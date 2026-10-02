@@ -1,0 +1,96 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Reading audio other apps created. Granular media permissions replaced the
+       storage one in Android 13, hence the ceiling on the older permission. -->
+  <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+  <uses-permission
+    android:name="android.permission.READ_EXTERNAL_STORAGE"
+    android:maxSdkVersion="32" />
+
+  <!-- Downloading a link into the library happens in here, so the permission
+       belongs here rather than being borrowed from whichever app is hosting the
+       module. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+
+  <!-- Attaching an equalizer to the player's audio session. A normal
+       permission: granted at install, nothing to ask the user for. -->
+  <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+  <application>
+    <!--
+      Tells Android Auto this app is worth offering in a car, and what kind of
+      app it is. Without it the service below is never asked anything.
+    -->
+    <meta-data
+      android:name="com.google.android.gms.car.application"
+      android:resource="@xml/automotive_app_desc" />
+
+    <!--
+      The home screen player. Declared exported because the launcher hosting it
+      is another app and has to be able to reach the provider at all; the only
+      broadcasts acted on are this widget's own transport actions.
+    -->
+    <receiver
+      android:name=".widget.JukeboxWidget"
+      android:exported="true"
+      android:label="@string/jukebox_widget_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/jukebox_widget_info" />
+    </receiver>
+
+    <service
+      android:name=".downloads.DownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
+    <!--
+      Covers, for a car to draw. Exported because Android Auto is another
+      process and a private file path means nothing to it; read-only, and
+      addressed by track id rather than by path, so the whole of what it will
+      ever hand out is the album art of songs already on this device. Granting
+      per request instead is not open to us: browse lists carry plain uris and
+      there is no intent to attach a grant to.
+    -->
+    <provider
+      android:name=".auto.CoverProvider"
+      android:authorities="${applicationId}.covers"
+      android:exported="true"
+      android:grantUriPermissions="true" />
+    <!--
+      A MediaSessionService is what keeps playback alive once the app is in the
+      background: Android only tolerates long-running audio from a foreground
+      service of type mediaPlayback. Declaring the queue-capable session here is
+      also what makes the notification show next/previous buttons.
+
+      Exported because browsing it is the whole point of the car support: Android
+      Auto runs in its own process and binds this service to ask for the library.
+      Left unexported it is still listed in the car launcher — discovery only
+      needs the manifest — and every bind is refused, which the car reports as
+      the app not working after a long wait.
+    -->
+    <service
+      android:name=".PlaybackService"
+      android:exported="true"
+      android:foregroundServiceType="mediaPlayback">
+      <intent-filter>
+        <!--
+          Both, and in this order. A head unit looks for the older browser
+          action, while the app's own controller connects through the media3
+          one; a service that is now a MediaLibraryService can answer either.
+        -->
+        <action android:name="androidx.media3.session.MediaLibraryService" />
+        <action android:name="androidx.media3.session.MediaSessionService" />
+        <action android:name="android.media.browse.MediaBrowserService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

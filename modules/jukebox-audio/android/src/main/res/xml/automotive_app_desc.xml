@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What this app offers a car. `media` is the whole of it: Android Auto draws
+  its own screens from the browse tree the playback service answers with, so
+  nothing the phone displays is involved and nothing about it has to change.
+-->
+<automotiveApp>
+  <uses name="media" />
+</automotiveApp>

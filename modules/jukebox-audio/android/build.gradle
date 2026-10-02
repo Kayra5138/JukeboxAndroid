@@ -1,0 +1,329 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.jukeboxaudio'
+version = '0.1.0'
+
+// Bergamot, from source.
+//
+// This used to be somebody else's AAR, downloaded at build time from a
+// three-week-old repository with one author. A pinned hash proves the bytes
+// have not changed since somebody looked at them; it proves nothing about what
+// is in them, because nobody here ever compiled them. What is fetched now is
+// the source archive for one commit, and everything that ends up in the APK —
+// the Kotlin API and the native engine both — is compiled by this build.
+//
+// The archive is GitHub's for an exact commit rather than a tag, so the tag
+// cannot be moved under it, and the SHA-256 below is of that archive. It is
+// unpacked during configuration rather than in a task because the CMake file
+// inside it has to exist by the time the Android plugin builds its model of
+// the native build: a task would run far too late. The unpack is skipped once
+// the tree is there, so it costs one download on a clean checkout and nothing
+// afterwards.
+//
+// Licences: the wrapper is MIT, the engine inside it is Mozilla's Bergamot
+// under MPL-2.0, Marian is MIT, SentencePiece and ruy are Apache-2.0. All of
+// them go into GPL-3.0. MPL-2.0 asks whoever distributes a binary to offer the
+// source it was built from; since the build fetches exactly that archive and
+// the hash names it, the offer is now something anyone can check rather than
+// something taken on trust.
+def bergamotVersion = '0.5.0'
+def bergamotCommit = '0eff2a15032362115848a496ce1df8ed9fc68650'
+def bergamotSha256 = '0f4a0f1bca29ed60c877895f2092bbcb9f6c383565ee8d175feb6ef66e9e582b'
+def bergamotHome = new File(project.layout.buildDirectory.get().asFile, 'bergamot')
+def bergamotSource = new File(bergamotHome, "foxlet-translate-${bergamotCommit}")
+// Written last, so an unpack that dies halfway is done again rather than built.
+def bergamotReady = new File(bergamotSource, '.unpacked')
+if (!bergamotReady.isFile()) {
+  bergamotHome.mkdirs()
+  def archive = new File(bergamotHome, "${bergamotCommit}.tar.gz")
+  def bytes = new URL("https://codeload.github.com/yinvoke/foxlet-translate/tar.gz/${bergamotCommit}").openConnection().with {
+    connectTimeout = 15000
+    readTimeout = 300000
+    inputStream.withCloseable { it.bytes }
+  }
+  def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+  if (hash != bergamotSha256) throw new GradleException('Bergamot source checksum mismatch')
+  archive.bytes = bytes
+  project.delete(bergamotSource)
+  project.copy {
+    from project.tarTree(project.resources.gzip(archive))
+    into bergamotHome
+  }
+  archive.delete()
+
+  // Marian stamps its build with the output of `git log`, having been written
+  // on the assumption that it is a checkout rather than an archive of one. An
+  // archive has no .git, so its CMake fails reading one before it ever reaches
+  // a compiler — the first thing anybody building this from source rather than
+  // from a clone runs into. The commit is known here, so the header that
+  // command would have produced is written directly instead. Anchored on text
+  // either side and loud if it is not found, because the hash above pins the
+  // file this expects and a silent no-op would leave the same error to be
+  // rediscovered.
+  def marianCMake = new File(bergamotSource, 'engine/marian-fork/src/CMakeLists.txt')
+  def marianText = marianCMake.text
+  def stampStart = marianText.indexOf('set(MARIAN_GIT_DIR')
+  def stampEnd = marianText.indexOf('# make sure all local dependencies are installed first')
+  if (stampStart < 0 || stampEnd < stampStart) {
+    throw new GradleException('Bergamot source: cannot find Marian\'s git revision stamping to replace')
+  }
+  marianCMake.text = marianText.substring(0, stampStart) +
+    'file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/common/git_revision.h\n' +
+    "  \"#define GIT_REVISION \\\"${bergamotCommit.substring(0, 9)} (foxlet-translate v${bergamotVersion})\\\"\\n\")\n\n" +
+    marianText.substring(stampEnd)
+
+  bergamotReady.text = "${bergamotCommit}\n"
+}
+
+android {
+  namespace "expo.modules.jukeboxaudio"
+  defaultConfig {
+    // Scoped storage is the whole basis of this module: RELATIVE_PATH,
+    // IS_PENDING and the volume-scoped MediaStore uris all arrived in API 29
+    // and are used unconditionally. Expo's default of 24 would put back the
+    // older code paths, which nothing this app targets can exercise.
+    minSdkVersion 29
+    // Not for the APK — AGP has no use for a version on a library. It is
+    // expo-module-gradle-plugin that insists: it builds a maven publication out
+    // of the namespace and this, and configuration fails outright without it.
+    versionName "0.1.0"
+    buildConfigField 'String', 'BUILD_TIMESTAMP', '"' + java.time.Instant.now().toString() + '"'
+
+    // Still 64-bit ARM only, and not for want of trying. The engine's vendored
+    // copy of Marian keeps only the ARM half: `intgemm`, which is what does
+    // int8 matrix multiplication on x86, is deliberately absent, and its
+    // CMakeLists stops the build outright rather than pretend otherwise — so
+    // x86 and x86_64 cannot be built without vendoring that library back in
+    // from upstream. 32-bit ARM gets further and then fails in `simd_utils`,
+    // whose NEON layer is written against AArch64 types (`float64x2_t`) that
+    // ARMv7's NEON simply does not have. Both are real pieces of work rather
+    // than a flag, and neither can be honestly claimed without a device to
+    // check the answers on. Everywhere else, translation falls through to what
+    // it falls through to now.
+    ndk { abiFilters 'arm64-v8a' }
+
+    // The one rule the AAR used to carry for its consumers: the native side
+    // looks its bridge class up by name, so R8 must not rename or drop it.
+    // Taken from the source rather than copied here, so it cannot drift away
+    // from the code it protects. Minifying is off in release builds today and
+    // this is what stops turning it on from quietly breaking translation.
+    consumerProguardFiles new File(bergamotSource, 'foxlet/consumer-rules.pro')
+
+    externalNativeBuild {
+      cmake {
+        // Only the JNI library: the same CMake file also describes host
+        // benchmarks and a CLI, none of which belong in a phone.
+        targets 'foxlet'
+        arguments '-DCOMPILE_TESTS=OFF',
+                  // The shared C++ runtime, which React Native, Reanimated and
+                  // half the other native modules in this build already bring,
+                  // so it is free here and linking a private copy in would not
+                  // be. It is also what upstream builds against, which is worth
+                  // something while nobody has run this on a phone yet.
+                  '-DANDROID_STL=c++_shared',
+                  // 16 KB pages: the alignment newer Android devices want.
+                  '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON',
+                  // Naming the target architecture stops Marian probing the
+                  // machine doing the compiling for SSE, which it would
+                  // otherwise do and get wrong.
+                  '-DBUILD_ARCH=armv8-a'
+      }
+    }
+  }
+  lint {
+    // expo-module-gradle-plugin turns this off for every module it configures.
+    // Turning it back on is the point: the API-29-on-minSdk-24 call that made
+    // the folder picker list one entry per song was in the report all along,
+    // under a setting that let it be ignored.
+    abortOnError true
+  }
+
+  buildTypes {
+    debug {
+      // A debug build of the app would otherwise mean a debug build of Marian,
+      // which is a translation engine with every optimisation turned off and
+      // every assertion turned on: slow enough to look broken. The Kotlin above
+      // it stays debuggable; only the engine is pinned to Release.
+      externalNativeBuild {
+        cmake { arguments '-DCMAKE_BUILD_TYPE=Release' }
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path new File(bergamotSource, 'CMakeLists.txt')
+      // The one the Android SDK installs, named rather than left to whatever
+      // happens to be on the machine. Most of the tree below asks for CMake 3.5
+      // and a newer CMake will change its mind about what that means; a build
+      // this long is not one to find that out halfway through.
+      version '3.22.1'
+    }
+  }
+
+  sourceSets {
+    main {
+      // The wrapper's Kotlin, compiled here with everything else rather than
+      // arriving as classes somebody else compiled. It is about three thousand
+      // lines — the model catalogue, the downloader, and the bridge to the
+      // library built above — and it depends on nothing but coroutines and
+      // what Android already has.
+      java.srcDir new File(bergamotSource, 'foxlet/src/main/kotlin')
+      // The bundled model catalogue, read from the classpath at runtime.
+      resources.srcDir new File(bergamotSource, 'foxlet/src/main/resources')
+    }
+  }
+}
+
+/*
+  Points the voice renderer at a passage from the command line:
+
+    ./gradlew :jukebox-audio:testDebugUnitTest --tests '*VoiceRender*' \
+      -PrenderIn=/path/to/passage.wav
+
+  These unit tests are the only place the effect classes run on a plain JVM, so
+  they are also the only place a tuning can be heard without building and
+  installing the whole app. Without the property the renderer skips itself, so
+  an ordinary test run is unaffected.
+*/
+tasks.withType(Test).configureEach {
+  systemProperty 'jukebox.render.in', project.findProperty('renderIn') ?: ''
+  systemProperty 'jukebox.render.out', project.findProperty('renderOut') ?: ''
+  testLogging { showStandardStreams = true }
+}
+
+dependencies {
+  // Android runtime, including Python and QuickJS, plus audio conversion.
+  implementation 'io.github.deniscerri.youtubedl-android:library:0.19.0'
+  implementation 'io.github.deniscerri.youtubedl-android:ffmpeg:0.19.0'
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20240303'
+  // The three Media3 artifacts share internals across the session/player
+  // boundary and a mismatch fails at runtime rather than at build time, so they
+  // move as one. Pinned rather than tracking latest because a transitive bump
+  // quietly changes how the media session and its notification behave.
+  // Bergamot, the engine Firefox translates pages with, wrapped for Android.
+  // Coroutines are the wrapper's interface and what it is written in, so they
+  // are asked for here rather than arriving transitively.
+  /*
+    Named rather than inherited. Deleting a track raises the system's own
+    confirmation through an activity result, and that class arrived here only
+    as a transitive dependency of ML Kit — so taking the proprietary engine out
+    of the build took the delete dialogue with it. What the module actually
+    uses, it now asks for.
+  */
+  implementation 'androidx.activity:activity-ktx:1.9.3'
+  // Reads the colours out of a cover, for the recap cards to be drawn in.
+  implementation 'androidx.palette:palette:1.0.0'
+  implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+
+  def media3Version = "1.9.0"
+  implementation "androidx.media3:media3-exoplayer:$media3Version"
+  implementation "androidx.media3:media3-session:$media3Version"
+  implementation "androidx.media3:media3-common:$media3Version"
+}
+
+// Bundle a reproducible extractor instead of relying on the wrapper's older
+// embedded version or downloading executable updates on the user's device.
+def extractorVersion = '2026.08.19'
+def extractorSha256 = '1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6'
+def extractorAssets = layout.buildDirectory.dir('generated/youtubeAssets')
+def prepareYoutubeExtractor = tasks.register('prepareYoutubeExtractor') {
+  inputs.property('version', extractorVersion)
+  inputs.property('sha256', extractorSha256)
+  outputs.dir(extractorAssets)
+  doLast {
+    def destination = extractorAssets.get().file('jukebox-yt-dlp').asFile
+    destination.parentFile.mkdirs()
+    def bytes = new URL("https://github.com/yt-dlp/yt-dlp/releases/download/${extractorVersion}/yt-dlp").openConnection().with {
+      connectTimeout = 15000
+      readTimeout = 60000
+      inputStream.withCloseable { it.bytes }
+    }
+    def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+    if (hash != extractorSha256) throw new GradleException('YouTube extractor checksum mismatch')
+    destination.bytes = bytes
+  }
+}
+android.sourceSets.main.assets.srcDir(extractorAssets)
+tasks.named('preBuild').configure { dependsOn(prepareYoutubeExtractor) }
+
+/*
+  An MP3 decoder that runs inside the app, for the chart maker.
+
+  Charting a song means decoding all of it, and through the platform's decoder
+  that is nine thousand round trips to another process for a four-minute song --
+  three quarters of the wait, measured. minimp3 does the same arithmetic here in
+  a fifth of a second. See src/main/cpp/jukebox_mp3.c.
+
+  Its two headers are fetched at one commit and refused unless they hash to what
+  is written here, the same way the translation engine and the extractor are:
+  what gets compiled is named exactly, and is not a copy kept in this repository
+  to go stale. Public domain (CC0), so there is nothing to carry with it but the
+  credit in THIRD_PARTY_NOTICES.md.
+
+  Built by a task of its own rather than added to the CMake build above, which
+  belongs to the translation engine: that file is the engine's, unpacked from
+  its archive, and a module is allowed only the one. It is a single C file, so
+  the compiler is simply asked.
+*/
+def minimp3Commit = 'ea99364f61c14656440e8d77e9c233ccf3124633'
+def minimp3Headers = [
+  'minimp3.h': '57e437c5c1f0e8b243885d3929c8973b5e6c778451e0100ab4251d19915cb3ad',
+  'minimp3_ex.h': '8437f3fc1d4d8ab2269a1624f5380a08df1967a048f8887789bae6e25db7db79',
+]
+def minimp3Home = layout.buildDirectory.dir("minimp3-${minimp3Commit}")
+def mp3Source = file('src/main/cpp/jukebox_mp3.c')
+def mp3Libs = layout.buildDirectory.dir('generated/mp3JniLibs')
+
+def fetchMinimp3 = tasks.register('fetchMinimp3') {
+  inputs.property('commit', minimp3Commit)
+  inputs.property('sha256', minimp3Headers)
+  outputs.dir(minimp3Home)
+  doLast {
+    def home = minimp3Home.get().asFile
+    home.mkdirs()
+    minimp3Headers.each { name, wanted ->
+      def bytes = new URL("https://raw.githubusercontent.com/lieff/minimp3/${minimp3Commit}/${name}").openConnection().with {
+        connectTimeout = 15000
+        readTimeout = 60000
+        inputStream.withCloseable { it.bytes }
+      }
+      def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+      if (hash != wanted) throw new GradleException("minimp3 ${name} checksum mismatch")
+      new File(home, name).bytes = bytes
+    }
+  }
+}
+
+def buildMp3Decoder = tasks.register('buildMp3Decoder', Exec) {
+  dependsOn(fetchMinimp3)
+  inputs.file(mp3Source)
+  inputs.dir(minimp3Home)
+  outputs.dir(mp3Libs)
+
+  def os = org.gradle.internal.os.OperatingSystem.current()
+  def host = os.isWindows() ? 'windows-x86_64' : os.isMacOsX() ? 'darwin-x86_64' : 'linux-x86_64'
+  def clang = new File(android.ndkDirectory, "toolchains/llvm/prebuilt/${host}/bin/clang${os.isWindows() ? '.exe' : ''}")
+  def library = mp3Libs.get().file('arm64-v8a/libjukeboxmp3.so').asFile
+
+  doFirst { library.parentFile.mkdirs() }
+  commandLine(
+    clang.absolutePath,
+    // The one architecture this project builds for, at the oldest Android it runs on.
+    '--target=aarch64-linux-android29',
+    '-O3', '-fPIC', '-shared',
+    // Sixteen-kilobyte pages, which newer phones use and older ones do not mind.
+    '-Wl,-z,max-page-size=16384',
+    '-Wl,-soname,libjukeboxmp3.so',
+    "-I${minimp3Home.get().asFile.absolutePath}",
+    '-o', library.absolutePath,
+    mp3Source.absolutePath,
+    '-lm'
+  )
+}
+android.sourceSets.main.jniLibs.srcDir(mp3Libs)
+tasks.named('preBuild').configure { dependsOn(buildMp3Decoder) }

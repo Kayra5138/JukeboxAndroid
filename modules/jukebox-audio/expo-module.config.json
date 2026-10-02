@@ -1,0 +1,12 @@
+{
+  "platforms": [
+    "android"
+  ],
+  "android": {
+    "modules": [
+      "expo.modules.jukeboxaudio.JukeboxAudioModule",
+      "expo.modules.jukeboxaudio.downloads.JukeboxDownloadsModule",
+      "expo.modules.jukeboxaudio.translate.JukeboxTranslateModule"
+    ]
+  }
+}
