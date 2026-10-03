@@ -16,7 +16,7 @@ and it comes with a rhythm game built out of your own songs, because why not.
   search as you type.
 - Swipe a track right to play it next, left to add it to the end of the queue.
 - Long-press a track for the full menu: play next, add to queue, go to album,
-  add to a list, look up details, edit tags, lyrics, file details, delete.
+  add to a list, piano tiles, view & edit details, delete.
 - Select several tracks at once to add them to a list or delete them.
 - A queue you can reorder, trim and jump around in.
 - Repeat off, one or all.
@@ -54,6 +54,8 @@ and it comes with a rhythm game built out of your own songs, because why not.
   Models come from Mozilla. No account, no key.
 - Fix things by hand: nudge the timing in quarter-second steps, search the
   catalogue yourself, or paste your own lyrics.
+- The stored lyrics are editable where they stand. Fix one wrong line without
+  pasting the whole song again.
 
 ### Tags and metadata
 
@@ -66,6 +68,11 @@ and it comes with a rhythm game built out of your own songs, because why not.
   `Eminem feat. Rihanna` and a guest left in the title are searched name by
   name, and `(Official Video)` is not part of the title.
 - Everything is editable, and a later lookup never overwrites what you typed.
+- **View & edit details** is one page with three tabs: General, Tags, Lyrics.
+- General edits title, artist, album, year, track and disc number, and the
+  cover, which you can pick from your gallery.
+- Each tab has its own **Look up**. In General and Tags it only fills the form
+  in: nothing is kept until you press Save.
 - `Rock` and `rock` are the same tag.
 
 ### Lists and albums
@@ -93,10 +100,14 @@ and it comes with a rhythm game built out of your own songs, because why not.
 
 ### Discover
 
-- Suggests artists you do not have yet, based on the ones you actually play.
+- A list of songs made from your last 30 days of listening: half from artists
+  you already play, half from new ones.
 - Powered by ListenBrainz: real listening habits, not a catalogue's idea of
   genre.
-- Each suggestion comes with a song to start from and its cover.
+- **+** keeps a song in your library, **−** excludes it for good. Either way
+  another song takes its place.
+- 10 to 40 songs, refreshed on a schedule you pick, in the background.
+- Songs can download automatically, on Wi-Fi only if you want.
 
 ### Downloads
 
@@ -150,6 +161,8 @@ from the song itself.
 ### Around the phone
 
 - Home-screen widget and media notification, both with working controls.
+- The widget is one row tall, on a gradient made from the cover's colours.
+- Pause, then swipe the notification away to close the music.
 - Playback keeps going with the app closed.
 - Android Auto: browse by track, album or list from the car.
 - A landscape layout: tabs move to a rail on the left, the player to a panel on
@@ -183,7 +196,7 @@ the only things that go out, and none of them needs an account or an API key.
 | Fetch lyrics | LRCLIB |
 | Translate lyrics | Mozilla (model download, once per language) |
 | Open a recap | MusicBrainz, Wikimedia Commons (artist photos) |
-| Ask for recommendations | ListenBrainz, Cover Art Archive |
+| Ask for recommendations | ListenBrainz, Cover Art Archive, YouTube (the songs) |
 | Use the Search tab | YouTube |
 
 ## Requirements
@@ -197,7 +210,7 @@ the only things that go out, and none of them needs an account or an API key.
 
 ```bash
 npm install
-npm test                 # 593 tests, pure logic
+npm test                 # 624 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android
