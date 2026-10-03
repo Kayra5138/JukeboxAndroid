@@ -25,7 +25,8 @@ object LibraryImport {
   /** Native-only entry point. Never accepts a filesystem path from JavaScript. */
   fun fromDownload(context: Context, file: File, folder: String, filename: String, onReserved: (String) -> Unit): String {
     val root = File(context.cacheDir, "youtube").canonicalFile
-    require(file.canonicalFile.toPath().startsWith(root.toPath()))
+    val discovery = File(context.noBackupFilesDir, "discover").canonicalFile
+    require(file.canonicalFile.toPath().startsWith(root.toPath()) || file.canonicalFile.toPath().startsWith(discovery.toPath()))
     return store(context, folder, filename, onReserved) { output ->
       file.inputStream().use { pump(it, output, file.length()) }
     }

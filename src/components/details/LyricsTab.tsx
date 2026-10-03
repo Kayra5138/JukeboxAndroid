@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,25 +8,26 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { isSynced, parseLrc } from '../lib/lyrics/lrc';
-import { formatOffset, parseOffsetMs } from '../lib/lyrics/offset';
-import { TextPrompt } from '../components/TextPrompt';
+import { isSynced, parseLrc } from '../../lib/lyrics/lrc';
+import { formatOffset, parseOffsetMs } from '../../lib/lyrics/offset';
+import { TextPrompt } from '../TextPrompt';
 import {
+  fetchLyrics,
   findLyricsCandidates,
   type LyricsCandidate,
-} from '../lib/lyrics/lrclib';
+} from '../../lib/lyrics/lrclib';
 import {
   clearLyrics,
   readLyrics,
+  writeLyrics,
   writeLyricsOffset,
   writeManualLyrics,
   type StoredLyrics,
-} from '../lib/db/lyrics';
-import { findTrack } from '../lib/media/library';
-import { bareTitle } from '../lib/metadata/text';
-import type { Track } from '../lib/types';
+} from '../../lib/db/lyrics';
+import { isAbortError } from '../../lib/metadata/http';
+import { bareTitle } from '../../lib/metadata/text';
+import type { Track } from '../../lib/types';
 
 /** One nudge of the timings, in milliseconds. */
 const STEP_MS = 250;
@@ -48,22 +46,20 @@ function describe(stored: StoredLyrics | null): string {
 }
 
 /**
- * Correcting a track's words by hand.
+ * A track's words: reading them, correcting them, and finding them.
  *
- * Three things, because the automatic path fails in three ways. Timings that
- * are right but early or late are shifted. A song whose words were never found
- * — usually because its recorded length disagrees with the catalogue's, which
- * the automatic match refuses on purpose — is searched for by hand, with
- * nothing ruled out. Anything left over is pasted in.
+ * The automatic path fails in three ways, and each has its answer here.
+ * Timings that are right but early or late are shifted. A song whose words
+ * were never found — usually because its recorded length disagrees with the
+ * catalogue's, which the automatic match refuses on purpose — is searched for
+ * by hand, with nothing ruled out. Anything left over is pasted in.
+ *
+ * And the words themselves are on the page to be changed: a wrong line or a
+ * misheard word is fixed where it stands rather than by pasting the whole
+ * song again.
  */
-export default function LyricsScreen() {
-  const { trackId } = useLocalSearchParams<{ trackId: string }>();
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-
-  const [track, setTrack] = useState<Track | null>(null);
-  /** False until the library has been searched, so "missing" can be told from "not yet". */
-  const [looked, setLooked] = useState(false);
+export function LyricsTab({ track }: { track: Track }) {
+  const trackId = track.id;
   const [stored, setStored] = useState<StoredLyrics | null>(null);
   const [query, setQuery] = useState('');
   const [pasted, setPasted] = useState('');
@@ -71,29 +67,100 @@ export default function LyricsScreen() {
   const [searching, setSearching] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const [typingOffset, setTypingOffset] = useState(false);
+  /** The stored words as they are being edited. */
+  const [edited, setEdited] = useState('');
+  const [lookingUp, setLookingUp] = useState(false);
   const search = useRef<AbortController | null>(null);
+  const lookup = useRef<AbortController | null>(null);
 
-  useEffect(() => () => search.current?.abort(), []);
+  useEffect(
+    () => () => {
+      search.current?.abort();
+      lookup.current?.abort();
+    },
+    []
+  );
 
   const refresh = useCallback(() => {
     if (trackId) setStored(readLyrics(trackId));
   }, [trackId]);
 
+  // The timed text where there is one, since that is the one that carries
+  // everything; the plain words otherwise.
+  const storedText = stored?.synced ?? stored?.plain ?? '';
+
+  // Whenever what is stored changes — a lookup, a search result chosen, a
+  // paste — the box shows that, and not what was being typed over the old.
   useEffect(() => {
-    void (async () => {
-      const found = await findTrack(trackId);
-      setTrack(found);
-      setLooked(true);
-      // Seeded with what the track calls itself, since that is what is being
-      // looked for; the point of typing is to be able to change it.
-      if (found) {
-        setQuery(
-          [found.artist, bareTitle(found.title, found.artist)].filter(Boolean).join(' ')
-        );
+    setEdited(storedText);
+  }, [storedText]);
+
+  // Seeded with what the track calls itself, since that is what is being
+  // looked for; the point of typing is to be able to change it.
+  useEffect(() => {
+    setQuery([track.artist, bareTitle(track.title, track.artist)].filter(Boolean).join(' '));
+    setResults(null);
+    setNote(null);
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackId]);
+
+  /**
+   * The automatic search, asked for by hand.
+   *
+   * The same one a play runs, strict about length and all, and here it is
+   * allowed to replace words somebody chose: pressing the button is asking
+   * for exactly that. Finding nothing leaves what is stored alone, though. A
+   * miss is no reason to throw away the words there are.
+   */
+  const lookUp = useCallback(async () => {
+    lookup.current?.abort();
+    const controller = new AbortController();
+    lookup.current = controller;
+    setLookingUp(true);
+    setNote(null);
+    try {
+      const found = await fetchLyrics(
+        {
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          durationSec: track.durationSec,
+        },
+        controller.signal
+      );
+      if (controller.signal.aborted) return;
+      if (!found) {
+        setNote('Nothing matched this track. The search below rules nothing out.');
+        return;
       }
+      // Cleared first: the old row takes its shift and its translations with
+      // it, and neither belongs to the words that are replacing it.
+      clearLyrics(trackId);
+      writeLyrics(trackId, found, Date.now());
+      setResults(null);
+      setNote('Found and saved.');
       refresh();
-    })();
-  }, [trackId, refresh]);
+    } catch (error) {
+      if (controller.signal.aborted || isAbortError(error)) return;
+      setNote('The search did not get through.');
+    } finally {
+      if (!controller.signal.aborted) setLookingUp(false);
+    }
+  }, [track, trackId, refresh]);
+
+  const saveEdited = useCallback(() => {
+    const body = edited.trim();
+    if (body.length === 0) return;
+    // Timed or not is decided by what is in the box, the same as a paste.
+    writeManualLyrics(
+      trackId,
+      { plain: isSynced(body) ? null : body, synced: isSynced(body) ? body : null },
+      Date.now()
+    );
+    setNote('Saved.');
+    refresh();
+  }, [edited, trackId, refresh]);
 
   const runSearch = useCallback(async () => {
     search.current?.abort();
@@ -170,37 +237,30 @@ export default function LyricsScreen() {
     [trackId, refresh]
   );
 
-  if (!track) {
-    return (
-      <View style={[styles.screen, styles.centered]}>
-        {looked ? (
-          // A track can go between opening the menu and arriving here — deleted,
-          // moved out of the library folder, the card pulled out. Spinning for
-          // ever says nothing; this at least says what happened.
-          <Text style={styles.body}>That track is no longer in the library.</Text>
-        ) : (
-          <ActivityIndicator color="#ededed" />
-        )}
-      </View>
-    );
-  }
-
   const timed = stored?.synced ? parseLrc(stored.synced).length : 0;
   const offset = stored?.offsetMs ?? 0;
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title} numberOfLines={1}>
-          {track.title}
-        </Text>
-        <Text style={styles.muted} numberOfLines={1}>
-          {track.artist ?? 'Unknown artist'} · {seconds(track.durationSec)}
+        <Pressable
+          style={[styles.action, lookingUp && styles.actionOff]}
+          disabled={lookingUp}
+          onPress={() => void lookUp()}>
+          {lookingUp ? (
+            <ActivityIndicator color="#121212" />
+          ) : (
+            <Text style={styles.actionLabel}>Look up</Text>
+          )}
+        </Pressable>
+        <Text style={styles.hint}>
+          Searches for this track's words the way playing it does, and replaces what is
+          stored if it finds them.
         </Text>
 
-        <Text style={styles.section}>What is stored</Text>
+        {note ? <Text style={styles.note}>{note}</Text> : null}
+
+        <Text style={[styles.section, styles.sectionFirst]}>What is stored</Text>
         <Text style={styles.body}>
           {describe(stored)}
           {timed > 0 ? ` · ${timed} lines` : ''}
@@ -211,6 +271,37 @@ export default function LyricsScreen() {
           <Pressable style={styles.revert} onPress={revert}>
             <Text style={styles.revertLabel}>Forget this and look again</Text>
           </Pressable>
+        ) : null}
+
+        {stored ? (
+          <>
+            <TextInput
+              style={[styles.input, styles.words]}
+              value={edited}
+              onChangeText={setEdited}
+              multiline
+              // Grows with the words, so the page scrolls and the box does
+              // not: a box scrolling inside a page scrolling is two things
+              // fighting over one finger.
+              scrollEnabled={false}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable
+              style={[
+                styles.action,
+                (edited.trim() === storedText.trim() || !edited.trim()) && styles.actionOff,
+              ]}
+              disabled={edited.trim() === storedText.trim() || !edited.trim()}
+              onPress={saveEdited}>
+              <Text style={styles.actionLabel}>Save changes</Text>
+            </Pressable>
+            <Text style={styles.hint}>
+              {timed > 0
+                ? 'Each line keeps the time in front of it. Change the words and leave the brackets, or the line loses its place.'
+                : 'Change anything. Saved words are kept as yours and no lookup replaces them.'}
+            </Text>
+          </>
         ) : null}
 
         {timed > 0 ? (
@@ -271,8 +362,6 @@ export default function LyricsScreen() {
           )}
         </Pressable>
 
-        {note ? <Text style={styles.note}>{note}</Text> : null}
-
         {results?.map((candidate) => (
           <Pressable
             key={candidate.id}
@@ -314,10 +403,6 @@ export default function LyricsScreen() {
           onPress={savePasted}>
           <Text style={styles.actionLabel}>Save pasted</Text>
         </Pressable>
-
-        <Pressable style={styles.done} onPress={() => router.back()}>
-          <Text style={styles.doneLabel}>Done</Text>
-        </Pressable>
       </ScrollView>
 
       <TextPrompt
@@ -328,16 +413,13 @@ export default function LyricsScreen() {
         onSubmit={setOffset}
         onClose={() => setTypingOffset(false)}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
-  centered: { alignItems: 'center', justifyContent: 'center' },
+  screen: { flex: 1 },
   content: { padding: 20, paddingBottom: 48, gap: 10 },
-  title: { color: '#ededed', fontSize: 17, fontWeight: '600' },
-  muted: { color: '#7a7a7a', fontSize: 13 },
   section: {
     color: '#5f5f5f',
     fontSize: 11,
@@ -374,6 +456,8 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   paste: { minHeight: 132, textAlignVertical: 'top' },
+  words: { minHeight: 132, textAlignVertical: 'top', lineHeight: 21 },
+  sectionFirst: { paddingTop: 10 },
   action: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -395,6 +479,4 @@ const styles = StyleSheet.create({
   },
   candidateTitle: { color: '#ededed', fontSize: 14.5 },
   candidateMeta: { color: '#5f5f5f', fontSize: 12 },
-  done: { alignItems: 'center', paddingTop: 26 },
-  doneLabel: { color: '#7ab8ff', fontSize: 15 },
 });

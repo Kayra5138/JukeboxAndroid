@@ -80,7 +80,14 @@ async function paced<T>(request: () => Promise<T>, signal?: AbortSignal): Promis
  * wrong recording by the wrong performer, and accepting them was filling the
  * library with confidently wrong credits.
  */
-function sameArtist(wanted: string, candidateArtist: string | undefined): boolean {
+function sameArtist(wanted: string[], candidateArtist: string | undefined): boolean {
+  // Any one of the names on the record will do. Apple files a song under its
+  // lead and puts the guest in the title, so a credit of two names is answered
+  // by an entry carrying one of them, and which one is Apple's choice.
+  return wanted.some((name) => sameOne(name, candidateArtist));
+}
+
+function sameOne(wanted: string, candidateArtist: string | undefined): boolean {
   if (!candidateArtist) return false;
   if (foldForMatch(wanted) === foldForMatch(candidateArtist)) return true;
   // Credits vary — `C418` against `C418 & Protostar` — so agreement on the
@@ -103,7 +110,7 @@ function upscaleArtwork(url: string | undefined): string | null {
 
 async function searchStorefront(
   query: string,
-  wantedArtist: string | null,
+  wantedArtist: string[],
   storefront: string,
   fallbackTitle: string,
   signal?: AbortSignal
@@ -125,7 +132,7 @@ async function searchStorefront(
     if (!result.trackName) continue;
     // When the artist is known, it is the strongest signal available and a
     // mismatch is decisive. Without one, the title has to carry the match.
-    if (wantedArtist && !sameArtist(wantedArtist, result.artistName)) continue;
+    if (wantedArtist.length > 0 && !sameArtist(wantedArtist, result.artistName)) continue;
     const score = matchScore(query, {
       title: result.trackName,
       artist: result.artistName,
@@ -156,11 +163,15 @@ export async function lookupTrack(
   track: Track,
   signal?: AbortSignal
 ): Promise<ItunesMatch | null> {
-  const { artist, query } = identify(track);
+  const { artist, artists, query } = identify(track);
   if (!query) return null;
 
+  // The credit as written as well as the names in it: a duo the rules took
+  // apart wrongly is still itself to a catalogue that lists it whole.
+  const wanted = artist ? [artist, ...artists] : [];
+
   for (const storefront of STOREFRONTS) {
-    const match = await searchStorefront(query, artist, storefront, track.title, signal);
+    const match = await searchStorefront(query, wanted, storefront, track.title, signal);
     if (match) return match;
   }
   return null;

@@ -1,3 +1,4 @@
+import { DiscoverSettings } from '../../components/DiscoverSettings';
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
 import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -246,7 +247,8 @@ export default function SettingsScreen() {
           ) : null}
         </View>
         <View style={styles.group}>
-          <Text style={styles.section}>Player</Text>
+          <DiscoverSettings />
+          <Text style={[styles.section, styles.sectionAfter]}>Player</Text>
           <View style={styles.card}>
             <Pressable style={styles.row} onPress={() => setPlaybackOpen(true)}>
               <View style={styles.line}>

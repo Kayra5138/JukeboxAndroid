@@ -1,5 +1,7 @@
+import { creditReader } from './credits.ts';
 import { db } from './index.ts';
 import { countsAsPlay, type Play } from '../player/session.ts';
+import { countArtists, tallyArtists, type CreditListens } from '../stats/artists.ts';
 import { ALL_TIME, type Listen, type Range } from '../stats/period.ts';
 
 export type { Play };
@@ -78,15 +80,26 @@ export function summarize(range: Range = ALL_TIME): ListeningSummary {
     play_count: number;
     total_seconds: number | null;
     distinct_tracks: number;
-    distinct_artists: number;
     completed_count: number | null;
   }>(
     `SELECT COUNT(*)                  AS play_count,
             SUM(seconds_played)       AS total_seconds,
             COUNT(DISTINCT track_id)  AS distinct_tracks,
-            COUNT(DISTINCT artist)    AS distinct_artists,
             SUM(completed)            AS completed_count
      FROM plays WHERE started_at >= ? AND started_at < ?`,
+    range.since,
+    range.until
+  );
+
+  /*
+    Artists are counted from the names in the credits rather than from the
+    credits. `COUNT(DISTINCT artist)` made `Eminem, Rihanna` a third artist
+    beside the two of them, and somebody who had only ever heard Rihanna as a
+    guest had not heard her at all.
+  */
+  const credits = db().getAllSync<{ artist: string; title: string | null }>(
+    `SELECT DISTINCT artist, title FROM plays
+     WHERE started_at >= ? AND started_at < ? AND artist IS NOT NULL`,
     range.since,
     range.until
   );
@@ -95,7 +108,7 @@ export function summarize(range: Range = ALL_TIME): ListeningSummary {
     playCount: row?.play_count ?? 0,
     totalSeconds: row?.total_seconds ?? 0,
     distinctTracks: row?.distinct_tracks ?? 0,
-    distinctArtists: row?.distinct_artists ?? 0,
+    distinctArtists: countArtists(credits, creditReader()),
     completedCount: row?.completed_count ?? 0,
   };
 }
@@ -254,28 +267,26 @@ export function topTracks(limit = 20, range: Range = ALL_TIME): TopEntry[] {
   );
 }
 
+/**
+ * The artists listened to most, each given every listen they are credited on.
+ *
+ * The database only gathers the listens up by credit and track; the counting
+ * is done in `stats/artists.ts`, because who a credit names is not a question
+ * SQL can answer. A song by two artists counts for both, so a guest spot is a
+ * listen and `Eminem, Rihanna` is not an artist. The title comes along because
+ * a guest is as often named there as in the credit.
+ */
 export function topArtists(limit = 20, range: Range = ALL_TIME): TopEntry[] {
-  return db().getAllSync<TopEntry>(
-    `SELECT artist AS "key",
-            artist AS label,
-            NULL   AS detail,
-            COUNT(*) AS playCount,
-            SUM(seconds_played) AS totalSeconds,
-            (SELECT track_id FROM plays best
-             WHERE best.artist = plays.artist
-               AND best.started_at >= ? AND best.started_at < ?
-             GROUP BY best.track_id
-             ORDER BY COUNT(*) DESC, SUM(best.seconds_played) DESC LIMIT 1) AS sample
+  const rows = db().getAllSync<CreditListens>(
+    `SELECT artist,
+            title,
+            track_id AS trackId,
+            COUNT(*) AS plays,
+            SUM(seconds_played) AS seconds
      FROM plays WHERE started_at >= ? AND started_at < ? AND artist IS NOT NULL
-     GROUP BY artist
-     ORDER BY playCount DESC, totalSeconds DESC
-     LIMIT ?`,
-    // The subquery takes the range as well, so an artist's cover comes from
-    // what they were played for in this period rather than from ever.
+     GROUP BY artist, title, track_id`,
     range.since,
-    range.until,
-    range.since,
-    range.until,
-    limit
+    range.until
   );
+  return tallyArtists(rows, creditReader(), limit).map((artist) => ({ ...artist, detail: null }));
 }

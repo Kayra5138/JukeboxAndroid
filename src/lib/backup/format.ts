@@ -34,6 +34,9 @@ export type Row = Record<string, Cell>;
  * without it and is dropped if it is missing.
  */
 export const TABLES = {
+  discover_exclusions: {
+    id: 'T!', song_key: 'T!', title: 'T!', artist: 'T!', reason: 'T!', until_at: 'I',
+  },
   plays: {
     track_id: 'T!',
     title: 'T!',

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { DiscoverPanel } from '../../components/DiscoverPanel';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -15,7 +16,9 @@ export default function YouTubeScreen() {
   const { jobs, error, refresh, enqueue, enqueueBatch, cancel } = useDownloads();
   const insets = useSafeAreaInsets();
   const columns = useListColumns();
-  const [mode, setMode] = useState<'videos' | 'playlist'>('videos');
+  const params = useLocalSearchParams<{ mode?: string }>();
+  const [mode, setMode] = useState<'discover' | 'videos' | 'playlist'>('discover');
+  useEffect(() => { if (params.mode === 'discover') setMode('discover'); }, [params.mode]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<YouTubeResult[]>([]);
   const [showQueue, setShowQueue] = useState(false);
@@ -145,7 +148,25 @@ export default function YouTubeScreen() {
         styles.screen,
         { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right },
       ]}>
-      <FlatList
+      <View style={styles.modeRow}>
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: mode === 'discover' }}
+          style={[styles.discoverTab, mode === 'discover' && styles.segmentOn]}
+          onPress={() => { stopSearch(); setMode('discover'); }}>
+          <Text style={mode === 'discover' ? styles.segmentLabelOn : styles.segmentLabel}>Discover</Text>
+        </Pressable>
+        <View style={styles.downloadModes}>
+          <Text style={styles.downloadHeading}>Download</Text>
+          <View style={styles.segmented}>
+            {(['videos', 'playlist'] as const).map(choice => <Pressable key={choice}
+              accessibilityRole="tab" accessibilityState={{ selected: mode === choice }} disabled={adding !== null}
+              style={[styles.segment, mode === choice && styles.segmentOn]}
+              onPress={() => { stopSearch(); setMode(choice); setResults([]); setSearched(false); setMessage(null); }}>
+              <Text style={mode === choice ? styles.segmentLabelOn : styles.segmentLabel}>{choice === 'videos' ? 'Videos' : 'Playlists'}</Text>
+            </Pressable>)}
+          </View>
+        </View>
+      </View>
+      {mode === 'discover' ? <DiscoverPanel /> : <FlatList
         data={results.slice(0, 500)}
         // Remounted when the count changes: a list will not take a new
         // numColumns in place, and turning the phone is when it changes.
@@ -156,14 +177,6 @@ export default function YouTubeScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.content}
         ListHeaderComponent={<>
-          <View style={styles.segmented}>
-            {(['videos', 'playlist'] as const).map((choice) => <Pressable key={choice}
-              accessibilityRole="tab" accessibilityState={{ selected: mode === choice }} disabled={adding !== null}
-              style={[styles.segment, mode === choice && styles.segmentOn]}
-              onPress={() => { stopSearch(); setMode(choice); setResults([]); setSearched(false); setMessage(null); }}>
-              <Text style={mode === choice ? styles.segmentLabelOn : styles.segmentLabel}>{choice === 'videos' ? 'Videos' : 'Playlist'}</Text>
-            </Pressable>)}
-          </View>
           <Text style={styles.intro}>{mode === 'playlist' ? 'Search for a playlist or paste its YouTube link. Open a result to preview and download its tracks. The first 500 playlist entries are checked.' : 'Search YouTube or paste a video link. Save the audio to your library.'}</Text>
           <View style={styles.searchRow}>
             <TextInput accessibilityLabel={mode === 'playlist' ? 'Playlist name or YouTube link' : 'Search YouTube or paste a video link'}
@@ -231,12 +244,16 @@ export default function YouTubeScreen() {
             </View>
           </View>;
         }}
-      />
+      />}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  modeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
+  discoverTab: { paddingHorizontal: 16, minHeight: 48, justifyContent: 'center', borderRadius: 12 },
+  downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: 5 },
+  downloadHeading: { color: '#777', fontSize: 10, textAlign: 'center', letterSpacing: 1 },
   screen: { flex: 1, backgroundColor: '#121212' },
   resultColumns: { gap: 8 },
   // Without this a row keeps its full width and the pair overflows the screen.

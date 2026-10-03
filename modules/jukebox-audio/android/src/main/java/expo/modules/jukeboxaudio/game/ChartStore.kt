@@ -46,6 +46,7 @@ internal object ChartStore {
       "chart for $trackId: decode ${decodedAt - startedAt}ms by ${song.by}, " +
         "analyse ${analysedAt - decodedAt}ms, " +
         "${song.samples.size} samples at ${song.rate}Hz, ${found.notes.size} notes, " +
+        "step ${found.stepMs}ms, ${found.lines.size} lines, bar ${found.barSteps} from ${found.barAt}, " +
         "${found.quiet.size} pauses " +
         found.quiet.joinToString(prefix = "[", postfix = "]") { "${it.startMs}-${it.endMs}" }
     )
@@ -55,8 +56,14 @@ internal object ChartStore {
       stepMs = found.stepMs,
       notes = found.notes,
       quiet = found.quiet,
-      levelMs = if (found.levels.isEmpty()) 0 else Levels.EVERY_MS,
-      levels = found.levels
+      levelMs = if (found.levels.isEmpty()) 0 else found.levelMs,
+      levels = found.levels,
+      lines = found.lines,
+      barSteps = found.barSteps,
+      barAt = found.barAt,
+      lanes = found.lanes,
+      accents = found.accents,
+      ease = found.ease
     )
     write(context, trackId, chart)
     return chart
@@ -78,6 +85,7 @@ internal object ChartStore {
       // -- as a song without any -- rather than as no chart at all.
       val quiet = json.optJSONArray("quiet") ?: JSONArray()
       val levels = json.optJSONArray("levels") ?: JSONArray()
+      val lines = json.optJSONArray("lines") ?: JSONArray()
       Chart(
         version = json.getInt("version"),
         durationMs = json.getLong("durationMs"),
@@ -91,7 +99,13 @@ internal object ChartStore {
           Chart.Span(span.getInt(0), span.getInt(1))
         },
         levelMs = json.optInt("levelMs", 0),
-        levels = (0 until levels.length()).map { levels.getInt(it) }
+        levels = (0 until levels.length()).map { levels.getInt(it) },
+        lines = (0 until lines.length()).map { lines.getInt(it) },
+        barSteps = json.optInt("barSteps", 0),
+        barAt = json.optInt("barAt", 0),
+        lanes = json.optString("lanes", ""),
+        accents = json.optString("accents", ""),
+        ease = json.optString("ease", "")
       )
     }.getOrNull()
   }
@@ -119,6 +133,12 @@ internal object ChartStore {
       .put("quiet", quiet)
       .put("levelMs", chart.levelMs)
       .put("levels", JSONArray(chart.levels))
+      .put("lines", JSONArray(chart.lines))
+      .put("barSteps", chart.barSteps)
+      .put("barAt", chart.barAt)
+      .put("lanes", chart.lanes)
+      .put("accents", chart.accents)
+      .put("ease", chart.ease)
 
     // Written aside and renamed. A chart half-written when the phone is killed
     // would be found by the next reader, parsed, and quietly played as a song
@@ -140,6 +160,12 @@ internal object ChartStore {
     },
     "quiet" to chart.quiet.map { listOf(it.startMs, it.endMs) },
     "levelMs" to chart.levelMs,
-    "levels" to chart.levels
+    "levels" to chart.levels,
+    "lines" to chart.lines,
+    "barSteps" to chart.barSteps,
+    "barAt" to chart.barAt,
+    "lanes" to chart.lanes,
+    "accents" to chart.accents,
+    "ease" to chart.ease
   )
 }

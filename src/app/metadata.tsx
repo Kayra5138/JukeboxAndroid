@@ -379,7 +379,7 @@ export default function MetadataScreen() {
               onPress={() =>
                 selected.size > 0
                   ? toggle(item.track.id)
-                  : router.push({ pathname: '/edit', params: { trackId: item.track.id } })
+                  : router.push({ pathname: '/details', params: { trackId: item.track.id, tab: 'tags' } })
               }
               onLongPress={() => toggle(item.track.id)}
             />

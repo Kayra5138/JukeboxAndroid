@@ -260,10 +260,11 @@ const GRID_WITHIN = 1.12;
  * keys still land on the music; they are no longer allowed to wander from the
  * pace to do it.
  */
-export function rowFor(wantedMs: number, stepMs: number): number {
+export function rowFor(wantedMs: number, stepMs: number, barSteps = 0): number {
   // A record with no pulse in it gets the row it asked for, since there is
   // nothing to line it up with.
   if (!(stepMs > 0) || !(wantedMs > 0)) return wantedMs;
+  if (barSteps > 0) return rowInBar(wantedMs, stepMs * barSteps, barSteps);
 
   // How far off a row is, as a ratio that reads the same slow or fast.
   const off = (multiple: number) => {
@@ -276,6 +277,112 @@ export function rowFor(wantedMs: number, stepMs: number): number {
   const straight = nearest(ON_THE_GRID);
   if (off(straight) <= GRID_WITHIN) return stepMs * straight;
   return stepMs * nearest([...ON_THE_GRID, ...BETWEEN]);
+}
+
+/**
+ * How far off a row that leans against the beat may be before any whole number
+ * of rows to the bar is taken instead.
+ */
+const LEAN_WITHIN = 1.2;
+
+/**
+ * How long a row is on a song whose bars are known: the bar divided into a
+ * whole number of rows.
+ *
+ * Which is what makes a chorus the same keys every time it comes round. A row
+ * that is some number of steps long lands on the music, but three steps into
+ * an eight-step bar it lands somewhere different in every bar, and the same
+ * passage is cut into different keys on each return. A bar cut into a whole
+ * number of rows is cut the same way every time.
+ *
+ * The number is chosen the way the row always was: the straight divisions
+ * first -- halves of halves, where the keys sound most like the song -- then
+ * the ones that lean against the beat and come round to it, and past those
+ * whatever whole number is nearest the pace that was asked for. A bar of six
+ * steps is two beats of three, so its straight divisions are different ones.
+ */
+function rowInBar(wantedMs: number, barMs: number, barSteps: number): number {
+  const off = (rows: number) => {
+    const ratio = barMs / rows / wantedMs;
+    return ratio > 1 ? ratio : 1 / ratio;
+  };
+  const nearest = (counts: readonly number[]) =>
+    counts.reduce((best, here) => (off(here) < off(best) ? here : best));
+
+  const triple = barSteps % 3 === 0;
+  const straight = triple ? [1, 2, 6, 12, 24, 48] : [1, 2, 4, 8, 16, 32, 64];
+  const leaning = triple ? [3, 4, 8, 9, 18, 36] : [3, 6, 12, 24, 48];
+
+  const even = nearest(straight);
+  if (off(even) <= GRID_WITHIN) return barMs / even;
+  const leant = nearest([...straight, ...leaning]);
+  if (off(leant) <= LEAN_WITHIN) return barMs / leant;
+  const any = Math.max(1, Math.round(barMs / wantedMs));
+  return barMs / (off(any) < off(leant) ? any : leant);
+}
+
+/** How many parts of a step the chart's lanes and accents are written at. */
+export const SLOTS = 4;
+
+/**
+ * Where in the chart a moment of the recording is.
+ *
+ * A chart is written in grid time, where every step is the same length. The
+ * band it was made from does not play that evenly, so the chart also says
+ * where each step really falls -- its `lines` -- and this reads a position in
+ * the recording through them. It is what lets the board be a ladder of equal
+ * rows and still land every one of them on the beat: the rows do not bend, the
+ * clock does, by a few parts in a hundred and never backwards.
+ *
+ * Before the first line and after the last it carries on at the pace of the
+ * nearest step, and a song with no lines is its own grid.
+ */
+export function toGrid(
+  lines: readonly number[] | undefined | null,
+  stepMs: number,
+  songMs: number
+): number {
+  'worklet';
+  const count = lines ? lines.length : 0;
+  if (!lines || count < 2 || !(stepMs > 0)) return songMs;
+
+  let line = 0;
+  if (songMs >= lines[count - 1]!) {
+    line = count - 2;
+  } else if (songMs > lines[0]!) {
+    // The line at or before this moment, by halving: a song is a thousand
+    // steps, and this is asked sixty times a second.
+    let low = 0;
+    let high = count - 1;
+    while (high - low > 1) {
+      const middle = (low + high) >> 1;
+      if (lines[middle]! <= songMs) low = middle;
+      else high = middle;
+    }
+    line = low;
+  }
+  const gap = lines[line + 1]! - lines[line]!;
+  if (!(gap > 0)) return line * stepMs;
+  return (line + (songMs - lines[line]!) / gap) * stepMs;
+}
+
+/** How long the chart is in its own time: the song's length, read through its lines. */
+export function gridLength(chart: Chart): number {
+  const lines = chart.lines;
+  if (!lines || lines.length < 2 || !(chart.stepMs > 0)) return chart.durationMs;
+  return (lines.length - 1) * chart.stepMs;
+}
+
+/**
+ * Where the first row starts, so that rows and bars begin together.
+ *
+ * Rows are counted from here rather than from the start of the record. A bar
+ * is a whole number of rows, but only if a row starts where a bar does.
+ */
+export function rowAnchor(chart: Chart, rowMs: number): number {
+  const bar = chart.barSteps ?? 0;
+  if (!(bar > 0) || !(chart.stepMs > 0) || !(rowMs > 0)) return 0;
+  return ((chart.barAt ?? 0) * chart.stepMs) % rowMs;
 }
 
 /**
@@ -304,6 +411,9 @@ const EASE_AROUND_MS = 4_000;
  */
 const EASE_UNDER = 0.7;
 
+/** What a chart writes the usual level of a passage as, in its own `ease`. */
+const EASE_USUAL = 20;
+
 /**
  * Which rows fall where the music eases off, as a flag for every row up to
  * [last].
@@ -313,8 +423,33 @@ const EASE_UNDER = 0.7;
  * the mean, so one crash nearby does not make every ordinary row beside it
  * look like a dip. Nothing is flagged on a chart that carries no curve.
  */
-export function easedRows(chart: Chart, rowMs: number, last: number): boolean[] {
+export function easedRows(chart: Chart, rowMs: number, last: number, anchor = 0): boolean[] {
   const eased = new Array<boolean>(Math.max(0, last + 1)).fill(false);
+
+  /*
+    A chart that has already asked how loud each moment is against its
+    surroundings is simply read. That is the same question as below, answered
+    where the song was analysed and made the same for every bar of a kind --
+    so a rest belongs to the passage and comes back with it, instead of being
+    worked out afresh from whatever rows happen to be either side.
+  */
+  const codes = chart.ease;
+  if (codes && chart.stepMs > 0 && rowMs > 0) {
+    const slotMs = chart.stepMs / SLOTS;
+    for (let row = 0; row <= last; row++) {
+      const from = Math.max(0, Math.floor((anchor + row * rowMs) / slotMs + 1e-6));
+      const to = Math.min(codes.length, Math.max(from + 1, Math.ceil((anchor + (row + 1) * rowMs) / slotMs - 1e-6)));
+      if (from >= to) continue;
+      let sum = 0;
+      for (let slot = from; slot < to; slot++) {
+        const code = codes.charCodeAt(slot);
+        sum += code >= 97 ? code - 87 : code - 48;
+      }
+      eased[row] = sum / (to - from) < EASE_USUAL * EASE_UNDER;
+    }
+    return eased;
+  }
+
   const levels = chart.levels;
   const every = chart.levelMs ?? 0;
   if (!levels || levels.length === 0 || !(every > 0) || !(rowMs > 0)) return eased;
@@ -324,8 +459,11 @@ export function easedRows(chart: Chart, rowMs: number, last: number): boolean[] 
   for (let i = 0; i < levels.length; i++) total[i + 1] = total[i]! + levels[i]!;
 
   const levelOf = (row: number) => {
-    const from = Math.min(levels.length - 1, Math.max(0, Math.floor((row * rowMs) / every)));
-    const to = Math.min(levels.length, Math.max(from + 1, Math.floor(((row + 1) * rowMs) / every)));
+    const from = Math.min(levels.length - 1, Math.max(0, Math.floor((anchor + row * rowMs) / every + 1e-6)));
+    const to = Math.min(
+      levels.length,
+      Math.max(from + 1, Math.floor((anchor + (row + 1) * rowMs) / every + 1e-6))
+    );
     return (total[to]! - total[from]!) / (to - from);
   };
 
@@ -399,8 +537,10 @@ export function ladderFrom(
     the song by a fraction of a row and the grid would stop agreeing with the
     music.
   */
-  const first = Math.ceil((fromMs + leadMs) / rowMs);
-  const last = Math.floor(chart.durationMs / rowMs);
+  const anchor = rowAnchor(chart, rowMs);
+  const startOf = (at: number) => anchor + at * rowMs;
+  const first = Math.ceil((fromMs + leadMs - anchor) / rowMs - 1e-9);
+  const last = Math.floor((gridLength(chart) - anchor) / rowMs);
 
   /*
     Which lane the record suggests for each row, from the onsets that fall in
@@ -409,7 +549,7 @@ export function ladderFrom(
   */
   const suggested = new Map<number, ChartNote>();
   for (const note of chart.notes) {
-    const row = Math.round(note.atMs / rowMs);
+    const row = Math.round((note.atMs - anchor) / rowMs);
     if (!suggested.has(row)) suggested.set(row, note);
   }
 
@@ -446,7 +586,7 @@ export function ladderFrom(
   const silent = (at: number) =>
     !suggested.has(at) &&
     quiet.some(
-      ([start, end]) => at * rowMs >= start && (at * rowMs < end || end >= chart.durationMs)
+      ([start, end]) => startOf(at) >= start && (startOf(at) < end || end >= gridLength(chart))
     );
 
   /*
@@ -457,8 +597,92 @@ export function ladderFrom(
     dip is still music, and a note in it is a soft note, which is exactly the
     kind a row is being left empty to let pass.
   */
-  const eased = easedRows(chart, rowMs, last);
+  const eased = easedRows(chart, rowMs, last, anchor);
   const empty = (at: number) => silent(at) || eased[at] === true;
+
+  /*
+    What the chart says about the moment a row starts at: which lane the song
+    suggests there, and how hard the music hits.
+
+    Read by the slot the row starts in, a quarter of a step at a time. A chart
+    made before these were written has neither, and the board does what it did
+    then.
+  */
+  const slotMs = chart.stepMs > 0 ? chart.stepMs / SLOTS : 0;
+  const slotOf = (at: number) => Math.floor(startOf(at) / slotMs + 1e-6);
+  const laneCodes = slotMs > 0 && chart.lanes ? chart.lanes : null;
+  const accentCodes = slotMs > 0 && chart.accents ? chart.accents : null;
+  const songLane = (at: number): number | null => {
+    if (!laneCodes) return null;
+    const code = laneCodes.charCodeAt(slotOf(at)) - 48;
+    return code >= 0 && code < lanes ? code : null;
+  };
+  const accentOf = (at: number): number => {
+    if (!accentCodes) return -1;
+    const code = accentCodes.charCodeAt(slotOf(at));
+    if (code >= 48 && code <= 57) return code - 48;
+    if (code >= 97 && code <= 122) return code - 87;
+    return -1;
+  };
+
+  /*
+    How hard a row has to hit to be given a second key.
+
+    The same share of the rows as before -- one in `doubleEvery` -- but the ones
+    where the music hits hardest rather than every so-many-th. Counting rows
+    put a pair on whatever happened to be seventh; this puts it on the crash.
+    And because a chorus hits in the same places every time, its pairs are in
+    the same places every time.
+  */
+  let pairAbove = Infinity;
+  if (accentCodes && doubleEvery > 0) {
+    const hits: number[] = [];
+    for (let at = Math.ceil(-anchor / rowMs - 1e-9); at <= last; at++) {
+      if (!empty(at)) hits.push(accentOf(at));
+    }
+    hits.sort((a, b) => b - a);
+    if (hits.length > 0) pairAbove = hits[Math.min(hits.length - 1, Math.floor(hits.length / doubleEvery))]!;
+  }
+  // Never two pairs in a row: the hands need a key between them to get back.
+  let lastPair = -Infinity;
+
+  /*
+    Where a row sits in its bar, counted in rows.
+
+    For the one thing below that has to be decided the same way in every bar:
+    which of two neighbouring rows gives way when the song wants them both in
+    one column.
+  */
+  const perBar = laneCodes && (chart.barSteps ?? 0) > 0 ? Math.round(((chart.barSteps ?? 0) * chart.stepMs) / rowMs) : 0;
+  const barRow = perBar > 0 ? Math.round(((chart.barAt ?? 0) * chart.stepMs - anchor) / rowMs) : 0;
+  const inBar = (at: number) => (((at - barRow) % perBar) + perBar) % perBar;
+  const wants = (at: number): number | null => (at < 0 || at > last || empty(at) ? null : songLane(at));
+
+  /**
+   * The lane a row takes when the song suggests the same one for its
+   * neighbour.
+   *
+   * A tune holds a note for longer than a row, and two keys cannot follow one
+   * another down a column: end to end they are a hold. So one of each two has
+   * to step aside. It used to be whichever came second, which depends on what
+   * came before it -- and so the same held note was played left-right in one
+   * chorus and right-left in the next. Now it is the row on the odd place in
+   * its bar, every time, and it steps to the nearest column that neither of
+   * its neighbours wants.
+   */
+  const settled = (at: number): number | null => {
+    const want = wants(at);
+    if (want == null || perBar <= 0) return want;
+    const prev = wants(at - 1);
+    const next = wants(at + 1);
+    if ((prev !== want && next !== want) || inBar(at) % 2 === 0) return want;
+    let best = -1;
+    for (let other = 0; other < lanes; other++) {
+      if (other === want || other === prev || other === next) continue;
+      if (best < 0 || Math.abs(other - want) < Math.abs(best - want)) best = other;
+    }
+    return best < 0 ? want : best;
+  };
 
   while (row <= last) {
     if (empty(row)) {
@@ -481,7 +705,7 @@ export function ladderFrom(
       is -- so whatever the song suggests has to move if the column is still
       warm.
     */
-    const wanted = source ? source.lane : ((before[0] ?? -2) + 2) % lanes;
+    const wanted = settled(row) ?? (source ? source.lane : ((before[0] ?? -2) + 2) % lanes);
     const lane = freeLane(wanted, before, lanes);
 
     /*
@@ -509,7 +733,7 @@ export function ladderFrom(
     }
 
     const holdMs = rows > 1 ? (rows - 1) * rowMs : 0;
-    out.push({ atMs: row * rowMs, lane, holdMs });
+    out.push({ atMs: startOf(row), lane, holdMs });
 
     /*
       Now and then, a second key in the same row.
@@ -521,11 +745,15 @@ export function ladderFrom(
       a second key and then blamed for the third.
     */
     const used = [lane];
-    if (doubleEvery > 0 && holdMs === 0 && row % doubleEvery === 0) {
+    const paired = accentCodes
+      ? accentOf(row) > pairAbove && row - lastPair > 1
+      : row % doubleEvery === 0;
+    if (doubleEvery > 0 && holdMs === 0 && paired) {
       const second = partnerFor(lane, before, lanes);
       if (second >= 0) {
-        out.push({ atMs: row * rowMs, lane: second, holdMs: 0 });
+        out.push({ atMs: startOf(row), lane: second, holdMs: 0 });
         used.push(second);
+        lastPair = row;
       }
     }
 

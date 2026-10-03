@@ -1,0 +1,52 @@
+import { StyleSheet } from 'react-native';
+
+/** What the three tabs of the details screen have in common, so they look like one screen. */
+export const shared = StyleSheet.create({
+  content: { padding: 20, paddingBottom: 48, gap: 12 },
+  section: {
+    color: '#5f5f5f',
+    fontSize: 11,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    paddingTop: 18,
+  },
+  field: { gap: 6 },
+  label: { color: '#9a9a9a', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
+  input: {
+    backgroundColor: '#1c1c1c',
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#2a2a2a',
+    color: '#ededed',
+    fontSize: 15,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+  },
+  hint: { color: '#5f5f5f', fontSize: 12, lineHeight: 18 },
+  note: { color: '#7ac48a', fontSize: 13 },
+  noteBad: { color: '#e0a085', fontSize: 13 },
+  complaint: { color: '#e0a085', fontSize: 12 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  action: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ededed',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    minHeight: 44,
+  },
+  actionWide: { flex: 1 },
+  actionOff: { opacity: 0.35 },
+  actionLabel: { color: '#121212', fontSize: 15, fontWeight: '600' },
+  button: {
+    backgroundColor: '#252525',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  buttonLabel: { color: '#ededed', fontSize: 14 },
+  link: { color: '#7ab8ff', fontSize: 13.5 },
+});

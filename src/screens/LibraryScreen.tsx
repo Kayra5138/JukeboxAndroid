@@ -38,8 +38,6 @@ import {
   scanLibrary,
 } from '../lib/media/library';
 import { withMetadata, type EnrichedTrack } from '../lib/media/merge';
-import { forgetMetadata } from '../lib/db/metadata';
-import { describeTrack } from '../lib/media/import';
 import { search } from '../lib/media/search';
 import {
   asSortOrder,
@@ -380,9 +378,6 @@ export default function LibraryScreen() {
   */
   const restoreTo = useRef(0);
 
-  /** The track a lookup is running for, so the row can say so. */
-  const [lookingUp, setLookingUp] = useState<string | null>(null);
-
   const load = useCallback(async () => {
     // The spinner is for having nothing to show, not for re-reading something
     // already on screen. Swapping the list out for it on every focus tore the
@@ -403,35 +398,6 @@ export default function LibraryScreen() {
       setScreen({ kind: 'error', message: String(error) });
     }
   }, []);
-
-  /**
-   * Search again for everything a track can be told about itself: its tags, its
-   * artist, its cover — and its words.
-   *
-   * The same pass an imported file goes through, so that asking for a lookup by
-   * hand and getting one automatically arrive at the same place. It used to run
-   * the enrichment alone and leave the lyrics as they were, which made "look up
-   * details" no help at all for the case it was most often reached for: a track
-   * whose words were never found.
-   *
-   * What is already known is thrown away first. The enrichment skips anything
-   * it has an answer for — the point of it, when sweeping a library — but
-   * asking for one track by name is asking for it to be tried again, and a
-   * track looked up and missed would otherwise be skipped in silence.
-   */
-  const lookUp = useCallback(
-    async (track: EnrichedTrack) => {
-      setLookingUp(track.id);
-      try {
-        forgetMetadata([track.id]);
-        await describeTrack(track.id);
-        await load();
-      } finally {
-        setLookingUp(null);
-      }
-    },
-    [load]
-  );
 
   const drag = useDragSelect({
     ids: useMemo(() => results.map((track) => track.id), [results]),
@@ -490,14 +456,11 @@ export default function LibraryScreen() {
       // route is then a type error here instead of a dead end at the tap.
       if (action === 'playNext') void playNext(track);
       else if (action === 'addToQueue') void addToQueue(track);
-      else if (action === 'lookup') void lookUp(track);
       else if (action === 'delete') {
         void deleteTracks([track.id]).then((gone) => {
           if (gone) void load();
         });
       }
-      else if (action === 'edit') router.push({ pathname: '/edit', params: { trackId: track.id } });
-      else if (action === 'lyrics') router.push({ pathname: '/lyrics', params: { trackId: track.id } });
       else if (action === 'addToPlaylist') setAddingTo([track.id]);
       else if (action === 'tiles') {
         // The name goes with it. The game shows what it is about to play before
@@ -509,9 +472,9 @@ export default function LibraryScreen() {
         const name = track.album?.trim();
         if (name) router.push({ pathname: '/playlist', params: { album: albumKey(name) } });
       }
-      else router.push({ pathname: '/view', params: { trackId: track.id } });
+      else router.push({ pathname: '/details', params: { trackId: track.id } });
     },
-    [addToQueue, load, lookUp, playNext, router]
+    [addToQueue, load, playNext, router]
   );
 
   // Re-read on focus so metadata gathered on the other screen shows up here.
@@ -710,13 +673,9 @@ export default function LibraryScreen() {
         {albumView ? null : (
         <View style={styles.meta}>
           <Text style={styles.metaText} numberOfLines={1}>
-            {/* A lookup takes seconds and changes nothing until it lands, so it
-                says so rather than appearing to have done nothing. Whatever the
-                list picker last did is said here too, since adding to a list
-                otherwise looks like nothing happening. */}
-            {lookingUp
-              ? 'Looking up details…'
-              : (note ?? `${libraryRoot()} · ${library.length} tracks`)}
+            {/* Whatever the list picker last did is said here, since adding
+                to a list otherwise looks like nothing happening. */}
+            {note ?? `${libraryRoot()} · ${library.length} tracks`}
           </Text>
         </View>
         )}

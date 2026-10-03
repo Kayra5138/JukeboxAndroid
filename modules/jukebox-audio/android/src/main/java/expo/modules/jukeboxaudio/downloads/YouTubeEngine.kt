@@ -108,7 +108,7 @@ object YouTubeEngine {
     }
   }
 
-  fun download(context: Context, id: String, format: String, directory: File, cancelled: AtomicBoolean,
+  fun download(context: Context, id: String, format: String, directory: File, cancelled: AtomicBoolean, discovery: JSONObject? = null,
     progress: (String, Int) -> Unit): Pair<File, JSONObject> {
     init(context)
     val url = YouTubeData.url(id)
@@ -124,6 +124,8 @@ object YouTubeEngine {
     runCatching { DownloadArtwork.resolve(context, info, video, cancelled) }
       .getOrNull()?.let { video.put("artworkUri", it) }
     check(!cancelled.get()) { "Cancelled" }
+    discovery?.optString("discoveryTitle")?.takeIf { it.isNotBlank() }?.let { info.put("meta_title", it) }
+    discovery?.optString("discoveryArtist")?.takeIf { it.isNotBlank() }?.let { info.put("meta_artist", it) }
     video.put("title", info.getString("meta_title")).put("artist", info.getString("meta_artist"))
     val request = request(url).apply {
       addOption("-f", "bestaudio/best")

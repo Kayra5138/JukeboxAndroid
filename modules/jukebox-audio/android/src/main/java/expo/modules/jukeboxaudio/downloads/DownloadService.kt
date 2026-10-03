@@ -82,7 +82,9 @@ class DownloadService : Service() {
           try {
             wakeLock.acquire(35 * 60 * 1000L)
             val video = job.getJSONObject("video")
+            check(!video.optBoolean("discoverWifiOnly") || DiscoverFiles.networkAllowed(this)["wifi"] == true) { "Waiting for Wi-Fi. Automatic download will resume later." }
             val progress: (String, Int) -> Unit = { state, percent ->
+              if (video.optBoolean("discoverWifiOnly") && DiscoverFiles.networkAllowed(this)["wifi"] != true) cancelled.set(true)
               DownloadStore.change(id, state, percent)
               val now = android.os.SystemClock.elapsedRealtime()
               if (now - lastNotification > 1000) {
@@ -92,17 +94,21 @@ class DownloadService : Service() {
               }
             }
             val (file, info) = YouTubeEngine.download(
-              this, video.getString("id"), job.getString("format"), directory, cancelled, progress)
+              this, video.getString("id"), job.getString("format"), directory, cancelled, video, progress)
             if (cancelled.get() || !DownloadStore.beginSaving(id)) throw YoutubeCancelled()
-            val trackId = LibraryImport.fromDownload(this, file, job.getString("folder"),
+            val trackId = if (!job.isNull("discoverKey")) {
+              DiscoverFiles.store(this, id, file, info, job.getJSONObject("video"))
+              "discover:$id"
+            } else LibraryImport.fromDownload(this, file, job.getString("folder"),
               "${info.getString("title")}.${file.extension}") { trackId ->
                 DownloadStore.reserve(id, trackId, info.optString("artworkUri").takeIf { it.startsWith("file://") })
               }
             DownloadStore.complete(id, trackId)
           } catch (error: Exception) {
-            val wasCancelled = cancelled.get() || error is YoutubeCancelled
+            val waiting = job.getJSONObject("video").optBoolean("discoverWifiOnly") && DiscoverFiles.networkAllowed(this)["wifi"] != true
+            val wasCancelled = !waiting && (cancelled.get() || error is YoutubeCancelled)
             DownloadStore.change(id, if (wasCancelled) "cancelled" else "failed",
-              error = if (wasCancelled) null else friendlyError(error))
+              error = if (waiting) "Waiting for Wi-Fi. Automatic download will resume later." else if (wasCancelled) null else friendlyError(error))
           } finally {
             if (wakeLock.isHeld) wakeLock.release()
             currentId = null

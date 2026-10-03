@@ -65,6 +65,13 @@ export type EnrichStore = {
   manualTrackIds: () => Set<string>;
   saveMetadata: (entry: TrackMetadata) => void;
   saveLookupTags: (trackId: string, tags: string[], source: TagSource) => void;
+  /**
+   * Remember whether a credit turned out to be one artist or several.
+   *
+   * Optional, because it is not part of finding a track: it is something the
+   * finding happens to learn, kept for whoever counts artists later.
+   */
+  saveCredit?: (credit: string, oneArtist: boolean) => void;
 };
 
 type Found = Omit<TrackMetadata, 'trackId' | 'status' | 'source'> & {
@@ -76,6 +83,8 @@ type Found = Omit<TrackMetadata, 'trackId' | 'status' | 'source'> & {
   source: 'musicbrainz' | 'itunes';
   /** Ranked, best first. The first also becomes the genre column.  */
   tags: string[];
+  /** The credit MusicBrainz was asked about and what it turned out to be. */
+  credit?: { text: string; oneArtist: boolean } | null;
 };
 
 /**
@@ -116,6 +125,10 @@ async function lookup(track: Track, signal?: AbortSignal): Promise<Found | null>
         trackNumber: null,
         discNumber: null,
         tags: musicbrainz.genres,
+        credit:
+          musicbrainz.oneArtist == null
+            ? null
+            : { text: musicbrainz.artist, oneArtist: musicbrainz.oneArtist },
       }
     : null;
 
@@ -141,6 +154,9 @@ async function lookup(track: Track, signal?: AbortSignal): Promise<Found | null>
       trackNumber: itunes.trackNumber,
       discNumber: itunes.discNumber,
       tags,
+      // What MusicBrainz learned about the credit is still true when Apple is
+      // the one that had the genre.
+      credit: found?.credit ?? null,
     };
   }
 
@@ -215,8 +231,12 @@ export async function runEnrichment(
       const match = await lookup(track, signal);
       unreachable = 0;
 
+      // Before deciding whether the match is worth keeping: a recording with
+      // no genre still settled who its artists are.
+      if (match?.credit) store.saveCredit?.(match.credit.text, match.credit.oneArtist);
+
       if (match && isUseful(match)) {
-        const { tags, ...metadata } = match;
+        const { tags, credit: _credit, ...metadata } = match;
         matched += 1;
         store.saveMetadata({ trackId: track.id, status: 'matched', ...metadata });
         store.saveLookupTags(track.id, tags, metadata.source);

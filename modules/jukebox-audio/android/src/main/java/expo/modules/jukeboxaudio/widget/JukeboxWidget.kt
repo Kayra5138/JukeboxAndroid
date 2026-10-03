@@ -79,7 +79,7 @@ class JukeboxWidget : AppWidgetProvider() {
 
     private fun layout(context: Context, id: Int): Int {
       val height = AppWidgetManager.getInstance(context).getAppWidgetOptions(id)
-        .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 92)
+        .getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 40)
       return if (height < 90) R.layout.jukebox_widget_compact else R.layout.jukebox_widget
     }
 

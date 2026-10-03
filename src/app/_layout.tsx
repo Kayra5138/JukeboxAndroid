@@ -1,3 +1,4 @@
+import { DiscoverProvider } from '../lib/discover/DiscoverProvider';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
@@ -9,6 +10,7 @@ export default function RootLayout() {
   return (
     <PlayerProvider>
       <DownloadsProvider>
+      <DiscoverProvider>
         {/*
           The now-playing screen is a layer over the navigator rather than a route
           within it, so whatever is underneath stays on screen while it is open.
@@ -24,8 +26,6 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="metadata" options={{ title: 'Tags' }} />
             <Stack.Screen name="folders" options={{ title: 'Library folder' }} />
-            <Stack.Screen name="edit" options={{ title: 'Edit metadata' }} />
-          <Stack.Screen name="lyrics" options={{ title: 'Lyrics' }} />
             <Stack.Screen name="equalizer" options={{ title: 'Equalizer' }} />
             <Stack.Screen name="transitions" options={{ title: 'Crossfade' }} />
             <Stack.Screen name="effects" options={{ title: 'Effects' }} />
@@ -34,9 +34,10 @@ export default function RootLayout() {
             <Stack.Screen name="tiles" options={{ headerShown: false }} />
             {/* Titled by the list itself, which the screen draws. */}
             <Stack.Screen name="playlist" options={{ headerShown: false }} />
-            <Stack.Screen name="view" options={{ title: 'Track details' }} />
+            <Stack.Screen name="details" options={{ title: 'View & edit details' }} />
           </Stack>
         </NowPlayingHost>
+      </DiscoverProvider>
       </DownloadsProvider>
     </PlayerProvider>
   );

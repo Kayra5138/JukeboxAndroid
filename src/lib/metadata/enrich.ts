@@ -3,6 +3,7 @@ import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { fillArtwork } from './artwork.ts';
 import { lookupTrack } from './itunes.ts';
 import { artworkChanged } from '../media/artworkEvents.ts';
+import { saveCredit } from '../db/credits.ts';
 import { saveLookupTags } from '../db/tags.ts';
 import { runEnrichment } from './pipeline.ts';
 import type { EnrichProgress, EnrichResult } from './pipeline.ts';
@@ -28,6 +29,7 @@ export async function enrichLibrary(
     manualTrackIds,
     saveMetadata,
     saveLookupTags,
+    saveCredit,
   });
   if (result.cancelled || result.stopped || signal?.aborted || !JukeboxAudio.downloadArtworkAsync) return result;
   const coversSaved = await fillArtwork(tracks, {

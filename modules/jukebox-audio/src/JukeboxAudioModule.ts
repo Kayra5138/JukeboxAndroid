@@ -56,6 +56,32 @@ export type Chart = {
    */
   levelMs?: number;
   levels?: number[];
+  /**
+   * Where each step of the grid falls in the recording, in milliseconds.
+   *
+   * Everything else in a chart is in grid time, where step `i` is at exactly
+   * `i * stepMs`. A band does not play that evenly, and this is the way back:
+   * `lines[i]` is the moment of the recording step `i` begins at. Absent or
+   * empty for a song with no pulse, where grid time is the song's own.
+   */
+  lines?: number[];
+  /** How many steps make a bar, and the step the first bar starts on. */
+  barSteps?: number;
+  barAt?: number;
+  /**
+   * The lane the song suggests for every quarter of a step, a digit each: from
+   * the tune where there is one, and the same for every bar that is the same
+   * music.
+   */
+  lanes?: string;
+  /** How hard the music hits at every quarter of a step, `0` softest to `z` hardest. */
+  accents?: string;
+  /**
+   * How loud every quarter of a step is against the passage it is in: `k` is
+   * the level of its surroundings and `0` is nothing. Where the board finds
+   * its rests, the same in every bar that is the same music.
+   */
+  ease?: string;
 };
 
 /** Where a pause starts and where the music comes back, in milliseconds. */

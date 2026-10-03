@@ -440,6 +440,27 @@ const DISCOVERY = `
   CREATE INDEX IF NOT EXISTS discoveries_rank ON discoveries (rank);
 `;
 
+/**
+ * What a catalogue has said about a credit that could be read two ways.
+ *
+ * `Simon & Garfunkel` and `Lena Raine & Minecraft` are the same shape, and
+ * only one of them is two artists. Nothing in the text says which, so the
+ * rules guess; and when a lookup finds the song filed under the whole credit,
+ * or only under one name out of it, that is the answer and it is kept here for
+ * the next time artists are counted.
+ *
+ * Keyed on the folded credit, like every other table that files things under
+ * an artist's name. Not in a backup: it is something learned from a catalogue
+ * and can be learned again.
+ */
+const CREDITS = `
+  CREATE TABLE IF NOT EXISTS artist_credits (
+    credit     TEXT PRIMARY KEY NOT NULL,
+    one_artist INTEGER NOT NULL,
+    fetched_at INTEGER NOT NULL
+  );
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -453,6 +474,14 @@ export const MIGRATIONS: string[] = [
   ARTIST_PHOTOS,
   SKIPS,
   DISCOVERY,
+  CREDITS,
+  `CREATE TABLE IF NOT EXISTS discover_state (
+    id TEXT PRIMARY KEY NOT NULL, data TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS discover_exclusions (
+    id TEXT PRIMARY KEY NOT NULL, song_key TEXT NOT NULL, title TEXT NOT NULL,
+    artist TEXT NOT NULL, reason TEXT NOT NULL, until_at INTEGER
+  );`,
 ];
 
 /**

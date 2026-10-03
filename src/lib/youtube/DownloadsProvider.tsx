@@ -33,7 +33,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     }
     const task = (async () => {
       try {
-        const next = await downloads.getJobsAsync(checkFiles);
+        const next = (await downloads.getJobsAsync(checkFiles)).filter(job => !job.discoverKey);
         let added = syncYouTubePlaylists(next);
         for (const job of next) {
           if (job.status === 'done' && !receipts.current.has(job.id)) {

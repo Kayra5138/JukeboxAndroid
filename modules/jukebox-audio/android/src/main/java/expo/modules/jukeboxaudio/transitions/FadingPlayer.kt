@@ -22,8 +22,24 @@ class FadingPlayer(
 ) : ForwardingPlayer(player) {
 
   override fun play() {
+    woken()
     if (crossfader.play()) return
     super.play()
+  }
+
+  /**
+   * A stopped player made ready again, before it is asked to play.
+   *
+   * Stopped is not paused. A player that has been stopped -- which is what
+   * swiping the notification away does -- keeps its queue and lets go of
+   * everything it needs to play it, and play on a player in that state is
+   * accepted and does nothing. So the next press of play, from a headset or
+   * the car or the widget, lit the button and made no sound. Every one of
+   * those presses comes through here, which makes this the one place to put
+   * it right.
+   */
+  private fun woken() {
+    if (playbackState == Player.STATE_IDLE && mediaItemCount > 0) prepare()
   }
 
   override fun pause() {
@@ -35,6 +51,7 @@ class FadingPlayer(
 
   override fun setPlayWhenReady(playWhenReady: Boolean) {
     if (playWhenReady) {
+      woken()
       if (crossfader.play()) return
     } else if (crossfader.pause()) {
       return

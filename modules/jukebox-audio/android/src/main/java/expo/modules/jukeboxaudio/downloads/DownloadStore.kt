@@ -62,13 +62,16 @@ object DownloadStore {
   fun list(): List<Map<String, Any?>> = jobs.asReversed().map(YouTubeData::map)
 
   @Synchronized
-  fun enqueue(context: Context, video: JSONObject, format: String, folder: String): String {
+  fun enqueue(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String? = null): String {
     val id = video.getString("id")
     YouTubeData.url(id)
     require(format in setOf("mp3", "original"))
     val destination = YouTubeData.folder(folder)
+    if (discoverKey != null) require(discoverKey.matches(Regex("[a-fA-F0-9-]{36}")))
     val existing = jobs.lastOrNull { it.getJSONObject("video").getString("id") == id &&
-      (it.optString("status") in activeStates || it.optString("status") == "done") }
+      it.optString("discoverKey", "") == (discoverKey ?: "") &&
+      (it.optString("status") in activeStates || it.optString("status") == "done") &&
+      (discoverKey == null || it.optString("status") != "cancelling") }
     if (existing != null) {
       if (existing.optString("status") != "done" || exists(context, existing)) return existing.getString("id")
       existing.put("status", "missing").put("trackId", JSONObject.NULL)
@@ -76,7 +79,7 @@ object DownloadStore {
     require(jobs.count { it.optString("status") in activeStates } < 500) { "The queue is full. Wait for a download to finish." }
     val jobId = UUID.randomUUID().toString()
     jobs.add(JSONObject().put("id", jobId).put("video", video).put("format", format)
-      .put("folder", destination).put("status", "queued").put("progress", 0)
+      .put("discoverKey", discoverKey ?: JSONObject.NULL).put("folder", destination).put("status", "queued").put("progress", 0)
       .put("trackId", JSONObject.NULL).put("error", JSONObject.NULL).put("described", false))
     persist()
     return jobId
@@ -99,20 +102,40 @@ object DownloadStore {
   }
 
   @Synchronized
+  fun recordPromotion(context: Context, id: String, trackId: String, folder: String, artworkUri: String?) {
+    init(context)
+    if (jobs.any { it.optString("trackId") == trackId && it.isNull("discoverKey") }) return
+    val source = jobs.firstOrNull { it.getString("id") == id } ?: return
+    val receipt = JSONObject(source.toString())
+    receipt.put("id", UUID.randomUUID().toString()).put("discoverKey", JSONObject.NULL)
+      .put("trackId", trackId).put("folder", folder).put("status", "done").put("progress", 100)
+      .put("described", false).put("artworkUri", artworkUri ?: JSONObject.NULL)
+    jobs.add(receipt); persist()
+  }
+
+  @Synchronized
+  fun forgetDiscovery(id: String) {
+    val removed = jobs.removeAll { it.optString("id") == id && !it.isNull("discoverKey") && it.optString("status") !in activeStates }
+    if (removed) persist()
+  }
+
+  @Synchronized
   fun artwork(context: Context, trackId: String): String? {
     init(context)
     return jobs.lastOrNull { it.optString("trackId") == trackId && it.optString("status") == "done" }
       ?.optString("artworkUri")?.takeIf { it.startsWith("file://") && File(java.net.URI(it)).isFile }
   }
 
-  private fun exists(context: Context, job: JSONObject): Boolean = try {
+  private fun exists(context: Context, job: JSONObject): Boolean { return try {
+    if (!job.isNull("discoverKey")) return DiscoverFiles.track(context, job.getString("id")) != null
     val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), job.getString("trackId").toLong())
     context.contentResolver.query(uri, arrayOf(MediaStore.Audio.Media._ID), null, null, null)?.use { it.moveToFirst() } ?: false
-  } catch (_: Exception) { false }
+  } catch (_: Exception) { false } }
 
   /** The row id is journaled before bytes are copied. A process death between
    * publishing and saving the receipt cannot create a duplicate on retry. */
   private fun recoverPublication(context: Context, job: JSONObject): Boolean {
+    if (!job.isNull("discoverKey")) return DiscoverFiles.track(context, job.getString("id")) != null
     if (job.isNull("trackId")) return false
     val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), job.getString("trackId").toLong())
     return try {
@@ -156,6 +179,22 @@ object DownloadStore {
     val job = jobs.firstOrNull { it.optString("status") == "queued" } ?: return null
     job.put("status", "preparing")
     persist()
+    return JSONObject(job.toString())
+  }
+
+  @Synchronized
+  fun prioritizeDiscovery(id: String) {
+    val job = jobs.firstOrNull { it.optString("id") == id && !it.isNull("discoverKey") } ?: return
+    // An explicit play request is allowed to use the current connection.
+    job.getJSONObject("video").put("discoverWifiOnly", false).put("discoverAutomatic", false)
+    if (job.optString("status") == "queued") { jobs.remove(job); jobs.add(0, job) }
+    persist()
+  }
+
+  @Synchronized
+  fun takeById(id: String): JSONObject? {
+    val job = jobs.firstOrNull { it.optString("id") == id && it.optString("status") == "queued" } ?: return null
+    job.put("status", "preparing"); persist()
     return JSONObject(job.toString())
   }
 

@@ -219,4 +219,27 @@ describe('runEnrichment', () => {
 
     assert.equal(result.cancelled, true);
   });
+
+  it('writes down what a lookup learned about a credit', async () => {
+    const credits: [string, boolean][] = [];
+    const kept = { ...store(), saveCredit: (credit: string, one: boolean) => void credits.push([credit, one]) };
+    stubFetch((url) => {
+      if (url.includes('/artist?')) {
+        // Nobody is called both names; the second of them exists.
+        const known = decodeURIComponent(url).includes('"Second Credited"');
+        return { body: { artists: known ? [{ id: 'artist-2nd', name: 'Second Credited', score: 100 }] : [] } };
+      }
+      return musicbrainzRoute([{ name: 'pop', count: 2 }])(url) ?? { body: { results: [] } };
+    });
+
+    await withoutWaiting(() =>
+      runEnrichment([song('First Credited, Second Credited', 'two')], () => {}, undefined, kept)
+    );
+
+    assert.deepEqual(credits, [['First Credited, Second Credited', false]]);
+    assert.equal(kept.rows[0]?.status, 'matched');
+    // The credit is saved as written, not as the name it was found under.
+    assert.equal(kept.rows[0]?.artist, 'First Credited, Second Credited');
+    assert.ok(!('credit' in kept.rows[0]!), 'and the verdict is not written into the row');
+  });
 });

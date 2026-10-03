@@ -120,6 +120,8 @@ export function remapTables(
   };
 
   const out = emptyTables();
+  // Catalogue recording ids are portable; no device track id needs remapping.
+  out.discover_exclusions = tables.discover_exclusions.map(row => ({ ...row }));
   let dropped = 0;
 
   for (const name of ['plays', 'skips'] as const) {
@@ -294,6 +296,8 @@ function everyEntry(here: Row[], there: Row[]): Row[] {
 /** The tables that are keyed by a song, merged. Lists are a separate matter. */
 function mergeKeyed(here: Tables, there: Tables): Omit<Tables, 'playlists' | 'playlist_tracks'> {
   return {
+    discover_exclusions: oneOfEach(here.discover_exclusions, there.discover_exclusions, row => row.id as string,
+      (a, b) => a.reason === 'blocked' ? a : b.reason === 'blocked' ? b : a.until_at == null ? a : b.until_at == null ? b : (a.until_at as number) >= (b.until_at as number) ? a : b),
     plays: everyListen(here.plays, there.plays),
     skips: everyListen(here.skips, there.skips),
     track_metadata: oneOfEach(

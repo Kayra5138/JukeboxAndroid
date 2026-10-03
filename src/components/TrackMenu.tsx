@@ -5,13 +5,10 @@ import type { EnrichedTrack } from '../lib/media/merge';
 export type TrackAction =
   | 'playNext'
   | 'addToQueue'
-  | 'lookup'
-  | 'edit'
-  | 'lyrics'
   | 'addToPlaylist'
   | 'album'
   | 'tiles'
-  | 'view'
+  | 'details'
   | 'delete';
 
 const ACTIONS: { key: TrackAction; label: string; hint: string }[] = [
@@ -20,10 +17,7 @@ const ACTIONS: { key: TrackAction; label: string; hint: string }[] = [
   { key: 'album', label: 'Go to album', hint: 'The rest of the record, in order' },
   { key: 'addToPlaylist', label: 'Add to a list', hint: 'One of your lists, or a new one' },
   { key: 'tiles', label: 'Play piano tiles', hint: 'Keys falling in time with this record' },
-  { key: 'lookup', label: 'Look up details', hint: 'Search again for tags and a cover' },
-  { key: 'edit', label: 'Edit tags', hint: 'Artist, title, tags and their order' },
-  { key: 'lyrics', label: 'Lyrics', hint: 'Fix the timing, search or paste them' },
-  { key: 'view', label: 'View details', hint: 'File, tags and listening history' },
+  { key: 'details', label: 'View & edit details', hint: 'Names, cover, tags and lyrics, with a lookup for each' },
   { key: 'delete', label: 'Delete', hint: 'Erases the file from the phone' },
 ];
 

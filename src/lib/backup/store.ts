@@ -32,6 +32,7 @@ export type BackupDb = {
  * relative to the others, which is what a tie on the clock is broken by.
  */
 const ORDER: Record<TableName, string> = {
+  discover_exclusions: 'id',
   plays: 'started_at, id',
   skips: 'started_at, id',
   track_metadata: 'track_id',

@@ -17,6 +17,7 @@ export type AudioFormat = 'mp3' | 'original';
 export type DownloadStatus = 'queued' | 'preparing' | 'downloading' | 'converting' |
   'saving' | 'cancelling' | 'cancelled' | 'failed' | 'done' | 'missing';
 export type DownloadJob = {
+  discoverKey?: string | null;
   id: string;
   video: YouTubeVideo;
   format: AudioFormat;

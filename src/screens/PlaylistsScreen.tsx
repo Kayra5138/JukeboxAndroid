@@ -228,7 +228,7 @@ export default function PlaylistsScreen() {
           */}
           <Pressable
             style={[styles.row, landscape && styles.cell]}
-            onPress={() => router.push('/discover')}>
+            onPress={() => router.push('/(tabs)/search?mode=discover')}>
             <Text style={styles.rowName} numberOfLines={1}>
               Discover
             </Text>

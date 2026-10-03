@@ -1,13 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Playback events refresh the widget; the running service updates progress
-     once per second only while playing, the screen is on and a widget exists. -->
+     once per second only while playing, the screen is on and a widget exists.
+
+     One row tall. A launcher that does not read the target size works the rows
+     out from the least height instead, as (height + 30) / 70 rounded up, and
+     at ninety-two that came to two: the widget arrived twice as tall as it was
+     drawn to be. Forty is the most that still counts as one row. It may be
+     made taller by hand, and the layout is chosen by the height it is given. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
   android:description="@string/jukebox_widget_description"
-  android:initialLayout="@layout/jukebox_widget"
+  android:initialLayout="@layout/jukebox_widget_compact"
   android:minWidth="250dp"
-  android:minHeight="92dp"
-  android:previewLayout="@layout/jukebox_widget"
-  android:resizeMode="horizontal"
+  android:minHeight="40dp"
+  android:minResizeHeight="40dp"
+  android:previewLayout="@layout/jukebox_widget_compact"
+  android:resizeMode="horizontal|vertical"
   android:targetCellWidth="4"
   android:targetCellHeight="1"
   android:updatePeriodMillis="0"

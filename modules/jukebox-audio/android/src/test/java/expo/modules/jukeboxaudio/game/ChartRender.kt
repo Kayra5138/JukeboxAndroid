@@ -42,7 +42,9 @@ class ChartRender {
 
     for (level in Difficulty.ALL) {
       val found = Onsets.find(song, rate, level.density)
-      val notes = found.notes
+      // The chart is written in grid time; a click has to be put where the
+      // step really falls in the recording, which is what the lines are for.
+      val notes = found.notes.map { it.copy(atMs = found.songMs(it.atMs)) }
       val name = level.name.lowercase()
       Wav.write(File(out, "chart-$name.wav"), Wav.Audio(rate, 1, mix(song, notes, rate)))
 

@@ -40,6 +40,17 @@ import java.util.concurrent.Executors
 private const val MAX_RECOVERY_TRIES = 2
 
 /**
+ * The mark Media3 puts on the stop key it sends when its notification is
+ * swiped away.
+ *
+ * Not a public constant: it is read out of the library, which is one more
+ * reason the media3 version in build.gradle is pinned. If an upgrade renames
+ * it, a swipe goes back to stopping the player and no further -- the music
+ * still stops, the service is only slower to go.
+ */
+private const val NOTIFICATION_DISMISSED = "androidx.media3.session.NOTIFICATION_DISMISSED_EVENT_KEY"
+
+/**
  * The surfaces a media app is expected to appear in, and the only callers
  * outside this app allowed to browse the library.
  *
@@ -249,6 +260,34 @@ class PlaybackService : MediaLibraryService() {
   @OptIn(UnstableApi::class)
   override fun onCreate() {
     super.onCreate()
+
+    /*
+      Let go of the foreground as soon as the music is paused.
+
+      Media3 holds the service in the foreground for ten minutes after a pause,
+      and a notification that belongs to a foreground service cannot be swiped
+      away. So for ten minutes after pausing, the player in the shade could not
+      be got rid of, which is exactly when somebody wants to: they have stopped
+      listening. Released at once, it can be swiped the moment it is paused.
+
+      What the ten minutes were buying is a process the system will not reclaim
+      while paused. That is given up, and it is safe to: the queue and the
+      position are written down as they change, and a press of play that finds
+      the service gone starts it again and puts them back (see onStartCommand).
+    */
+    setForegroundServiceTimeoutMs(0)
+
+    /*
+      No notification for a player that has been stopped.
+
+      Left to itself Media3 keeps one up after a stop unless it was swiped
+      away, and it forgets the swipe the moment it hears from a player that
+      is not yet idle. A swipe arrives as a pause and then a stop, so the
+      pause wiped the mark the swipe had just made, the stop found none, and
+      the notification was posted again: one swipe to stop, a second to be
+      rid of it. Stopped is stopped; there is nothing for it to offer.
+    */
+    setShowNotificationForIdlePlayer(SHOW_NOTIFICATION_FOR_IDLE_PLAYER_NEVER)
 
     val audioSessionId = getSystemService(AudioManager::class.java).generateAudioSessionId()
 
@@ -494,7 +533,32 @@ class PlaybackService : MediaLibraryService() {
    * A queue that was already there is untouched, so none of this applies to
    * the ordinary case of a press while the music is running.
    */
+  @OptIn(UnstableApi::class)
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    /*
+      Swiping the notification away closes the music.
+
+      Media3 sends the swipe here as a stop key with a mark on it, and stops
+      the player. That is half of closing: the service would live on with
+      nothing to do, holding the session open and the widget's controls lit.
+      So the service is stopped as well, and a swipe is never taken for a
+      press that wants the last queue put back.
+
+      Only stopped, and not with pauseAllPlayersAndStopSelf, which looks like
+      the same thing said properly. That one redraws the notification first,
+      and it would do it here before Media3 has got round to the stop key: the
+      player still looks ready and nothing is marked as swiped, so the
+      notification that was just thrown away is posted again, and it took a
+      second swipe to be rid of it. There is nothing left for it to pause
+      anyway. A notification can only be swiped once the music is paused.
+    */
+    val dismissed = intent?.getBooleanExtra(NOTIFICATION_DISMISSED, false) == true
+    if (dismissed) {
+      val result = super.onStartCommand(intent, flags, startId)
+      stopSelf()
+      return result
+    }
+
     if (intent?.action == Intent.ACTION_MEDIA_BUTTON && restoreQueueIfEmpty()) {
       mediaSession?.player?.playWhenReady = true
     }

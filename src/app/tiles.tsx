@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
+  cancelAnimation,
   Easing,
   runOnJS,
   useAnimatedStyle,
@@ -47,6 +48,7 @@ import {
   SPEEDS,
   TILE_ASPECT,
   tileAt,
+  toGrid,
   touching,
   type Run,
   type Score,
@@ -319,6 +321,15 @@ const RISE_MS = 650;
 
 const CONFETTI_PIECES = 72;
 
+/**
+ * How long after everything has been stopped the screen is left.
+ *
+ * A few frames at any refresh rate: long enough for the other thread to have
+ * finished the frame it was in when it was told to stop, short enough that
+ * nobody pressing Back feels a wait.
+ */
+const LEAVE_AFTER_MS = 80;
+
 /*
   The veil the page at the end is read through. Dark enough for figures and no
   darker, because what is behind it is the reason it is a veil; and thinner at
@@ -381,6 +392,19 @@ export default function TilesScreen() {
   const [loading, setLoading] = useState<Loading>('idle');
   const [phase, setPhase] = useState<Phase>('setup');
   const [end, setEnd] = useState<End>('stopped');
+  /*
+    Whether paper is in the air, kept apart from which page is showing.
+
+    It was drawn for as long as the winning page was, and so was taken off the
+    screen the moment that page went -- by Again, pressed while it was still
+    falling. A view taken away in the middle of being animated is the one thing
+    the animation library does not survive; see `leave` below. So a burst is
+    started by a win and ended only by itself.
+  */
+  const [paper, setPaper] = useState(false);
+  const sPaper = useSharedValue(0);
+  /** How far up the page at the end has come: held here so it can be stopped from here. */
+  const sShown = useSharedValue(0);
   /** Which end of the board the page at the end stays off, if either. */
   const [keep, setKeep] = useState<Keep>(null);
   const [speed, setSpeed] = useState<Speed>(() => speedById(readSetting(SETTINGS.tilesDifficulty)));
@@ -420,6 +444,19 @@ export default function TilesScreen() {
   const drift = useSharedValue(1);
 
   const run = useSharedValue<Run | null>(null);
+  /*
+    Where each step of the chart falls in the recording, and how long a step is
+    in the chart's own time.
+
+    The chart is written on an even grid and the band did not play evenly, so
+    the board reads the player's position through these: see `toGrid`. Every
+    place below that asks "where is the song now" asks it in grid time, which
+    is the only time the tiles are laid out in. What stays in the song's own
+    time is what is about the recording itself -- how far through it is, and
+    whether it has ended.
+  */
+  const sLines = useSharedValue<number[]>([]);
+  const sStepMs = useSharedValue(0);
   const view = useSharedValue<number[]>(new Array(POOL * FIELDS).fill(0));
   /** The two the board is drawn into alternately; see the frame callback. */
   const pair = useSharedValue<number[][]>([]);
@@ -540,9 +577,9 @@ export default function TilesScreen() {
     const rows = board.height > 0 && tileHeight > 0 ? board.height / tileHeight : 1;
     const wanted = speed.onScreenMs / rows;
     const step = chart?.stepMs ?? 0;
-    const row = rowFor(wanted, step);
+    const row = rowFor(wanted, step, chart?.barSteps ?? 0);
     return { rowMs: row, spanFor: row * rows };
-  }, [board.height, chart?.stepMs, speed.onScreenMs, tileHeight]);
+  }, [board.height, chart?.barSteps, chart?.stepMs, speed.onScreenMs, tileHeight]);
 
   useEffect(() => {
     boardWidth.set(board.width);
@@ -793,6 +830,7 @@ export default function TilesScreen() {
   /** The song ran out of notes. It stops with the run, like every other end. */
   const finished = useCallback(() => {
     setKeep(null);
+    setPaper(true);
     wound('won');
   }, [wound]);
 
@@ -865,7 +903,7 @@ export default function TilesScreen() {
         // Held where it is, in this frame, so whatever is still on the board
         // stays on it instead of blinking out before the page arrives.
         sEnd.value = END_WON;
-        sEndNow.value = ms - offsetMs.value;
+        sEndNow.value = toGrid(sLines.value, sStepMs.value, ms - offsetMs.value);
         runOnJS(finished)();
       }
 
@@ -906,7 +944,7 @@ export default function TilesScreen() {
         return;
       }
 
-      const now = ended ? sEndNow.value : ms - offsetMs.value;
+      const now = ended ? sEndNow.value : toGrid(sLines.value, sStepMs.value, ms - offsetMs.value);
       const span = spanMs.value;
       const travel = travelPx.value;
       const tall = tallPx.value;
@@ -1205,6 +1243,8 @@ export default function TilesScreen() {
       sLostAt,
       sLostHold,
       sLostLane,
+      sLines,
+      sStepMs,
       sStill,
       songMs,
       spanMs,
@@ -1214,7 +1254,7 @@ export default function TilesScreen() {
       view,
     ]
   );
-  useFrameCallback(frame);
+  const ticking = useFrameCallback(frame);
 
   /*
     Touch.
@@ -1256,7 +1296,7 @@ export default function TilesScreen() {
               continue;
             }
 
-            const now = songMs.value - offsetMs.value;
+            const now = toGrid(sLines.value, sStepMs.value, songMs.value - offsetMs.value);
             const span = spanMs.value;
             const travel = travelPx.value;
             const tall = tallPx.value;
@@ -1400,7 +1440,7 @@ export default function TilesScreen() {
             // Let go early. The key was struck and counted when it was; all
             // that is lost is what holding it to the end would have added.
             if (notes.state[index] === 1) {
-              const at = songMs.value - offsetMs.value;
+              const at = toGrid(sLines.value, sStepMs.value, songMs.value - offsetMs.value);
               notes.state[index] = 2;
               notes.doneAt[index] = at;
               const from = notes.heldFrom[index]!;
@@ -1443,6 +1483,8 @@ export default function TilesScreen() {
       sSlipOn,
       sSlipX,
       sSlipY,
+      sLines,
+      sStepMs,
       sStill,
       songMs,
       spanMs,
@@ -1518,7 +1560,17 @@ export default function TilesScreen() {
       down rather than appearing part way. The ladder is counted from the start
       of the record, so whatever this skips is rows, never fractions of one.
     */
-    const playable = ladderFrom(chart, landed, rowMs, spanFor + 250, LANES, speed.doubleEvery);
+    const lines = chart.lines ?? [];
+    const playable = ladderFrom(
+      chart,
+      // The record was asked where it is; the ladder is asked where to begin,
+      // and those are the same moment in two different times.
+      toGrid(lines, chart.stepMs, landed),
+      rowMs,
+      spanFor + 250,
+      LANES,
+      speed.doubleEvery
+    );
 
     /*
       Armed only now rather than when the screen appeared, and armed is all it
@@ -1539,6 +1591,8 @@ export default function TilesScreen() {
     cleared();
     setEnd('stopped');
     endsAt.set(chart.durationMs);
+    sLines.set(lines);
+    sStepMs.set(chart.stepMs);
     setScore({ ...NOTHING_YET, total: playable.length });
     run.set(runOf(playable));
     songMs.set(landed);
@@ -1564,8 +1618,10 @@ export default function TilesScreen() {
     sClean,
     sCombo,
     sHit,
+    sLines,
     sLives,
     sMiss,
+    sStepMs,
     settled,
     speed.doubleEvery,
     songMs,
@@ -1621,6 +1677,38 @@ export default function TilesScreen() {
     void JukeboxAudio.pauseAsync().catch(() => {});
   }, [cleared, run, running]);
 
+  /** Cut short from outside: the record under the run was changed. */
+  const stop = useCallback(() => {
+    setKeep(null);
+    wound('stopped');
+  }, [wound]);
+
+  /*
+    Leaving, which has to be done in two steps.
+
+    Everything on this screen is moved from the other thread, and a view that
+    is taken away while it is still being moved is never forgotten there: the
+    animation library goes on trying to move it, fails, and tries again on
+    every scroll of every list for as long as the app is open. A win left in
+    its first seconds, with seventy scraps of paper in the air, left a hundred
+    and seventy-five such views behind, and the library then spent a hundred
+    and fifty milliseconds a frame failing to move them -- which is what a
+    stuttering library screen turned out to be.
+
+    So nothing here is allowed to be moving when the screen goes. Everything is
+    stopped first, the other thread is given a few frames to finish what it had
+    already begun, and only then is the screen left.
+  */
+  const leaving = useRef(false);
+  const leave = useCallback(() => {
+    if (leaving.current) return;
+    leaving.current = true;
+    running.set(0);
+    ticking.setActive(false);
+    for (const moving of [sBlame, sEndNow, sHurt, sHeal, sPaper, sShown]) cancelAnimation(moving);
+    setTimeout(() => router.back(), LEAVE_AFTER_MS);
+  }, [router, running, sBlame, sEndNow, sHeal, sHurt, sPaper, sShown, ticking]);
+
   /*
     Back belongs to the run before it belongs to the navigator.
 
@@ -1640,16 +1728,12 @@ export default function TilesScreen() {
         toMenu();
         return true;
       }
-      return false;
+      // Out of the screen, but not by simply dropping it: see `leave`.
+      leave();
+      return true;
     });
     return () => listener.remove();
-  }, [pause, phase, toMenu]);
-
-  /** Cut short from outside: the record under the run was changed. */
-  const stop = useCallback(() => {
-    setKeep(null);
-    wound('stopped');
-  }, [wound]);
+  }, [leave, pause, phase, toMenu]);
 
   const again = useCallback(() => {
     running.set(0);
@@ -1818,7 +1902,7 @@ export default function TilesScreen() {
             accessibilityRole="button"
             accessibilityLabel="Back"
             hitSlop={14}
-            onPress={() => router.back()}
+            onPress={leave}
             style={[styles.leave, { top: insets.top + 12 }]}>
             <BackIcon size={24} color={TEXT} />
           </Pressable>
@@ -1890,6 +1974,7 @@ export default function TilesScreen() {
           top={insets.top}
           bottom={insets.bottom}
           keep={keep}
+          shown={sShown}
           clear={
             end === 'lapse'
               ? Math.min(tileHeight, board.height * 0.38)
@@ -1905,8 +1990,14 @@ export default function TilesScreen() {
         Over the page as well as the board. Under it the paper would be dimmed
         by the same veil that dims the keys, and dimmed confetti is litter.
       */}
-      {phase === 'over' && end === 'won' && !still && board.width > 0 ? (
-        <Confetti width={board.width} height={board.height} colour={keyColour} />
+      {paper && !still && board.width > 0 ? (
+        <Confetti
+          width={board.width}
+          height={board.height}
+          colour={keyColour}
+          clock={sPaper}
+          onDone={() => setPaper(false)}
+        />
       ) : null}
     </GestureHandlerRootView>
   );
@@ -1936,6 +2027,7 @@ function Ending({
   bottom,
   keep,
   clear,
+  shown,
   onAgain,
 }: {
   end: End;
@@ -1947,16 +2039,27 @@ function Ending({
   /** Which end of the board to stay off, and how much of it, in points. */
   keep: Keep;
   clear: number;
+  /** How far up the page has come, nought to one. Held by the screen, which may have to stop it. */
+  shown: SharedValue<number>;
   onAgain: () => void;
 }) {
   const wait = still || end === 'stopped' ? 0 : end === 'won' ? WON_WAIT_MS : LOST_WAIT_MS;
-  const shown = useSharedValue(still ? 1 : 0);
   const [armed, setArmed] = useState(still);
 
   useEffect(() => {
-    if (still) return;
+    if (still) {
+      shown.value = 1;
+      return;
+    }
+    shown.value = 0;
     shown.value = withDelay(wait, withTiming(1, { duration: RISE_MS, easing: Easing.out(Easing.quad) }));
-    const timer = setTimeout(() => setArmed(true), wait + RISE_MS * 0.6);
+    /*
+      Not until the page has finished arriving, and a moment past. Again takes
+      this page off the screen, and it must not go while it is still being
+      faded in: see `leave` on the screen for what a view removed in the middle
+      of an animation does afterwards.
+    */
+    const timer = setTimeout(() => setArmed(true), wait + RISE_MS + 60);
     return () => clearTimeout(timer);
   }, [shown, still, wait]);
 
@@ -2114,28 +2217,37 @@ const Confetti = memo(function Confetti({
   width,
   height,
   colour,
+  clock,
+  onDone,
 }: {
   width: number;
   height: number;
   colour: string;
+  /** The burst's own clock, in seconds. Held by the screen, which may have to stop it. */
+  clock: SharedValue<number>;
+  /** Called once the last scrap has gone, which is when this may be taken down. */
+  onDone: () => void;
 }) {
-  const clock = useSharedValue(0);
-  const [over, setOver] = useState(false);
   const scraps = useMemo(() => confettiFor(CONFETTI_PIECES, width, height), [height, width]);
   // The record's own colour among them, so the paper belongs to the song.
   const colours = useMemo(() => [...CONFETTI, colour], [colour]);
 
   useEffect(() => {
+    clock.value = 0;
     clock.value = withTiming(
       CONFETTI_SEC,
       { duration: CONFETTI_SEC * 1000, easing: Easing.linear },
       (done) => {
-        if (done) runOnJS(setOver)(true);
+        // Only when it ran its course. Stopped half way, it is the screen
+        // that is going, and the screen takes this down with it.
+        if (done) runOnJS(onDone)();
       }
     );
+    // Once, when the burst begins: `onDone` is a new function on every render
+    // of the screen, and starting again each time would never let it land.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clock]);
 
-  if (over) return null;
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {scraps.map((scrap, index) => (

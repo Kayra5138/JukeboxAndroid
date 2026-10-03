@@ -13,10 +13,14 @@ import {
   LANES,
   runOf,
   pointsOf,
+  gridLength,
+  rowAnchor,
   rowFor,
+  SLOTS,
   speedById,
   SPEEDS,
   tileAt,
+  toGrid,
   touching,
 } from '../game.ts';
 
@@ -589,5 +593,270 @@ describe('the score', () => {
 
   it('counts only what was judged', () => {
     assert.equal(accuracyOf({ hit: 3, bonus: 0, missed: 1, combo: 0, best: 3, total: 50 }), 0.75);
+  });
+});
+
+/*
+  A chart as the analysis now makes them: on a grid that follows the beat, with
+  a lane and an accent written for every quarter of a step, and bars.
+
+  Eight steps to the bar, four hundred milliseconds to the step, and a tune
+  that is the same four bars twice over -- so whatever the board does with the
+  first four it has to do again with the second.
+*/
+const STEP = 400;
+const BAR = 8;
+function song(bars: number, pattern: (bar: number, slot: number) => number, extra: Partial<Chart> = {}): Chart {
+  const steps = bars * BAR;
+  let lanes = '';
+  let accents = '';
+  for (let slot = 0; slot < steps * SLOTS; slot++) {
+    const bar = Math.floor(slot / (BAR * SLOTS));
+    lanes += String(pattern(bar, slot % (BAR * SLOTS)));
+    // Hardest on the first step of the bar, then on its fifth, soft elsewhere.
+    const within = slot % (BAR * SLOTS);
+    accents += within === 0 ? 'z' : within === 4 * SLOTS ? 'm' : '2';
+  }
+  return {
+    version: 10,
+    durationMs: steps * STEP,
+    stepMs: STEP,
+    notes: [],
+    lines: Array.from({ length: steps + 1 }, (_, index) => index * STEP),
+    barSteps: BAR,
+    barAt: 0,
+    lanes,
+    accents,
+    ...extra,
+  };
+}
+/** A tune that climbs through the bar, the same in every bar of the same parity. */
+const twice = (bar: number, slot: number) => (Math.floor(slot / SLOTS) + (bar % 4)) % LANES;
+
+describe('song time and grid time', () => {
+  it('is the same thing for a song with no lines', () => {
+    assert.equal(toGrid(undefined, 250, 1234), 1234);
+    assert.equal(toGrid([], 250, 1234), 1234);
+    assert.equal(toGrid([0, 250], 0, 1234), 1234);
+  });
+
+  it('puts every line exactly on its step', () => {
+    const lines = [100, 520, 910, 1340, 1750];
+    lines.forEach((at, index) => assert.equal(toGrid(lines, 400, at), index * 400));
+  });
+
+  it('goes evenly between two lines, however far apart they are', () => {
+    const lines = [0, 500, 900];
+    // Half way through a long step and half way through a short one are both
+    // half a step.
+    assert.equal(toGrid(lines, 400, 250), 200);
+    assert.equal(toGrid(lines, 400, 700), 600);
+  });
+
+  it('carries on at the nearest pace before the first line and after the last', () => {
+    const lines = [1000, 1400, 1900];
+    assert.equal(toGrid(lines, 400, 600), -400);
+    assert.equal(toGrid(lines, 400, 2400), 1200);
+  });
+
+  it('never goes backwards', () => {
+    const lines = [0];
+    // A band that speeds up and slows down by a tenth either way.
+    for (let index = 1; index < 600; index++) lines.push(lines[index - 1]! + 400 + 40 * Math.sin(index / 9));
+    let before = -Infinity;
+    for (let ms = -500; ms < lines[lines.length - 1]! + 500; ms += 7) {
+      const now = toGrid(lines, 400, ms);
+      assert.ok(now > before, `at ${ms}`);
+      before = now;
+    }
+  });
+
+  it('measures the chart by its lines and not by the recording', () => {
+    assert.equal(gridLength(song(4, twice, { durationMs: 99_999 })), 4 * BAR * STEP);
+    assert.equal(gridLength(chartOf([])), 60_000);
+  });
+});
+
+describe('how long a row is when the bars are known', () => {
+  const BAR_MS = STEP * BAR;
+
+  it('is always the bar cut into a whole number of rows', () => {
+    for (const bars of [6, 8]) {
+      for (const step of [160, 215, 272, 333, 412, 440]) {
+        for (const wanted of [140, 200, 280, 360, 520, 700]) {
+          const rows = (step * bars) / rowFor(wanted, step, bars);
+          assert.ok(Math.abs(rows - Math.round(rows)) < 1e-9, `${wanted} on ${step}x${bars}: ${rows}`);
+          assert.ok(rows >= 1);
+        }
+      }
+    }
+  });
+
+  it('is never far from what was asked', () => {
+    let worst = 1;
+    for (const bars of [6, 8]) {
+      for (let step = 160; step <= 440; step += 7) {
+        for (let wanted = 130; wanted <= 560; wanted += 11) {
+          const row = rowFor(wanted, step, bars);
+          worst = Math.max(worst, row > wanted ? row / wanted : wanted / row);
+        }
+      }
+    }
+    // A fifth, and a shade more where a bar is so short that it holds only
+    // two or three rows and the next whole number is a long way off.
+    assert.ok(worst <= 1.25, `the worst is ${worst.toFixed(3)} times off`);
+  });
+
+  it('takes a straight division when one is close', () => {
+    assert.equal(rowFor(400, STEP, BAR), BAR_MS / 8);
+    assert.equal(rowFor(430, STEP, BAR), BAR_MS / 8);
+    assert.equal(rowFor(210, STEP, BAR), BAR_MS / 16);
+  });
+
+  it('leans against the beat when that is nearer the pace', () => {
+    assert.equal(rowFor(280, STEP, BAR), BAR_MS / 12);
+    assert.equal(rowFor(540, STEP, BAR), BAR_MS / 6);
+  });
+
+  it('cuts a bar of six steps the way that bar is counted', () => {
+    // Two beats of three: six rows are its steps, and two its beats.
+    assert.equal(rowFor(250, 250, 6), 250);
+    assert.equal(rowFor(700, 250, 6), 750);
+  });
+
+  it('starts its rows where a bar starts', () => {
+    const late = song(4, twice, { barAt: 3 });
+    const row = rowFor(300, STEP, BAR);
+    const anchor = rowAnchor(late, row);
+    assert.ok(anchor >= 0 && anchor < row);
+    // The bar begins three steps in, and a whole number of rows before that.
+    const rows = (3 * STEP - anchor) / row;
+    assert.ok(Math.abs(rows - Math.round(rows)) < 1e-9);
+    assert.equal(rowAnchor(chartOf([]), row), 0);
+  });
+});
+
+describe('a song played the way it was learned', () => {
+  /** The keys of one bar, as lanes in order, for comparing bars. */
+  const barOf = (tiles: ChartNote[], bar: number) =>
+    tiles
+      .filter((tile) => tile.atMs >= bar * BAR * STEP - 1e-6 && tile.atMs < (bar + 1) * BAR * STEP - 1e-6)
+      .map((tile) => `${Math.round(tile.atMs - bar * BAR * STEP)}:${tile.lane}:${Math.round(tile.holdMs)}`)
+      .join(' ');
+
+  it('takes its lanes from the song', () => {
+    // One lane all bar would be end to end in a column, so the tune moves.
+    const tiles = ladderFrom(song(2, (_bar, slot) => Math.floor(slot / SLOTS) % LANES), 0, STEP);
+    assert.deepEqual(tiles.slice(0, 8).map((tile) => tile.lane), [0, 1, 2, 3, 0, 1, 2, 3]);
+  });
+
+  it('gives the same bar the same keys, at every speed', () => {
+    const chart = song(16, twice);
+    for (const wanted of [140, 190, 210, 280, 330, 400, 520, 700]) {
+      const row = rowFor(wanted, STEP, BAR);
+      for (const pairs of [0, 5, 7]) {
+        const tiles = ladderFrom(chart, 0, row, 0, LANES, pairs);
+        // Bars four apart are the same music. The first four are left out: a
+        // song's first key has nothing before it to be kept clear of.
+        for (let bar = 4; bar < 12; bar++) {
+          assert.equal(barOf(tiles, bar + 4), barOf(tiles, bar), `rows of ${row} ms, pairs ${pairs}, bar ${bar}`);
+        }
+      }
+    }
+  });
+
+  it('gives it the same keys when the bars do not start with the record', () => {
+    const chart = song(16, twice, { barAt: 5 });
+    const row = rowFor(280, STEP, BAR);
+    const tiles = ladderFrom(chart, 0, row, 0, LANES, 7);
+    const from = 5 * STEP;
+    const cut = (bar: number) =>
+      tiles
+        .filter((tile) => tile.atMs >= from + bar * BAR * STEP - 1e-6 && tile.atMs < from + (bar + 1) * BAR * STEP - 1e-6)
+        .map((tile) => `${Math.round(tile.atMs - from - bar * BAR * STEP)}:${tile.lane}`)
+        .join(' ');
+    // The tune comes round every four bars wherever the bar lines are drawn.
+    for (let bar = 4; bar < 9; bar++) assert.equal(cut(bar + 4), cut(bar), `bar ${bar}`);
+  });
+
+  it('still never puts two keys end to end in a column', () => {
+    const flat = ladderFrom(song(4, () => 2), 0, STEP);
+    for (let index = 1; index < flat.length; index++) assert.notEqual(flat[index]!.lane, flat[index - 1]!.lane);
+  });
+
+  it('puts its pairs where the music hits hardest', () => {
+    const tiles = ladderFrom(song(8, twice), 0, STEP, 0, LANES, 7);
+    const paired = new Map<number, number>();
+    for (const tile of tiles) paired.set(tile.atMs, (paired.get(tile.atMs) ?? 0) + 1);
+    const pairs = [...paired.entries()].filter(([, count]) => count === 2).map(([at]) => at);
+    assert.ok(pairs.length >= 3, `${pairs.length} pairs`);
+    // Every one on the first step of a bar, which is where the accent is.
+    for (const at of pairs) assert.equal(at % (BAR * STEP), 0, `a pair at ${at}`);
+  });
+
+  it('never puts one pair straight after another', () => {
+    const loud = song(8, twice, { accents: 'z'.repeat(8 * BAR * SLOTS).replace(/z(?=.{3}(.{4})*$)/g, 'y') });
+    const tiles = ladderFrom(loud, 0, STEP, 0, LANES, 2);
+    const count = new Map<number, number>();
+    for (const tile of tiles) count.set(tile.atMs, (count.get(tile.atMs) ?? 0) + 1);
+    const rows = [...count.keys()].sort((a, b) => a - b);
+    for (let index = 1; index < rows.length; index++) {
+      assert.ok(!(count.get(rows[index]!) === 2 && count.get(rows[index - 1]!) === 2), `at ${rows[index]}`);
+    }
+  });
+
+  it('rests where the chart says the music eases, in every bar alike', () => {
+    // The last quarter of every bar is at half the level of what is around it.
+    let ease = '';
+    for (let slot = 0; slot < 8 * BAR * SLOTS; slot++) ease += slot % (BAR * SLOTS) >= 6 * SLOTS ? 'a' : 'k';
+    const chart = song(8, twice, { ease });
+    for (const wanted of [200, 400]) {
+      const row = rowFor(wanted, STEP, BAR);
+      // Up to the end of the chart; the row that sits on its last moment is
+      // past everything the chart has said anything about.
+      const tiles = ladderFrom(chart, 0, row).filter((tile) => tile.atMs < 8 * BAR * STEP);
+      for (const tile of tiles) {
+        assert.ok(tile.atMs % (BAR * STEP) < 6 * STEP, `a key at ${tile.atMs} in the rest`);
+      }
+      // And keys everywhere else.
+      assert.equal(new Set(tiles.map((tile) => tile.atMs)).size, (8 * 6 * STEP) / row);
+    }
+    assert.deepEqual(easedRows(chart, STEP, 7), [false, false, false, false, false, false, true, true]);
+  });
+
+  it('steps a held note aside the same way every time', () => {
+    // One note for a whole bar, then another: the tune holds, the keys cannot.
+    const held = song(8, (bar) => (bar % 2 === 0 ? 1 : 3));
+    const tiles = ladderFrom(held, 0, STEP).filter((tile) => tile.atMs < 8 * BAR * STEP);
+    const lanes = tiles.map((tile) => tile.lane);
+    assert.equal(lanes.length, 8 * BAR);
+    for (let index = 1; index < lanes.length; index++) assert.notEqual(lanes[index], lanes[index - 1]);
+    // The rows on the even places are the song's lane; the odd ones stepped aside.
+    for (let index = 0; index < lanes.length; index += 2) assert.equal(lanes[index], Math.floor(index / BAR) % 2 === 0 ? 1 : 3);
+    // And every bar of the same note is the same keys.
+    for (let bar = 0; bar < 6; bar++) {
+      assert.deepEqual(lanes.slice((bar + 2) * BAR, (bar + 3) * BAR), lanes.slice(bar * BAR, (bar + 1) * BAR), `bar ${bar}`);
+    }
+  });
+
+  it('runs to the end of the chart, which is not the length of the recording', () => {
+    const chart = song(4, twice, { durationMs: 1_000 });
+    const tiles = ladderFrom(chart, 0, STEP);
+    assert.equal(tiles[tiles.length - 1]!.atMs, 4 * BAR * STEP);
+  });
+
+  it('plays a chart from before any of this the way it always did', () => {
+    const old = chartOf([note(0, 1), note(500, 3), note(1000, 0)]);
+    const tiles = ladderFrom(old, 0, 250, 0, LANES, 7);
+    // Rows from the first moment of the record, the lanes its notes name, and
+    // a pair on every seventh row.
+    const at = (ms: number) => tiles.filter((tile) => tile.atMs === ms).map((tile) => tile.lane);
+    assert.equal(at(0)[0], 1);
+    assert.equal(at(500)[0], 3);
+    assert.equal(at(1000)[0], 0);
+    for (const tile of tiles) assert.equal(tile.atMs % 250, 0);
+    const pairs = tiles.filter((tile, index) => index > 0 && tiles[index - 1]!.atMs === tile.atMs).map((tile) => tile.atMs / 250);
+    assert.ok(pairs.length > 5);
+    for (const row of pairs) assert.equal(row % 7, 0, `a pair on row ${row}`);
   });
 });

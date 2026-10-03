@@ -1,5 +1,6 @@
 import { rankGenres, type WeightedGenre } from './genres.ts';
 import { request, sleep, statusOf, USER_AGENT } from './http.ts';
+import { splitCredit } from './credit.ts';
 import { identify } from './identify.ts';
 import { foldForMatch, matchScore } from './text.ts';
 import type { Track } from '../types.ts';
@@ -56,6 +57,15 @@ export const MIN_ARTIST_SCORE = 90;
  * are the compilation's — `Now That's What I Call Music` is not a genre of
  * anything on it.
  */
+/**
+ * How many names out of one credit are tried before giving up on it.
+ *
+ * Each costs up to three paced requests. The song is almost always under the
+ * first or second name; a credit with nine on it is a compilation's, and nine
+ * tries would hold the whole queue up for half a minute to learn that.
+ */
+const NAMES_TRIED = 4;
+
 const REPACKAGED = new Set(['Compilation', 'Live', 'Remix', 'DJ-mix', 'Mixtape/Street']);
 
 export type MusicBrainzMatch = {
@@ -64,6 +74,13 @@ export type MusicBrainzMatch = {
   /** Ranked, best first. The first is the genre; the rest are still true. */
   genres: string[];
   year: number | null;
+  /**
+   * What finding it said about the credit, when the credit could be read two
+   * ways: `true` if the catalogue has it as one artist, `false` if the song
+   * was only found under one of the names in it. Null when there was nothing
+   * to settle.
+   */
+  oneArtist: boolean | null;
 };
 
 type Tagged = { genres?: WeightedGenre[]; tags?: WeightedGenre[] };
@@ -214,30 +231,78 @@ async function searchRecordings(
     `/recording?query=${encodeURIComponent(query)}&fmt=json&limit=5`,
     signal
   );
-  return (search.recordings ?? []).find((recording) =>
+  const agreeing = (search.recordings ?? []).filter((recording) =>
     titlesAgree(recording.title, wantedTitle)
-  ) ?? null;
+  );
+
+  /*
+    The earliest of the ones that agree, not the first.
+
+    A song that did well is in the catalogue several times over under the same
+    title -- the album cut, the one on the greatest hits, a reissue -- and each
+    is dated to its own release. Taking whichever the search ranked first filed
+    a 2010 song under 2022 because the reissue happened to score a point
+    higher. The earliest is the recording the others are copies of, and its
+    release is the one whose genres describe the song.
+
+    One with no date at all only wins when none of them has one.
+  */
+  const yearOf = (recording: RecordingResult) => {
+    const year = Number(recording['first-release-date']?.slice(0, 4));
+    return Number.isInteger(year) && year > 1900 ? year : Infinity;
+  };
+  let best: RecordingResult | null = null;
+  for (const recording of agreeing) {
+    if (!best || yearOf(recording) < yearOf(best)) best = recording;
+  }
+  return best;
 }
 
 export async function lookupTrack(
   track: Track,
   signal?: AbortSignal
 ): Promise<MusicBrainzMatch | null> {
-  const { artist, title } = identify(track);
+  const { artist, artists, title } = identify(track);
   if (!artist) return null;
-
-  const resolved = await resolveArtist(artist, signal);
 
   // Quoted so the words have to appear together, but escaped first: a title
   // carrying a quote or a backslash closes the phrase early and MusicBrainz
   // answers 400, which used to surface as a rate limit and cost a minute.
   const phrase = escapeLucene(title);
 
-  // Pinning to a resolved artist is the precise search, so it goes first.
-  let recording =
-    resolved && phrase
-      ? await searchRecordings(`arid:${resolved.id} AND recording:"${phrase}"`, title, signal)
-      : null;
+  /*
+    The credit as written goes first, then each name in it.
+
+    As written, because `Earth, Wind & Fire` is an artist and has to be found
+    as one before anybody tries looking for Earth. Then name by name, because
+    `Eminem, Rihanna` is not an artist anywhere: the search used to stop at
+    that, with a song both of them are credited on sitting one request away.
+    An artist id finds every recording the artist is credited on, guest or
+    lead, so whichever name resolves first is enough.
+
+    Pinning to a resolved artist is the precise search, which is why all of
+    this comes before the looser one below.
+  */
+  const names = [artist, ...artists]
+    .filter((name, index, all) => all.findIndex((other) => foldForMatch(other) === foldForMatch(name)) === index)
+    .slice(0, NAMES_TRIED);
+
+  let recording: RecordingResult | null = null;
+  let resolved: ResolvedArtist | null = null;
+  let under: string | null = null;
+  for (const name of names) {
+    const found = await resolveArtist(name, signal);
+    // The genres of whoever the record is filed under are the fallback even
+    // when the song itself turns up under somebody else.
+    resolved ??= found;
+    if (!found || !phrase) continue;
+    recording = await searchRecordings(`arid:${found.id} AND recording:"${phrase}"`, title, signal);
+    if (recording) {
+      resolved = found;
+      under = name;
+      break;
+    }
+  }
 
   // `JoJo - Doppio` and `Minecraft - C418 Aria Math` name a work rather than a
   // performer. Treating that as the alternative case assumed resolving them as
@@ -269,10 +334,17 @@ export async function lookupTrack(
 
   const year = Number(recording['first-release-date']?.slice(0, 4));
 
+  // Only a credit the rules would take apart has anything to be settled, and
+  // only a search pinned to an artist settles it.
+  const ambiguous = splitCredit(artist).length > 1;
+  const oneArtist =
+    !ambiguous || under == null ? null : foldForMatch(under) === foldForMatch(artist);
+
   return {
     title: recording.title,
     artist,
     genres: rankGenres(labelsOf(recording), groupGenres, resolved?.genres),
     year: Number.isInteger(year) && year > 1900 ? year : null,
+    oneArtist,
   };
 }

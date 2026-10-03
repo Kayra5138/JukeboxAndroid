@@ -46,7 +46,49 @@ data class Chart(
    * analysis.
    */
   val levelMs: Int = 0,
-  val levels: List<Int> = emptyList()
+  val levels: List<Int> = emptyList(),
+  /**
+   * Where each step of the grid falls in the recording, in milliseconds.
+   *
+   * Everything else here -- the notes, the pauses, the curve -- is written in
+   * grid time, where step number `i` is at exactly `i * stepMs`. The band does
+   * not play that evenly, so this is the way back: line `i` is the moment of
+   * the recording that step `i` begins at. The board reads the player's
+   * position through it and so lands its rows on the beat the whole way
+   * through, instead of on a ruler laid beside the song.
+   *
+   * Empty for a song with no pulse, where grid time is simply the song's.
+   */
+  val lines: List<Int> = emptyList(),
+  /** How many steps make a bar, and which step the first one starts on. Nought for no pulse. */
+  val barSteps: Int = 0,
+  val barAt: Int = 0,
+  /**
+   * The lane the song suggests for every quarter of a step, one digit each.
+   *
+   * From the tune where there is one -- low notes to the left, high to the
+   * right, by where each sits among the notes around it -- and from the band
+   * that stood out where there is not. The same for every bar that is the same
+   * music, which is the point: a chorus is played the way it was learned.
+   */
+  val lanes: String = "",
+  /**
+   * How hard the music hits at every quarter of a step, one character each,
+   * `0` the softest to `z` the hardest. The board puts its two-finger keys on
+   * the moments that hit hardest, rather than on every so-many-th row.
+   */
+  val accents: String = "",
+  /**
+   * How loud each quarter of a step is against the passage it is in, one
+   * character each: `k` is the level of its surroundings, `0` is nothing.
+   *
+   * The same question the curve above answers, already asked. The board used
+   * to work a dip out for itself from the rows around each row, which gave a
+   * chorus different rests on each return because the bars either side of it
+   * were different. Asked here, once, and made the same for every bar of a
+   * kind, a rest is part of the passage and comes back with it.
+   */
+  val ease: String = ""
 ) {
   /**
    * One tile: when it lands, which lane it falls in, and how long it is held.
@@ -68,9 +110,12 @@ data class Chart(
      * Bumped when the analysis changes in a way that would give a different
      * chart, so that old ones are made again rather than quietly kept.
      */
-    const val VERSION = 9
+    const val VERSION = 11
 
     const val LANES = 4
+
+    /** How many parts of a step the lanes and the curve are written at. */
+    const val SLOTS = 4
   }
 }
 
@@ -116,12 +161,16 @@ data class Difficulty(
  */
 internal object Onsets {
   /**
-   * 1024 samples at 44.1 kHz is 23 ms of sound, and a hop of a quarter of that
-   * puts a reading every 6 ms. Finer than a player can hear a note as separate,
-   * which is what the spacing rule below then has to thin out.
+   * How many samples a window is, for a recording at [rate].
+   *
+   * Twenty-three milliseconds of sound whatever the rate, and a reading every
+   * quarter of that: finer than a player can hear a note as separate, which is
+   * what the spacing rule below then has to thin out. Counted in samples it
+   * would be a different length on every file, and the app listens at half the
+   * rate a song is usually recorded at -- where a window of the same count is
+   * twice as long, and everything timed by it half as exact.
    */
-  private const val WINDOW = 1024
-  private const val HOP = WINDOW / 4
+  private fun windowFor(rate: Int): Int = if (rate < 32_000) 512 else 1024
 
   /**
    * How close two tiles may fall.
@@ -214,17 +263,41 @@ internal object Onsets {
     val stepMs: Int,
     val notes: List<Chart.Note>,
     val quiet: List<Chart.Span> = emptyList(),
-    val levels: List<Int> = emptyList()
-  )
+    val levels: List<Int> = emptyList(),
+    val levelMs: Int = Levels.EVERY_MS,
+    val lines: List<Int> = emptyList(),
+    val barSteps: Int = 0,
+    val barAt: Int = 0,
+    val lanes: String = "",
+    val accents: String = "",
+    val ease: String = ""
+  ) {
+    private val map: TimeMap? =
+      if (lines.size > 1 && stepMs > 0) TimeMap(DoubleArray(lines.size) { lines[it].toDouble() }, stepMs)
+      else null
+
+    /** Where in the recording a moment of the chart is. The same moment, for a song with no pulse. */
+    fun songMs(gridMs: Int): Int {
+      val between = map ?: return gridMs
+      val position = gridMs.toDouble() / stepMs
+      val line = position.toInt().coerceIn(0, lines.size - 2)
+      return Math.round(between.toSong(line, position - line)).toInt()
+    }
+
+    /** And where in the chart a moment of the recording is. */
+    fun gridMs(songMs: Int): Int = map?.let { Math.round(it.toGrid(songMs.toDouble())).toInt() } ?: songMs
+  }
 
   fun find(samples: FloatArray, rate: Int, strength: Float = 1f): Found {
-    if (samples.size < WINDOW * 2) return Found(0, emptyList())
+    val size = windowFor(rate)
+    val hop = size / 4
+    if (samples.size < size * 2) return Found(0, emptyList())
 
-    val window = Spectrum.hann(WINDOW)
-    val bins = WINDOW / 2
-    val laneOf = IntArray(bins) { laneFor(it * rate.toDouble() / WINDOW) }
+    val window = Spectrum.hann(size)
+    val bins = size / 2
+    val laneOf = IntArray(bins) { laneFor(it * rate.toDouble() / size) }
 
-    val frames = (samples.size - WINDOW) / HOP
+    val frames = (samples.size - size) / hop
     val flux = FloatArray(frames)
     val laneFlux = Array(frames) { FloatArray(Chart.LANES) }
     // How much each band holds, as opposed to how much it grew. Growth says
@@ -233,8 +306,8 @@ internal object Onsets {
     var previous = FloatArray(bins)
 
     for (frame in 0 until frames) {
-      val at = frame * HOP
-      val piece = FloatArray(WINDOW) { samples[at + it] * window[it] }
+      val at = frame * hop
+      val piece = FloatArray(size) { samples[at + it] * window[it] }
       val now = Spectrum.magnitudes(piece)
 
       var total = 0f
@@ -263,8 +336,8 @@ internal object Onsets {
     */
     val loudness = FloatArray(frames) { laneEnergy[it].sum() }
     val endMs = (samples.size.toLong() * 1000 / rate).toInt()
-    val quiet = Pauses.find(loudness, HOP, rate, endMs)
-    val levels = Levels.of(loudness, HOP, rate)
+    val quiet = Pauses.find(loudness, hop, rate, endMs)
+    val levels = Levels.of(loudness, hop, rate)
 
     /*
       What each band usually does, so that a note can be put in the lane that
@@ -300,7 +373,7 @@ internal object Onsets {
       around /= (to - from)
       if (here < around * OVER) continue
 
-      val atMs = (frame.toLong() * HOP * 1000 / rate).toInt()
+      val atMs = (frame.toLong() * hop * 1000 / rate).toInt()
       // Dropped before it can count as the last hit: something found in a
       // pause must not hold back the real note that ends it.
       if (quiet.any { atMs in it }) continue
@@ -320,90 +393,288 @@ internal object Onsets {
         // too close to play, and the spacing rule above has thinned those.
       }
       busyUntil[lane] = atMs + LANE_REST_MS
-      found += Chart.Note(atMs, lane, holdFrom(laneEnergy, frame, lane, rate))
+      found += Chart.Note(atMs, lane, holdFrom(laneEnergy, frame, lane, rate, hop))
     }
 
-    val beat = beatMs(found)
-    val step = if (beat > 0) (beat / 2).coerceAtLeast(60) else 0
-    val gridded = onGrid(found, beat)
-
-    if (strength >= 1f) return Found(step, gridded, quiet, levels)
+    /*
+      A song with too little in it to find a pulse from is handed back as it
+      was heard: the notes where they fell, in the song's own time. The board
+      has a fixed row for that, and nothing below has anything to go on.
+    */
+    val laid = if (found.size >= FEWEST_FOR_A_PULSE) {
+      onPulse(samples, rate, flux, laneFlux, laneAverage, loudness, found, quiet, endMs)
+    } else {
+      null
+    }
+    val whole = laid ?: Found(0, found, quiet, levels)
+    if (strength >= 1f) return whole
 
     // Thinned by keeping the loudest, then put back in time order: dropping
     // every other note instead would take the backbeat out of a bar and leave
     // something that no longer follows the song.
-    val keep = (gridded.size * strength).toInt().coerceAtLeast(1)
-    return Found(step, gridded
-      .sortedByDescending { flux[(it.atMs.toLong() * rate / 1000 / HOP).toInt().coerceIn(0, frames - 1)] }
-      .take(keep)
-      .sortedBy { it.atMs }, quiet, levels)
+    fun fluxAt(note: Chart.Note): Float =
+      flux[(whole.songMs(note.atMs).toLong() * rate / 1000 / hop).toInt().coerceIn(0, frames - 1)]
+    val keep = (whole.notes.size * strength).toInt().coerceAtLeast(1)
+    val thinned = whole.notes.sortedByDescending { fluxAt(it) }.take(keep).sortedBy { it.atMs }
+    return Found(
+      whole.stepMs, thinned, whole.quiet, whole.levels, whole.levelMs,
+      whole.lines, whole.barSteps, whole.barAt, whole.lanes, whole.accents, whole.ease
+    )
   }
 
-  /**
-   * The spacing of the song's beat, in milliseconds, or nought if it has none.
-   *
-   * Found by asking which spacing the onsets themselves most agree on: lay the
-   * list of hit times against a copy of itself slid along by a candidate
-   * spacing, and the one where most hits land on top of each other is the beat.
-   * Nothing about musical theory is needed for that — it is the same question
-   * as "what does this repeat at".
-   */
-  private fun beatMs(found: List<Chart.Note>): Int {
-    if (found.size < 8) return 0
+  /** Fewer onsets than this and there is nothing to find a pulse in. */
+  private const val FEWEST_FOR_A_PULSE = 8
 
-    // 200 to 1000 ms is 60 to 300 beats a minute, which covers everything
-    // anybody dances to and most of what they do not.
-    var best = 0
-    var bestScore = 0.0
-    var candidate = 200
-    while (candidate <= 1_000) {
-      var score = 0.0
-      for (note in found) {
-        val off = (note.atMs % candidate).toDouble() / candidate
-        // How near this hit sits to a line of the grid, as a cosine so that
-        // near-misses count for something and the measure stays smooth.
-        score += Math.cos(2.0 * Math.PI * off)
+  /** A slot counts as having a tune in it if it is stronger than this share of them. */
+  private const val TUNELESS = 0.30
+
+  /** How far either side a slot's loudness is compared with, and what its usual level is written as. */
+  private const val EASE_AROUND_MS = 4_000
+  private const val EASE_USUAL = 20
+
+  /** How many steps either side a pitch is ranked among, to decide its lane. */
+  private const val AROUND_STEPS = 32
+
+  /**
+   * The chart laid on the song's own pulse.
+   *
+   * Everything the short window measured is gathered up here onto a grid that
+   * follows the beat, and joined by what the long window heard: the tune, to
+   * say which lane, and the harmony and sound, to say which bars are the same.
+   * Null when no pulse could be followed, and the caller falls back.
+   */
+  private fun onPulse(
+    samples: FloatArray,
+    rate: Int,
+    flux: FloatArray,
+    laneFlux: Array<FloatArray>,
+    laneAverage: FloatArray,
+    loudness: FloatArray,
+    found: List<Chart.Note>,
+    quiet: List<Chart.Span>,
+    endMs: Int
+  ): Found? {
+    val hop = windowFor(rate) / 4
+    val frameMs = hop * 1000.0 / rate
+    val envelope = Pulse.envelope(flux, frameMs)
+    val pulse = Pulse.step(envelope, frameMs)
+    if (pulse <= 0.0) return null
+    val tracked = Pulse.follow(envelope, frameMs, pulse)
+    if (tracked.size < FEWEST_FOR_A_PULSE) return null
+
+    val lines = Pulse.covering(tracked, pulse, endMs.toDouble())
+    val slotsPer = Chart.SLOTS
+    // A whole number of slots, so a slot is a whole number of milliseconds.
+    // Grid time is the board's own, so the step may be any length it likes;
+    // only the lines say how long a step really lasts.
+    val stepMs = (Math.round(pulse / slotsPer).toInt() * slotsPer).coerceAtLeast(slotsPer * 20)
+    val slotMs = stepMs / slotsPer
+    val map = TimeMap(lines, stepMs)
+    val steps = map.steps
+    val slots = steps * slotsPer
+    val frames = flux.size
+
+    fun shortFrame(songMs: Double) = Math.round(songMs / frameMs).toInt().coerceIn(0, frames - 1)
+    fun slotStart(slot: Int): Double =
+      if (slot >= slots) lines[steps] else map.toSong(slot / slotsPer, (slot % slotsPer).toDouble() / slotsPer)
+
+    // ---- what each step sounds like, for telling the bars apart
+    val onset = FloatArray(steps)
+    val low = FloatArray(steps)
+    for (step in 0 until steps) {
+      val centre = shortFrame(lines[step])
+      for (k in -2..2) {
+        val frame = (centre + k).coerceIn(0, frames - 1)
+        onset[step] = maxOf(onset[step], envelope[frame])
+        low[step] = maxOf(low[step], laneFlux[frame][0])
       }
-      /*
-        Divided by the square root of how many lines there are, not by the
-        count: without it the shortest spacing always wins, because a grid of
-        more lines catches more hits by luck alone.
-      */
-      val fair = score / Math.sqrt(1_000.0 / candidate)
-      if (fair > bestScore) {
-        bestScore = fair
-        best = candidate
-      }
-      candidate += 5
     }
-    return best
-  }
 
-  /**
-   * The notes moved onto the nearest line of the grid, one to a line.
-   *
-   * Which is what makes it a game of keys rather than a game of moments. Tiles
-   * that may begin anywhere are tiles that may overlap, and a player cannot aim
-   * at a key that is half behind another; laid on a grid they are rows, and
-   * rows cannot collide. A hit dragged a few tens of milliseconds onto the beat
-   * is also, nearly always, where a listener thought it was anyway.
-   *
-   * Lines with nothing near them stay empty. A grid is a place for notes to
-   * land, not a metronome to be filled in.
-   */
-  private fun onGrid(found: List<Chart.Note>, beat: Int): List<Chart.Note> {
-    if (beat <= 0) return found
+    val heard = Tune.hear(samples, rate)
+    if (heard.frames == 0) return null
+    fun longFrame(songMs: Double) = Math.round(songMs / heard.frameMs).toInt().coerceIn(0, heard.frames - 1)
+
+    val harmony = Array(steps) { FloatArray(12) }
+    val sound = Array(steps) { FloatArray(Tune.BANDS) }
+    for (step in 0 until steps) {
+      val from = longFrame(lines[step])
+      val to = maxOf(from + 1, longFrame(lines[step + 1])).coerceAtMost(heard.frames)
+      for (frame in from until to) {
+        for (k in 0 until 12) harmony[step][k] += heard.chroma[frame][k]
+        for (k in 0 until Tune.BANDS) sound[step][k] += heard.timbre[frame][k]
+      }
+      val count = (to - from).coerceAtLeast(1)
+      for (k in 0 until 12) harmony[step][k] /= count
+      for (k in 0 until Tune.BANDS) sound[step][k] /= count
+    }
+
+    val features = Bars.steps(harmony, sound, onset)
+    val bar = Bars.length(features)
+    val barAt = Bars.start(low, bar)
+    val kind = Bars.kinds(features, bar, barAt)
+    val families = Bars.families(kind)
+
+    // ---- what each slot holds: the tune, the band that stood out, how hard it hit, how loud it was
+    val pitch = FloatArray(slots)
+    val strong = FloatArray(slots)
+    val band = IntArray(slots)
+    val accent = FloatArray(slots)
+    val level = FloatArray(slots)
+    val usual = Pauses.usual(loudness)
+    val perLane = FloatArray(Chart.LANES)
+    for (slot in 0 until slots) {
+      val startsAt = slotStart(slot)
+      val endsAt = slotStart(slot + 1)
+
+      val from = longFrame(startsAt)
+      val to = maxOf(from + 1, longFrame(endsAt)).coerceAtMost(heard.frames)
+      val pitches = FloatArray(to - from) { heard.pitch[from + it] }
+      pitches.sort()
+      // The middle one, so a single frame that jumped an octave is outvoted.
+      pitch[slot] = if (pitches.size % 2 == 1) pitches[pitches.size / 2]
+      else (pitches[pitches.size / 2 - 1] + pitches[pitches.size / 2]) / 2
+      var sum = 0f
+      for (frame in from until to) sum += heard.strength[frame]
+      strong[slot] = sum / (to - from)
+
+      val first = shortFrame(startsAt)
+      val last = maxOf(first + 1, shortFrame(endsAt)).coerceAtMost(frames)
+      java.util.Arrays.fill(perLane, 0f)
+      var loud = 0f
+      for (frame in first until last) {
+        for (lane in 0 until Chart.LANES) perLane[lane] += laneFlux[frame][lane]
+        loud += loudness[frame]
+      }
+      band[slot] = standsOut(perLane, laneAverage, null, 0).coerceAtLeast(0)
+      level[slot] = if (usual > 0f) loud / (last - first) / usual * Levels.USUAL else 0f
+      for (k in -2..2) accent[slot] = maxOf(accent[slot], envelope[(first + k).coerceIn(0, frames - 1)])
+    }
 
     /*
-      Half a beat, because eighths are where most songs put things and
-      quantising to whole beats throws away every off-beat in the music.
+      The lane of a slot with a tune in it is where its pitch ranks among the
+      pitches around it. Ranked, not placed between their extremes: a tune that
+      lives on three notes then still uses the whole board, where measured
+      against its highest and lowest it would sit in one column and visit the
+      others twice a song.
     */
-    val step = (beat / 2).coerceAtLeast(60)
-    val taken = HashSet<Int>()
-    val out = mutableListOf<Chart.Note>()
+    val threshold = strong.sortedArray()[((slots - 1) * TUNELESS).toInt().coerceAtLeast(0)]
+    val tuneful = BooleanArray(slots) { strong[it] > threshold }
+    val note = IntArray(slots) { Math.round(pitch[it]) }
+    val reach = AROUND_STEPS * slotsPer
+    val lane = IntArray(slots)
+    for (slot in 0 until slots) {
+      if (!tuneful[slot]) {
+        lane[slot] = band[slot]
+        continue
+      }
+      var below = 0
+      var same = 0
+      var count = 0
+      for (other in maxOf(0, slot - reach)..minOf(slots - 1, slot + reach)) {
+        if (!tuneful[other]) continue
+        count++
+        if (note[other] < note[slot]) below++ else if (note[other] == note[slot]) same++
+      }
+      lane[slot] = ((below + same / 2.0) / count * Chart.LANES).toInt().coerceIn(0, Chart.LANES - 1)
+    }
 
     /*
-      Only one note may be held at a time.
+      How loud each slot is against the slots around it: the middle value of
+      four seconds either side, so one crash nearby does not make every
+      ordinary slot beside it look like a dip.
+    */
+    val around = (EASE_AROUND_MS / slotMs).coerceAtLeast(2)
+    val eased = FloatArray(slots)
+    for (slot in 0 until slots) {
+      val from = maxOf(0, slot - around)
+      val to = minOf(slots - 1, slot + around)
+      val near = FloatArray(to - from + 1) { level[from + it] }
+      near.sort()
+      val middle = near[near.size / 2]
+      eased[slot] = if (middle > 0f) level[slot] / middle else 1f
+    }
+
+    // ---- the onsets, each on the line nearest it and one to a line
+    val struck = BooleanArray(steps)
+    val hold = IntArray(steps)
+    for (hit in found) {
+      val step = map.nearestLine(hit.atMs.toDouble())
+      if (step >= steps || struck[step]) continue
+      struck[step] = true
+      hold[step] = hit.holdMs
+    }
+
+    /*
+      One answer for every bar of a kind.
+
+      Each of them was heard separately and each came out a little different;
+      what they have in common is taken as what the passage is. The lane of a
+      slot is the one most of its bars chose. A key is there if at least half
+      of them had one, and held for as long as the middle one was. How hard a
+      moment hits and how loud it is are their averages. After this a bar of a
+      kind is the same bar wherever in the song it comes.
+    */
+    val barSlots = bar * slotsPer
+    for (family in families) {
+      val votes = IntArray(Chart.LANES)
+      for (position in 0 until barSlots) {
+        java.util.Arrays.fill(votes, 0)
+        var hits = 0f
+        var loud = 0f
+        var soft = 0f
+        for (member in family) {
+          val slot = (barAt + member * bar) * slotsPer + position
+          votes[lane[slot]]++
+          hits += accent[slot]
+          loud += level[slot]
+          soft += eased[slot]
+        }
+        var agreed = 0
+        for (candidate in 1 until Chart.LANES) if (votes[candidate] > votes[agreed]) agreed = candidate
+        for (member in family) {
+          val slot = (barAt + member * bar) * slotsPer + position
+          lane[slot] = agreed
+          accent[slot] = hits / family.size
+          level[slot] = loud / family.size
+          eased[slot] = soft / family.size
+        }
+      }
+      for (position in 0 until bar) {
+        val held = ArrayList<Int>()
+        for (member in family) {
+          val step = barAt + member * bar + position
+          if (struck[step]) held.add(hold[step])
+        }
+        val there = held.size * 2 >= family.size
+        held.sort()
+        /*
+          Held in all of them or in none.
+
+          A hold may not follow another too soon, and decided bar by bar that
+          rule keeps the first of a run of the same bar and turns the next two
+          into taps -- the one place a chorus would still differ from itself,
+          and by the most visible thing on the board. So it is decided for the
+          kind: if its bars come round sooner than holds are allowed to, none
+          of them is held.
+        */
+        var soonest = Int.MAX_VALUE
+        for (index in 1 until family.size) {
+          soonest = minOf(soonest, (family[index] - family[index - 1]) * bar * stepMs)
+        }
+        val agreed = when {
+          held.isEmpty() || soonest < BETWEEN_HOLDS_MS -> 0
+          else -> held[held.size / 2]
+        }
+        for (member in family) {
+          val step = barAt + member * bar + position
+          struck[step] = there
+          hold[step] = if (there) agreed else 0
+        }
+      }
+    }
+
+    /*
+      Only one note may be held at a time, and not often.
 
       Two hands have two thumbs. A chart that asks for three keys to be kept
       down at once is not hard, it is impossible, and one that asks for two
@@ -411,35 +682,64 @@ internal object Onsets {
       begin while another is still being held becomes a tap -- the beat is kept,
       which is what is being followed, and only the asking-to-hold is dropped.
     */
+    val notes = ArrayList<Chart.Note>()
     var heldUntil = -1
     var lastHoldAt = -BETWEEN_HOLDS_MS
-
-    for (note in found.sortedBy { it.atMs }) {
-      val line = Math.round(note.atMs.toDouble() / step).toInt()
-      // Two hits rounding onto the same line are one key. The first keeps it:
-      // it is the one the ear heard as the beat.
-      if (!taken.add(line)) continue
-      /*
-        Every hit belongs to some line, since the lines are half a beat apart
-        and nothing can be further than a quarter beat from one.
-
-        This used to drop anything more than two fifths of a step away, to
-        avoid inventing a rhythm. What it actually did was leave holes: a
-        passage whose timing drifts a little against the grid lost note after
-        note, and seconds of a song arrived with nothing to play. A hit moved
-        by a fraction of a beat is still the hit that was heard; a hit removed
-        is a silence that was not.
-      */
-      val at = line * step
-      val wanted = if (at < heldUntil || at - lastHoldAt < BETWEEN_HOLDS_MS) 0 else note.holdMs
-      val hold = if (wanted > 0) wanted.coerceAtMost(LONGEST_HOLD_MS) else 0
-      if (hold > 0) {
-        heldUntil = at + hold
+    for (step in 0 until steps) {
+      if (!struck[step]) continue
+      val at = step * stepMs
+      val wanted = if (at < heldUntil || at - lastHoldAt < BETWEEN_HOLDS_MS) 0 else hold[step]
+      val kept = if (wanted > 0) wanted.coerceAtMost(LONGEST_HOLD_MS) else 0
+      if (kept > 0) {
+        heldUntil = at + kept
         lastHoldAt = at
       }
-      out += note.copy(atMs = at, holdMs = hold)
+      notes += Chart.Note(at, lane[step * slotsPer], kept)
     }
-    return out
+
+    // How hard each slot hits, as where it ranks in the song: thirty-six levels.
+    val order = (0 until slots).sortedBy { accent[it] }
+    val rank = IntArray(slots)
+    for ((position, slot) in order.withIndex()) rank[slot] = position
+    val digits = "0123456789abcdefghijklmnopqrstuvwxyz"
+    val accents = StringBuilder(slots)
+    val lanes = StringBuilder(slots)
+    val ease = StringBuilder(slots)
+    for (slot in 0 until slots) {
+      ease.append(digits[Math.round(eased[slot] * EASE_USUAL).coerceIn(0, digits.length - 1)])
+      // Ranked by value, so two slots that were stamped the same say the same.
+      var position = rank[slot]
+      while (position > 0 && accent[order[position - 1]] == accent[slot]) position--
+      accents.append(digits[(position.toLong() * digits.length / slots).toInt().coerceIn(0, digits.length - 1)])
+      lanes.append(('0' + lane[slot]))
+    }
+
+    return Found(
+      stepMs = stepMs,
+      notes = notes,
+      quiet = quiet.map {
+        Chart.Span(
+          Math.round(map.toGrid(it.startMs.toDouble())).toInt(),
+          Math.round(map.toGrid(it.endMs.toDouble())).toInt()
+        )
+      },
+      levels = List(slots) { Math.round(level[it]).coerceIn(0, 1_000) },
+      levelMs = slotMs,
+      /*
+        Half a window later than they were measured. A frame is timed from
+        where its window starts, and a hit is only seen once it is well inside
+        the window: on struck sounds of known position the measure comes out
+        twelve milliseconds early, which is half of the window. Everything
+        above agrees with itself in the frames' own time, so the correction is
+        made once, here, on the way out.
+      */
+      lines = List(lines.size) { Math.round(lines[it] + windowFor(rate) * 500.0 / rate).toInt() },
+      barSteps = bar,
+      barAt = barAt,
+      lanes = lanes.toString(),
+      accents = accents.toString(),
+      ease = ease.toString()
+    )
   }
 
   private fun laneFor(hz: Double): Int {
@@ -466,7 +766,8 @@ internal object Onsets {
     energy: Array<FloatArray>,
     from: Int,
     lane: Int,
-    rate: Int
+    rate: Int,
+    hop: Int
   ): Int {
     val peak = energy[from][lane]
     if (peak <= 0f) return 0
@@ -474,7 +775,7 @@ internal object Onsets {
     var frame = from
     while (frame + 1 < energy.size && energy[frame + 1][lane] > peak * STILL_SOUNDING) frame++
 
-    val heldMs = ((frame - from).toLong() * HOP * 1000 / rate).toInt()
+    val heldMs = ((frame - from).toLong() * hop * 1000 / rate).toInt()
     return if (heldMs >= SHORTEST_HOLD_MS) heldMs else 0
   }
 

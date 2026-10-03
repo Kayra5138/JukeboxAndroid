@@ -196,9 +196,13 @@ class OnsetsTest {
     val found = Onsets.find(out, RATE)
     assertEquals("pauses found: ${found.quiet}", 1, found.quiet.size)
     val pause = found.quiet.single()
-    // Within a window or so of where the sound actually stops and starts.
-    assertTrue("the pause starts at ${pause.startMs}", pause.startMs in 3_950..4_100)
-    assertTrue("the pause ends at ${pause.endMs}", pause.endMs in 7_900..8_050)
+    // Within a window or so of where the sound actually stops and starts. The
+    // chart is written in its own time, so the question is asked of the
+    // recording: where do the two ends of the pause fall in the sound?
+    val startsAt = found.songMs(pause.startMs)
+    val endsAt = found.songMs(pause.endMs)
+    assertTrue("the pause starts at $startsAt", startsAt in 3_950..4_100)
+    assertTrue("the pause ends at $endsAt", endsAt in 7_900..8_050)
 
     /*
       Nothing inside it. Measured a little in from each edge: putting the notes
@@ -411,8 +415,8 @@ class LevelsTest {
     val found = Onsets.find(samples, rate)
     assertTrue("no curve", found.levels.isNotEmpty())
     assertEquals(emptyList<Chart.Span>(), found.quiet)
-    val loud = found.levels[2_000 / Levels.EVERY_MS]
-    val soft = found.levels[4_500 / Levels.EVERY_MS]
+    val loud = found.levels[found.gridMs(2_000) / found.levelMs]
+    val soft = found.levels[found.gridMs(4_500) / found.levelMs]
     assertTrue("soft $soft against loud $loud", soft < loud * 0.5 && soft > loud * 0.15)
   }
 }

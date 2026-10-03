@@ -1,3 +1,4 @@
+import { splitCredit } from '../metadata/credit.ts';
 import { foldForMatch } from '../metadata/text.ts';
 
 /**
@@ -114,8 +115,12 @@ export function rankSuggestions(
 export function ownedArtists(tracks: { artist?: string | null }[]): Set<string> {
   const owned = new Set<string>();
   for (const track of tracks) {
-    const folded = foldForMatch(track.artist ?? '');
-    if (folded) owned.add(folded);
+    // The credit as written, and each name in it: somebody who is only ever a
+    // guest in this library is still somebody whose music is already here.
+    for (const name of [track.artist ?? '', ...splitCredit(track.artist)]) {
+      const folded = foldForMatch(name);
+      if (folded) owned.add(folded);
+    }
   }
   return owned;
 }

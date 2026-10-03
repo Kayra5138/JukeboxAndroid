@@ -88,6 +88,8 @@ export type Recording = {
   /** Cover Art Archive id, which is how the sleeve is addressed. */
   caaId: number | null;
   caaReleaseMbid: string | null;
+  durationSec: number | null;
+  tags: string[];
 };
 
 type TopRecording = {
@@ -97,6 +99,8 @@ type TopRecording = {
   release_name?: string;
   caa_id?: number;
   caa_release_mbid?: string;
+  length?: number;
+  tags?: { tag: string; genre_mbid?: string }[];
 };
 
 /**
@@ -132,6 +136,8 @@ function readRecordings(rows: unknown, limit: number): Recording[] {
       release: row.release_name ?? null,
       caaId: row.caa_id ?? null,
       caaReleaseMbid: row.caa_release_mbid ?? null,
+      durationSec: row.length ? row.length / 1000 : null,
+      tags: (row.tags ?? []).filter(t => !!t.genre_mbid).map(t => t.tag),
     }));
 }
 

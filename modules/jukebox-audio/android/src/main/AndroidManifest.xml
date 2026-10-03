@@ -10,6 +10,7 @@
        belongs here rather than being borrowed from whichever app is hosting the
        module. -->
   <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
   <!-- Attaching an equalizer to the player's audio session. A normal
        permission: granted at install, nothing to ask the user for. -->

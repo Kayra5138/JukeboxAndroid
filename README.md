@@ -62,6 +62,9 @@ and it comes with a rhythm game built out of your own songs, because why not.
 - Tracks get an ordered list of tags instead of a single genre.
 - Tags are filtered against MusicBrainz's genre vocabulary (2,188 entries,
   bundled), so `seen live` never shows up in your stats.
+- Songs with more than one artist are found too. `Eminem, Rihanna`,
+  `Eminem feat. Rihanna` and a guest left in the title are searched name by
+  name, and `(Official Video)` is not part of the title.
 - Everything is editable, and a later lookup never overwrites what you typed.
 - `Rock` and `rock` are the same tag.
 
@@ -83,6 +86,8 @@ and it comes with a rhythm game built out of your own songs, because why not.
 - Every listen past 30 seconds is recorded. So is every skip.
 - Stats by day, week, month, year or all time, compared with the period before.
 - A chart you can scrub, with the top tracks, artists and genres behind it.
+- A song by two artists counts for both. `Eminem, Rihanna` is never an artist
+  of its own, and `Earth, Wind & Fire` is never three.
 - Recap cards you can save or share. Artist photos come from Wikimedia Commons
   and the credit is printed on the card.
 
@@ -107,8 +112,16 @@ and it comes with a rhythm game built out of your own songs, because why not.
 Long-press any track and choose **Play piano tiles**. The game is generated
 from the song itself.
 
-- **Charts from audio.** The song is analysed on the device: onsets are found
-  across four frequency bands, low notes on the left and high on the right.
+- **Charts from audio.** The song is analysed on the device, with no account
+  and no server.
+- **Keys land on the beat.** The song's pulse is followed from start to finish,
+  so the board stays in time even when the band speeds up or drags.
+- **Keys follow the tune.** The melody is tracked and its pitch decides the
+  column: low notes on the left, high notes on the right. Where nobody is
+  singing or playing a tune, the drums and bass decide instead.
+- **A chorus is the same keys every time.** Bars that are the same music are
+  found by ear (harmony, sound and rhythm) and given one pattern, rests and
+  holds included. What you learned the first time still works the third.
 - **A ladder of keys.** Every key has the same height and each one starts where
   the last ended. Long notes become hold keys.
 - **Holds are worth their length.** One point per row, and a hold counts as
@@ -116,9 +129,10 @@ from the song itself.
 - **It breathes with the music.** Rows stay empty where the song is silent
   (30 dB under its usual level for 1.5 s) and where it eases off.
 - **Four difficulties: Easy, Normal, Hard, Harder.** Each one runs at the same
-  pace on every song, within about 15%, whatever the tempo.
-- **Two-finger notes** on Hard and Harder, never in neighbouring columns and
-  never in the same column twice in a row.
+  pace on every song, within about a fifth, whatever the tempo. A bar is always
+  cut into a whole number of keys.
+- **Two-finger notes** on Hard and Harder, on the moments the music hits
+  hardest, never in neighbouring columns.
 - **Five lives.** Fifty clean keys in a row give one back.
 - **Sounds that cannot clash with the song.** Every effect is shaped noise with
   no pitch: tap, empty tap, missed key, a soft breath while holding, a rising
@@ -126,7 +140,7 @@ from the song itself.
 - **Colours from the album cover**, one shade per column.
 - **Latency offset** for Bluetooth headphones.
 - **Fast to start.** MP3s are decoded inside the app with minimp3, so a chart
-  takes about a second instead of six to ten. Charts are cached after that.
+  takes about two seconds instead of six to ten. Charts are cached after that.
 - The song starts and stops with the run, and Back pauses instead of quitting.
 - **An ending you can read.** The board stops and stays, and the score fades in
   over it. Lose, and the move that did it is marked in red: the key that got
@@ -183,13 +197,13 @@ the only things that go out, and none of them needs an account or an API key.
 
 ```bash
 npm install
-npm test                 # 530 tests, pure logic
+npm test                 # 593 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android
 
 cd android
-./gradlew :jukebox-audio:testDebugUnitTest   # 109 more, in Kotlin
+./gradlew :jukebox-audio:testDebugUnitTest   # 124 more, in Kotlin
 ./gradlew :app:assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
@@ -262,8 +276,13 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
 - **The game clock never jumps.** When it disagrees with the audio it changes
   its rate by a bounded amount until they agree again. A position that jumps is
   a board that stutters.
-- **Chart analysis** is Kotlin: an STFT, spectral flux per band, a beat grid,
-  plus a loudness curve the board uses to decide where to rest.
+- **Chart analysis** is Kotlin, in two passes. A short window finds the onsets
+  and, from their autocorrelation, the song's smallest steady step; dynamic
+  programming then lays a line on every step. A long window gives harmony,
+  timbre and the melody (harmonic summation and a Viterbi path).
+- **The board runs in grid time.** The chart says where each step really falls
+  in the recording, and the board reads the player's position through that, so
+  rows stay equal while the clock bends with the band.
 - **Tests cover logic, not UI:** calendar arithmetic for stats, tag weighting,
   the shuffle spread, lyric parsing, crossfade rules, backup merging, the game's
   rules. The Kotlin tests render audio buffers and measure what came out.

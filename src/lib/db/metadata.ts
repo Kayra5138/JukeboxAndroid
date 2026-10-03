@@ -106,6 +106,39 @@ export function saveArtwork(trackId: string, uri: string, album: string | null):
     WHERE track_id = ?`, uri, album, trackId);
 }
 
+/**
+ * The genre a track is counted under, changed on its own.
+ *
+ * It is the first of the track's tags, and the tags are edited apart from
+ * everything else here, so it has to be writable without the rest of the row
+ * being said again. Where a lookup or an edit has already made a row, only
+ * this column moves and the row stays what it was. Where there is none, or
+ * only a note that nothing was found, one is made and it is the user's: the
+ * statistics read the genre from this table and from nowhere else, and tags
+ * typed for a track no catalogue knows would otherwise count for nothing.
+ */
+export function saveGenre(trackId: string, genre: string | null): void {
+  const changed = db().runSync(
+    `UPDATE track_metadata SET genre = ? WHERE track_id = ? AND status != 'not_found'`,
+    genre,
+    trackId
+  ).changes;
+  if (changed > 0 || genre == null) return;
+  saveMetadata({
+    trackId,
+    status: 'manual',
+    source: 'manual',
+    title: null,
+    artist: null,
+    album: null,
+    genre,
+    year: null,
+    artworkUrl: null,
+    trackNumber: null,
+    discNumber: null,
+  });
+}
+
 /** Track ids that have never been looked up, in the order given. */
 export function filterUnenriched(trackIds: string[]): string[] {
   const known = new Set(
