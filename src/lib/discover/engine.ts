@@ -5,7 +5,7 @@ import { downloads } from '../youtube/native';
 import { withMetadata } from '../media/merge';
 import { scanLibrary, libraryRoot } from '../media/library';
 import { isActive, type DownloadJob } from '../youtube/types';
-import { DAY, batchReady, retirementIds, selectSongs, songKey, type DiscoverSettings } from './policy';
+import { DAY, DEFAULT_SETTINGS, NO_MATCH, batchReady, isNoMatch, retirementIds, selectSongs, songKey, type DiscoverSettings } from './policy';
 import { buildPool } from './catalogue';
 import { chooseVideo } from './video';
 import { readSnapshot, saveSnapshot, readDiscoverSettings, saveDiscoverSettings, exclude, exclusions, unblock, type Entry, type Snapshot } from './store';
@@ -15,7 +15,7 @@ import type { Track } from '../types';
 let snapshot: Snapshot | null = null;
 let settings: DiscoverSettings | null = null;
 let view = { snapshot: null as Snapshot | null, settings: readDefaults(), busy: false, message: '', waiting: '', error: '', jobs: [] as DownloadJob[] };
-function readDefaults(): DiscoverSettings { return { count: 20, refreshDays: 7, autoDownload: true, wifiOnly: true }; }
+function readDefaults(): DiscoverSettings { return { ...DEFAULT_SETTINGS }; }
 const listeners = new Set<() => void>();
 let serial: Promise<unknown> = Promise.resolve();
 let maintenance: Promise<void> | null = null;
@@ -126,7 +126,7 @@ async function queue(entry: Entry, background = false, automatic = false) {
   emit({ message: `Finding audio: ${entry.title}…` });
   const videos = await downloads.searchAsync(`${entry.artist} ${entry.title} official audio`, `discover-${entry.recordingMbid}`);
   const video = chooseVideo(entry, videos);
-  if (!video) throw new Error('A matching studio recording could not be found. Tap to retry later.');
+  if (!video) throw new Error(NO_MATCH);
   const source = { ...video, discoveryTitle: entry.title, discoveryArtist: entry.artist, discoverAutomatic: automatic, discoverWifiOnly: automatic && settings!.wifiOnly };
   if (entry.jobId) snapshot!.retired.push(entry.jobId);
   entry.jobId = background ? await downloads.queueDiscoverBackgroundAsync(source, entry.recordingMbid)
@@ -154,6 +154,27 @@ async function autoDownload(background: boolean) {
     } catch (e) { entry.error = discoverError(e); commit(); }
   }
 }
+/**
+ * A song with no studio recording to be found gives up its place.
+ *
+ * It used to keep it and ask to be tapped again later, which is a row of the
+ * list that plays nothing and, a week on, still plays nothing. It is put away
+ * for a month instead and the best song not yet shown takes the place, from
+ * the pool already fetched. If the pool has run dry the list is left short,
+ * and being short is what makes the next pass fetch a new one.
+ */
+function replaceUnmatched(): boolean {
+  const gone = snapshot!.entries.filter(e => !e.track && isNoMatch(e.error));
+  if (!gone.length) return false;
+  transaction(() => {
+    for (const entry of gone) { exclude(entry, 'unmatched'); if (entry.jobId) snapshot!.retired.push(entry.jobId); }
+    const excluded = exclusions();
+    for (const entry of snapshot!.pending ?? []) { excluded.add(entry.recordingMbid); excluded.add(songKey(entry)); }
+    snapshot!.entries = selectSongs(snapshot!.pool, snapshot!.entries.filter(e => !gone.includes(e)), settings!.count, excluded);
+  });
+  if (snapshot!.entries.length < settings!.count) lastAttempt = 0;
+  return true;
+}
 function discardPending() {
   for (const entry of snapshot!.pending ?? []) if (entry.jobId) snapshot!.retired.push(entry.jobId);
   snapshot!.pending = undefined; snapshot!.pendingRejected = undefined;
@@ -165,7 +186,7 @@ function finishPending() {
   const failed = pending.filter(e => e.error && !e.error.includes('Waiting for Wi-Fi'));
   if (failed.length) {
     snapshot!.pendingRejected = [...(snapshot!.pendingRejected ?? []), ...failed.map(e => e.recordingMbid)];
-    failed.forEach(e => { if (e.jobId) snapshot!.retired.push(e.jobId); });
+    failed.forEach(e => { if (isNoMatch(e.error)) exclude(e, 'unmatched'); if (e.jobId) snapshot!.retired.push(e.jobId); });
     const excluded = new Set([...exclusions(), ...(snapshot!.pendingRejected ?? []), ...snapshot!.entries.flatMap(e => [e.recordingMbid, songKey(e)])]);
     snapshot!.pending = selectSongs(snapshot!.pool, pending.filter(e => !failed.includes(e)), settings!.count, excluded);
     commit();
@@ -194,7 +215,11 @@ export function maintainDiscover(force = false, background = false): Promise<voi
       if (!snapshot!.pending && (force || ((due || missing) && Date.now() - lastAttempt > 15 * 60_000))) {
         lastAttempt = Date.now(); await fill(force || (due && snapshot!.entries.length > 0));
       }
-      await autoDownload(background); await sync(); finishPending();
+      await autoDownload(background);
+      // A replacement can be as unfindable as what it replaced, so it is tried
+      // too, a few times over and no more: each round is a search per song.
+      for (let round = 0; round < 3 && replaceUnmatched(); round++) await autoDownload(background);
+      await sync(); finishPending();
     } catch (e) { emit({ error: discoverError(e) }); }
     finally { emit({ busy: false, message: '' }); }
   }).finally(() => { maintenance = null; });
@@ -266,6 +291,10 @@ export async function prepareDiscover(id: string, abandoned: () => boolean = () 
     try { await queue(entry); }
     catch (e) { entry.error = discoverError(e); commit(); throw e; }
     commit();
+  }).catch(e => {
+    // Tapped and not to be found: the next pass takes it out and fills the place.
+    if (isNoMatch(discoverError(e))) void maintainDiscover();
+    throw e;
   });
   // No lock while waiting; minus, settings and other downloads stay usable.
   const deadline = Date.now() + 35 * 60_000;

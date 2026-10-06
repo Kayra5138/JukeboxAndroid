@@ -7,7 +7,7 @@
 #   -> turn on "Unknown sources" (without it a sideloaded app is never offered)
 #   and tap "Start head unit server".
 #
-# Usage: scripts/android-auto.sh [adb-serial]
+# Usage: [AUTO_SCREEN=small|720p|1080p|wide] scripts/android-auto.sh [adb-serial]
 
 set -euo pipefail
 
@@ -38,5 +38,17 @@ export LD_LIBRARY_PATH="${NDKLIB:-}:${BUILDLIB:-}:${LD_LIBRARY_PATH:-}"
 adb -s "$DEVICE" forward tcp:5277 tcp:5277 >/dev/null
 trap 'adb -s "$DEVICE" forward --remove tcp:5277 >/dev/null 2>&1 || true' EXIT
 
+# Which car to pretend to be. Left to itself the head unit is 800x480, a
+# screen few cars have had for years, and everything on it looks enormous:
+# a tile is the same size on every screen, so a small one holds two rows where
+# a real dashboard holds four. 720p is the usual dashboard and the default
+# here. AUTO_SCREEN=small is the old one, for seeing the worst case.
+case "${AUTO_SCREEN:-720p}" in
+  small) CONFIG=config/default.ini ;;
+  1080p) CONFIG=config/default_1080p.ini ;;
+  wide)  CONFIG=config/default_wide.ini ;;
+  *)     CONFIG=config/default_720p.ini ;;
+esac
+
 cd "$DHU"
-exec ./desktop-head-unit "$@"
+exec ./desktop-head-unit -c "$CONFIG"

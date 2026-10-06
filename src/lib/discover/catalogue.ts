@@ -6,12 +6,14 @@ import { isGenre } from '../metadata/genres.ts';
 import { isAbortError } from '../metadata/http.ts';
 import { ownedArtists, rankSuggestions, type Suggested } from './rank.ts';
 import { foldForMatch } from '../metadata/text.ts';
-import { DAY, tasteProfile, type Listen, type Skip } from './policy.ts';
+import { DAY, tagFit, tagMix, tasteProfile, type Listen, type Skip } from './policy.ts';
 import { similarArtists, topRecordings, coverUrl } from './listenbrainz.ts';
 import type { Track } from '../types.ts';
 import type { Entry } from './store.ts';
 
 type Artist = { id: string; name: string; score?: number };
+/** MusicBrainz's stand-in for a compilation's credit. It carries every tag there is and is nobody. */
+const VARIOUS_ARTISTS = '89ad4ac3-39f7-470e-963a-56509c546377';
 const quoted = (value: string) => `"${value.replace(/[\\"]/g, ' ')}"`;
 async function resolve(name: string, now: number, signal?: AbortSignal): Promise<string | null> {
   const cached = knownArtistId(name);
@@ -30,9 +32,7 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
   const profile = tasteProfile(plays, skips, tags, now);
   if (!profile.artists.length) {
     for (const name of new Set(library.map(t => t.artist).filter((n): n is string => !!n))) profile.artists.push({ name, score: 1 });
-    const counts = new Map<string, number>();
-    for (const track of library) for (const tag of tags.get(track.id) ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
-    profile.tags = [...counts].sort((a,b) => b[1]-a[1]).slice(0,4).map(([tag]) => tag);
+    Object.assign(profile, tagMix(library.map(track => [tags.get(track.id) ?? [], 1])));
   }
   if (!profile.artists.length) throw new Error('Add some music or listen to a few songs to build your Discover taste profile.');
   const familiar = ownedArtists([...library, ...plays]);
@@ -49,12 +49,25 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
       suggested.push({ seed: seed.name, weight, candidates: await similarArtists(id, signal) });
     } catch (e) { if (isAbortError(e)) throw e; }
   }
-  // Genre searches bring in artists outside the immediate similarity neighbourhood.
-  for (const tag of profile.tags.slice(0,3)) {
-    onProgress(`Exploring ${tag}…`);
+  /*
+    Genre searches bring in artists outside the immediate similarity neighbourhood.
+
+    Two tags at a time, the pairs that turn up together on what was played. One
+    tag at a time was asking a catalogue for "rock", and what comes back for
+    that is whoever is most famous for it, the same for everybody. Both at once
+    is a few hundred artists instead of forty thousand, and they are the ones
+    that sit where this listener's tastes meet. A single tag is only fallen
+    back on where there are not three pairs to ask about.
+  */
+  const searches = profile.pairs.map(pair => ({ label: pair.join(' + '), tags: pair as string[] }));
+  for (const tag of profile.tags) if (searches.length < 3) searches.push({ label: tag, tags: [tag] });
+  for (const search of searches.slice(0,3)) {
+    onProgress(`Exploring ${search.label}…`);
     try {
-      const response = await musicBrainzGet<{ artists?: Artist[] }>(`/artist/?query=${encodeURIComponent(`tag:${quoted(tag)}`)}&fmt=json&limit=15`, signal);
-      suggested.push({ seed: tag, weight: .65, candidates: (response.artists ?? []).map(a => ({ mbid: a.id, name: a.name, score: a.score ?? 0 })) });
+      const query = search.tags.map(tag => `tag:${quoted(tag)}`).join(' AND ');
+      const response = await musicBrainzGet<{ artists?: Artist[] }>(`/artist/?query=${encodeURIComponent(query)}&fmt=json&limit=15`, signal);
+      suggested.push({ seed: search.label, weight: .65, candidates: (response.artists ?? [])
+        .filter(a => a.id !== VARIOUS_ARTISTS).map(a => ({ mbid: a.id, name: a.name, score: a.score ?? 0 })) });
     } catch (e) { if (isAbortError(e)) throw e; }
   }
   const ranked = rankSuggestions(suggested, new Set(), 35);
@@ -72,7 +85,7 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
         artist: song.artist || artist.name, artistMbid: artist.mbid, release: song.release, coverUrl: coverUrl(song),
         because: artist.because.slice(0,2).join(' · '), familiar: familiar.has(foldForMatch(artist.name)),
         tags: song.tags, durationSec: song.durationSec,
-        score: artist.score * (1 + song.tags.filter(tag => profile.tags.includes(tag)).length * .3) / (1 + index * .12) }));
+        score: artist.score * (1 + tagFit(song.tags, profile.weights) * .3) / (1 + index * .12) }));
     } catch (e) { if (isAbortError(e)) throw e; }
   }
   if (!pool.length) throw new Error('No recommendations could be fetched. Your current Discover list is kept; please retry later.');

@@ -106,8 +106,14 @@ and it comes with a rhythm game built out of your own songs, because why not.
   genre.
 - **+** keeps a song in your library, **−** excludes it for good. Either way
   another song takes its place.
-- 10 to 40 songs, refreshed on a schedule you pick, in the background.
-- Songs can download automatically, on Wi-Fi only if you want.
+- 10 to 40 songs. Refresh by hand, or on a schedule you pick.
+- Tap a song to fetch it, or let them download ahead, on Wi-Fi only if you
+  want. Scheduled refresh and automatic downloads are off until you turn them
+  on.
+- A song with no studio recording to be found gives up its place to the next
+  best one.
+- Genres are searched in the pairs you play together, like `j-pop` + `rock`,
+  not one famous tag at a time.
 
 ### Downloads
 
@@ -164,11 +170,20 @@ from the song itself.
 - The widget is one row tall, on a gradient made from the cover's colours.
 - Pause, then swipe the notification away to close the music.
 - Playback keeps going with the app closed.
-- Android Auto: browse by track, album or list from the car.
 - A landscape layout: tabs move to a rail on the left, the player to a panel on
   the right.
 - A "hold the decoration still" switch for older phones. It turns off the
   decorative animations and leaves the game playable.
+
+### Android Auto
+
+- Four tabs: Home, Tracks, Albums, Lists. Everything is cover tiles.
+- Home starts with Continue, Shuffle recent and Shuffle all, then what you
+  played lately.
+- Each shelf has a Sort tile at its head: by name, artist, recently added,
+  most played or recently played.
+- Search works typed or spoken.
+- Names and covers are the ones the phone shows, corrections included.
 
 ### Your data
 
@@ -198,6 +213,7 @@ the only things that go out, and none of them needs an account or an API key.
 | Open a recap | MusicBrainz, Wikimedia Commons (artist photos) |
 | Ask for recommendations | ListenBrainz, Cover Art Archive, YouTube (the songs) |
 | Use the Search tab | YouTube |
+| Browse in the car | iTunes (a cover not saved yet, fetched once) |
 
 ## Requirements
 
@@ -210,13 +226,13 @@ the only things that go out, and none of them needs an account or an API key.
 
 ```bash
 npm install
-npm test                 # 624 tests, pure logic
+npm test                 # 630 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android
 
 cd android
-./gradlew :jukebox-audio:testDebugUnitTest   # 124 more, in Kotlin
+./gradlew :jukebox-audio:testDebugUnitTest   # 134 more, in Kotlin
 ./gradlew :app:assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
@@ -237,6 +253,11 @@ Good to know:
   `rm -rf android/app/build/generated/assets/react`
 - Icons are generated from `assets/source` by `scripts/icons.sh` (needs
   ImageMagick).
+- `scripts/android-auto.sh` opens the Desktop Head Unit against your phone as a
+  720p dashboard. `AUTO_SCREEN=small`, `1080p` or `wide` picks another screen.
+- Android Auto hides sideloaded apps unless its "Unknown sources" developer
+  switch is on. Installing with `adb install -r -i com.android.vending` gets
+  your own build listed without it.
 
 ## Permissions
 
@@ -281,6 +302,12 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
   whole queue. The notification, the widget, the car and the app all talk to it
   through a `MediaController`. No JavaScript has to be running for music to
   play, which is why a media button still works after the app is gone.
+- **The service never opens the app's database.** It reads with Android's
+  SQLite, the app writes with expo-sqlite's own, and two copies of SQLite in
+  one process cannot see each other's locks: one read from the service used to
+  delete the write-ahead log under the app, and everything saved afterwards was
+  lost at the next restart. The app now writes what the service needs into a
+  small copy and hands it over by rename.
 - **The media session is closed to strangers.** Only the app itself, the system
   and known browsers (Android Auto, Wear, Assistant, system UI, Bluetooth) may
   connect.

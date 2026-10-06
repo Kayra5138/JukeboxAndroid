@@ -504,7 +504,25 @@ class PlayerController(
           ?: (track["id"] as? String)?.let {
             expo.modules.jukeboxaudio.downloads.DownloadStore.artwork(context, it)
           }
-        artwork?.let { setArtworkUri(Uri.parse(it)) }
+        /*
+          And at an address somebody else can open.
+
+          Those covers are files in the app's own folder, and a `file://`
+          address is only any use to this app. The session turns it into a
+          picture for the notification itself, which is why it looked fine
+          there. A car's split screen does not take the picture: it takes the
+          address and opens it from its own process, cannot, and draws an
+          empty square. So a track of the library is given the address the
+          car's browse screens already use for it, which is the same cover
+          found in the same order, through the one door that is open to
+          others. Anything that is not a library track keeps what it had.
+        */
+        val id = track["id"] as? String
+        if (id?.toLongOrNull() != null) {
+          setArtworkUri(expo.modules.jukeboxaudio.auto.CoverProvider.uriFor(context, id))
+        } else {
+          artwork?.let { setArtworkUri(Uri.parse(it)) }
+        }
       }
       .setExtras(extras)
       .build()

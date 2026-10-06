@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
+import { FormScroll } from '../FormScroll';
 import { TagEditor } from '../TagEditor';
 import { saveGenre } from '../../lib/db/metadata';
 import { saveManualTags, tagCounts, tagsFor, type TagEdit } from '../../lib/db/tags';
@@ -87,7 +88,7 @@ export function TagsTab({
   }, [track.id, tags, onChanged]);
 
   return (
-    <ScrollView contentContainerStyle={shared.content} keyboardShouldPersistTaps="handled">
+    <FormScroll contentContainerStyle={shared.content}>
       <Pressable
         style={[shared.action, looking && shared.actionOff]}
         disabled={looking}
@@ -122,6 +123,6 @@ export function TagsTab({
         The first tag is the one counted as the genre. A tag you typed is kept as yours:
         no later lookup will remove it.
       </Text>
-    </ScrollView>
+    </FormScroll>
   );
 }

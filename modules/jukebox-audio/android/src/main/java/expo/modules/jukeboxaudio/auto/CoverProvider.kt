@@ -8,6 +8,7 @@ import android.database.MatrixCursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
+import expo.modules.jukeboxaudio.AlbumArtwork
 import expo.modules.jukeboxaudio.MediaStoreLibrary
 import expo.modules.jukeboxaudio.downloads.DownloadStore
 import java.io.File
@@ -81,9 +82,16 @@ class CoverProvider : ContentProvider() {
   /**
    * The cover for a track, in the order the rest of the app prefers them.
    *
-   * The picture inside the file first, because that is the one every other
-   * screen shows, and a car disagreeing with the phone about what a record
-   * looks like would be worse than no picture at all.
+   * The one the app keeps for it first: what a lookup found, or what somebody
+   * chose from their gallery. That is the one every other screen shows, and it
+   * is most of them, since a file that arrived without a picture inside it has
+   * no other. Then the picture inside the file.
+   *
+   * Then a cover the app knows only by its web address. The phone shows those
+   * straight from the web, and the car had nothing for them at all: it drew a
+   * made-up tile for a song the phone had a cover for. So it is fetched here,
+   * once, into the same folder the app's own fetching uses, and is a file from
+   * then on. Last, whatever a download came with.
    */
   private fun resolve(uri: Uri): File? {
     val context = context ?: return null
@@ -91,10 +99,18 @@ class CoverProvider : ContentProvider() {
     if (segments.size != 2 || segments[0] != TRACK) return null
     val trackId = segments[1].takeIf { it.toLongOrNull() != null } ?: return null
 
-    val found = runCatching { MediaStoreLibrary.embeddedArtwork(context, trackId) }.getOrNull()
-      ?: runCatching { DownloadStore.artwork(context, trackId) }.getOrNull()
+    val kept = runCatching { LibraryDatabase.cover(context, trackId) }.getOrNull()
+    if (kept != null && kept.startsWith("file://")) own(context, kept)?.let { return it }
 
-    val file = found?.let { runCatching { File(java.net.URI(it)) }.getOrNull() }
+    runCatching { MediaStoreLibrary.embeddedArtwork(context, trackId) }.getOrNull()
+      ?.let { runCatching { File(java.net.URI(it)) }.getOrNull() }
+      ?.takeIf { it.isFile }
+      ?.let { return it }
+
+    if (kept != null && kept.startsWith("https://")) fetched(context, kept)?.let { return it }
+
+    val file = runCatching { DownloadStore.artwork(context, trackId) }.getOrNull()
+      ?.let { runCatching { File(java.net.URI(it)) }.getOrNull() }
     if (file != null && file.isFile) return file
 
     // Nothing to show is not the same as nothing to draw. Refusing here leaves
@@ -103,7 +119,41 @@ class CoverProvider : ContentProvider() {
     return runCatching { Tile.of(context, trackId) }.getOrNull()
   }
 
+  /**
+   * A `file://` address as a file, if it is one of the app's own.
+   *
+   * The address comes out of a database, and this provider is open to other
+   * apps. Only a picture inside the app's own folder is ever handed over.
+   */
+  private fun own(context: Context, address: String): File? =
+    runCatching { File(java.net.URI(address)) }.getOrNull()
+      ?.takeIf { it.isFile && it.canonicalPath.startsWith(context.filesDir.canonicalPath + File.separator) }
+
+  /**
+   * A cover at a web address, fetched and kept.
+   *
+   * The fetching is the app's own, which only goes to the catalogues it
+   * already trusts and refuses anything else. A car asks from a thread of its
+   * own, so waiting on the network holds up nothing but that one picture.
+   * What could not be fetched is not asked for again for a while: a car in a
+   * tunnel draws the same screen many times, and each asking would wait out
+   * the same dead connection.
+   */
+  private fun fetched(context: Context, address: String): File? {
+    val now = android.os.SystemClock.elapsedRealtime()
+    synchronized(failed) {
+      val at = failed[address]
+      if (at != null && now - at < RETRY_AFTER_MS) return null
+    }
+    val file = runCatching { AlbumArtwork.download(context, address) }.getOrNull()?.let { own(context, it) }
+    synchronized(failed) { if (file == null) failed[address] = now else failed.remove(address) }
+    return file
+  }
+
   companion object {
+    private const val RETRY_AFTER_MS = 10 * 60_000L
+    private val failed = HashMap<String, Long>()
+
     private const val TRACK = "track"
 
     private fun authority(context: Context) = "${context.packageName}.covers"
@@ -115,6 +165,10 @@ class CoverProvider : ContentProvider() {
         .authority(authority(context))
         .appendPath(TRACK)
         .appendPath(trackId)
+        // A car remembers a picture by its address. The tiles it was shown
+        // while this skipped the app's own covers are filed under the old
+        // one, and it would go on showing them; a new address asks again.
+        .appendQueryParameter("v", "3")
         .build()
   }
 }

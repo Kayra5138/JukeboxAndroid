@@ -2,8 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -98,9 +96,7 @@ export default function DetailsScreen() {
   const { file, shown } = found;
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]}>
       <View style={styles.heading}>
         <Text style={styles.title} numberOfLines={1}>
           {shown.title}
@@ -140,7 +136,7 @@ export default function DetailsScreen() {
       <View style={tab === 'lyrics' ? styles.pane : styles.hidden}>
         <LyricsTab track={shown} />
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

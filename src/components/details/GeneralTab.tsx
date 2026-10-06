@@ -3,14 +3,13 @@ import { Image } from 'expo-image';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
+import { FormScroll, TextField } from '../FormScroll';
 import { saveCredit } from '../../lib/db/credits';
 import { listeningFor, type TrackListening } from '../../lib/db/history';
 import {
@@ -298,7 +297,7 @@ export function GeneralTab({
   }, [track.id, reset, onChanged]);
 
   return (
-    <ScrollView contentContainerStyle={shared.content} keyboardShouldPersistTaps="handled">
+    <FormScroll contentContainerStyle={shared.content}>
       <View style={styles.coverRow}>
         <Pressable onPress={() => void pick()} accessibilityLabel="Choose a cover from the gallery">
           {shown ? (
@@ -344,7 +343,7 @@ export function GeneralTab({
       {FIELDS.map((field, index) => (
         <View key={field.key} style={shared.field}>
           <Text style={shared.label}>{field.label}</Text>
-          <TextInput
+          <TextField
             style={shared.input}
             value={fields[field.key]}
             onChangeText={(value) => set(field.key, value)}
@@ -392,7 +391,7 @@ export function GeneralTab({
       <Row label="Folder" value={track.folder ?? 'unknown'} />
       <Row label="Length" value={formatDuration(track.durationSec)} />
       <Row label="Details from" value={cameFrom(stored)} />
-    </ScrollView>
+    </FormScroll>
   );
 }
 

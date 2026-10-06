@@ -2,15 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 
 import { isSynced, parseLrc } from '../../lib/lyrics/lrc';
 import { formatOffset, parseOffsetMs } from '../../lib/lyrics/offset';
+import { FormScroll, TextField } from '../FormScroll';
 import { TextPrompt } from '../TextPrompt';
 import {
   fetchLyrics,
@@ -242,7 +241,7 @@ export function LyricsTab({ track }: { track: Track }) {
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <FormScroll contentContainerStyle={styles.content}>
         <Pressable
           style={[styles.action, lookingUp && styles.actionOff]}
           disabled={lookingUp}
@@ -275,15 +274,16 @@ export function LyricsTab({ track }: { track: Track }) {
 
         {stored ? (
           <>
-            <TextInput
+            <TextField
               style={[styles.input, styles.words]}
               value={edited}
               onChangeText={setEdited}
               multiline
-              // Grows with the words, so the page scrolls and the box does
-              // not: a box scrolling inside a page scrolling is two things
-              // fighting over one finger.
-              scrollEnabled={false}
+              // A box of its own height that scrolls inside. It used to grow
+              // with the words, and a song is taller than the screen: the
+              // line being changed was then wherever it fell, usually under
+              // the keyboard, and a field can only be moved clear as a whole.
+              // Held to this height, the field keeps its own caret in view.
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -340,7 +340,7 @@ export function LyricsTab({ track }: { track: Track }) {
           anything whose length disagrees, and is why some tracks never find
           their words.
         </Text>
-        <TextInput
+        <TextField
           style={styles.input}
           value={query}
           onChangeText={setQuery}
@@ -387,7 +387,7 @@ export function LyricsTab({ track }: { track: Track }) {
         <Text style={styles.hint}>
           Takes an LRC file or plain words. Timestamps make it a timed set.
         </Text>
-        <TextInput
+        <TextField
           style={[styles.input, styles.paste]}
           value={pasted}
           onChangeText={setPasted}
@@ -403,7 +403,7 @@ export function LyricsTab({ track }: { track: Track }) {
           onPress={savePasted}>
           <Text style={styles.actionLabel}>Save pasted</Text>
         </Pressable>
-      </ScrollView>
+      </FormScroll>
 
       <TextPrompt
         visible={typingOffset}
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   paste: { minHeight: 132, textAlignVertical: 'top' },
-  words: { minHeight: 132, textAlignVertical: 'top', lineHeight: 21 },
+  words: { height: 260, textAlignVertical: 'top', lineHeight: 21 },
   sectionFirst: { paddingTop: 10 },
   action: {
     alignItems: 'center',

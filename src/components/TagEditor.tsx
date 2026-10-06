@@ -1,4 +1,6 @@
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { TextField } from './FormScroll';
 
 import { canonicalLabel, foldForMatch } from '../lib/metadata/text';
 import type { TagEdit } from '../lib/db/tags';
@@ -97,7 +99,7 @@ export function TagEditor({
         </View>
       ))}
 
-      <TextInput
+      <TextField
         style={styles.input}
         value={draft}
         onChangeText={onDraft}

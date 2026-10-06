@@ -215,18 +215,21 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /**
-   * Finds a cover for the widget, preferring the one inside the file.
-   *
-   * [downloaded] is whatever a lookup found for this track, already on disk and
-   * free to use — but second in line, because the picture stored in the file is
-   * the one the rest of the app shows, and the widget disagreeing with the
-   * player about which cover a song has would be worse than a plain square.
+   * Finds a cover for the widget, in the order the app's own screens do: the
+   * one kept for the track, then the one inside the file, then what a download
+   * came with. The widget disagreeing with the player about which cover a song
+   * has would be worse than a plain square.
    */
   private fun resolveArtwork(trackId: String, downloaded: Uri?) {
     artworkReader.execute {
-      val path = MediaStoreLibrary.embeddedArtwork(this, trackId)
+      // The cover the app keeps for the track first, as every screen of the
+      // app does. It used to arrive here as [downloaded], and no longer does:
+      // a queue item's cover is an address for other apps now, not a file.
+      val path = expo.modules.jukeboxaudio.auto.LibraryDatabase.cover(this, trackId)
+        ?.let { runCatching { Uri.parse(it).path }.getOrNull() }?.takeIf { java.io.File(it).isFile }
+        ?: MediaStoreLibrary.embeddedArtwork(this, trackId)
         ?.let { runCatching { Uri.parse(it).path }.getOrNull() }
-        ?: downloaded?.path?.takeIf { java.io.File(it).isFile }
+        ?: downloaded?.takeIf { it.scheme == "file" }?.path?.takeIf { java.io.File(it).isFile }
         ?: expo.modules.jukeboxaudio.downloads.DownloadStore.artwork(this, trackId)?.let { Uri.parse(it).path }
         ?: return@execute
 
@@ -445,6 +448,11 @@ class PlaybackService : MediaLibraryService() {
       */
       val items = runCatching { BrowseTree.children(this@PlaybackService, parentId) }
         .getOrElse { emptyList() }
+      // An order was just chosen for a shelf, and the car is still holding the
+      // shelf's own tab the way it was. Told, it asks for it again.
+      BrowseTree.refreshes(parentId)?.let { tab ->
+        runCatching { session.notifyChildrenChanged(tab, Int.MAX_VALUE, null) }
+      }
       return Futures.immediateFuture(
         LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
       )
@@ -467,6 +475,38 @@ class PlaybackService : MediaLibraryService() {
     }
 
     /**
+     * A car's search, typed or spoken.
+     *
+     * Asked in two steps because that is how the car asks: it says what it is
+     * looking for and is told how many there are, then comes back for them.
+     * Answering the first is what puts a search button on the screen at all.
+     * A throw is an empty answer here for the same reason as everywhere else
+     * in this callback: it would otherwise take the whole connection down.
+     */
+    override fun onSearch(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      query: String,
+      params: LibraryParams?
+    ): ListenableFuture<LibraryResult<Void>> {
+      val count = runCatching { BrowseTree.search(this@PlaybackService, query).size }.getOrDefault(0)
+      runCatching { session.notifySearchResultChanged(browser, query, count, params) }
+      return Futures.immediateFuture(LibraryResult.ofVoid())
+    }
+
+    override fun onGetSearchResult(
+      session: MediaLibrarySession,
+      browser: MediaSession.ControllerInfo,
+      query: String,
+      page: Int,
+      pageSize: Int,
+      params: LibraryParams?
+    ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+      val items = runCatching { BrowseTree.search(this@PlaybackService, query) }.getOrElse { emptyList() }
+      return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+    }
+
+    /**
      * Choosing a track in a car queues what it was found in, starting there.
      *
      * What comes back from a head unit is an id and not much else, so the
@@ -486,6 +526,49 @@ class PlaybackService : MediaLibraryService() {
         MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
       )
       if (mediaItems.size != 1 || chosen == null) return passThrough
+
+      /*
+        "Continue": whatever was playing, from where it was left.
+
+        Answered here and not by the tree, because here is where the queue is.
+        A player that still holds one is asked for it as it stands. One that
+        was closed since is given the queue that was written down as it
+        changed. With neither there is nothing to carry on with, and the tree
+        answers with something to play anyway.
+      */
+      if (chosen == BrowseTree.CONTINUE) {
+        val player = mediaSession.player
+        if (player.mediaItemCount > 0) {
+          val held = List(player.mediaItemCount) { player.getMediaItemAt(it) }
+          return Futures.immediateFuture(
+            MediaSession.MediaItemsWithStartPosition(
+              held, player.currentMediaItemIndex, player.currentPosition.coerceAtLeast(0)
+            )
+          )
+        }
+        QueueStore.load(this@PlaybackService)?.let { saved ->
+          return Futures.immediateFuture(
+            MediaSession.MediaItemsWithStartPosition(saved.items, saved.index, saved.positionMs)
+          )
+        }
+      }
+
+      /*
+        Asked for by voice: "play such-and-such". It arrives as one item with
+        no id and the words that were said, and the best answer is the songs
+        those words find, the likeliest first. Said with no words at all it is
+        "play some music", which the same tile as above already means.
+      */
+      val spoken = mediaItems.first().requestMetadata.searchQuery
+      if (chosen.isEmpty() && spoken != null) {
+        val found = runCatching {
+          if (spoken.isBlank()) BrowseTree.resolve(this@PlaybackService, BrowseTree.CONTINUE).first
+          else BrowseTree.search(this@PlaybackService, spoken)
+        }.getOrElse { emptyList() }
+        if (found.isNotEmpty()) {
+          return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(found, 0, 0))
+        }
+      }
 
       /*
         Asked of the tree rather than decided here.

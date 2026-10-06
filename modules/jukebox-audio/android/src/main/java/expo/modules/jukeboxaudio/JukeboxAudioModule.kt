@@ -266,6 +266,16 @@ class JukeboxAudioModule : Module() {
       withContext(Dispatchers.IO) { ImagePicker.adopt(context, picked) }
     }
 
+    /**
+     * Puts the copy of the library the car reads into place.
+     *
+     * A rename and nothing more, which is the point of it: the service on the
+     * other side either finds the old copy or the new one, never half of one.
+     */
+    AsyncFunction("publishCarCopyAsync") {
+      expo.modules.jukeboxaudio.auto.LibraryDatabase.adopt(context)
+    }.runOnQueue(io)
+
     // ---- backup ----
 
     /**

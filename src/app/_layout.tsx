@@ -1,12 +1,17 @@
 import { DiscoverProvider } from '../lib/discover/DiscoverProvider';
+import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
+import { keepCarCopy } from '../lib/db/carCopy';
 import { NowPlayingHost } from '../lib/player/NowPlayingSheet';
 import { PlayerProvider } from '../lib/player/PlayerProvider';
 import { DownloadsProvider } from '../lib/youtube/DownloadsProvider';
 
 export default function RootLayout() {
+  // What the car and the widget read is a copy, kept up to date from here.
+  useEffect(() => keepCarCopy(), []);
+
   return (
     <PlayerProvider>
       <DownloadsProvider>

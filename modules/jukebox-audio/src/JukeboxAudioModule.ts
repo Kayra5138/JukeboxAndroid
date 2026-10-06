@@ -240,6 +240,14 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
    */
   pickImageAsync?(): Promise<string | null>;
   /**
+   * Puts the copy of the library the car reads into place.
+   *
+   * The copy is written beside the database as `car.next.db`; this renames it
+   * to the name the playback service opens. Answers false if there was no new
+   * copy to put in place.
+   */
+  publishCarCopyAsync?(): Promise<boolean>;
+  /**
    * Saves a backup where the user chooses, through the system's own "save as".
    *
    * `document` is the backup, already written out as text; `pictures` are the

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DAY, batchReady, retirementIds, selectSongs, settingsFrom, songKey, tasteProfile, type RankedSong } from '../policy.ts';
+import { DAY, NO_MATCH, batchReady, isNoMatch, retirementIds, selectSongs, settingsFrom, songKey, tagFit, tagMix, tasteProfile, type RankedSong } from '../policy.ts';
 const song = (i: number, familiar = i % 2 === 0): RankedSong => ({ recordingMbid: `recording-${i}`, title: `Song ${i}`, artist: `Artist ${Math.floor(i/2)}`, artistMbid: `artist-${Math.floor(i/2)}`, familiar, score: 100-i });
 test('fills exact familiar/new quotas without recommending an owned or rejected recording', () => {
   const pool = Array.from({ length: 60 }, (_, i) => song(i));
@@ -50,7 +50,7 @@ test('taste uses rolling thirty days, recency, completion and deliberate early s
   assert.deepEqual(profile.tags,['rock']);
 });
 test('corrupt settings cannot create enormous downloads or invalid refresh intervals', () => {
-  assert.deepEqual(settingsFrom({ count: 50000, refreshDays: -1, autoDownload: 'yes', wifiOnly: 0 }), { count:20,refreshDays:7,autoDownload:true,wifiOnly:true });
+  assert.deepEqual(settingsFrom({ count: 50000, refreshDays: -1, autoDownload: 'yes', wifiOnly: 0 }), { count:20,refreshDays:0,autoDownload:false,wifiOnly:true });
 });
 
 test('refresh never replaces a playable list with an empty, short or unfinished batch', () => {
@@ -62,4 +62,47 @@ test('refresh never replaces a playable list with an empty, short or unfinished 
 });
 test('cleanup protects both current and staged jobs, including a reused retired file', () => {
   assert.deepEqual(retirementIds(['reused','expired'],[{id:'old'},{id:'current'},{id:'staged'}],['reused','current','staged',undefined]).sort(),['expired','old']);
+});
+test('a song with no recording to be found is recognised, in either wording, and nothing else is', () => {
+  assert.ok(isNoMatch(NO_MATCH));
+  assert.ok(isNoMatch('A matching studio recording could not be found. Tap to retry later.'));
+  assert.ok(!isNoMatch('Download stopped. Tap to retry.'));
+  assert.ok(!isNoMatch('Waiting for Wi-Fi'));
+  assert.ok(!isNoMatch(undefined));
+  assert.ok(!isNoMatch(''));
+});
+test('the tag mix counts what is played together, not only what is played most', () => {
+  const mix = tagMix([
+    [['j-pop', 'rock'], 300], [['rock', 'j-pop', 'anime'], 200],
+    [['hip hop'], 400], [['video game music', 'electronic'], 250],
+    [['rock'], 50], [['ignored'], 0],
+  ]);
+  assert.deepEqual(mix.tags, ['rock', 'j-pop', 'hip hop', 'electronic']);
+  assert.equal(mix.weights.get('rock'), 1);
+  assert.equal(mix.weights.get('hip hop'), 400 / 550);
+  assert.ok(!mix.weights.has('ignored'));
+  // Hip hop is played more than anything it is paired with, and is in no pair: nothing was played with it.
+  assert.deepEqual(mix.pairs, [['j-pop', 'rock'], ['electronic', 'video game music'], ['anime', 'j-pop']]);
+});
+test('a pair is the same pair whichever way round a song lists it, and a repeated tag is one tag', () => {
+  const mix = tagMix([[['a', 'b', 'a'], 1], [['b', 'a'], 1]]);
+  assert.deepEqual(mix.pairs, [['a', 'b']]);
+  assert.equal(mix.weights.get('a'), 1);
+});
+test('only the first four tags of a song count, and nothing at all is an empty mix', () => {
+  assert.ok(!tagMix([[['1', '2', '3', '4', '5'], 1]]).weights.has('5'));
+  assert.deepEqual(tagMix([]), { tags: [], weights: new Map(), pairs: [] });
+});
+test('a song fits by every tag it shares with the mix, up to a cap', () => {
+  const weights = new Map([['rock', 1], ['j-pop', 0.5], ['anime', 0.25]]);
+  assert.equal(tagFit(['rock', 'j-pop', 'jazz'], weights), 1.5);
+  assert.equal(tagFit(['rock', 'rock'], weights), 1);
+  assert.equal(tagFit(['jazz'], weights), 0);
+  assert.equal(tagFit(['a', 'b', 'c', 'd'], new Map([['a', 1], ['b', 1], ['c', 1], ['d', 1]])), 3);
+});
+test('nothing saved means nothing happens unasked: manual refresh, no downloading ahead', () => {
+  assert.deepEqual(settingsFrom(null), { count: 20, refreshDays: 0, autoDownload: false, wifiOnly: true });
+  assert.deepEqual(settingsFrom({}), settingsFrom(null));
+  // What somebody chose is kept, whatever the defaults have become.
+  assert.deepEqual(settingsFrom({ count: 30, refreshDays: 7, autoDownload: true, wifiOnly: false }), { count: 30, refreshDays: 7, autoDownload: true, wifiOnly: false });
 });

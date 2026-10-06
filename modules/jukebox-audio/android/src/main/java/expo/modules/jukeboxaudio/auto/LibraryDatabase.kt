@@ -4,39 +4,65 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 
 /**
- * The app's own database, read from the service.
+ * What the app knows about the library, read from the service.
  *
  * Everything the car needs to show — which folder the library is, what the
  * lists are called, which record a track belongs to — is written by the
  * JavaScript half of the app into `jukebox.db`. The car does not start that
  * half: a head unit connects to the media service and nothing else, so the
- * service has to read the file itself.
+ * service has to read for itself.
  *
- * Read-only in practice, though opened for writing: the file is kept in
- * write-ahead logging mode, and a strictly read-only open of one of those
- * fails when the shared-memory file has to be created. Only SELECTs are issued
- * here, and SQLite is happy with two connections from one process.
+ * It does not read that file. It reads a copy the other half writes out for
+ * it, `car.db`, and the reason is worth keeping in front of anybody who thinks
+ * of going back. This opens with Android's SQLite. The other half writes with
+ * the SQLite that expo-sqlite carries. Two copies of SQLite in one process do
+ * not see each other's locks, so this one took itself to be alone with the
+ * file, and on closing it folded the write-ahead log away and deleted it —
+ * from under a connection that was still writing to it. Every write after
+ * that went to a file with no name and was lost when the app next stopped.
+ * It was reproduced on a desk with the two libraries and a ten-line program:
+ * one read from here, and nothing written afterwards survived.
+ *
+ * The copy is a plain database nobody else has open, replaced whole by a
+ * rename, and opened read-only. It can be a minute behind. It cannot lose
+ * anything.
  *
  * Nothing is cached. A browse in a car is a handful of queries against a few
- * hundred rows, and a cache would be a second copy of the library to keep in
+ * hundred rows, and a cache would be a third copy of the library to keep in
  * step with a screen the driver cannot see.
  */
 internal object LibraryDatabase {
   /**
-   * Where expo-sqlite keeps it, which is not where Android keeps databases.
+   * Where expo-sqlite keeps its databases, which is not where Android does.
    *
    * `getDatabasePath` answers with `databases/`, and that is where a database
    * opened by the platform would live. Expo puts its own under the documents
-   * directory instead. Looking in the wrong one is not an error — it is an
-   * empty car, which is how this was found.
+   * directory instead, and the copy is written beside it.
    */
-  private fun file(context: Context) = java.io.File(context.filesDir, "SQLite/jukebox.db")
+  private fun folder(context: Context) = java.io.File(context.filesDir, "SQLite")
+
+  private fun file(context: Context) = java.io.File(folder(context), "car.db")
+
+  /**
+   * Puts a newly written copy in place of the old one.
+   *
+   * Renamed rather than copied: a rename within one folder happens at once,
+   * so a read that is under way keeps the old file to the end and the next
+   * one opens the new. False where there was no new copy waiting.
+   */
+  fun adopt(context: Context): Boolean {
+    val next = java.io.File(folder(context), "car.next.db")
+    if (!next.isFile) return false
+    // Whatever the writer left beside it belongs to a file that is moving.
+    java.io.File(folder(context), "car.next.db-journal").delete()
+    return next.renameTo(file(context))
+  }
 
   private fun <T> read(context: Context, fallback: T, body: (SQLiteDatabase) -> T): T =
     runCatching {
       val target = file(context)
       if (!target.isFile) return fallback
-      SQLiteDatabase.openDatabase(target.path, null, SQLiteDatabase.OPEN_READWRITE).use(body)
+      SQLiteDatabase.openDatabase(target.path, null, SQLiteDatabase.OPEN_READONLY).use(body)
     }.getOrDefault(fallback)
 
   /** The folder the library is read from, defaulting the way the app does. */
@@ -106,6 +132,16 @@ internal object LibraryDatabase {
       }
     }
 
+  /** How often each track has been listened to, and when it last was. */
+  fun plays(context: Context): Map<String, Pair<Int, Long>> =
+    read(context, emptyMap()) { database ->
+      database.rawQuery(
+        "SELECT track_id, COUNT(*), MAX(started_at) FROM plays GROUP BY track_id", null
+      ).use { cursor ->
+        buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getInt(1) to cursor.getLong(2)) }
+      }
+    }
+
   /** Tracks by how often they have been listened to, the most first. */
   fun mostPlayed(context: Context, limit: Int): List<String> =
     read(context, emptyList()) { database ->
@@ -119,30 +155,49 @@ internal object LibraryDatabase {
     }
 
   /**
-   * Each track that names a record, and what it names.
+   * What the app knows about each track beyond what its file says.
    *
-   * One query for the lot rather than one per record: the grouping is done in
-   * memory against the library that has already been read, which is the only
-   * way to leave out records whose files are no longer on the phone.
+   * One query for the lot rather than one per track. A track that was looked
+   * for and not found is left out: a note that nothing was found says nothing
+   * about the track.
    */
-  fun albumsByTrack(context: Context): Map<String, String> =
+  fun kept(context: Context): Map<String, Kept> =
     read(context, emptyMap()) { database ->
       database.rawQuery(
-        "SELECT track_id, album FROM track_metadata WHERE album IS NOT NULL AND album <> ''",
+        """SELECT track_id, status, title, artist, album, track_number
+           FROM track_metadata WHERE status != 'not_found'""",
         null
       ).use { cursor ->
-        buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getString(1)) }
+        buildMap {
+          while (cursor.moveToNext()) {
+            put(
+              cursor.getString(0),
+              Kept(
+                manual = cursor.getString(1) == "manual",
+                title = cursor.getString(2),
+                artist = cursor.getString(3),
+                album = cursor.getString(4),
+                position = if (cursor.isNull(5)) null else cursor.getInt(5)
+              )
+            )
+          }
+        }
       }
     }
 
-  /** Where each track sits on its record, for putting one in order. */
-  fun positionsByTrack(context: Context): Map<String, Int> =
-    read(context, emptyMap()) { database ->
-      database.rawQuery(
-        "SELECT track_id, track_number FROM track_metadata WHERE track_number IS NOT NULL",
-        null
-      ).use { cursor ->
-        buildMap { while (cursor.moveToNext()) put(cursor.getString(0), cursor.getInt(1)) }
-      }
-    }
+  /**
+   * The cover the app keeps for a track, as an address, or null.
+   *
+   * What a lookup found or somebody picked from their gallery, which is most
+   * covers: files that arrive without a picture inside them get theirs this
+   * way. Usually a `file://` in the app's own folder. Sometimes still the web
+   * address the catalogue gave, where the picture has not been fetched yet;
+   * the phone's screens show those straight from the web, so they count.
+   */
+  fun cover(context: Context, trackId: String): String? = read(context, null as String?) { database ->
+    database.rawQuery(
+      "SELECT artwork_url FROM track_metadata WHERE track_id = ? AND artwork_url IS NOT NULL AND artwork_url <> ''",
+      arrayOf(trackId)
+    ).use { if (it.moveToFirst()) it.getString(0) else null }
+  }
 }

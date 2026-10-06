@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import expo.modules.jukeboxaudio.MediaStoreLibrary
+import expo.modules.jukeboxaudio.QueueStore
+import expo.modules.jukeboxaudio.R
 
 /**
  * The library as a car can see it.
@@ -15,45 +17,59 @@ import expo.modules.jukeboxaudio.MediaStoreLibrary
  * how much a driver may be shown — which is why supporting it changes nothing
  * about the app and is entirely a matter of answering those questions well.
  *
- * The top of it is four tabs, which is all a car will show, and they are named
- * after what a driver wants rather than after how the library is filed. The
- * first is the important one: reaching for what you were playing yesterday is
- * the commonest thing anybody does in a car, and a tree of Tracks/Albums/Lists
- * cannot answer it at all — every one of those is a cabinet to be opened, and
- * the first screen plays nothing.
+ * So what can be decided here is less than a screen and more than a list. Four
+ * tabs, which is all a car shows. Tiles rather than lines, everywhere: a cover
+ * is recognised in the time a name takes to read, and a small screen holds
+ * several times as many of them. The first tab is what a driver reaches for —
+ * carrying on, or something played lately — and the other three are the
+ * library, each in an order that can be changed.
+ *
+ * What cannot be decided here is where any of it goes. The car puts the tabs
+ * and its own search button where it likes, and takes no buttons from an app,
+ * which is why changing the order is a tile at the head of each shelf rather
+ * than a control beside the tabs.
  */
 internal object BrowseTree {
   const val ROOT = "root"
   private const val HOME = "home"
   private const val TRACKS = "tracks"
-  private const val RECENT = "recent"
-  private const val MOST_PLAYED = "most-played"
-  private const val ADDED = "recently-added"
   private const val ALBUMS = "albums"
-  private const val ARTISTS = "artists"
   private const val LISTS = "lists"
+  private const val RECENT = "recent"
 
-  /** Everything, in no order anybody chose. */
-  private const val SHUFFLE = "shuffle"
+  /** One record, one list, and the answer to one search: `album/Name`, `list/7`, `search/words`. */
+  private const val ALBUM = "album/"
+  private const val LIST = "list/"
+  private const val SEARCH = "search/"
+
+  /** Under a shelf: the choice of orders, and the shelf in one of them. */
+  private const val SORT = "/sort"
+  private const val BY = "/by/"
 
   /**
-   * How long the shelves on the first screen are.
+   * The three tiles at the top of the first screen.
    *
-   * Short on purpose. These exist to be glanced at and reached into, and a
-   * driver is held to about twenty items across a whole path while the car is
-   * moving anyway.
+   * Their own ids rather than a track's: what each means is decided when it is
+   * chosen, not when it is drawn.
    */
+  const val CONTINUE = "continue"
+  private const val SHUFFLE = "shuffle"
+  private const val SHUFFLE_RECENT = "shuffle-recent"
+
+  /** How far back "lately" goes, for the shelf a recent song is queued with. */
   private const val SHELF = 100
 
   /**
-   * How many of each go on the first screen.
+   * How many recent songs are on the first screen.
    *
-   * Six apiece and three headings is eighteen, plus the shuffle row and the way
-   * through to everything: twenty. A car holds a driver to about that many
-   * across a whole path while it is moving, and what goes over is not scrolled
-   * to, it is dropped.
+   * Tiles, so a good many fit: six rows of four on a small screen. More is not
+   * better. This is the screen for what was played this week, and the Tracks
+   * tab sorted by recently played is one tap away for the rest.
    */
-  private const val ON_HOME = 6
+  private const val ON_HOME = 24
+
+  /** How many answers a search gives. A driver is not going to read a hundred. */
+  private const val FOUND = 50
 
   /**
    * A playable item carries where it was found as well as what it is.
@@ -112,65 +128,93 @@ internal object BrowseTree {
       }
     }
 
+    for (shelf in Sort.FOR.keys) {
+      if (parentId == shelf) {
+        return listOf(sortTile(context, shelf)) + shelf(context, root, shelf, Sort.read(context, shelf))
+      }
+      if (parentId == "$shelf$SORT") {
+        val now = Sort.read(context, shelf)
+        return Sort.FOR.getValue(shelf).map {
+          icon(
+            context, "$shelf$BY${it.key}", it.label, R.drawable.jukebox_auto_sort,
+            subtitle = if (it == now) "In this order now" else null, browsable = true
+          )
+        }
+      }
+      if (parentId.startsWith("$shelf$BY")) {
+        // Opening an order is choosing it: the shelf is shown that way, and
+        // stays that way the next time its tab is opened.
+        val sort = Sort.of(shelf, parentId.removePrefix("$shelf$BY"))
+        Sort.write(context, shelf, sort)
+        return shelf(context, root, shelf, sort)
+      }
+    }
+
     return when {
       // Four, because four is all that is shown. A fifth would not be a
       // crowded row, it would be a tab nobody can reach.
       parentId == ROOT -> listOf(
-        browsable(context, HOME, "Home"),
-        // Only the shelf of records is asked for as tiles: a record is known by
-        // its cover, where a song is known by its name and a wall of identical
-        // covers would say less than a list.
-        browsable(context, ALBUMS, "Albums", grid = true),
-        browsable(context, ARTISTS, "Artists", grid = true),
-        browsable(context, LISTS, "Lists")
+        icon(context, HOME, "Home", R.drawable.jukebox_auto_home, browsable = true, single = false),
+        icon(context, TRACKS, "Tracks", R.drawable.jukebox_auto_tracks, browsable = true, single = false),
+        icon(context, ALBUMS, "Albums", R.drawable.jukebox_auto_albums, browsable = true, single = false),
+        icon(context, LISTS, "Lists", R.drawable.jukebox_auto_lists, browsable = true, single = false)
       )
 
       /*
-        The songs themselves, under headings, rather than a row per heading.
+        Three ways to start without choosing anything, and straight after
+        them, in the same run of tiles, what was played lately.
 
-        A car draws the children of one node as one scrolling screen and will
-        put a title above any run of them that asks for the same one. That is
-        the whole difference between a first screen that is a menu and a first
-        screen that is content: three taps to reach something to play becomes
-        one, and the space that was four words of a category name is a cover
-        and a song instead.
+        One run and no headings, because of what a heading costs. A car starts
+        a new block of the screen for every heading and gives the heading a
+        line of its own, and with the three under one and the songs under
+        another, the first screen was three tiles and nothing else: everything
+        worth seeing was a scroll away, which in a car is a long way. Run
+        together they share rows, and a song or two is on screen from the
+        start.
 
-        Held to about twenty between them because that is what a car allows a
-        driver while it is moving, and going over does not scroll -- it is cut.
+        The three wear covers and not symbols, each the cover of something it
+        would play, so the row looks like the music and not like a toolbar.
       */
       parentId == HOME -> buildList {
-        add(shuffleEverything(context, root))
-
         val everything = tracks(context, root)
         val recent = inOrderOf(everything, LibraryDatabase.recentlyPlayed(context, ON_HOME))
-        val most = inOrderOf(everything, LibraryDatabase.mostPlayed(context, ON_HOME))
-        val added = everything
-          .sortedWith(compareBy({ it.addedAt == null }, { -(it.addedAt ?: 0L) }))
-          .take(ON_HOME)
 
-        // A heading with nothing under it is worse than no heading, and a new
-        // library has nothing it has played yet.
-        recent.forEach { add(playable(context, it, RECENT, group = "Carry on")) }
-        most.forEach { add(playable(context, it, MOST_PLAYED, group = "You play these most")) }
-        added.forEach { add(playable(context, it, ADDED, group = "New here")) }
+        val last = runCatching { QueueStore.load(context) }.getOrNull()
+          ?.let { it.items.getOrNull(it.index) }
+        val lastId = last?.mediaId?.substringAfterLast('|')?.takeIf { id -> everything.any { it.id == id } }
+        add(action(
+          context, CONTINUE, "Continue",
+          // What it would carry on with, so the tile says more than its name.
+          subtitle = last?.mediaMetadata?.title?.toString(),
+          cover = lastId ?: recent.firstOrNull()?.id ?: everything.firstOrNull()?.id
+        ))
+        if (recent.isNotEmpty()) {
+          // Not the newest of them where there is another: that one is as
+          // likely as not the cover the tile beside it is already wearing.
+          add(action(
+            context, SHUFFLE_RECENT, "Shuffle recent", "${recent.size} songs",
+            cover = (recent.firstOrNull { it.id != lastId } ?: recent.first()).id
+          ))
+        }
+        if (everything.isNotEmpty()) {
+          // A different record each day and the same one all day: something to
+          // look at that is not the same sleeve for ever, without a tile that
+          // changes under a finger.
+          val today = (System.currentTimeMillis() / 86_400_000L).toInt()
+          add(action(
+            context, SHUFFLE, "Shuffle all", "${everything.size} songs",
+            cover = everything[Math.floorMod(today * 31, everything.size)].id
+          ))
+        }
 
-        add(browsable(context, TRACKS, "All tracks"))
-      }
+        recent.forEach { add(playable(context, it, RECENT)) }
 
-      parentId == ALBUMS -> albums(context, root).map { (name, entries) ->
-        browsable(context, "$ALBUMS/$name", name, cover = entries.firstOrNull()?.id)
-      }
-
-      parentId == ARTISTS -> artists(context, root).map { (name, entries) ->
-        browsable(
-          context, "$ARTISTS/$name", name,
-          subtitle = "${entries.size} tracks",
-          cover = entries.firstOrNull()?.id
-        )
-      }
-
-      parentId == LISTS -> LibraryDatabase.playlists(context).map {
-        browsable(context, "$LISTS/${it.id}", it.name, "${it.trackCount} tracks")
+        // A library nothing has been played from yet still deserves a first
+        // screen with something on it.
+        if (recent.isEmpty()) {
+          sorted(context, everything, Sort.ADDED).take(ON_HOME)
+            .forEach { add(playable(context, it, "$TRACKS$BY${Sort.ADDED.key}")) }
+        }
       }
 
       else -> entriesOf(context, root, parentId)
@@ -180,13 +224,108 @@ internal object BrowseTree {
   }
 
   /**
+   * The tab that has to be drawn again once [parentId] has been answered.
+   *
+   * Choosing an order changes what the shelf's own tab holds, and a car keeps
+   * what it was last told about a tab until it is told otherwise.
+   */
+  fun refreshes(parentId: String): String? =
+    Sort.FOR.keys.firstOrNull { parentId.startsWith("$it$BY") }
+
+  /** One of the three shelves, in [sort]. */
+  private fun shelf(context: Context, root: String, shelf: String, sort: Sort): List<MediaItem> = when (shelf) {
+    TRACKS -> {
+      val node = "$TRACKS$BY${sort.key}"
+      songs(context, node, entriesOf(context, root, node).orEmpty())
+    }
+
+    ALBUMS -> {
+      val plays = if (sort == Sort.MOST) LibraryDatabase.plays(context) else emptyMap()
+      val records = albums(context, root).entries.toList()
+      when (sort) {
+        Sort.ADDED -> records.sortedByDescending { (_, entries) -> entries.maxOf { it.addedAt ?: 0L } }
+        Sort.MOST -> records.sortedByDescending { (_, entries) -> entries.sumOf { plays[it.id]?.first ?: 0 } }
+        else -> records
+      }.map { (name, entries) ->
+        browsable(
+          context, "$ALBUM$name", name,
+          subtitle = entries.mapNotNull { it.artist }.distinct().singleOrNull() ?: "${entries.size} tracks",
+          cover = entries.firstOrNull()?.id
+        )
+      }
+    }
+
+    else -> {
+      val lists = LibraryDatabase.playlists(context)
+      when (sort) {
+        Sort.TITLE -> lists.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name })
+        Sort.SIZE -> lists.sortedByDescending { it.trackCount }
+        else -> lists
+      }.map {
+        browsable(
+          context, "$LIST${it.id}", it.name, "${it.trackCount} tracks",
+          // A list is known by what is in it, and its first song stands for it.
+          cover = LibraryDatabase.playlistTrackIds(context, it.id).firstOrNull()
+        )
+      }
+    }
+  }
+
+  /** The tile at the head of a shelf that says what order it is in and opens the others. */
+  private fun sortTile(context: Context, shelf: String): MediaItem =
+    icon(
+      context, "$shelf$SORT", "Sort", R.drawable.jukebox_auto_sort,
+      subtitle = Sort.read(context, shelf).label, browsable = true
+    )
+
+  /** [entries] in [sort]. Ties, and songs the order says nothing about, go by name. */
+  private fun sorted(context: Context, entries: List<Entry>, sort: Sort): List<Entry> {
+    val byName = compareBy<Entry> { folded(it.title) }
+    return when (sort) {
+      Sort.ARTIST -> entries.sortedWith(
+        compareBy<Entry>({ it.artist.isNullOrBlank() }, { folded(it.artist ?: "") }, { folded(it.album ?: "") },
+          { it.position == null }, { it.position ?: 0 }).then(byName)
+      )
+      // Newest first, and anything the media store would not date goes last
+      // rather than pretending to be from 1970.
+      Sort.ADDED -> entries.sortedWith(compareBy<Entry>({ it.addedAt == null }, { -(it.addedAt ?: 0L) }).then(byName))
+      Sort.MOST, Sort.RECENT -> {
+        val plays = LibraryDatabase.plays(context)
+        entries.sortedWith(
+          compareBy<Entry> { entry ->
+            val (count, last) = plays[entry.id] ?: (0 to 0L)
+            if (sort == Sort.MOST) -count.toLong() else -last
+          }.then(byName)
+        )
+      }
+      else -> entries.sortedWith(byName)
+    }
+  }
+
+  /** The songs that answer [query], best first. */
+  private fun found(context: Context, root: String, query: String): List<Entry> =
+    tracks(context, root)
+      .mapNotNull { entry -> searchRank(query, entry.title, listOf(entry.artist, entry.album))?.let { it to entry } }
+      .sortedWith(compareBy({ it.first }, { folded(it.second.title) }))
+      .take(FOUND)
+      .map { it.second }
+
+  /** What a search for [query] shows. */
+  fun search(context: Context, query: String): List<MediaItem> {
+    val root = LibraryDatabase.libraryRoot(context)
+    val node = "$SEARCH${query.trim()}"
+    return found(context, root, query).map { playable(context, it, node) }
+  }
+
+  /**
    * The songs a node holds, in order, or null for a node that holds folders.
    *
    * Separated from [children] because a list may have to be handed over in
    * parts, and the parts have to be cut from the same sequence the whole was.
    */
   private fun entriesOf(context: Context, root: String, parentId: String): List<Entry>? = when {
-    parentId == TRACKS -> tracks(context, root)
+    parentId.startsWith("$TRACKS$BY") ->
+      sorted(context, tracks(context, root), Sort.of(TRACKS, parentId.removePrefix("$TRACKS$BY")))
 
     // The history knows ids and when they were heard; what those ids are is
     // still the library's to say, and a track played once and deleted since
@@ -195,29 +334,17 @@ internal object BrowseTree {
       tracks(context, root), LibraryDatabase.recentlyPlayed(context, SHELF)
     )
 
-    parentId == MOST_PLAYED -> inOrderOf(
-      tracks(context, root), LibraryDatabase.mostPlayed(context, SHELF)
-    )
+    parentId.startsWith(ALBUM) -> albums(context, root)[parentId.removePrefix(ALBUM)]
 
-    // Newest first, and anything the media store would not date goes last
-    // rather than pretending to be from 1970.
-    parentId == ADDED -> tracks(context, root)
-      .sortedWith(compareBy({ it.addedAt == null }, { -(it.addedAt ?: 0L) }))
-      .take(SHELF)
-
-    parentId.startsWith("$ALBUMS/") ->
-      albums(context, root)[parentId.removePrefix("$ALBUMS/")]
-
-    parentId.startsWith("$ARTISTS/") ->
-      artists(context, root)[parentId.removePrefix("$ARTISTS/")]
-
-    parentId.startsWith("$LISTS/") -> {
-      val id = parentId.removePrefix("$LISTS/").toLongOrNull()
+    parentId.startsWith(LIST) -> {
+      val id = parentId.removePrefix(LIST).toLongOrNull()
       if (id == null) null else {
         val byId = tracks(context, root).associateBy { it.id }
         LibraryDatabase.playlistTrackIds(context, id).mapNotNull { byId[it] }
       }
     }
+
+    parentId.startsWith(SEARCH) -> found(context, root, parentId.removePrefix(SEARCH))
 
     else -> null
   }
@@ -261,50 +388,10 @@ internal object BrowseTree {
   private fun shorten(title: String): String =
     if (title.length <= 12) title else title.take(11).trimEnd() + "…"
 
-  /**
-   * The library arranged by who made it.
-   *
-   * Free: the artist is already on every row that has been read, so this is a
-   * grouping of what is in hand rather than anything asked of the disk.
-   */
-  private fun artists(context: Context, root: String): Map<String, List<Entry>> =
-    tracks(context, root)
-      .groupBy { it.artist?.takeIf(String::isNotBlank) ?: "Unknown artist" }
-      .mapValues { (_, entries) ->
-        entries.sortedWith(
-          compareBy({ it.album ?: "" }, { it.position == null }, { it.position ?: 0 }, { it.title })
-        )
-      }
-      .toSortedMap(String.CASE_INSENSITIVE_ORDER)
-
   /** [entries] picked out and put in the order [ids] gives, skipping the gone. */
   private fun inOrderOf(entries: List<Entry>, ids: List<String>): List<Entry> {
     val byId = entries.associateBy { it.id }
     return ids.mapNotNull { byId[it] }
-  }
-
-  /**
-   * One row that starts the whole library in no particular order.
-   *
-   * Playable, and first, because a browse screen wants something on it that
-   * plays. Its own id rather than a track's: what it means is "all of them,
-   * shuffled", and which track comes first is decided when it is chosen, not
-   * when it is drawn.
-   */
-  private fun shuffleEverything(context: Context, root: String): MediaItem {
-    val first = tracks(context, root).firstOrNull()
-    return MediaItem.Builder()
-      .setMediaId(SHUFFLE)
-      .setMediaMetadata(
-        MediaMetadata.Builder()
-          .setTitle("Shuffle everything")
-          .setIsBrowsable(false)
-          .setIsPlayable(true)
-          .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-          .apply { first?.let { setArtworkUri(CoverProvider.uriFor(context, it.id)) } }
-          .build()
-      )
-      .build()
   }
 
   /**
@@ -314,13 +401,19 @@ internal object BrowseTree {
    * a record leaves the rest of the record queued behind it.
    */
   fun resolve(context: Context, mediaId: String): Pair<List<MediaItem>, Int> {
-    if (mediaId == SHUFFLE) {
+    if (mediaId == SHUFFLE || mediaId == SHUFFLE_RECENT || mediaId == CONTINUE) {
       // Shuffled here rather than handed over in order and shuffled by the
       // player: what was asked for was a shuffled queue, and leaving it to a
-      // mode the driver cannot see would mean the row did something different
+      // mode the driver cannot see would mean the tile did something different
       // depending on a setting made weeks ago.
-      val all = tracks(context, LibraryDatabase.libraryRoot(context)).shuffled()
-      return all.map { playable(context, it, TRACKS) } to 0
+      val all = tracks(context, LibraryDatabase.libraryRoot(context))
+      val recent = if (mediaId == SHUFFLE_RECENT) {
+        inOrderOf(all, LibraryDatabase.recentlyPlayed(context, SHELF))
+      } else emptyList()
+      // Carrying on is the service's to answer, since it has the queue. It
+      // only arrives here when there is none, and then anything is better
+      // than a tile that does nothing.
+      return recent.ifEmpty { all }.shuffled().map { playable(context, it, RECENT) } to 0
     }
 
     if (!mediaId.startsWith(PLAYABLE)) return emptyList<MediaItem>() to 0
@@ -358,21 +451,23 @@ internal object BrowseTree {
   )
 
   private fun tracks(context: Context, root: String): List<Entry> {
-    val albums = LibraryDatabase.albumsByTrack(context)
-    val positions = LibraryDatabase.positionsByTrack(context)
+    val kept = LibraryDatabase.kept(context)
 
     return MediaStoreLibrary.queryTracks(context, root).mapNotNull { row ->
       val id = row["id"] as? String ?: return@mapNotNull null
       val uri = row["uri"] as? String ?: return@mapNotNull null
+      val known = kept[id]
+      // Named the way the phone names it, corrections and lookups included.
+      val names = named(
+        row["title"] as? String ?: "Unknown", row["artist"] as? String, row["album"] as? String, known
+      )
       Entry(
         id = id,
         uri = uri,
-        title = row["title"] as? String ?: "Unknown",
-        artist = row["artist"] as? String,
-        // What a lookup found outranks the folder name the media store reports
-        // as an album, which for a folder of downloads is the folder.
-        album = albums[id] ?: row["album"] as? String,
-        position = positions[id],
+        title = names.title,
+        artist = names.artist,
+        album = names.album,
+        position = known?.position ?: (row["trackNumber"] as? Number)?.toInt(),
         addedAt = row["addedAt"] as? Long,
         durationSec = (row["durationSec"] as? Number)?.toDouble() ?: -1.0
       )
@@ -382,16 +477,14 @@ internal object BrowseTree {
   /**
    * Records, with their tracks in order.
    *
-   * Only what a lookup named, and only what is still on the phone: the tracks
-   * are taken from the media store and the names from the database, so a
-   * record whose files have gone does not appear at all.
+   * Every track that names one, by the name the phone shows for it, and only
+   * what is still on the phone: the tracks are the media store's, so a record
+   * whose files have gone does not appear at all.
    */
-  private fun albums(context: Context, root: String): Map<String, List<Entry>> {
-    val named = LibraryDatabase.albumsByTrack(context)
-    return tracks(context, root)
-      .filter { named.containsKey(it.id) }
-      .groupBy { it.album ?: "" }
-      .filterKeys { it.isNotBlank() }
+  private fun albums(context: Context, root: String): Map<String, List<Entry>> =
+    tracks(context, root)
+      .filter { !it.album.isNullOrBlank() }
+      .groupBy { it.album!!.trim() }
       .mapValues { (_, entries) ->
         // Numbered first and in order, the rest after them — the same rule the
         // app's own album screen follows.
@@ -400,24 +493,19 @@ internal object BrowseTree {
         )
       }
       .toSortedMap(String.CASE_INSENSITIVE_ORDER)
-  }
 
   /**
-   * A folder.
+   * A folder, drawn as a tile and holding tiles.
    *
    * [cover] is the track whose picture stands for the folder — a record's
-   * first song, for a shelf of records. [grid] asks the car to lay the folder's
-   * children out as tiles rather than as lines of text, which is the whole
-   * difference between a list of album names and a wall of covers. It is a
-   * hint: a head unit that does not do tiles ignores it and draws a list.
+   * first song, for a shelf of records.
    */
   private fun browsable(
     context: Context,
     id: String,
     title: String,
     subtitle: String? = null,
-    cover: String? = null,
-    grid: Boolean = false
+    cover: String? = null
   ): MediaItem =
     MediaItem.Builder()
       .setMediaId(id)
@@ -428,23 +516,83 @@ internal object BrowseTree {
           .setIsBrowsable(true)
           .setIsPlayable(false)
           .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-          .apply {
-            cover?.let { setArtworkUri(CoverProvider.uriFor(context, it)) }
-            if (grid) setExtras(grid())
-          }
+          .apply { cover?.let { setArtworkUri(CoverProvider.uriFor(context, it)) } }
+          .setExtras(tiles())
+          .build()
+      )
+      .build()
+
+  /** A tile that plays something and is not a song: one of the three on the first screen. */
+  private fun action(context: Context, id: String, title: String, subtitle: String?, cover: String?): MediaItem =
+    MediaItem.Builder()
+      .setMediaId(id)
+      .setMediaMetadata(
+        MediaMetadata.Builder()
+          .setTitle(title)
+          .setSubtitle(subtitle)
+          // A car shows the artist under a playable tile, and the subtitle
+          // only under a folder.
+          .setArtist(subtitle)
+          .setIsBrowsable(false)
+          .setIsPlayable(true)
+          .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+          .apply { cover?.let { setArtworkUri(CoverProvider.uriFor(context, it)) } }
+          .setExtras(tiles())
           .build()
       )
       .build()
 
   /**
-   * Draw what is inside this folder as tiles.
+   * A tile that is an icon and not a cover: a tab, or an order to sort by.
+   *
+   * [single] asks for this one tile to be drawn as an icon whatever its
+   * neighbours are, which is what stops a play symbol being blown up to the
+   * size of a record sleeve and cropped. A tab is not a tile and does not ask.
+   *
+   * The picture is addressed by its number and not its name: a release build
+   * renames resources to save space, and a name that was right when this was
+   * written finds nothing afterwards.
+   */
+  private fun icon(
+    context: Context,
+    id: String,
+    title: String,
+    drawable: Int,
+    subtitle: String? = null,
+    browsable: Boolean = false,
+    single: Boolean = true
+  ): MediaItem =
+    MediaItem.Builder()
+      .setMediaId(id)
+      .setMediaMetadata(
+        MediaMetadata.Builder()
+          .setTitle(title)
+          .setSubtitle(subtitle)
+          .setIsBrowsable(browsable)
+          .setIsPlayable(!browsable)
+          .setMediaType(if (browsable) MediaMetadata.MEDIA_TYPE_FOLDER_MIXED else MediaMetadata.MEDIA_TYPE_MUSIC)
+          .setArtworkUri(Uri.parse("android.resource://${context.packageName}/$drawable"))
+          .setExtras(tiles().apply { if (single) putInt(SINGLE_ITEM, ICON_TILE) })
+          .build()
+      )
+      .build()
+
+  /**
+   * Draw what is inside this folder as tiles, folders and songs alike.
    *
    * The keys are the old MediaBrowserCompat ones because that is what a head
-   * unit still speaks; media3 passes the extras through untouched.
+   * unit still speaks; media3 passes the extras through untouched. They are
+   * hints: a head unit that does not do tiles ignores them and draws a list.
    */
-  private fun grid() = Bundle().apply {
-    putInt("android.media.browse.CONTENT_STYLE_BROWSABLE_HINT", 2)
-    putInt("android.media.browse.CONTENT_STYLE_PLAYABLE_HINT", 1)
+  private const val BROWSABLE_STYLE = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
+  private const val PLAYABLE_STYLE = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
+  private const val SINGLE_ITEM = "android.media.browse.CONTENT_STYLE_SINGLE_ITEM_HINT"
+  private const val TILE = 2
+  private const val ICON_TILE = 4
+
+  private fun tiles() = Bundle().apply {
+    putInt(BROWSABLE_STYLE, TILE)
+    putInt(PLAYABLE_STYLE, TILE)
   }
 
   private fun playable(

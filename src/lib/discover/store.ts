@@ -16,10 +16,12 @@ export function readSnapshot(): Snapshot {
 export function saveSnapshot(value: Snapshot) {
   db().runSync('INSERT INTO discover_state (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data', 'current', JSON.stringify(value));
 }
-export function exclude(entry: Entry, reason: 'blocked' | 'saved' | 'expired', now = Date.now()) {
+/** How long a song stays out: for good if it was saved or blocked, a season if it was shown, a month if it could not be found. */
+const AWAY_DAYS = { blocked: null, saved: null, expired: 90, unmatched: 30 } as const;
+export function exclude(entry: Entry, reason: keyof typeof AWAY_DAYS, now = Date.now()) {
   db().runSync(`INSERT INTO discover_exclusions (id,song_key,title,artist,reason,until_at) VALUES (?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET reason=excluded.reason,until_at=excluded.until_at`,
-  entry.recordingMbid, songKey(entry), entry.title, entry.artist, reason, reason === 'expired' ? now + 90 * DAY : null);
+  entry.recordingMbid, songKey(entry), entry.title, entry.artist, reason, AWAY_DAYS[reason] == null ? null : now + AWAY_DAYS[reason] * DAY);
 }
 export function exclusions(now = Date.now()): Set<string> {
   const rows = db().getAllSync<{ id: string; song_key: string }>('SELECT id,song_key FROM discover_exclusions WHERE until_at IS NULL OR until_at > ?', now);
