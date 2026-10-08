@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { durationLabel, isActive, jobForVideo, type DownloadJob } from '../types.ts';
+import { stringsFor } from '../../i18n/languages.ts';
+import { durationLabel, isActive, jobForVideo, statusLabel, type DownloadJob } from '../types.ts';
 
 function job(status: DownloadJob['status'], id = 'job'): DownloadJob {
   return { id, status, video: { id: 'BaW_jenozKc', title: 'Track', channel: 'Channel', url: 'https://www.youtube.com/watch?v=BaW_jenozKc', duration: null, thumbnail: null }, format: 'mp3', folder: 'Music', progress: 0, trackId: null, error: null, described: false };
@@ -29,5 +30,18 @@ describe('YouTube durations', () => {
     assert.equal(durationLabel(NaN), '');
     assert.equal(durationLabel(241.8), '4:01');
     assert.equal(durationLabel(3661), '1:01:01');
+  });
+});
+
+describe('what a download is doing, in words', () => {
+  it('is said in English', () => {
+    assert.equal(statusLabel({ ...job('downloading'), progress: 42 }), 'Downloading · 42%');
+    assert.equal(statusLabel(job('done')), 'In library');
+    assert.equal(statusLabel(job('missing')), 'File removed');
+  });
+  it('is said in Turkish when that is the language', () => {
+    const tr = stringsFor('tr');
+    assert.equal(statusLabel({ ...job('downloading'), progress: 42 }, tr), 'İndiriliyor · %42');
+    assert.equal(statusLabel(job('done'), tr), 'Kütüphanede');
   });
 });

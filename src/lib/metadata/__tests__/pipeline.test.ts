@@ -174,6 +174,28 @@ describe('runEnrichment', () => {
     assert.equal(db.rows.filter((row) => row.status === 'not_found').length, 0);
   });
 
+  it('does not take Apple slowing it down for a song Apple does not have', async () => {
+    // Apple's rate limit answers 403. Read as a refusal it was written down as
+    // a miss, for this track and for every one after it until the limit
+    // lifted, and a miss is not looked up again. MusicBrainz knows the
+    // recording and no genre for it, which is what sends the question on.
+    const musicbrainz = musicbrainzRoute([]);
+    stubFetch((url) => {
+      if (url.includes('itunes.apple.com')) return { status: 403 };
+      return musicbrainz(url) ?? { body: { results: [] } };
+    });
+
+    const db = store();
+    const seen: EnrichProgress[] = [];
+    const result = await withoutWaiting(() =>
+      runEnrichment([song('Susumu Hirasawa')], (progress) => seen.push(progress), undefined, db)
+    );
+
+    assert.ok(seen.some((progress) => progress.throttled));
+    assert.equal(result.missed, 0);
+    assert.equal(db.rows.length, 0, 'nothing is settled about a track that was never answered');
+  });
+
   it('gives up rather than grinding when nothing can be reached', async () => {
     stubFetch(() => ({ fail: 'network' }));
 

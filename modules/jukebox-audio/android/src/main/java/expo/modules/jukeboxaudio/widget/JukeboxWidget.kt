@@ -14,6 +14,7 @@ import android.view.KeyEvent
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
+import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.PlaybackService
 import expo.modules.jukeboxaudio.R
 import java.io.File
@@ -86,10 +87,25 @@ class JukeboxWidget : AppWidgetProvider() {
     private fun render(context: Context, state: NowPlaying, id: Int): RemoteViews {
       val views = RemoteViews(context.packageName, layout(context, id))
 
+      /*
+        The words are put in from here, the ones a screen reader says included.
+
+        The layout names them too, but a launcher inflates the layout in its
+        own process and so in the phone's language, which is not necessarily
+        the app's. What is set from this side travels as text and arrives as
+        it was sent.
+      */
+      val words = Localised.context(context)
+      views.setContentDescription(R.id.jukebox_widget_art, words.getString(R.string.jukebox_widget_art))
+      views.setContentDescription(R.id.jukebox_widget_previous, words.getString(R.string.jukebox_widget_previous))
+      views.setContentDescription(R.id.jukebox_widget_toggle, words.getString(R.string.jukebox_widget_toggle))
+      views.setContentDescription(R.id.jukebox_widget_next, words.getString(R.string.jukebox_widget_next))
+      views.setContentDescription(R.id.jukebox_widget_progress, words.getString(R.string.jukebox_widget_progress))
+
       val idle = state.title.isNullOrBlank()
       views.setTextViewText(
         R.id.jukebox_widget_title,
-        if (idle) context.getString(R.string.jukebox_widget_idle) else state.title
+        if (idle) words.getString(R.string.jukebox_widget_idle) else state.title
       )
       views.setTextViewText(R.id.jukebox_widget_artist, state.artist.orEmpty())
       views.setImageViewResource(
@@ -232,7 +248,8 @@ class JukeboxWidget : AppWidgetProvider() {
    * A foreground start carries an obligation: the service has a few seconds to
    * post its notification or the system kills it. `PlaybackService` discharges
    * it by playing — see the queue it puts back when a key arrives at an empty
-   * player.
+   * player — and, for a press that does not end in anything playing, by hand:
+   * see `foregroundOwed` there.
    */
   private fun send(context: Context, keyCode: Int) {
     val intent = Intent(Intent.ACTION_MEDIA_BUTTON)

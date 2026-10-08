@@ -1,3 +1,5 @@
+import { strings, type Strings } from '../i18n/languages.ts';
+
 /**
  * The stretches of time a listening history is read in, and the columns a chart
  * of one is drawn from.
@@ -25,27 +27,28 @@ export type Bucket = {
   major: boolean;
 };
 
-export const PERIODS: { id: PeriodId; label: string }[] = [
-  { id: 'day', label: 'Day' },
-  { id: 'week', label: 'Week' },
-  { id: 'month', label: 'Month' },
-  { id: 'year', label: 'Year' },
-  { id: 'all', label: 'All' },
+/** In the order they are offered. What each is called is `stats.period.labels`, by id. */
+export const PERIODS: { id: PeriodId }[] = [
+  { id: 'day' },
+  { id: 'week' },
+  { id: 'month' },
+  { id: 'year' },
+  { id: 'all' },
 ];
 
 export const ALL_TIME: Range = { since: 0, until: Number.MAX_SAFE_INTEGER };
 
 /*
-  Written out rather than asked of `toLocaleString`, for the same reason the
-  date format is: Intl on React Native's engine has never been something to
-  lean on, and the app choosing its own names is one less thing that changes
-  underfoot when the phone's locale does.
+  The names of days and months are written out in each language's `format`
+  rather than asked of `toLocaleString`, for the same reason the date format
+  is: Intl on React Native's engine has never been something to lean on, and
+  the app choosing its own names is one less thing that changes underfoot when
+  the phone's locale does.
+
+  Wherever something here is worded, [t] is the language to word it in. A
+  screen passes the table `useT()` gave it; left out, it is whatever the app
+  is speaking at the moment of asking, which is English in a test.
 */
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
 
 /** Past this many columns a monthly chart is redrawn a year at a time. */
 const MAX_COLUMNS = 36;
@@ -121,36 +124,30 @@ export function previousRange(id: PeriodId, now: number): Range | null {
 }
 
 /** How the period is named on screen: `Today`, `September`, `2026`. */
-export function titleOf(id: PeriodId, now: number): string {
+export function titleOf(id: PeriodId, now: number, t: Strings = strings()): string {
   const date = new Date(now);
   switch (id) {
     case 'day':
-      return 'Today';
+      return t.stats.period.today;
     case 'week':
-      return 'This week';
+      return t.stats.period.thisWeek;
     case 'month':
-      return MONTH_NAMES[date.getMonth()] + ' ' + date.getFullYear();
+      return t.stats.period.monthOf(date);
     case 'year':
       return String(date.getFullYear());
     case 'all':
-      return 'All time';
+      return t.stats.period.allTime;
   }
 }
 
-/** What a total is being compared against, said in words. */
-export function comparisonOf(id: PeriodId): string {
-  switch (id) {
-    case 'day':
-      return 'yesterday';
-    case 'week':
-      return 'last week';
-    case 'month':
-      return 'last month';
-    case 'year':
-      return 'last year';
-    case 'all':
-      return '';
-  }
+/**
+ * What a total is being compared against, said in words: `vs yesterday`.
+ *
+ * The whole phrase and not only the day, because where the "against" goes is
+ * the language's business: Turkish hangs it on the end, `düne göre`.
+ */
+export function comparisonOf(id: PeriodId, t: Strings = strings()): string {
+  return t.stats.period.versus(id);
 }
 
 /**
@@ -163,7 +160,14 @@ export function comparisonOf(id: PeriodId): string {
  * [firstAt] is when the history starts, and only all time needs it: the others
  * know their own width. Without it all time falls back to the year to now.
  */
-export function bucketsOf(id: PeriodId, now: number, firstAt?: number | null): Bucket[] {
+export function bucketsOf(
+  id: PeriodId,
+  now: number,
+  firstAt?: number | null,
+  t: Strings = strings()
+): Bucket[] {
+  const DAY_NAMES = t.format.weekdaysShort;
+  const MONTH_NAMES = t.format.monthsShort;
   switch (id) {
     case 'day': {
       const start = startOfDay(now);
@@ -352,16 +356,17 @@ export function longestStreak(listens: Listen[]): number {
 }
 
 /** `4h 12m`, `38m`, `45s`. Long enough to read, short enough for a headline. */
-export function formatDuration(seconds: number): string {
+export function formatDuration(seconds: number, t: Strings = strings()): string {
+  const said = t.stats.duration;
   const whole = Math.max(0, Math.round(seconds));
-  if (whole < 60) return `${whole}s`;
+  if (whole < 60) return said.seconds(whole);
 
   const minutes = Math.round(whole / 60);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return said.minutes(minutes);
 
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+  return rest === 0 ? said.hours(hours) : said.hoursMinutes(hours, rest);
 }
 
 /** `07:00`, for an hour of the day. */

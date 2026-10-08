@@ -28,12 +28,27 @@ object CoverColour {
   private const val LIGHTEST = 0.72f
 
   /**
+   * What a cover was read as: the stops to draw in, and the colour they were
+   * made from.
+   *
+   * The stops are never colourless, which is what a gradient wants and is not
+   * the truth about a black-and-white cover: its greys are given a saturation
+   * they do not have, and since a grey's hue is nought, they come out red.
+   * `main` is the cover's leading colour as it was found, before any of that,
+   * for a caller that would rather know a grey cover is one.
+   */
+  class Reading(val stops: List<String>, val main: String)
+
+  /**
    * Three stops, dark to light, sharing the cover's hue.
    *
    * Answers null where there is no picture to read, so the caller can keep
    * whatever it would have used anyway rather than showing a grey card.
    */
-  fun of(path: String): List<String>? {
+  fun of(path: String): List<String>? = read(path)?.stops
+
+  /** The same three stops, and with them the colour they were made from. */
+  fun read(path: String): Reading? {
     val file = File(path.removePrefix("file://"))
     if (!file.isFile) return null
 
@@ -70,10 +85,13 @@ object CoverColour {
     val satA = saturationOf(first.rgb).coerceIn(0.45f, 0.95f)
     val satB = (second?.let { saturationOf(it.rgb) } ?: satA).coerceIn(0.45f, 0.95f)
 
-    return listOf(
-      shade(hueA, satA * 0.9f, DARKEST),
-      shade(hueA, satA, (DARKEST + LIGHTEST) / 2f),
-      shade(hueB, satB, LIGHTEST)
+    return Reading(
+      stops = listOf(
+        shade(hueA, satA * 0.9f, DARKEST),
+        shade(hueA, satA, (DARKEST + LIGHTEST) / 2f),
+        shade(hueB, satB, LIGHTEST)
+      ),
+      main = String.format("#%06X", 0xFFFFFF and first.rgb)
     )
   }
 

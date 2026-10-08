@@ -2,6 +2,7 @@ import {
   TABLES,
   TABLE_NAMES,
   carried,
+  staysThroughReplace,
   emptyTables,
   type Cell,
   type Row,
@@ -88,7 +89,8 @@ export function holdsAnything(database: BackupDb): boolean {
  * tables; this only ever writes. The one thing [mode] decides is the settings.
  * Replacing takes the backup's, and clears the record of which downloaded
  * playlists feed which lists, because the lists it pointed at by number are
- * gone and the numbers now mean other lists. Merging keeps what the phone has
+ * gone and the numbers now mean other lists. The library folder and the
+ * connection to ListenBrainz are this phone's and are left as they were. Merging keeps what the phone has
  * and only adds settings it had no value for.
  */
 export function restore(
@@ -107,11 +109,22 @@ export function restore(
       }
     }
 
+    /*
+      Which listens ListenBrainz has had is kept by the row number of the
+      listen, and every listen has just been written again under a new one.
+      Left alone the record would say that other listens had been sent; empty,
+      it says none has, which costs a second sending of what the service will
+      recognise and drop.
+    */
+    database.run('DELETE FROM listenbrainz_listens');
+
     if (mode === 'replace') {
-      // The library folder is a place on this phone and is not the backup's to
-      // change; everything else the backup did not carry was this phone's
-      // version of something it replaces.
-      database.run(`DELETE FROM settings WHERE key != 'library:root'`);
+      // Everything the backup did not carry was this phone's version of
+      // something it replaces -- apart from the few things that are about this
+      // phone and not about what is on it.
+      for (const { key } of database.all<{ key: string }>('SELECT key FROM settings')) {
+        if (!staysThroughReplace(key)) database.run('DELETE FROM settings WHERE key = ?', key);
+      }
     }
     for (const [key, value] of Object.entries(settings)) {
       if (!carried(key)) continue;

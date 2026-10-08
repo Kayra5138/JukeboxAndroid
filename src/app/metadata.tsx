@@ -22,10 +22,12 @@ import {
   type TrackMetadata,
 } from '../lib/db/metadata';
 import { SearchField } from '../components/SearchField';
+import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { enrichLibrary, type EnrichProgress } from '../lib/metadata/enrich';
 import { foldForMatch } from '../lib/metadata/text';
 import { ensureAudioPermission, scanLibrary } from '../lib/media/library';
+import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
 type Row = { track: Track; metadata: TrackMetadata | undefined };
@@ -70,6 +72,11 @@ export default function MetadataScreen() {
   // horizontal inset from the navigator.
   const insets = useSafeAreaInsets();
   const sides = { paddingLeft: insets.left, paddingRight: insets.right };
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
+  const said = t.details.library;
 
   // Mirrors for the gesture handler, which is created once and would otherwise
   // close over stale state.
@@ -221,16 +228,14 @@ export default function MetadataScreen() {
       setProgress({ done: 0, total: 0, matched: 0, throttled: false });
       try {
         const result = await enrichLibrary(tracks, setProgress, controller.signal);
-        if (result.coversSaved) setOutcome(`${result.coversSaved} album covers saved for offline use.`);
+        if (result.coversSaved) setOutcome(said.coversSaved(result.coversSaved));
         if (result.stopped === 'offline') {
-          setOutcome(
-            `Nothing answered, so the run stopped after ${result.matched} matched. Nothing was written for the rest — they are still waiting to be tried.`
-          );
+          setOutcome(said.stoppedOffline(result.matched));
         }
       } catch (error) {
         // Enrichment is documented never to reject, but a press handler is the
         // wrong place to find out that changed.
-        setOutcome(error instanceof Error ? error.message : 'The lookup stopped unexpectedly.');
+        setOutcome(error instanceof Error ? error.message : said.stoppedUnexpectedly);
       } finally {
         abortRef.current = null;
         setProgress(null);
@@ -238,7 +243,7 @@ export default function MetadataScreen() {
         await refresh();
       }
     },
-    [refresh]
+    [refresh, said]
   );
 
   const resetSelected = useCallback(async () => {
@@ -262,7 +267,7 @@ export default function MetadataScreen() {
   if (!rows) {
     return (
       <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color="#f2f2f2" />
+        <ActivityIndicator color={c.text} />
       </View>
     );
   }
@@ -287,16 +292,19 @@ export default function MetadataScreen() {
           <View style={styles.stack}>
             <Text style={styles.body}>
               {progress.offline
-                ? 'Nothing answered. Stopping.'
+                ? said.nothingAnswered
                 : progress.throttled
-                  ? 'Rate limited, waiting a minute…'
+                  ? said.rateLimited
                   : progress.total === 0
-                    ? 'Looking up…'
-                    : `${progress.phase === 'artwork' ? 'Album covers' : 'Looking up'} ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…`}
+                    ? said.lookingUp
+                    : (progress.phase === 'artwork' ? said.coversProgress : said.lookingUpProgress)(
+                        Math.min(progress.done + 1, progress.total),
+                        progress.total
+                      )}
             </Text>
-            <Text style={styles.muted}>{progress.matched} matched so far</Text>
-            <Pressable style={styles.button} onPress={() => abortRef.current?.abort()}>
-              <Text style={styles.buttonLabel}>Stop</Text>
+            <Text style={styles.muted}>{said.matchedSoFar(progress.matched)}</Text>
+            <Pressable android_ripple={pressed} style={styles.button} onPress={() => abortRef.current?.abort()}>
+              <Text style={styles.buttonLabel}>{said.stop}</Text>
             </Pressable>
           </View>
         ) : (
@@ -304,47 +312,38 @@ export default function MetadataScreen() {
             {outcome ? <Text style={styles.outcome}>{outcome}</Text> : null}
             <Text style={styles.muted}>
               {selected.size > 0
-                ? `${selected.size} selected`
-                : [
-                    `${summary.matched} matched`,
-                    summary.manual > 0 ? `${summary.manual} edited` : null,
-                    `${summary.notFound} not found`,
-                    `${untried} untried`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ')}
+                ? said.selected(selected.size)
+                : said.summary(summary.matched, summary.manual, summary.notFound, untried)}
             </Text>
             <View style={styles.actions}>
               {selected.size > 0 ? (
                 <>
-                  <Pressable style={styles.button} onPress={() => void lookUpSelected()}>
-                    <Text style={styles.buttonLabel}>Look up</Text>
+                  <Pressable android_ripple={pressed} style={styles.button} onPress={() => void lookUpSelected()}>
+                    <Text style={styles.buttonLabel}>{t.details.lookUp}</Text>
                   </Pressable>
-                  <Pressable style={styles.button} onPress={() => void resetSelected()}>
-                    <Text style={styles.buttonLabel}>Reset</Text>
+                  <Pressable android_ripple={pressed} style={styles.button} onPress={() => void resetSelected()}>
+                    <Text style={styles.buttonLabel}>{said.reset}</Text>
                   </Pressable>
                 </>
               ) : (
-                <Pressable style={styles.button} onPress={() => void run()}>
-                  <Text style={styles.buttonLabel}>Look up missing</Text>
+                <Pressable android_ripple={pressed} style={styles.button} onPress={() => void run()}>
+                  <Text style={styles.buttonLabel}>{said.lookUpMissing}</Text>
                 </Pressable>
               )}
               <Pressable
+                android_ripple={pressed}
                 style={styles.button}
                 onPress={() =>
                   setSelected(allSelected ? new Set() : new Set(visible.map((r) => r.track.id)))
                 }>
-                <Text style={styles.buttonLabel}>{allSelected ? 'Clear' : 'Select all'}</Text>
+                <Text style={styles.buttonLabel}>{allSelected ? t.common.clear : t.common.selectAll}</Text>
               </Pressable>
             </View>
-            <Text style={styles.hint}>
-              Tap a track to correct it by hand. Drag down the checkboxes to select
-              a run.
-            </Text>
+            <Text style={styles.hint}>{said.hint}</Text>
             <SearchField
               value={query}
               onChangeText={setQuery}
-              placeholder="Search these tracks"
+              placeholder={said.searchPlaceholder}
             />
           </View>
         )}
@@ -406,9 +405,12 @@ function MetadataRow({
   onLongPress: () => void;
 }) {
   const artwork = useTrackArtwork(track);
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
 
   return (
-    <Pressable style={styles.row} onPress={onPress} onLongPress={onLongPress}>
+    <Pressable android_ripple={pressed} style={styles.row} onPress={onPress} onLongPress={onLongPress}>
       <View style={styles.checkColumn}>
         <View style={[styles.checkbox, checked && styles.checkboxOn]}>
           {checked ? <Text style={styles.checkMark}>✓</Text> : null}
@@ -432,12 +434,12 @@ function MetadataRow({
             </Text>
             <Text style={styles.detail} numberOfLines={1}>
               {[metadata.genre, metadata.year, metadata.source].filter(Boolean).join(' · ') ||
-                'no genre'}
+                t.details.library.noGenre}
             </Text>
           </>
         ) : (
           <Text style={styles.unmatched}>
-            {metadata?.status === 'not_found' ? 'no match found' : 'not looked up yet'}
+            {metadata?.status === 'not_found' ? t.details.library.noMatch : t.details.library.notLookedUp}
           </Text>
         )}
       </View>
@@ -445,14 +447,14 @@ function MetadataRow({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   centered: { alignItems: 'center', justifyContent: 'center' },
   listWrapper: { flex: 1 },
   header: {
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a2a',
+    borderBottomColor: c.border,
   },
   stack: { gap: 10 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -462,7 +464,7 @@ const styles = StyleSheet.create({
     height: ROW_HEIGHT,
     paddingRight: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1e1e1e',
+    borderBottomColor: c.border,
   },
   checkColumn: { width: CHECKBOX_COLUMN, alignItems: 'center', justifyContent: 'center' },
   checkbox: {
@@ -470,30 +472,32 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#5a5a5a',
+    borderColor: c.textDisabled,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  checkboxOn: { backgroundColor: '#7ab8ff', borderColor: '#7ab8ff' },
-  checkMark: { color: '#121212', fontSize: 14, fontWeight: '700', lineHeight: 16 },
+  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
+  checkMark: { color: c.onAccent, fontSize: 14, fontWeight: '700', lineHeight: 16 },
   rowText: { flex: 1, gap: 3 },
-  art: { width: 46, height: 46, borderRadius: 6, marginRight: 12, backgroundColor: '#1c1c1c' },
-  artEmpty: { backgroundColor: '#1c1c1c' },
-  title: { color: '#f2f2f2', fontSize: 15 },
-  matched: { color: '#7bd88f', fontSize: 13 },
+  // No colour of the theme's on the picture itself; see TrackRow's `art`.
+  art: { width: 46, height: 46, borderRadius: 6, marginRight: 12 },
+  artEmpty: { backgroundColor: c.surfaceRaised },
+  title: { color: c.text, fontSize: 15 },
+  matched: { color: c.success, fontSize: 13 },
   /** Distinct from a lookup result, because it is the one thing lookups respect. */
-  manual: { color: '#e8c46a', fontSize: 13 },
-  detail: { color: '#6f9e7c', fontSize: 12 },
-  unmatched: { color: '#6a6a6a', fontSize: 13 },
-  body: { color: '#f2f2f2', fontSize: 15 },
-  muted: { color: '#9a9a9a', fontSize: 13 },
-  outcome: { color: '#e8c46a', fontSize: 13, lineHeight: 19 },
-  hint: { color: '#6a6a6a', fontSize: 12, lineHeight: 17 },
+  manual: { color: c.warning, fontSize: 13 },
+  detail: { color: c.textMuted, fontSize: 12 },
+  unmatched: { color: c.textFaint, fontSize: 13 },
+  body: { color: c.text, fontSize: 15 },
+  muted: { color: c.textSecondary, fontSize: 13 },
+  outcome: { color: c.warning, fontSize: 13, lineHeight: 19 },
+  hint: { color: c.textFaint, fontSize: 12, lineHeight: 17 },
   button: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: c.surfaceRaised,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
+    ...outlined(c),
   },
-  buttonLabel: { color: '#f2f2f2', fontSize: 14 },
-});
+  buttonLabel: { color: c.text, fontSize: 14 },
+}));

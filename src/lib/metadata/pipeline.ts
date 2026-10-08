@@ -1,5 +1,5 @@
 import { fromItunesGenre } from './genres.ts';
-import { isAbortError, isNetworkError, pause, statusOf } from './http.ts';
+import { isAbortError, isNetworkError, isThrottle, pause, statusOf } from './http.ts';
 import { lookupTrack as lookupItunes } from './itunes.ts';
 import { lookupTrack as lookupMusicBrainz } from './musicbrainz.ts';
 import type { TrackMetadata } from '../db/metadata.ts';
@@ -273,14 +273,15 @@ export async function runEnrichment(
       // Waiting a minute changes none of that, so it counts as a miss and the
       // queue keeps moving.
       const status = statusOf(error);
-      if (status === null || (status >= 400 && status < 500 && status !== 429)) {
+      if (!isThrottle(error) && (status === null || (status >= 400 && status < 500))) {
         missed += 1;
         store.saveMetadata(miss(track.id));
         continue;
       }
 
-      // 429 and the 5xx range mean "later". Nothing is written for this track,
-      // so the next pass retries it.
+      // A throttle and the 5xx range mean "later". Nothing is written for this
+      // track, so the next pass retries it. Apple's throttle is a 403, which is
+      // why the service says so itself rather than the status being read here.
       onProgress({ done: index, total: pending.length, matched, throttled: true });
       await pause(RATE_LIMIT_BACKOFF_MS, signal);
       if (signal?.aborted) return { matched, missed, cancelled: true };

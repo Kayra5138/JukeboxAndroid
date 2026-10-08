@@ -73,6 +73,20 @@ class PlayerController(
   }
 
   private val listener = object : Player.Listener {
+    /*
+      Said only for a queue the app did not set. Its own edits arrive here too
+      and look no different, but it made those to its own copy first and has
+      nothing to learn from being told; see [QueueReplaced]. This comes ahead
+      of the track change the same replacement causes, which is the order the
+      app needs: it can stop believing its copy before it is asked to look a
+      position up in it.
+    */
+    override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+      if (reason == Player.TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED && QueueReplaced.justHappened()) {
+        emit("onQueueReplaced", emptyMap())
+      }
+    }
+
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       emit(
         "onTrackChange",
@@ -148,7 +162,12 @@ class PlayerController(
         "onPlaybackError",
         mapOf(
           "trackId" to controller?.currentMediaItem?.mediaId,
-          "message" to listOfNotNull(said, underneath).joinToString(" — ")
+          "message" to listOfNotNull(said, underneath).joinToString(" — "),
+          // The message above is the player's own and is in English whatever
+          // the app is in. These two are for a screen: a name for the fault
+          // that never changes, and a sentence in the app's language.
+          "code" to error.errorCodeName,
+          "text" to Localised.text(context, playbackWords(error.errorCode))
         )
       )
     }
@@ -550,4 +569,20 @@ class PlayerController(
       "folder" to extras?.getString(EXTRA_FOLDER)
     )
   }
+}
+
+/**
+ * The sentence that says what a player's error code means to a listener.
+ *
+ * Media3 numbers its errors by where they arose, a thousand to each: reading
+ * the file in the two thousands, making sense of it in the three, decoding it
+ * in the four. That is as fine as a sentence needs to be — the exact fault is
+ * still sent beside it for whoever wants it.
+ */
+internal fun playbackWords(errorCode: Int): Int = when (errorCode) {
+  PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND -> R.string.jukebox_playback_missing
+  PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> R.string.jukebox_playback_denied
+  in 2000..2999 -> R.string.jukebox_playback_unreadable
+  in 3000..4999 -> R.string.jukebox_playback_unsupported
+  else -> R.string.jukebox_playback_failed
 }

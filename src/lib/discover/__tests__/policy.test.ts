@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DAY, NO_MATCH, batchReady, isNoMatch, retirementIds, selectSongs, settingsFrom, songKey, tagFit, tagMix, tasteProfile, type RankedSong } from '../policy.ts';
+import { DAY, NO_MATCH, batchReady, isNoMatch, isWaitingWifi, retirementIds, selectSongs, settingsFrom, songKey, tagFit, tagMix, tasteProfile, type RankedSong } from '../policy.ts';
 const song = (i: number, familiar = i % 2 === 0): RankedSong => ({ recordingMbid: `recording-${i}`, title: `Song ${i}`, artist: `Artist ${Math.floor(i/2)}`, artistMbid: `artist-${Math.floor(i/2)}`, familiar, score: 100-i });
 test('fills exact familiar/new quotas without recommending an owned or rejected recording', () => {
   const pool = Array.from({ length: 60 }, (_, i) => song(i));
@@ -105,4 +105,19 @@ test('nothing saved means nothing happens unasked: manual refresh, no downloadin
   assert.deepEqual(settingsFrom({}), settingsFrom(null));
   // What somebody chose is kept, whatever the defaults have become.
   assert.deepEqual(settingsFrom({ count: 30, refreshDays: 7, autoDownload: true, wifiOnly: false }), { count: 30, refreshDays: 7, autoDownload: true, wifiOnly: false });
+});
+
+test('a download waiting for Wi-Fi is known by its code, whatever language its words are in', () => {
+  assert.ok(isWaitingWifi({ error: 'Wi-Fi bekleniyor. Otomatik indirme daha sonra sürecek.', errorCode: 'ERR_DOWNLOAD_WAITING_WIFI' }));
+  assert.ok(!isWaitingWifi({ error: 'İndirme başarısız oldu.', errorCode: 'ERR_YOUTUBE_NETWORK' }));
+  // The code is believed over words that only happen to mention it.
+  assert.ok(!isWaitingWifi({ error: 'Waiting for Wi-Fi', errorCode: 'ERR_DOWNLOAD_FAILED' }));
+  // A failure that has been cleared is not waiting for anything, whatever code was left.
+  assert.ok(!isWaitingWifi({ errorCode: 'ERR_DOWNLOAD_WAITING_WIFI' }));
+});
+test('an entry stored before codes were kept is still known by its English', () => {
+  assert.ok(isWaitingWifi({ error: 'Waiting for Wi-Fi. Automatic download will resume later.' }));
+  assert.ok(isWaitingWifi({ error: 'Waiting for Wi-Fi. Automatic download will resume later.', errorCode: null }));
+  assert.ok(!isWaitingWifi({ error: 'Download failed. Please retry.' }));
+  assert.ok(!isWaitingWifi({}));
 });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { ArtistPhoto } from '../../db/artistPhotos.ts';
+import { stringsFor } from '../../i18n/languages.ts';
 import { creditLine, creditsOn, photoFor, pictureFor, type Photos } from '../photos.ts';
 import type { RankedEntry, ReportCard } from '../report.ts';
 
@@ -86,6 +87,15 @@ describe('the credit a card carries', () => {
 
   it('states the licence even where nobody is named', () => {
     assert.equal(creditLine(photo({ credit: null })), 'Photo: CC BY-SA 3.0');
+  });
+
+  it('translates the word in front and nothing that belongs to the photographer', () => {
+    const tr = stringsFor('tr');
+    assert.equal(creditLine(photo(), tr), 'Fotoğraf: Jane Doe / CC BY-SA 3.0');
+    assert.equal(creditLine(photo({ credit: null }), tr), 'Fotoğraf: CC BY-SA 3.0');
+    assert.deepEqual(creditsOn(closing(), new Map([['Şebnem Ferah', photo()]]), tr), [
+      'Fotoğraf: Jane Doe / CC BY-SA 3.0',
+    ]);
   });
 
   it('credits every photograph the chart actually shows, once each', () => {

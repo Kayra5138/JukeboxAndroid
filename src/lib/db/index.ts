@@ -65,8 +65,17 @@ export const SETTINGS = {
   repeat: 'player:repeat',
   /** Which stretch of history the stats screen opens on. */
   statsPeriod: 'stats:period',
-  /** `'albums'` when the library is being browsed by record rather than track. */
+  /**
+   * Which way the library was last being looked at: one of the views in
+   * `media/views.ts`. Absent, or naming a view that has since been turned off,
+   * the first one on offer is drawn instead.
+   */
   libraryView: 'library:view',
+  /**
+   * The views the library's switch offers, as their names with commas between
+   * — see `media/views.ts` for what an absent one means.
+   */
+  libraryViews: 'library:views',
   /**
    * One of `'name' | 'added' | 'played'` — see `media/sort.ts`.
    *
@@ -76,6 +85,17 @@ export const SETTINGS = {
    * happens to be drawn in.
    */
   librarySort: 'library:sort',
+  /**
+   * The order of the artists, and of the folders: `ArtistSort` in
+   * `media/artists.ts` and `FolderSort` in `media/folders.ts`.
+   *
+   * Each its own, unlike the one above. These are not the collection drawn
+   * another way but lists of other things, asked other questions — there is no
+   * "most tracks" to ask of a track — so an answer given for one of them says
+   * nothing about the others.
+   */
+  libraryArtistSort: 'library:sort:artists',
+  libraryFolderSort: 'library:sort:folders',
   /**
    * `'true'` when records are browsed as a rack rather than as a list.
    *
@@ -120,4 +140,22 @@ export const SETTINGS = {
    * thing being looked for is a minute away.
    */
   jumpSeconds: 'player:jumpSeconds',
+  sleepTimer: 'player:sleepTimer', // What the sleep timer was last set to; see `player/sleep.ts`.
+  /**
+   * The language the app speaks, as the id of one in `i18n/languages.ts`.
+   *
+   * Chosen by hand and deliberately not taken from the phone: absent, the app
+   * is in English whatever the phone is in.
+   */
+  language: 'ui:language',
+  /**
+   * `'system'`, or the id of a theme in `theme/registry.ts`. Absent, or naming
+   * a theme that is no longer there, it is `'system'`.
+   */
+  theme: 'ui:theme',
+  /**
+   * The language lyrics are translated into, as the translator's tag for it.
+   * Absent, English; see `lyrics/target.ts`.
+   */
+  lyricsTarget: 'lyrics:target',
 } as const;

@@ -5,8 +5,11 @@ import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Swit
 import { readSetting, SETTINGS, writeSetting } from '../../lib/db/index';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import { libraryRoot } from '../../lib/media/library';
+import { LIBRARY_VIEWS, storedViews, viewsFrom, withView, type LibraryView } from '../../lib/media/views';
+import { OptionSheet } from '../../components/OptionSheet';
 import { PlayerSettings } from '../../components/PlayerSettings';
 import { BackupSheet } from '../../components/BackupSheet';
+import { ListenBrainzSettings } from '../../components/ListenBrainzSettings';
 import {
   applyBackup,
   BackupError,
@@ -15,20 +18,52 @@ import {
   restart,
   type Opened,
 } from '../../lib/backup/index';
-import { formatDateTime } from '../../lib/format/date';
+import { chooseLanguage, LANGUAGES, useLanguage, useT } from '../../lib/i18n/index';
+import { sameSongs } from '../../lib/identity/index';
+import { namedTargets } from '../../lib/lyrics/target';
+import { chooseLyricsTarget, useLyricsTarget, useUnsupportedTargets } from '../../lib/lyrics/useTarget';
 import { DEFAULT_JUMP, JUMP_STEPS, stepFrom } from '../../lib/player/jump';
 import { rackWanted, useLandscape } from '../../lib/ui/layout';
 import { usePlayerActions, usePlayerState } from '../../lib/player/PlayerProvider';
+import { makeStyles, outlined, outlinedClip, switchColours, useColours, usePressed } from '../../lib/theme/index';
+import { ThemePicker } from '../../lib/theme/ThemePicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SettingsScreen() {
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
+  /*
+    The three choices that are not read on focus like the rest, because they
+    are not this screen's to keep: each is held where everything that depends
+    on it is watching, and changing one here redraws the app — this screen
+    with it — on the spot.
+  */
+  const language = useLanguage();
+  const lyricsTarget = useLyricsTarget();
+  const unsupportedTargets = useUnsupportedTargets();
+  const [targetsOpen, setTargetsOpen] = useState(false);
   const [folder, setFolder] = useState('Music');
   const [playbackOpen, setPlaybackOpen] = useState(false);
   const { speed, pitch } = usePlayerState();
   const { setSpeed, setPitch } = usePlayerActions();
   const [rack, setRack] = useState(true);
   const [still, setStill] = useState(false);
+  /** The ways of looking at the library that its switch offers. */
+  const [views, setViews] = useState<LibraryView[]>(() => viewsFrom(null));
   const [jump, setJump] = useState(DEFAULT_JUMP);
+  /**
+   * Whether tracks are evened out, or null where this build cannot say.
+   *
+   * Kept by the player rather than with the other settings, because the
+   * player has to know it with the app closed. Null until it has answered,
+   * and for good on a native build from before the feature — the row is not
+   * drawn then, rather than drawn as a switch that does nothing.
+   */
+  const [even, setEven] = useState<boolean | null>(null);
+  /** How many pairs of files are waiting to be called one song or two. */
+  const [pairs, setPairs] = useState(0);
 
   /*
     The backup, which is the one thing on this screen that takes time and can
@@ -54,13 +89,13 @@ export default function SettingsScreen() {
     try {
       // Nothing is said when the user backs out of choosing a place. They
       // know they did, and "cancelled" is not news.
-      if (await exportBackup()) setNote({ text: 'Saved.', bad: false });
+      if (await exportBackup()) setNote({ text: t.common.saved, bad: false });
     } catch (trouble) {
-      setNote({ text: said(trouble, 'The backup could not be saved.'), bad: true });
+      setNote({ text: said(trouble, t.settings.exportAll.failed), bad: true });
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [t]);
 
   const chooseBackup = useCallback(async () => {
     setBusy('import');
@@ -73,11 +108,11 @@ export default function SettingsScreen() {
         setOpened(found);
       }
     } catch (trouble) {
-      setNote({ text: said(trouble, 'That file could not be read.'), bad: true });
+      setNote({ text: said(trouble, t.common.fileUnreadable), bad: true });
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [t]);
 
   const bringIn = useCallback(
     async (mode: 'merge' | 'replace') => {
@@ -89,18 +124,29 @@ export default function SettingsScreen() {
         setImported(true);
       } catch (trouble) {
         // The write is all or nothing, so a failure here has changed nothing.
-        setRefused(`${said(trouble, 'The import failed.')} Nothing on this phone was changed.`);
+        setRefused(t.settings.importBackup.refused(said(trouble, t.settings.importBackup.failed)));
       } finally {
         setApplying(false);
       }
     },
-    [opened]
+    [opened, t]
   );
   useFocusEffect(useCallback(() => {
     setFolder(libraryRoot());
     setStill(readSetting(SETTINGS.reduceMotion) === 'true');
     setRack(rackWanted(true));
+    setViews(viewsFrom(readSetting(SETTINGS.libraryViews)));
     setJump(stepFrom(readSetting(SETTINGS.jumpSeconds)));
+    JukeboxAudio.getLoudnessAsync?.()
+      .then((loudness) => setEven(loudness.enabled))
+      .catch(() => setEven(null));
+    // Counted here and not kept anywhere, so the row is gone the moment the
+    // last pair has been answered and this screen is come back to.
+    try {
+      setPairs(sameSongs().length);
+    } catch {
+      setPairs(0);
+    }
   }, []));
   useFocusEffect(useCallback(() => {
     const listener = BackHandler.addEventListener('hardwareBackPress', () => {
@@ -114,10 +160,18 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const built = JukeboxAudio.buildTimestamp;
   const date = built ? new Date(built) : null;
+  const targets = namedTargets(t.languages, language);
+  // The one already chosen stays in the list whatever is said of it, so that
+  // the row and the tick never name something the list does not hold.
+  const offered = targets.filter((target) => target.tag === lyricsTarget || !unsupportedTargets.has(target.tag));
   return <View style={styles.screen}>
     <ScrollView style={{ paddingTop: insets.top }} contentContainerStyle={styles.content}>
       <Text style={styles.brand}>Jukebox</Text>
-      <Text style={styles.built}>Last built: {date && Number.isFinite(date.getTime()) ? formatDateTime(date) : 'Available after installing the new APK'}</Text>
+      <Text style={styles.built}>
+        {date && Number.isFinite(date.getTime())
+          ? t.settings.lastBuilt(t.format.dateTime(date))
+          : t.settings.lastBuiltUnknown}
+      </Text>
       {/*
         Two short groups, beside each other where there is width for it.
 
@@ -128,22 +182,64 @@ export default function SettingsScreen() {
       */}
       <View style={[styles.groups, landscape && styles.groupsWide]}>
         <View style={styles.group}>
-          <Text style={styles.section}>Library</Text>
+          {/*
+            First, because the language is the one setting somebody may have to
+            find without being able to read the rest. Each language is written
+            in itself for the same reason.
+          */}
+          <Text style={styles.section}>{t.format.upper(t.settings.sections.app)}</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View style={styles.line}>
+                <Text style={styles.title}>{t.settings.language.title}</Text>
+                <View style={styles.choices}>
+                  {LANGUAGES.map((entry) => (
+                    <Pressable
+                      android_ripple={pressed}
+                      key={entry.id}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: entry.id === language }}
+                      style={[styles.choice, entry.id === language && styles.choiceOn]}
+                      onPress={() => chooseLanguage(entry.id)}>
+                      <Text style={[styles.choiceText, entry.id === language && styles.choiceTextOn]}>
+                        {entry.name}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+              <Text style={styles.muted}>{t.settings.language.note}</Text>
+            </View>
+            <View style={styles.rule} />
+            {/*
+              Drawn from the list of themes, by a picker that knows nothing
+              else: a theme added to the list is offered here without this
+              screen being touched. Under its title rather than beside it,
+              since a dozen themes with a picture each want the whole width.
+            */}
+            <View style={styles.row}>
+              <Text style={styles.title}>{t.settings.theme.title}</Text>
+              <ThemePicker />
+              <Text style={styles.muted}>{t.settings.theme.note}</Text>
+            </View>
+          </View>
+
+          <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.library)}</Text>
           <View style={styles.card}>
             <Link href="/metadata" asChild>
-              <Pressable style={styles.row}>
+              <Pressable android_ripple={pressed} style={styles.row}>
                 <View style={styles.line}>
-                  <Text style={styles.title}>Tags</Text>
+                  <Text style={styles.title}>{t.nav.tags}</Text>
                   <Text style={styles.chevron}>›</Text>
                 </View>
-                <Text style={styles.muted}>Track information and album covers</Text>
+                <Text style={styles.muted}>{t.settings.tags.note}</Text>
               </Pressable>
             </Link>
             <View style={styles.rule} />
             <Link href="/folders" asChild>
-              <Pressable style={styles.row}>
+              <Pressable android_ripple={pressed} style={styles.row}>
                 <View style={styles.line}>
-                  <Text style={styles.title}>Library folder</Text>
+                  <Text style={styles.title}>{t.nav.libraryFolder}</Text>
                   <Text style={styles.chevron}>›</Text>
                 </View>
                 <Text style={styles.muted}>{folder}</Text>
@@ -164,44 +260,83 @@ export default function SettingsScreen() {
                 three lines deep and looked unattached to anything.
               */}
               <View style={styles.line}>
-                <Text style={styles.title}>Albums as a rack</Text>
+                <Text style={styles.title}>{t.settings.rack.title}</Text>
                 <Switch
                   value={rack}
                   onValueChange={(on) => {
                     setRack(on);
                     writeSetting(SETTINGS.coverFlow, on ? 'true' : 'false');
                   }}
-                  trackColor={{ false: '#2a2a2a', true: '#2f4a63' }}
-                  thumbColor={rack ? '#7ab8ff' : '#6a6a6a'}
+                  {...switchColours(c, rack)}
                 />
               </View>
-              <Text style={styles.muted}>
-                Holding the phone sideways, flick through sleeves instead of
-                reading a list. Tap the one in front to open it.
-              </Text>
+              <Text style={styles.muted}>{t.settings.rack.note}</Text>
             </View>
             <View style={styles.rule} />
             <View style={styles.row}>
               <View style={styles.line}>
-                <Text style={styles.title}>Hold the decoration still</Text>
+                <Text style={styles.title}>{t.settings.still.title}</Text>
                 <Switch
                   value={still}
                   onValueChange={(on) => {
                     setStill(on);
                     writeSetting(SETTINGS.reduceMotion, on ? 'true' : 'false');
                   }}
-                  trackColor={{ false: '#2a2a2a', true: '#2f4a63' }}
-                  thumbColor={still ? '#7ab8ff' : '#6a6a6a'}
+                  {...switchColours(c, still)}
                 />
               </View>
-              <Text style={styles.muted}>
-                For a phone that drops frames. The player appears instead of
-                rising, and the game stops lighting up around a life won or
-                lost. The keys themselves still fall — that is the game, not
-                decoration.
-              </Text>
+              <Text style={styles.muted}>{t.settings.still.note}</Text>
             </View>
           </View>
+
+          {/*
+            Which of its four shapes the library's switch offers.
+
+            A switch each rather than a list to pick from, because they are not
+            alternatives: the question for each is whether it earns a place on
+            a row that gets more crowded with every one that does.
+          */}
+          <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.views)}</Text>
+          <View style={styles.card}>
+            {LIBRARY_VIEWS.map((view, index) => {
+              const on = views.includes(view);
+              /*
+                The last one left on cannot be turned off, and says so by not
+                moving. `withView` would refuse anyway; held still here so the
+                switch is not seen to flick over and back, which reads as the
+                app having failed to do what it was asked.
+              */
+              const only = on && views.length === 1;
+              return (
+                <View key={view}>
+                  {index > 0 ? <View style={styles.rule} /> : null}
+                  <View style={styles.row}>
+                    <View style={styles.line}>
+                      <Text style={styles.title}>{t.library.views[view]}</Text>
+                      <Switch
+                        accessibilityLabel={t.library.views[view]}
+                        accessibilityHint={
+                          only ? t.settings.views.onlyHint : t.settings.views.toggleHint
+                        }
+                        value={on}
+                        disabled={only}
+                        onValueChange={(wanted) => {
+                          const next = withView(views, view, wanted);
+                          setViews(next);
+                          writeSetting(SETTINGS.libraryViews, storedViews(next));
+                        }}
+                        {...switchColours(c, on)}
+                      />
+                    </View>
+                    <Text style={styles.muted}>{t.settings.views.notes[view]}</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.aside}>
+            {views.length === 1 ? t.settings.views.asideOne : t.settings.views.asideMany}
+          </Text>
 
           {/*
             Under the library rather than in a group of its own, so that
@@ -209,35 +344,51 @@ export default function SettingsScreen() {
             third. It is also where it belongs: this is the rest of what the
             app holds about the music in that folder.
           */}
-          <Text style={[styles.section, styles.sectionAfter]}>Your data</Text>
+          <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.data)}</Text>
           <View style={styles.card}>
+            {/*
+              Only there when there is something to decide. Most of the time
+              there is not, and a row that opens an empty screen is a row
+              somebody has to learn to ignore.
+            */}
+            {pairs > 0 ? (
+              <>
+                <Link href="/samesongs" asChild>
+                  <Pressable android_ripple={pressed} style={styles.row}>
+                    <View style={styles.line}>
+                      <Text style={styles.title}>{t.nav.sameSong}</Text>
+                      <Text style={styles.chevron}>›</Text>
+                    </View>
+                    <Text style={styles.muted}>{t.settings.sameSong.note(pairs)}</Text>
+                  </Pressable>
+                </Link>
+                <View style={styles.rule} />
+              </>
+            ) : null}
             <Pressable
+              android_ripple={pressed}
               accessibilityRole="button"
               disabled={busy != null}
               style={styles.row}
               onPress={() => void saveBackup()}>
               <View style={styles.line}>
-                <Text style={styles.title}>Export everything</Text>
-                {busy === 'export' ? <ActivityIndicator color="#7a7a7a" /> : <Text style={styles.chevron}>›</Text>}
+                <Text style={styles.title}>{t.settings.exportAll.title}</Text>
+                {busy === 'export' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron}>›</Text>}
               </View>
-              <Text style={styles.muted}>
-                Your listening history, lists, tags, lyrics and settings, in one file you choose a
-                place for. Not the music itself.
-              </Text>
+              <Text style={styles.muted}>{t.settings.exportAll.note}</Text>
             </Pressable>
             <View style={styles.rule} />
             <Pressable
+              android_ripple={pressed}
               accessibilityRole="button"
               disabled={busy != null}
               style={styles.row}
               onPress={() => void chooseBackup()}>
               <View style={styles.line}>
-                <Text style={styles.title}>Import</Text>
-                {busy === 'import' ? <ActivityIndicator color="#7a7a7a" /> : <Text style={styles.chevron}>›</Text>}
+                <Text style={styles.title}>{t.settings.importBackup.title}</Text>
+                {busy === 'import' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron}>›</Text>}
               </View>
-              <Text style={styles.muted}>
-                Bring a backup in. You are shown what is in it and asked before anything changes.
-              </Text>
+              <Text style={styles.muted}>{t.settings.importBackup.note}</Text>
             </Pressable>
           </View>
           {note ? (
@@ -248,33 +399,33 @@ export default function SettingsScreen() {
         </View>
         <View style={styles.group}>
           <DiscoverSettings />
-          <Text style={[styles.section, styles.sectionAfter]}>Player</Text>
+          <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.player)}</Text>
           <View style={styles.card}>
-            <Pressable style={styles.row} onPress={() => setPlaybackOpen(true)}>
+            <Pressable android_ripple={pressed} style={styles.row} onPress={() => setPlaybackOpen(true)}>
               <View style={styles.line}>
-                <Text style={styles.title}>Playback</Text>
+                <Text style={styles.title}>{t.settings.playback.title}</Text>
                 <Text style={styles.chevron}>›</Text>
               </View>
-              <Text style={styles.muted}>Speed and pitch · {speed}×</Text>
+              <Text style={styles.muted}>{t.settings.playback.note(String(speed))}</Text>
             </Pressable>
             <View style={styles.rule} />
             <Link href="/equalizer" asChild>
-              <Pressable style={styles.row}>
+              <Pressable android_ripple={pressed} style={styles.row}>
                 <View style={styles.line}>
-                  <Text style={styles.title}>Equalizer</Text>
+                  <Text style={styles.title}>{t.nav.equalizer}</Text>
                   <Text style={styles.chevron}>›</Text>
                 </View>
-                <Text style={styles.muted}>Bands, bass, surround and loudness</Text>
+                <Text style={styles.muted}>{t.settings.equalizer.note}</Text>
               </Pressable>
             </Link>
             <View style={styles.rule} />
             <Link href="/effects" asChild>
-              <Pressable style={styles.row}>
+              <Pressable android_ripple={pressed} style={styles.row}>
                 <View style={styles.line}>
-                  <Text style={styles.title}>Effects</Text>
+                  <Text style={styles.title}>{t.nav.effects}</Text>
                   <Text style={styles.chevron}>›</Text>
                 </View>
-                <Text style={styles.muted}>Width, crossfeed, rotation and level</Text>
+                <Text style={styles.muted}>{t.settings.effects.note}</Text>
               </Pressable>
             </Link>
             <View style={styles.rule} />
@@ -287,10 +438,11 @@ export default function SettingsScreen() {
             */}
             <View style={styles.row}>
               <View style={styles.line}>
-                <Text style={styles.title}>Jump by</Text>
+                <Text style={styles.title}>{t.settings.jump.title}</Text>
                 <View style={styles.choices}>
                   {JUMP_STEPS.map((seconds) => (
                     <Pressable
+                      android_ripple={pressed}
                       key={seconds}
                       accessibilityRole="button"
                       accessibilityState={{ selected: seconds === jump }}
@@ -306,26 +458,95 @@ export default function SettingsScreen() {
                   ))}
                 </View>
               </View>
-              <Text style={styles.muted}>
-                How far the two buttons either side of play move through a
-                track, in seconds.
-              </Text>
+              <Text style={styles.muted}>{t.settings.jump.note}</Text>
             </View>
             <View style={styles.rule} />
             <Link href="/transitions" asChild>
-              <Pressable style={styles.row}>
+              <Pressable android_ripple={pressed} style={styles.row}>
                 <View style={styles.line}>
-                  <Text style={styles.title}>Crossfade</Text>
+                  <Text style={styles.title}>{t.nav.crossfade}</Text>
                   <Text style={styles.chevron}>›</Text>
                 </View>
-                <Text style={styles.muted}>How one track gives way to the next</Text>
+                <Text style={styles.muted}>{t.settings.crossfade.note}</Text>
               </Pressable>
             </Link>
+            <View style={styles.rule} />
+            {/*
+              Too many to lay out as chips, so the row says which and opens a
+              list. Named in the language the app is in, unlike the app's own
+              languages above: this is a list to read, not one to be found in
+              by somebody who cannot.
+            */}
+            <Pressable
+              android_ripple={pressed}
+              accessibilityRole="button"
+              style={styles.row}
+              onPress={() => setTargetsOpen(true)}>
+              <View style={styles.line}>
+                <Text style={styles.title}>{t.settings.lyricsLanguage.title}</Text>
+                <View style={styles.choices}>
+                  <Text style={styles.value} numberOfLines={1}>
+                    {targets.find((target) => target.tag === lyricsTarget)?.name ?? lyricsTarget}
+                  </Text>
+                  <Text style={styles.chevron}>›</Text>
+                </View>
+              </View>
+              <Text style={styles.muted}>{t.settings.lyricsLanguage.note}</Text>
+            </Pressable>
+            {/*
+              A switch and no more. There is a target level and a ceiling
+              behind it, and neither is offered: the one is a standard and
+              the other is what stops a turned-up track clipping, and a
+              slider for either is a way to make this sound worse.
+            */}
+            {even !== null ? (
+              <>
+                <View style={styles.rule} />
+                <View style={styles.row}>
+                  <View style={styles.line}>
+                    <Text style={styles.title}>{t.settings.loudness.title}</Text>
+                    <Switch
+                      value={even}
+                      onValueChange={(on) => {
+                        // Shown at once and put back if the player would not
+                        // take it, so the switch never lags the finger.
+                        setEven(on);
+                        JukeboxAudio.setLoudnessAsync?.({ enabled: on })
+                          .then((loudness) => setEven(loudness.enabled))
+                          .catch((failure: unknown) => {
+                            console.warn('Even loudness could not be set', failure);
+                            setEven(!on);
+                          });
+                      }}
+                      {...switchColours(c, even)}
+                    />
+                  </View>
+                  <Text style={styles.muted}>{t.settings.loudness.note}</Text>
+                </View>
+              </>
+            ) : null}
           </View>
+          {/*
+            Last, and under a heading that says what it is. It is the one thing
+            here that sends anything about the user anywhere, it needs an
+            account with somebody else, and it is newer than everything above
+            it: at the foot of the page it is found by whoever goes looking
+            and is in nobody else's way.
+          */}
+          <ListenBrainzSettings heading={t.settings.sections.experimental} />
         </View>
       </View>
     </ScrollView>
     <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch} onSpeed={(value) => void setSpeed(value)} onPitch={(value) => void setPitch(value)} onClose={() => setPlaybackOpen(false)} />
+    <OptionSheet
+      visible={targetsOpen}
+      heading={t.settings.lyricsLanguage.title}
+      note={t.settings.lyricsLanguage.note}
+      options={offered.map((target) => ({ value: target.tag, label: target.name }))}
+      chosen={lyricsTarget}
+      onChoose={chooseLyricsTarget}
+      onClose={() => setTargetsOpen(false)}
+    />
     <BackupSheet
       opened={opened}
       working={applying}
@@ -339,11 +560,11 @@ export default function SettingsScreen() {
   </View>;
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   content: { padding: 20, paddingBottom: 32 },
-  brand: { color: '#ededed', fontSize: 28, fontWeight: '600', letterSpacing: -0.4 },
-  built: { color: '#6a6a6a', fontSize: 12, marginTop: 4 },
+  brand: { color: c.text, fontSize: 28, fontWeight: '600', letterSpacing: -0.4 },
+  built: { color: c.textFaint, fontSize: 12, marginTop: 4 },
 
   groups: { gap: 26, marginTop: 28 },
   // Side by side only where there is width for it; the gap above does for
@@ -353,13 +574,14 @@ const styles = StyleSheet.create({
   // A second heading inside one group needs the room above it that the gap
   // between groups gives the first.
   sectionAfter: { marginTop: 26 },
-  note: { color: '#8fbf8f', fontSize: 12.5, marginTop: 8, marginLeft: 4 },
-  noteBad: { color: '#ff8a8a', fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
+  /** A line under a card that is about the whole card rather than a row of it. */
+  aside: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
+  note: { color: c.success, fontSize: 12.5, marginTop: 8, marginLeft: 4 },
+  noteBad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
   section: {
-    color: '#6a6a6a',
+    color: c.textFaint,
     fontSize: 11,
     fontWeight: '600',
-    textTransform: 'uppercase',
     letterSpacing: 0.8,
     marginBottom: 8,
     marginLeft: 4,
@@ -370,7 +592,7 @@ const styles = StyleSheet.create({
     top and bottom rows are cut to the card's own corners and no row has to
     know whether it is at an end.
   */
-  card: { backgroundColor: '#1a1a1a', borderRadius: 14, overflow: 'hidden' },
+  card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
   row: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
   /*
     A line of its own between the rows rather than a border on them. As a
@@ -378,7 +600,7 @@ const styles = StyleSheet.create({
     row given its style as a list of two lost its padding when it was also
     inside a Link — so every row here is handed exactly one style object.
   */
-  rule: { height: StyleSheet.hairlineWidth, backgroundColor: '#2a2a2a', marginLeft: 16 },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: 16 },
   /** Name on the left, whatever acts on it on the right, on one line. */
   line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
 
@@ -389,14 +611,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 5,
     borderRadius: 8,
-    backgroundColor: '#262626',
+    backgroundColor: c.surfaceRaised,
     alignItems: 'center',
+    ...outlined(c),
   },
-  choiceOn: { backgroundColor: '#ededed' },
-  choiceText: { color: '#a8a8a8', fontSize: 13.5, fontVariant: ['tabular-nums'] },
-  choiceTextOn: { color: '#121212', fontWeight: '600' },
+  choiceOn: { backgroundColor: c.primary, ...outlined(c, c.primary) },
+  choiceText: { color: c.textSecondary, fontSize: 13.5, fontVariant: ['tabular-nums'] },
+  choiceTextOn: { color: c.onPrimary, fontWeight: '600' },
 
-  title: { color: '#ededed', fontSize: 15.5, flexShrink: 1 },
-  muted: { color: '#7a7a7a', fontSize: 12.5, lineHeight: 18 },
-  chevron: { color: '#5a5a5a', fontSize: 20, lineHeight: 22 },
-});
+  title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
+  /** What a row that opens a list is set to at the moment, beside its chevron. */
+  value: { color: c.textSecondary, fontSize: 14, flexShrink: 1 },
+  muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
+  chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
+}));

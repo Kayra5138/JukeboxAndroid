@@ -1,4 +1,14 @@
-import { createContext, use, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  memo,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { Image } from 'expo-image';
 import {
   Animated,
@@ -13,38 +23,87 @@ import {
 } from 'react-native';
 
 import { PlayIcon } from './Icons';
+import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
+import { makeStyles, outlined } from '../lib/theme/index';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
 import type { Track } from '../lib/types';
 
 export const QUEUE_ROW_HEIGHT = 56;
 
-function QueueRow({
+/**
+ * One row, drawn again only when something about that row changed.
+ *
+ * The list above it is drawn again far more often than any row has reason to
+ * be: once for every slot a dragged row crosses, and once whenever the player
+ * moves on. Each of those used to redraw every row in the window, because every
+ * row was handed functions made for it on the spot and so never looked the same
+ * twice. The row is told where it is instead and given the list's own handlers,
+ * which do not change, and says its position back when it calls them.
+ */
+const QueueRow = memo(function QueueRow({
   track,
+  index,
   playing,
   lifted,
   onPress,
-  onLongPress,
+  onLift,
+  onMenu,
   onRemove,
 }: {
   track: Track;
+  index: number;
   playing: boolean;
   lifted: boolean;
-  onPress: () => void;
+  onPress: (index: number) => void;
   /** Absent on a list that holds no order of its own; the row cannot be lifted. */
-  onLongPress?: (event: GestureResponderEvent) => void;
+  onLift?: (index: number, pageY: number) => void;
+  /** Absent where the screen has no menu for a track; see the row's two holds. */
+  onMenu?: (index: number) => void;
   /** Absent when nothing can be taken out; the cross is not drawn. */
-  onRemove?: () => void;
+  onRemove?: (index: number) => void;
 }) {
   const artwork = useTrackArtwork(track);
+  const t = useT();
+  const styles = useStyles();
+
+  /*
+    Two things a held row can mean, and one finger to say it with.
+
+    Holding a row used to lift it, anywhere on the row, because there was
+    nothing else a hold could be. Now there is the track's menu, which is what
+    a hold means on every other row of tracks in the app — so the row's body
+    opens the menu, after the same wait as in the library, and lifting is the
+    handle's: the mark at the end that was always drawn to say "this moves".
+    They are two pressables, one inside the other, and a touch belongs to the
+    innermost one it lands on, so neither can be mistaken for the other and
+    there is no moment at which both are waiting.
+
+    Where the screen has no menu the whole row lifts, as it always did.
+  */
+  const liftFrom = onLift
+    ? (event: GestureResponderEvent) => onLift(index, event.nativeEvent.pageY)
+    : undefined;
 
   return (
     <Pressable
       style={[styles.row, lifted && styles.rowLifted]}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={220}>
+      accessibilityRole="button"
+      accessibilityState={{ selected: playing }}
+      // A long press is not something a screen reader's user can be expected
+      // to find by trying. Named, it is in the reader's own list of actions.
+      accessibilityActions={onMenu ? [{ name: 'longpress', label: t.library.trackMenu }] : undefined}
+      onAccessibilityAction={
+        onMenu
+          ? (event) => {
+              if (event.nativeEvent.actionName === 'longpress') onMenu(index);
+            }
+          : undefined
+      }
+      onPress={() => onPress(index)}
+      onLongPress={onMenu ? () => onMenu(index) : liftFrom}
+      delayLongPress={onMenu ? undefined : LIFT_AFTER_MS}>
       <View style={styles.mark}>{playing ? <PlayIcon size={8} /> : null}</View>
       {artwork ? (
         <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
@@ -56,7 +115,7 @@ function QueueRow({
           {track.title}
         </Text>
         <Text style={styles.artist} numberOfLines={1}>
-          {track.artist ?? 'Unknown artist'}
+          {track.artist ?? t.common.unknownArtist}
         </Text>
       </View>
       {/*
@@ -66,14 +125,50 @@ function QueueRow({
         screen cannot keep.
       */}
       {onRemove ? (
-        <Pressable style={styles.remove} onPress={onRemove} hitSlop={6}>
+        <Pressable
+          style={styles.remove}
+          accessibilityRole="button"
+          // Named with the track: every row has one of these, and "remove"
+          // alone does not say what from.
+          accessibilityLabel={t.player.queue.remove(track.title)}
+          onPress={() => onRemove(index)}
+          // The cross is a small mark in a tall row. Reached for and missed,
+          // it plays the track instead.
+          hitSlop={REMOVE_SLOP}>
           <Text style={styles.removeLabel}>×</Text>
         </Pressable>
       ) : null}
-      {onLongPress ? <Text style={styles.grip}>≡</Text> : null}
+      {onLift && onMenu ? (
+        <Pressable
+          // Tapped, it is still part of the row. Only the hold is its own.
+          onPress={() => onPress(index)}
+          onLongPress={liftFrom}
+          delayLongPress={LIFT_AFTER_MS}
+          // The mark is a few points wide in a row a finger's height tall, and
+          // a hold that misses it now opens a menu instead of doing nothing.
+          hitSlop={GRIP_SLOP}
+          // The row says everything there is to say; this is how it is moved
+          // by hand, which is not something to stop at on the way past.
+          accessible={false}>
+          <Text style={styles.grip}>≡</Text>
+        </Pressable>
+      ) : onLift ? (
+        <Text style={styles.grip}>≡</Text>
+      ) : null}
     </Pressable>
   );
-}
+});
+
+/** How long a hold has to last before it lifts a row. Shorter than a menu's. */
+const LIFT_AFTER_MS = 220;
+
+/** Out to the row's own edges, and no further left than the cross's own reach. */
+const GRIP_SLOP = { top: 18, bottom: 18, left: 2, right: 16 };
+
+const REMOVE_SLOP = { top: 8, bottom: 8, left: 12, right: 10 };
+
+/** What the copy in the hand does when pressed, which it cannot be. */
+const nothing = () => {};
 
 type Drag = { from: number | null; to: number | null };
 
@@ -101,6 +196,7 @@ const DragContext = createContext<Drag>({ from: null, to: null });
  */
 function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>) {
   const { from, to } = use(DragContext);
+  const styles = useStyles();
   const dragging = from === index;
   const shift = from !== null && to !== null ? rowShift(index, from, to) : 0;
 
@@ -121,7 +217,8 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>
 }
 
 /**
- * The queue: scrollable, and reorderable by holding a row and dragging it.
+ * The queue: scrollable, and reorderable by holding a row and dragging it —
+ * by its handle, where holding the row itself opens a menu instead.
  *
  * Scrolling and dragging both want the same vertical gesture, and on Android a
  * scroll view claims one natively — once it has, JavaScript cannot take it
@@ -135,6 +232,11 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>
  * because none of it depends on the rows existing: a finger position becomes an
  * index through the fixed row height, and the rows it passes are the ones on
  * screen, which are exactly the ones a window keeps mounted.
+ *
+ * `header` and `footer` scroll with the rows, for a screen that has more on it
+ * than the list. They go inside rather than the list going inside a scroll
+ * view with them: a list within a scroll view is as tall as everything it
+ * holds, so all of it counts as on screen and every row is mounted at once.
  */
 export function QueueList({
   queue,
@@ -142,6 +244,9 @@ export function QueueList({
   onSelect,
   onMove,
   onRemove,
+  onLongPress,
+  header,
+  footer,
 }: {
   queue: Track[];
   currentIndex: number;
@@ -149,7 +254,15 @@ export function QueueList({
   /** Both absent on a list whose order and membership are not the user's. */
   onMove?: (from: number, to: number) => void;
   onRemove?: (index: number) => void;
+  /**
+   * A row held down, for the screen's menu of that track. Where there is one,
+   * a row is lifted by its handle and not by its body.
+   */
+  onLongPress?: (index: number) => void;
+  header?: ReactNode;
+  footer?: ReactNode;
 }) {
+  const styles = useStyles();
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const offset = useRef(new Animated.Value(0)).current;
@@ -178,6 +291,20 @@ export function QueueList({
   lengthRef.current = queue.length;
   const currentRef = useRef(currentIndex);
   currentRef.current = currentIndex;
+  /*
+    How much sits above the first row. A row's place is its number times the
+    row height only when the rows start at the top, and under a header they do
+    not: the list needs it to know where a row is without drawing it, and the
+    copy in the hand needs it to be drawn where the row was.
+
+    In state for the list, which has to be told again when it changes, and in a
+    ref for the handlers, which are made once.
+  */
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const headerRef = useRef(0);
+  /* The latest of what the screen passed in, for the same handlers. */
+  const handlers = useRef({ onSelect, onRemove, onLongPress });
+  handlers.current = { onSelect, onRemove, onLongPress };
 
   /*
     Where the playing row is about to be renumbered to by an edit made here.
@@ -360,7 +487,7 @@ export function QueueList({
    */
   const [liftedTop, setLiftedTop] = useState(0);
 
-  const lift = (index: number, pageY: number) => {
+  const lift = useCallback((index: number, pageY: number) => {
     /*
       Where the list is on the screen, asked for as the drag begins rather than
       when the list was laid out.
@@ -376,13 +503,35 @@ export function QueueList({
     grabbedAt.current = pageY;
     fingerAt.current = pageY;
     grabbedScroll.current = scrolled.current;
-    setLiftedTop(index * QUEUE_ROW_HEIGHT - scrolled.current);
+    setLiftedTop(headerRef.current + index * QUEUE_ROW_HEIGHT - scrolled.current);
     fromRef.current = index;
     toRef.current = index;
     offset.setValue(0);
     setFrom(index);
     setTo(index);
-  };
+    // Refs, setters and an animated value, none of which is ever replaced.
+  }, [offset]);
+
+  const select = useCallback((index: number) => handlers.current.onSelect(index), []);
+
+  const menu = useCallback((index: number) => {
+    // A hold that lands as a drag is ending, or with a row still in the hand,
+    // belongs to the drag.
+    if (fromRef.current === null) handlers.current.onLongPress?.(index);
+  }, []);
+
+  const remove = useCallback((index: number) => {
+    // Only a row above the playing one renumbers it, so only that case needs
+    // predicting. Removing the playing row leaves the index where it is —
+    // except when it was the last row, and then the jump to nothing is worth
+    // following.
+    if (index < currentRef.current) {
+      expectIndex(indexAfterRemove(currentRef.current, index));
+    }
+    handlers.current.onRemove?.(index);
+    // expectIndex only touches refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // A timer outliving the list it scrolls would be reaching for a ref nobody
   // is reading any more.
@@ -392,7 +541,7 @@ export function QueueList({
   const anchorToCurrent = (animated: boolean) => {
     if (fromRef.current !== null) return;
     scroll.current?.scrollToOffset({
-      offset: Math.max(0, (currentIndex - 1) * QUEUE_ROW_HEIGHT),
+      offset: Math.max(0, headerRef.current + (currentIndex - 1) * QUEUE_ROW_HEIGHT),
       animated,
     });
   };
@@ -453,9 +602,21 @@ export function QueueList({
           CellRendererComponent={QueueCell}
           scrollEnabled={from === null}
           contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            header ? (
+              <View
+                onLayout={(event) => {
+                  headerRef.current = event.nativeEvent.layout.height;
+                  setHeaderHeight(headerRef.current);
+                }}>
+                {header}
+              </View>
+            ) : null
+          }
+          ListFooterComponent={footer ? <>{footer}</> : null}
           getItemLayout={(_data, index) => ({
             length: QUEUE_ROW_HEIGHT,
-            offset: QUEUE_ROW_HEIGHT * index,
+            offset: headerHeight + QUEUE_ROW_HEIGHT * index,
             index,
           })}
           /*
@@ -481,27 +642,13 @@ export function QueueList({
           renderItem={({ item, index }) => (
             <QueueRow
               track={item}
+              index={index}
               playing={index === currentIndex}
               lifted={from === index}
-              onPress={() => onSelect(index)}
-              onLongPress={
-                onMove ? (event) => lift(index, event.nativeEvent.pageY) : undefined
-              }
-              onRemove={
-                onRemove
-                  ? () => {
-                      // Only a row above the playing one renumbers it, so only
-                      // that case needs predicting. Removing the playing row
-                      // leaves the index where it is — except when it was the
-                      // last row, and then the jump to nothing is worth
-                      // following.
-                      if (index < currentIndex) {
-                        expectIndex(indexAfterRemove(currentIndex, index));
-                      }
-                      onRemove(index);
-                    }
-                  : undefined
-              }
+              onPress={select}
+              onLift={onMove ? lift : undefined}
+              onMenu={onLongPress ? menu : undefined}
+              onRemove={onRemove ? remove : undefined}
             />
           )}
         />
@@ -522,14 +669,20 @@ export function QueueList({
             styles.held,
             { top: liftedTop, height: QUEUE_ROW_HEIGHT, transform: [{ translateY: offset }] },
           ]}>
-          <QueueRow track={queue[from]} playing={from === currentIndex} lifted onPress={() => {}} />
+          <QueueRow
+            track={queue[from]}
+            index={from}
+            playing={from === currentIndex}
+            lifted
+            onPress={nothing}
+          />
         </Animated.View>
       ) : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   /* Left standing so the rows around it still have somewhere to slide to. */
   hidden: { opacity: 0 },
   held: { position: 'absolute', left: 0, right: 0, zIndex: 2, elevation: 2 },
@@ -543,15 +696,16 @@ const styles = StyleSheet.create({
     height: QUEUE_ROW_HEIGHT,
     paddingHorizontal: 16,
   },
-  rowLifted: { backgroundColor: '#242424', borderRadius: 8 },
+  rowLifted: { backgroundColor: c.surfaceRaised, borderRadius: 8, ...outlined(c) },
   mark: { width: 12, alignItems: 'center' },
-  art: { width: 36, height: 36, borderRadius: 4, backgroundColor: '#1c1c1c' },
-  artEmpty: { backgroundColor: '#1c1c1c' },
+  // No colour of the theme's on the picture itself; see TrackRow's `art`.
+  art: { width: 36, height: 36, borderRadius: 4 },
+  artEmpty: { backgroundColor: c.surfaceRaised },
   text: { flex: 1, gap: 1 },
-  title: { color: '#9a9a9a', fontSize: 14 },
-  titlePlaying: { color: '#ededed' },
-  artist: { color: '#5a5a5a', fontSize: 11.5 },
+  title: { color: c.textSecondary, fontSize: 14 },
+  titlePlaying: { color: c.text },
+  artist: { color: c.textFaint, fontSize: 11.5 },
   remove: { paddingHorizontal: 6, paddingVertical: 4 },
-  removeLabel: { color: '#6a6a6a', fontSize: 18, lineHeight: 20 },
-  grip: { color: '#4a4a4a', fontSize: 18, paddingHorizontal: 4 },
-});
+  removeLabel: { color: c.textFaint, fontSize: 18, lineHeight: 20 },
+  grip: { color: c.textDisabled, fontSize: 18, paddingHorizontal: 4 },
+}));

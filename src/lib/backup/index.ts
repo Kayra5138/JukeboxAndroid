@@ -1,6 +1,8 @@
 import { version } from '../../../package.json';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import { db } from '../db/index.ts';
+import { forBridge } from '../equalizer/bridge.ts';
+import { strings } from '../i18n/languages.ts';
 import { scanLibrary } from '../media/library.ts';
 import {
   mergeTables,
@@ -56,13 +58,28 @@ async function readSound(): Promise<Backup['sound']> {
       sound.transitions = settings;
     }
   } catch {}
+  // The switch only. What each file was measured at stays behind: it is a
+  // fact about this phone's copies, and another phone measures its own.
+  try {
+    const loudness = await JukeboxAudio.getLoudnessAsync?.();
+    if (loudness) sound.loudness = loudness;
+  } catch {}
   try {
     const state = await JukeboxAudio.getEqualizerAsync?.();
     if (state) {
       sound.equalizer = {
         enabled: state.enabled,
-        preset: state.preset,
-        bands: state.bands,
+        // The bands, the preamp and the curves kept under names. Nothing in
+        // them belongs to this phone, so they mean the same on the next one.
+        ...(state.parametric
+          ? {
+              parametric: {
+                bands: state.parametric.bands,
+                preampDb: state.parametric.preampDb,
+                presets: state.parametric.presets,
+              },
+            }
+          : { preset: state.preset, bands: state.bands }),
         bass: state.bass,
         virtualizer: state.virtualizer,
         loudness: state.loudness,
@@ -76,34 +93,65 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
   value != null && typeof value === 'object' && !Array.isArray(value);
 
 /**
+ * A part of the sound setup the player would not take back, said in the log.
+ *
+ * Each part is tried on its own and a failure of one does not stop the rest,
+ * which is right; saying nothing about it was not. A backup's equalizer went
+ * unrestored for as long as it did because nothing recorded that it had.
+ */
+function unrestored(part: string, failure: unknown): void {
+  console.warn(`The backup's ${part} could not be put back`, failure);
+}
+
+/**
  * Hands the player its settings back.
  *
  * The player checks whatever it is given, so these are passed on as they were
- * found. The equalizer is the exception worth a look first: its bands are the
- * phone's, and a set made for five bands means nothing to a phone with ten.
+ * found. That goes for the equalizer too, with one case worth a look first. A
+ * backup from before the app had an equalizer of its own holds levels for
+ * the phone's bands and not what frequencies they were at, so they cannot be
+ * turned into anything: the switch and the tone controls are put back and the
+ * bands are left as they are here.
  */
 async function writeSound(sound: Backup['sound']): Promise<void> {
   try {
-    if (isObject(sound.effects)) await JukeboxAudio.setAudioEffectsAsync?.(sound.effects as never);
-  } catch {}
+    if (isObject(sound.effects)) await JukeboxAudio.setAudioEffectsAsync?.(forBridge(sound.effects) as never);
+  } catch (failure) {
+    unrestored('effects', failure);
+  }
   try {
     if (isObject(sound.transitions)) {
-      await JukeboxAudio.setTransitionsAsync?.(sound.transitions as never);
+      await JukeboxAudio.setTransitionsAsync?.(forBridge(sound.transitions) as never);
     }
-  } catch {}
+  } catch (failure) {
+    unrestored('crossfade', failure);
+  }
+  try {
+    if (isObject(sound.loudness)) await JukeboxAudio.setLoudnessAsync?.(forBridge(sound.loudness) as never);
+  } catch (failure) {
+    unrestored('loudness', failure);
+  }
   try {
     const wanted = sound.equalizer;
     const here = await JukeboxAudio.getEqualizerAsync?.();
-    if (
-      here &&
-      isObject(wanted) &&
-      Array.isArray(wanted.bands) &&
-      wanted.bands.length === here.bandCount &&
-      wanted.bands.every((band) => typeof band === 'number')
-    ) {
-      await JukeboxAudio.setEqualizerAsync?.(wanted as never);
+    if (here && isObject(wanted)) {
+      if (here.parametric) {
+        // `preset` and `bands` are the old phone's and are not sent on.
+        const { preset: _preset, bands: _bands, ...rest } = wanted;
+        await JukeboxAudio.setEqualizerAsync?.(forBridge(rest) as never);
+      } else if (
+        // A native build that still drives the phone's equalizer: its bands
+        // are the phone's, and a set made for five means nothing to ten.
+        Array.isArray(wanted.bands) &&
+        wanted.bands.length === here.bandCount &&
+        wanted.bands.every((band) => typeof band === 'number')
+      ) {
+        await JukeboxAudio.setEqualizerAsync?.(forBridge(wanted) as never);
+      }
     }
-  } catch {}
+  } catch (failure) {
+    unrestored('equalizer', failure);
+  }
 }
 
 /** A name with the day in it, so two backups in one folder can be told apart. */
@@ -119,7 +167,8 @@ function fileName(now: Date): string {
  * where its file is, what it is called, how long it runs. That description is
  * the only thing that will find the song again on a phone where its id is
  * different. A song that has been deleted since is described from the last
- * time it was played, which is the last anybody knew of it.
+ * time it was played, which is the last anybody knew of it, and has a length
+ * only if it was ever skipped.
  */
 async function gather(): Promise<Backup> {
   const database = open();
@@ -133,6 +182,16 @@ async function gather(): Promise<Backup> {
       artist: row.artist ?? null,
       filename: row.filename ?? null,
     });
+  }
+
+  // A listen does not say how long the song was, but a skip does, and for a
+  // song that is gone it is the only place the length was ever written down.
+  // Worth carrying: the length is what tells two files with one name apart.
+  const lengthWhenSkipped = new Map<string, number>();
+  for (const row of tables.skips) {
+    if (typeof row.duration_sec === 'number' && row.duration_sec > 0) {
+      lengthWhenSkipped.set(row.track_id as string, row.duration_sec);
+    }
   }
 
   const text = (value: Cell | undefined) => (typeof value === 'string' ? value : null);
@@ -156,7 +215,7 @@ async function gather(): Promise<Backup> {
             folder: null,
             title: text(heard?.title),
             artist: text(heard?.artist),
-            durationSec: null,
+            durationSec: lengthWhenSkipped.get(id) ?? null,
           }
     );
   }
@@ -178,7 +237,7 @@ async function gather(): Promise<Backup> {
  * Answers false if they backed out of choosing, which is not a failure.
  */
 export async function exportBackup(): Promise<boolean> {
-  if (!JukeboxAudio.exportBackupAsync) throw new Error('Install the updated Android build to export.');
+  if (!JukeboxAudio.exportBackupAsync) throw new Error(strings().backup.needsBuildToExport);
 
   const backup = await gather();
   return JukeboxAudio.exportBackupAsync(
@@ -208,7 +267,7 @@ export type Opened = {
  * can answer. Null if they backed out of choosing.
  */
 export async function openBackup(): Promise<Opened | null> {
-  if (!JukeboxAudio.openBackupAsync) throw new Error('Install the updated Android build to import.');
+  if (!JukeboxAudio.openBackupAsync) throw new Error(strings().backup.needsBuildToImport);
 
   const picked = await JukeboxAudio.openBackupAsync();
   if (!picked) return null;

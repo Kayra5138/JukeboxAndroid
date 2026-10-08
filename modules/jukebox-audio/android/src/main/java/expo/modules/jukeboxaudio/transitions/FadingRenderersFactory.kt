@@ -1,16 +1,24 @@
 package expo.modules.jukeboxaudio.transitions
 
 import android.content.Context
+import android.os.Handler
 import androidx.annotation.OptIn
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessorChain
 import androidx.media3.common.audio.GainProcessor
 import expo.modules.jukeboxaudio.effects.EffectsProcessor
+import expo.modules.jukeboxaudio.equalizer.EqualizerProcessor
+import expo.modules.jukeboxaudio.loudness.LoudnessProcessor
+import expo.modules.jukeboxaudio.loudness.NamingAudioRenderer
+import expo.modules.jukeboxaudio.loudness.PlayingStream
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.Renderer
+import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 
 /**
  * A player whose output passes through a fader.
@@ -30,8 +38,23 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 @OptIn(UnstableApi::class)
 class FadingRenderersFactory(
   context: Context,
-  private val fade: FadeGainProvider
+  private val fade: FadeGainProvider,
+  /**
+   * The one track this player will ever play, where that is known.
+   *
+   * The crossfade's second player says; the main one does not, and finds out
+   * from its renderer as it goes. See [PlayingStream].
+   */
+  only: String? = null
 ) : DefaultRenderersFactory(context) {
+  /**
+   * Which track this player's samples belong to, shared between the renderer
+   * that knows and the processor that needs to: the loudness of a track is
+   * corrected by a gain of its own, and two players in a crossfade are on
+   * two different tracks.
+   */
+  private val stream = PlayingStream(only)
+
   /*
     Float output is deliberately left off, and why is worth keeping.
 
@@ -80,8 +103,37 @@ class FadingRenderersFactory(
         separately since well below our minimum SDK.
       */
       .setEnableAudioTrackPlaybackParams(true)
-      .setAudioProcessorChain(FadeLastChain(GainProcessor(fade)))
+      .setAudioProcessorChain(
+        FadeLastChain(LoudnessProcessor(stream), EqualizerProcessor(), GainProcessor(fade))
+      )
       .build()
+
+  /**
+   * The stock audio renderer, in a subclass that says which track it is on.
+   *
+   * Built here rather than by the superclass for that one reason; see
+   * [NamingAudioRenderer]. The superclass goes on from this to look for the
+   * extension decoders -- FFmpeg, libopus and the rest -- and is not asked
+   * to, because it only looks when extensions are switched on, which they
+   * are not and, with none of them in the build, could not usefully be.
+   */
+  override fun buildAudioRenderers(
+    context: Context,
+    extensionRendererMode: Int,
+    mediaCodecSelector: MediaCodecSelector,
+    enableDecoderFallback: Boolean,
+    audioSink: AudioSink,
+    eventHandler: Handler,
+    eventListener: AudioRendererEventListener,
+    out: ArrayList<Renderer>
+  ) {
+    out.add(
+      NamingAudioRenderer(
+        context, codecAdapterFactory, mediaCodecSelector, enableDecoderFallback,
+        eventHandler, eventListener, audioSink, stream
+      )
+    )
+  }
 }
 
 /**
@@ -116,7 +168,11 @@ class FadingRenderersFactory(
  * what the listener hears rather than in source time.
  */
 @OptIn(UnstableApi::class)
-private class FadeLastChain(private val fade: AudioProcessor) : AudioProcessorChain {
+private class FadeLastChain(
+  private val loudness: AudioProcessor,
+  private val equalizer: AudioProcessor,
+  private val fade: AudioProcessor
+) : AudioProcessorChain {
   private val stock = DefaultAudioSink.DefaultAudioProcessorChain()
 
   /*
@@ -125,9 +181,37 @@ private class FadeLastChain(private val fade: AudioProcessor) : AudioProcessorCh
     commute closely enough — but being last is what matters for the pair of
     them, and the effects processor is the one that takes the repeated
     end-of-stream telling on the chain's behalf.
+
+    The loudness correction goes in front of both: it is the record's level
+    being put right, and the fade and the preamp are things done to the
+    record afterwards. Like them it is a plain processor that never ends
+    early, so it changes nothing about who is told what when a stream does.
+
+    The equalizer goes between the loudness correction and the fader, and
+    each side of that is a choice.
+
+    After the loudness correction, because of headroom. That stage turns a
+    quiet record up to within a decibel of full scale and no further; the
+    equalizer then comes with a preamp of its own that takes off whatever its
+    bands add. In that order each stage hands on something that fits in
+    sixteen bits, which between stages is all there is. The other way round,
+    the record's level would be corrected after the equalizer's preamp had
+    already turned it down and rounded it, and the correction would turn the
+    rounding up with the music.
+
+    Before the fader, because the tone is part of what is being faded. A
+    filter remembers what went through it, and one placed after the fader
+    would still be ringing with the music when the fader had reached silence
+    -- a tail under a pause, and under the end of a crossfade.
+
+    And before the effects, where the user's preamp and the last clip are:
+    the equalizer corrects the headphones, and the width, the balance and
+    that preamp are then what is done with the corrected sound. The effects
+    processor is still the last thing in the chain, which is what the chain
+    needs of it.
   */
   override fun getAudioProcessors(): Array<AudioProcessor> =
-    stock.audioProcessors + fade + EffectsProcessor()
+    stock.audioProcessors + loudness + equalizer + fade + EffectsProcessor()
 
   override fun applyPlaybackParameters(parameters: PlaybackParameters): PlaybackParameters =
     stock.applyPlaybackParameters(parameters)

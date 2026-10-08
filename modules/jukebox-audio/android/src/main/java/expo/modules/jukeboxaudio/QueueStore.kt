@@ -26,6 +26,18 @@ import java.io.File
 object QueueStore {
   private const val FILE = "queue.json"
 
+  /**
+   * Where in the queue playback had got to, in a file of its own.
+   *
+   * The queue is thousands of entries and changes rarely; the place in it is
+   * two numbers and changes all the time. Kept together, either the place is
+   * only as fresh as the last time the list changed -- which is how a press of
+   * play after the app was reclaimed came to start on a track finished long
+   * before -- or the whole list is written out again every few seconds to
+   * record that some more of a song has gone by.
+   */
+  private const val PLACE_FILE = "queue-place.json"
+
   /** Beyond this the file costs more to write than the tail of it is worth. */
   private const val MAX_ITEMS = 2_000
 
@@ -53,21 +65,54 @@ object QueueStore {
   }.getOrDefault("")
 
   /**
+   * Reads where the player is, which like [snapshot] has to happen on the
+   * thread that owns it.
+   *
+   * The id goes with the index so that the two files cannot be read as one
+   * when they are not: see [resumeFrom].
+   *
+   * A player that has run off the end of its queue is recorded at the start of
+   * the last track rather than the end of it. Put back at the end it would be
+   * finished the instant it was started, and a press of play would be a press
+   * of nothing.
+   */
+  fun place(player: Player): String = runCatching {
+    val item = player.currentMediaItem ?: return ""
+    val ended = player.playbackState == Player.STATE_ENDED
+    JSONObject()
+      .put("id", item.mediaId)
+      .put("index", player.currentMediaItemIndex)
+      .put("positionMs", if (ended) 0L else player.currentPosition.coerceAtLeast(0))
+      .toString()
+  }.getOrDefault("")
+
+  /**
    * Puts it on disk, through a temporary file.
    *
    * This is written while playing and read after a kill, so a write interrupted
    * in place would leave half a queue behind — which parses as a short one
    * rather than as nothing.
    */
-  fun save(context: Context, body: String) {
+  fun save(context: Context, body: String) = write(context, FILE, body)
+
+  fun savePlace(context: Context, body: String) = write(context, PLACE_FILE, body)
+
+  private fun write(context: Context, name: String, body: String) {
     if (body.isEmpty()) return
     runCatching {
-      val target = file(context)
-      val temporary = File(target.parentFile, "$FILE.part")
+      val target = File(context.filesDir, name)
+      val temporary = File(target.parentFile, "$name.part")
       temporary.writeText(body)
       if (!temporary.renameTo(target)) temporary.delete()
     }
   }
+
+  private fun loadPlace(context: Context): Place? = runCatching {
+    val target = File(context.filesDir, PLACE_FILE)
+    if (!target.isFile) return null
+    val body = JSONObject(target.readText())
+    Place(body.optString("id"), body.optInt("index", -1), body.optLong("positionMs", 0L))
+  }.getOrNull()
 
   fun load(context: Context): Saved? = runCatching {
     val target = file(context)
@@ -78,11 +123,13 @@ object QueueStore {
     val items = (0 until array.length()).mapNotNull { fromJson(array.optJSONObject(it)) }
     if (items.isEmpty()) return null
 
-    Saved(
-      items = items,
-      index = body.optInt("index", 0).coerceIn(0, items.size - 1),
-      positionMs = body.optLong("positionMs", 0L).coerceAtLeast(0L)
+    val (index, positionMs) = resumeFrom(
+      ids = items.map { it.mediaId },
+      index = body.optInt("index", 0),
+      positionMs = body.optLong("positionMs", 0L),
+      place = loadPlace(context)
     )
+    Saved(items = items, index = index, positionMs = positionMs)
   }.getOrNull()
 
   private fun toJson(item: MediaItem): JSONObject {
@@ -128,9 +175,33 @@ object QueueStore {
       .build()
 
     return MediaItem.Builder()
-      .setMediaId(json.optString("id"))
+      // Plain already for anything saved lately. A queue a car chose before
+      // ids were made plain on the way in was written with the car's own.
+      .setMediaId(expo.modules.jukeboxaudio.auto.BrowseTree.trackId(json.optString("id")))
       .setUri(uri)
       .setMediaMetadata(metadata)
       .build()
   }
+}
+
+/** A track in the queue and how far into it playback was. */
+data class Place(val id: String, val index: Int, val positionMs: Long)
+
+/**
+ * Which track to pick up on and where, out of the two things written down.
+ *
+ * The queue carries the place it was at when it was last written; [place] is
+ * the later word, but it is a separate file and nothing writes the two as one.
+ * So it is believed only where it still describes this queue -- its index
+ * holds the track it names. A list that changed after the place was noted
+ * fails that and falls back on what the queue says of itself, which was true
+ * of that list at least when it was written.
+ *
+ * Pure, so the judgement can be stated without a player or a disk.
+ */
+fun resumeFrom(ids: List<String>, index: Int, positionMs: Long, place: Place?): Pair<Int, Long> {
+  if (place != null && ids.getOrNull(place.index) == place.id) {
+    return place.index to place.positionMs.coerceAtLeast(0L)
+  }
+  return index.coerceIn(0, maxOf(ids.size - 1, 0)) to positionMs.coerceAtLeast(0L)
 }

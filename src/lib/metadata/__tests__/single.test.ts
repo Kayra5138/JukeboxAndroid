@@ -10,6 +10,7 @@ import {
   withLookupTags,
   type Catalogues,
 } from '../single.ts';
+import { stringsFor } from '../../i18n/languages.ts';
 import { abortError, networkError } from '../http.ts';
 import type { ItunesMatch } from '../itunes.ts';
 import type { MusicBrainzMatch } from '../musicbrainz.ts';
@@ -216,5 +217,12 @@ describe('numbers typed into a field', () => {
     assert.equal(numberComplaint('1994', 'year'), null);
     assert.ok(numberComplaint('abcd', 'year'));
     assert.ok(numberComplaint('0', 'place'));
+  });
+
+  it('complains in Turkish when that is the language', () => {
+    const tr = stringsFor('tr');
+    assert.equal(numberComplaint('abcd', 'year', tr), 'Bu bir yıl değil.');
+    assert.equal(numberComplaint('0', 'place', tr), '1 ya da daha büyük bir tam sayı gir.');
+    assert.equal(numberComplaint('1994', 'year', tr), null);
   });
 });

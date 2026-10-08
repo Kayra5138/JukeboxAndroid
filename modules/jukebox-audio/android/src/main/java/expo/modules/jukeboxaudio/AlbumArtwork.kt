@@ -27,8 +27,8 @@ object AlbumArtwork {
       // not a music catalogue. It is named rather than matched by suffix, the
       // same as the rest: a picture this app redistributes has to come from a
       // place whose licence terms are known.
-      require(url.protocol == "https" && (url.host.endsWith(".mzstatic.com") || url.host in setOf("i.ytimg.com", "i9.ytimg.com", "img.youtube.com", "upload.wikimedia.org", "thumb.wikimedia.org")) && url.userInfo == null) {
-        "Only catalogue, YouTube or Wikimedia artwork can be downloaded."
+      if (!(url.protocol == "https" && (url.host.endsWith(".mzstatic.com") || url.host in setOf("i.ytimg.com", "i9.ytimg.com", "img.youtube.com", "upload.wikimedia.org", "thumb.wikimedia.org")) && url.userInfo == null)) {
+        throw Told(R.string.jukebox_cover_source)
       }
       val connection = (url.openConnection() as HttpURLConnection).apply {
         connectTimeout = 10_000
@@ -37,10 +37,10 @@ object AlbumArtwork {
       }
       try {
         if (connection.responseCode in 300..399) {
-          val location = connection.getHeaderField("Location") ?: error("Missing cover redirect.")
+          val location = connection.getHeaderField("Location") ?: throw Told(R.string.jukebox_cover_redirect)
           url = URL(url, location)
         } else {
-          check(connection.responseCode in 200..299) { "Album cover unavailable." }
+          if (connection.responseCode !in 200..299) throw Told(R.string.jukebox_cover_unavailable)
           val temporary = File.createTempFile("cover-", ".tmp", directory)
           try {
             connection.inputStream.use { input -> temporary.outputStream().use { output ->
@@ -50,19 +50,19 @@ object AlbumArtwork {
                 val count = input.read(bytes)
                 if (count < 0) break
                 total += count
-                check(total <= 5 * 1024 * 1024) { "Album cover is too large." }
+                if (total > 5 * 1024 * 1024) throw Told(R.string.jukebox_cover_too_large)
                 output.write(bytes, 0, count)
               }
             } }
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(temporary.absolutePath, bounds)
-            check(bounds.outWidth in 1..8192 && bounds.outHeight in 1..8192) { "Invalid album cover." }
-            check(temporary.renameTo(target)) { "Could not save album cover." }
+            if (bounds.outWidth !in 1..8192 || bounds.outHeight !in 1..8192) throw Told(R.string.jukebox_cover_invalid)
+            if (!temporary.renameTo(target)) throw Told(R.string.jukebox_cover_not_saved)
             return Uri.fromFile(target).toString()
           } finally { temporary.delete() }
         }
       } finally { connection.disconnect() }
     }
-    error("Too many album cover redirects.")
+    throw Told(R.string.jukebox_cover_redirects)
   }
 }

@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { hydrationFrom, readPlayerState, sameMoment, toggleCommand } from '../hydrate.ts';
+import {
+  hydrationFrom,
+  landingOf,
+  readPlayerState,
+  reconcile,
+  sameMoment,
+  toggleCommand,
+} from '../hydrate.ts';
 import type { PlayerStatus, QueueEntry } from '../../../../modules/jukebox-audio/index.ts';
+import type { Track } from '../../types.ts';
 
 function entry(id: string, fields: Partial<QueueEntry> = {}): QueueEntry {
   return {
@@ -152,6 +160,109 @@ describe('hydrationFrom', () => {
     assert.equal(restored?.isPlaying, false);
     assert.equal(restored?.speed, 1);
     assert.equal(restored?.repeat, 'off');
+  });
+});
+
+function tracks(...ids: string[]): Track[] {
+  return hydrationFrom(status(), ids.map((id) => entry(id)))!.queue;
+}
+
+describe('landingOf', () => {
+  it('takes the index where the id agrees with it', () => {
+    const queue = tracks('1', '2', '3');
+    const landing = landingOf(queue, 1, '2');
+
+    assert.equal(landing.trusted, true);
+    assert.equal(landing.index, 1);
+    assert.equal(landing.track, queue[1]);
+  });
+
+  it('trusts the index over the id, so a track queued twice resolves', () => {
+    const queue = tracks('1', '2', '1');
+
+    assert.equal(landingOf(queue, 2, '1').index, 2);
+    assert.equal(landingOf(queue, 0, '1').index, 0);
+  });
+
+  it('does not name whatever sits at an index the id disagrees with', () => {
+    // A car set a queue of its own: position 1 of that is not position 1 of
+    // this, and showing this one's would bill the listening to the wrong track.
+    const landing = landingOf(tracks('1', '2', '3'), 1, '77');
+
+    assert.equal(landing.trusted, false);
+    assert.equal(landing.track, null);
+    assert.equal(landing.index, -1);
+  });
+
+  it('does not go looking by id for a track the index got wrong', () => {
+    // The id being somewhere else in the list does not make the list the
+    // player's; a queue that disagrees about one position is not to be read.
+    assert.equal(landingOf(tracks('1', '2', '3'), 0, '3').trusted, false);
+  });
+
+  it('has nothing to go on past the end of the queue, or with no queue at all', () => {
+    assert.equal(landingOf(tracks('1'), 4, '1').trusted, false);
+    assert.equal(landingOf([], 0, '1').trusted, false);
+  });
+
+  it('falls back to the id for a player that sends no index', () => {
+    const queue = tracks('1', '2', '3');
+    const landing = landingOf(queue, -1, '3');
+
+    assert.equal(landing.trusted, true);
+    assert.equal(landing.index, 2);
+    assert.equal(landingOf(queue, -1, '77').trusted, false);
+  });
+
+  it('takes a change to no track at all as the queue having emptied', () => {
+    const landing = landingOf(tracks('1', '2'), 0, null);
+
+    assert.equal(landing.trusted, true);
+    assert.equal(landing.track, null);
+    assert.equal(landing.index, -1);
+  });
+});
+
+describe('reconcile', () => {
+  const theirs = (ids: string[], index: number) =>
+    hydrationFrom(status({ index, trackId: ids[index] ?? null }), ids.map((id) => entry(id)));
+
+  it('keeps a copy that already matches the player', () => {
+    assert.deepEqual(reconcile(tracks('1', '2', '3'), 1, theirs(['1', '2', '3'], 1)), {
+      kind: 'keep',
+    });
+  });
+
+  it('adopts a queue the app was never shown', () => {
+    assert.deepEqual(reconcile(tracks('1', '2', '3'), 1, theirs(['8', '9'], 0)), { kind: 'adopt' });
+    // Put back by the widget while this side still held nothing.
+    assert.deepEqual(reconcile([], -1, theirs(['8', '9'], 0)), { kind: 'adopt' });
+  });
+
+  it('adopts the same tracks in another order, or one more or fewer of them', () => {
+    assert.equal(reconcile(tracks('1', '2', '3'), 0, theirs(['1', '3', '2'], 0)).kind, 'adopt');
+    assert.equal(reconcile(tracks('1', '2', '3'), 0, theirs(['1', '2'], 0)).kind, 'adopt');
+    assert.equal(reconcile(tracks('1', '2'), 0, theirs(['1', '2', '3'], 0)).kind, 'adopt');
+  });
+
+  it('only moves the playing row where the queue itself is the same', () => {
+    // The richer rows the app holds are worth keeping when nothing else moved.
+    assert.deepEqual(reconcile(tracks('1', '2', '3'), 0, theirs(['1', '2', '3'], 2)), {
+      kind: 'move',
+      index: 2,
+    });
+  });
+
+  it('leaves the copy alone when the player holds nothing', () => {
+    // A stopped service answers with an empty player; the queue on screen is
+    // then the only place it is still held.
+    assert.deepEqual(reconcile(tracks('1', '2'), 0, null), { kind: 'keep' });
+  });
+
+  it('does not clear the playing row on the say of a player that cannot place it', () => {
+    const lost = hydrationFrom(status({ index: 9, trackId: 'gone' }), [entry('1'), entry('2')]);
+
+    assert.deepEqual(reconcile(tracks('1', '2'), 0, lost), { kind: 'keep' });
   });
 });
 

@@ -51,7 +51,7 @@ object DiscoverFiles {
     return row.takeIf { file.isFile && file.length() > 0 }
   }
   @Synchronized fun promote(context: Context, id: String, folder: String): String {
-    val data = track(context, id) ?: error("Download this song before saving it.")
+    val data = track(context, id) ?: throw YouTubeTrouble(Failure.NOT_HERE)
     val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
     val reserved = data.optString("savedId").toLongOrNull()
     if (reserved != null) {
@@ -88,18 +88,18 @@ object DiscoverFiles {
     timer.schedule(object : java.util.TimerTask() { override fun run() { cancelled.set(true) } }, 120_000)
     try {
       val video = job.getJSONObject("video")
-      check(!video.optBoolean("discoverWifiOnly") || networkAllowed(context)["wifi"] == true) { "Waiting for Wi-Fi. Automatic download will resume later." }
+      if (video.optBoolean("discoverWifiOnly") && networkAllowed(context)["wifi"] != true) throw YouTubeTrouble(Failure.WAITING_WIFI)
       val (audio, info) = YouTubeEngine.download(context, job.getJSONObject("video").getString("id"), "mp3", directory, cancelled, video) { state, progress ->
         if (DownloadStore.isCancelling(id)) cancelled.set(true)
         if (video.optBoolean("discoverWifiOnly") && networkAllowed(context)["wifi"] != true) cancelled.set(true)
         DownloadStore.change(id, state, progress)
       }
-      check(!cancelled.get() && DownloadStore.beginSaving(id)) { "Download paused. Open Discover to retry." }
+      if (cancelled.get() || !DownloadStore.beginSaving(id)) throw YouTubeTrouble(Failure.PAUSED)
       store(context, id, audio, info, job.getJSONObject("video"))
       DownloadStore.complete(id, "discover:$id")
     } catch (error: Exception) {
       val waiting = job.getJSONObject("video").optBoolean("discoverWifiOnly") && networkAllowed(context)["wifi"] != true
-      DownloadStore.change(id, "failed", error = if (waiting) "Waiting for Wi-Fi. Automatic download will resume later." else friendlyError(error))
+      DownloadStore.change(id, "failed", error = if (waiting) Failed(Failure.WAITING_WIFI) else failed(error))
     } finally { timer.cancel(); directory.deleteRecursively() }
   }
   fun networkAllowed(context: Context): Map<String, Boolean> {

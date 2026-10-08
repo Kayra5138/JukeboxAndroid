@@ -9,8 +9,12 @@ import expo.modules.kotlin.activityresult.AppContextActivityResultLauncher
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
+import expo.modules.jukeboxaudio.sleep.SleepTimers
 import expo.modules.jukeboxaudio.transitions.Crossfades
+import expo.modules.jukeboxaudio.equalizer.ParametricSettings
+import expo.modules.jukeboxaudio.loudness.Loudness
 import expo.modules.jukeboxaudio.transitions.TransitionStore
+import expo.modules.jukeboxaudio.widget.JukeboxWidget
 import expo.modules.kotlin.modules.ModuleDefinition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +71,8 @@ class JukeboxAudioModule : Module() {
     Name("JukeboxAudio")
     Constant("buildTimestamp") { BuildConfig.BUILD_TIMESTAMP }
 
-    Events("onTrackChange", "onPlaybackStateChange", "onQueueEnded", "onPlaybackError")
+    Events("onTrackChange", "onPlaybackStateChange", "onQueueEnded", "onPlaybackError", "onQueueReplaced",
+      "onSleepTimerChange")
 
     OnCreate {
       destroyed = false
@@ -81,6 +86,12 @@ class JukeboxAudioModule : Module() {
       }
         .also { player = it }
         .connect()
+      // Left in place when this module goes: it holds nothing but the weak
+      // reference, and a module made after this one will have put its own
+      // here by the time this one is torn down.
+      SleepTimers.listener = { state ->
+        self.get()?.takeUnless { it.destroyed }?.sendEvent("onSleepTimerChange", state)
+      }
     }
 
     RegisterActivityContracts {
@@ -236,6 +247,27 @@ class JukeboxAudioModule : Module() {
       CoverColour.of(path)
     }.runOnQueue(io)
 
+    /*
+      The same reading with the colour it was made from beside it. A function
+      of its own rather than a longer answer from the one above: that one
+      answers a bare list, and everything drawing a gradient from it wants
+      exactly that list and nothing changed about it.
+    */
+    AsyncFunction("coverReadingAsync") { path: String ->
+      CoverColour.read(path)?.let { mapOf("stops" to it.stops, "main" to it.main) }
+    }.runOnQueue(io)
+
+    /*
+      Not a promise: the colours are resources the system already holds, and
+      answering at once is what lets the theme be right on the first frame.
+      Any failure is an answer of none, since a phone whose maker has done
+      something of its own with these is a phone without the theme, not one
+      on which the app should fall over as it opens.
+    */
+    Function("systemPalette") {
+      runCatching { SystemPalette.of(context) }.getOrNull()
+    }
+
     AsyncFunction("saveImageAsync") { path: String ->
       ImageExport.save(context, java.io.File(Uri.parse(path).path ?: path)).toString()
     }.runOnQueue(io)
@@ -296,7 +328,7 @@ class JukeboxAudioModule : Module() {
         val files = pictures.filter(BackupArchive::safeName).map { java.io.File(home, it) }
         try {
           val out = context.contentResolver.openOutputStream(uri, "w")
-            ?: throw IllegalStateException("That place could not be written to.")
+            ?: throw Told(R.string.jukebox_file_not_writable)
           out.use { BackupArchive.write(it, document, files) }
         } catch (trouble: Exception) {
           // A file with half a backup in it is worse than no file: it looks
@@ -326,7 +358,7 @@ class JukeboxAudioModule : Module() {
         staging.deleteRecursively()
         staging.mkdirs()
         val input = context.contentResolver.openInputStream(android.net.Uri.parse(picked))
-          ?: throw IllegalStateException("That file could not be opened.")
+          ?: throw Told(R.string.jukebox_file_not_opened)
         val document = input.use { BackupArchive.read(it, staging) }
         val home = java.io.File(context.filesDir, "album-artwork")
         mapOf(
@@ -469,12 +501,10 @@ class JukeboxAudioModule : Module() {
     // ---- equalizer ----
 
     /**
-     * Everything the equalizer screen draws itself from.
-     *
-     * One call rather than a getter per field, because the band count, the
-     * level range and the current gains only make sense together: sliders
-     * drawn from one device's ranges and another's values would be wrong in a
-     * way nothing later could correct.
+     * Everything the equalizer screen draws itself from: the switch, the
+     * app's own bands, preamp and kept curves, and the three tone controls
+     * that are the phone's. One call, because they are one document on disk
+     * and one screen.
      */
     AsyncFunction("getEqualizerAsync") {
       AudioEffects.describe(context)
@@ -485,26 +515,44 @@ class JukeboxAudioModule : Module() {
      *
      * Whole rather than by field: the settings are one document on disk, and a
      * per-field write would have to read, change and write it back for every
-     * band a drag crosses. Sending all of it costs a handful of numbers and
-     * makes each call independent of the last.
+     * step of a drag. Sending all of it costs a few dozen numbers and makes
+     * each call independent of the last.
      *
-     * Answers with the state that resulted, which is not always the state that
-     * was sent — a preset is a curve the device owns, and the bands it moves
-     * to only become knowable afterwards.
+     * `parametric` may be left out, and the bands are then left alone: that
+     * is what a backup from before this equalizer sends. Whatever does arrive
+     * is held inside its limits here, not trusted to have been.
+     *
+     * On the queue Expo hands out and not the pool the downloads use, small
+     * as the wait would be: that queue is one thread, so the steps of a drag
+     * are stored in the order the finger made them.
+     *
+     * Answers with the state that resulted.
      */
     AsyncFunction("setEqualizerAsync") { settings: Map<String, Any?> ->
       AudioEffects.update(
         context,
         EffectsStore.Settings(
           enabled = settings["enabled"] as? Boolean ?: false,
-          preset = (settings["preset"] as? Number)?.toInt() ?: -1,
-          bands = (settings["bands"] as? List<*>)?.map { (it as? Number)?.toInt() ?: 0 }
-            ?: emptyList(),
           bass = (settings["bass"] as? Number)?.toInt() ?: 0,
           virtualizer = (settings["virtualizer"] as? Number)?.toInt() ?: 0,
           loudness = (settings["loudness"] as? Number)?.toInt() ?: 0
-        )
+        ),
+        (settings["parametric"] as? Map<*, *>)?.let(ParametricSettings::fromMap)
       )
+    }
+
+    /**
+     * Lets the user choose a text file and answers what is in it and what it
+     * is called, or null if they backed out.
+     *
+     * For importing a headphone correction somebody has saved. The picker is
+     * the one a backup is opened with; nothing is kept of the file.
+     */
+    AsyncFunction("pickTextFileAsync") Coroutine { ->
+      val launcher = backupOpen ?: return@Coroutine null
+      val picked = withContext(Dispatchers.Main) { launcher.launch(BackupOpen.Input()) }
+        ?: return@Coroutine null
+      withContext(Dispatchers.IO) { TextDocument.read(context, Uri.parse(picked)) }
     }
 
     // ---- transitions ----
@@ -528,6 +576,66 @@ class JukeboxAudioModule : Module() {
       TransitionStore.toMap(settings)
     }
 
+    // ---- loudness ----
+
+    AsyncFunction("getLoudnessAsync") {
+      Loudness.toMap(Loudness.read(context))
+    }
+
+    /**
+     * Stores whether tracks are evened out and tells the running service.
+     *
+     * Stored first, as the transitions are and for the reason they are: the
+     * service that plays the next song may be one that has not started yet.
+     * The gains themselves are no business of this module's -- the service
+     * finds them, from the files, without being asked.
+     */
+    AsyncFunction("setLoudnessAsync") { values: Map<String, Any?> ->
+      val settings = Loudness.fromMap(values)
+      Loudness.write(context, settings)
+      Loudness.changed()
+      Loudness.toMap(settings)
+    }
+
+    // ---- language ----
+
+    /**
+     * Says which language the app is in, as a BCP-47 tag.
+     *
+     * JavaScript calls this as it starts and again whenever the choice is
+     * changed. It is written down on this side because most of what speaks
+     * from here does so when JavaScript is not running: the widget, a car, a
+     * notification for a service the system started. Not a promise, because
+     * the caller has nothing to wait for; whatever is showing words redraws
+     * itself (see [Localised.watch]), and the widget is redrawn from here
+     * since it has no life of its own in which to listen.
+     */
+    Function("setAppLanguage") { tag: String ->
+      if (Localised.set(context, tag)) JukeboxWidget.refresh(context)
+    }
+
+    // ---- sleep timer ----
+
+    /**
+     * Sets a sleep timer, in place of any there was, and answers with it.
+     *
+     * Kept by the playback service and not here: it has to fire with the app
+     * swiped away, when this module no longer exists. So this only passes the
+     * request along, and an answer of `off` to a request that was not for
+     * `off` means there was no service to keep it or nothing to time.
+     */
+    AsyncFunction("setSleepTimerAsync") { request: Map<String, Any?>, promise: Promise ->
+      SleepTimers.set(request) { promise.resolve(it) }
+    }
+
+    AsyncFunction("cancelSleepTimerAsync") { promise: Promise ->
+      SleepTimers.cancel { promise.resolve(it) }
+    }
+
+    AsyncFunction("getSleepTimerAsync") { promise: Promise ->
+      SleepTimers.read { promise.resolve(it) }
+    }
+
     AsyncFunction("setRepeatModeAsync") { mode: String ->
       player?.setRepeatMode(mode)
     }
@@ -547,7 +655,7 @@ class JukeboxAudioModule : Module() {
      */
     AsyncFunction("deleteTracksAsync") Coroutine { ids: List<String> ->
       val launcher = remover
-        ?: throw IllegalStateException("Deleting needs Android 11 or newer.")
+        ?: throw Told(R.string.jukebox_delete_needs_11)
       if (ids.isEmpty()) return@Coroutine false
       // Launching raises a system dialog, which is a main-thread affair.
       withContext(Dispatchers.Main) {

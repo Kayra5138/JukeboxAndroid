@@ -5,6 +5,7 @@ import { isActive, type AudioFormat, type DownloadJob, type YouTubeVideo } from 
 import { ensureNotificationPermission, libraryRoot } from '../media/library';
 import { registerYouTubePlaylist, syncYouTubePlaylists } from '../db/youtubePlaylists';
 import { describeTrack } from '../media/import';
+import { strings } from '../i18n/index';
 
 type DownloadContext = {
   jobs: DownloadJob[];
@@ -45,7 +46,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
         setJobs(next);
         setError(null);
         if (added) setRevision((value) => value + 1);
-      } catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not read downloads.'); }
+      } catch (failure) { setError(failure instanceof Error ? failure.message : strings().search.failed.read); }
     })();
     reading.current = task;
     try { await task; } finally { if (reading.current === task) reading.current = null; }
@@ -83,7 +84,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   }, [descriptionId, trackId, refresh]);
 
   const enqueue = useCallback(async (video: YouTubeVideo, format: AudioFormat) => {
-    if (!downloads) throw new Error('Install a new Android build to enable YouTube downloads.');
+    if (!downloads) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
     await downloads.enqueueAsync(video, format, libraryRoot());
     // An older in-flight read may predate the enqueue. Always read again after
@@ -92,7 +93,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   const enqueueBatch = useCallback(async (videos: YouTubeVideo[], format: AudioFormat) => {
-    if (!downloads) throw new Error('Install a new Android build to enable YouTube downloads.');
+    if (!downloads) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
     registerYouTubePlaylist(videos);
     setRevision((value) => value + 1);

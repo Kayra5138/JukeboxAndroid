@@ -1,3 +1,4 @@
+import { moveOnto } from '../playlists/members.ts';
 import { db } from './index.ts';
 
 export type Playlist = {
@@ -5,6 +6,11 @@ export type Playlist = {
   name: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * How many members are written down, which is not always how many can be
+   * played: a member whose file is outside the library today is still counted
+   * here. A screen that has the library in hand counts against it instead.
+   */
   trackCount: number;
   /** Whose cover stands for the list, or null for the first four in a square. */
   coverTrackId: string | null;
@@ -211,38 +217,40 @@ export function removeFromPlaylist(id: number, trackId: string, at: number): voi
 }
 
 /**
- * Moves the track at [from] to [to], shifting whatever is in between.
+ * Moves one track onto the row another holds, shifting whatever is in between.
+ *
+ * By id rather than by row: the screen shows only the members that are in the
+ * library, so its row numbers are not positions in the list.
  *
  * The whole list is rewritten rather than the affected range patched. A range
  * update is two statements that have to agree about direction and inclusivity,
  * gets the edges wrong in one of the four cases, and saves nothing worth
  * having on lists of the size a person actually makes.
  */
-export function reorderPlaylist(id: number, from: number, to: number, at: number): void {
+export function reorderPlaylist(id: number, movedId: string, targetId: string, at: number): void {
   const database = db();
   database.withTransactionSync(() => {
-    const ids = playlistTrackIds(id);
-    if (from < 0 || from >= ids.length || to < 0 || to >= ids.length || from === to) return;
+    const order = moveOnto(playlistTrackIds(id), movedId, targetId);
+    if (!order) return;
 
-    const [moved] = ids.splice(from, 1);
-    ids.splice(to, 0, moved);
-    write(id, ids);
+    write(id, order);
     database.runSync(`UPDATE playlists SET updated_at = ? WHERE id = ?`, Math.round(at), id);
   });
 }
 
 /**
- * The first few tracks of every list at once, for drawing their covers.
+ * Every list's members at once, in order.
  *
  * One query for the whole screen rather than one per list. The alternative is
  * a round trip per row, which on a screen that exists to show a dozen rows is
  * a dozen round trips before anything is drawn.
+ *
+ * All of them rather than the first few, because which are the first few on
+ * show depends on what the library holds today, and so does the count.
  */
-export function coverTrackIds(each: number): Map<number, string[]> {
+export function playlistMembers(): Map<number, string[]> {
   const rows = db().getAllSync<{ playlist_id: number; track_id: string }>(
-    `SELECT playlist_id, track_id FROM playlist_tracks
-     WHERE position < ? ORDER BY playlist_id, position`,
-    each
+    `SELECT playlist_id, track_id FROM playlist_tracks ORDER BY playlist_id, position`
   );
 
   const byList = new Map<number, string[]>();
@@ -255,30 +263,37 @@ export function coverTrackIds(each: number): Map<number, string[]> {
 }
 
 /**
- * Drops tracks that are no longer on the phone.
+ * Takes tracks out of every list, for files that have been erased.
  *
- * Membership is stored by media store id, and an id stops resolving once its
- * file is deleted. Called with the library that was just scanned, so a list
- * does not quietly accumulate entries that can never play.
+ * The one way a track leaves a list without being taken off it by hand. A
+ * track merely missing from the library is not this: the folder can be
+ * widened again and a card put back, and a list that had dropped its members
+ * in the meantime would have nothing to show for it. Only the user erasing the
+ * file says it is not coming back.
+ *
+ * Runs inside the caller's transaction, alongside everything else forgotten
+ * about the same tracks.
  */
-export function forgetMissingTracks(present: Set<string>): void {
+export function dropFromEveryList(trackIds: string[]): void {
+  if (trackIds.length === 0) return;
+  const placeholders = trackIds.map(() => '?').join(',');
   const database = db();
-  const rows = database.getAllSync<{ playlist_id: number; track_id: string }>(
-    `SELECT playlist_id, track_id FROM playlist_tracks`
-  );
-  const gone = rows.filter((row) => !present.has(row.track_id));
-  if (gone.length === 0) return;
 
-  database.withTransactionSync(() => {
-    for (const row of gone) {
-      database.runSync(
-        `DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?`,
-        row.playlist_id,
-        row.track_id
-      );
-    }
-    for (const id of new Set(gone.map((row) => row.playlist_id))) renumber(id);
-  });
+  const touched = database.getAllSync<{ playlist_id: number }>(
+    `SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id IN (${placeholders})`,
+    ...trackIds
+  );
+  database.runSync(
+    `DELETE FROM playlist_tracks WHERE track_id IN (${placeholders})`,
+    ...trackIds
+  );
+  for (const row of touched) renumber(row.playlist_id);
+
+  // A list cannot go on wearing the cover of a track that no longer exists.
+  database.runSync(
+    `UPDATE playlists SET cover_track_id = NULL WHERE cover_track_id IN (${placeholders})`,
+    ...trackIds
+  );
 }
 
 /** Rewrites positions as 0..n-1 in the order currently held. */

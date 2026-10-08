@@ -178,6 +178,53 @@ async function searchLyrics(
   return null;
 }
 
+/**
+ * Every entry the database holds for this recording, for a caller that wants
+ * one written a particular way.
+ *
+ * The catalogue files a Japanese song several times over: as it was written,
+ * romanised, sometimes translated. The automatic lookup takes the first with
+ * words in it, which is as likely to be the romanised one as not. This is the
+ * same search with the same test — the length has to agree — but answers with
+ * all that pass, and whoever asked picks by what the words are written in.
+ *
+ * Nothing at all for a track whose length is not known. Length is the only
+ * thing here that tells a recording from another of the same name, and words
+ * that are going to be laid line against line under somebody else's have to
+ * be the same recording.
+ */
+export async function fetchLyricsVersions(
+  track: LyricsQuery,
+  signal?: AbortSignal
+): Promise<Lyrics[]> {
+  if (!track.durationSec) return [];
+  const wanted = Math.round(track.durationSec);
+  const title = bareTitle(track.title, track.artist);
+
+  // By name and artist first, then by name alone: the entry in the original
+  // writing is often filed under the artist's name in that writing too, where
+  // an artist spelled in Latin letters does not find it.
+  const searches = track.artist
+    ? [{ artist_name: track.artist, track_name: title }, { track_name: title }]
+    : [{ q: title }];
+
+  const versions: Lyrics[] = [];
+  const seen = new Set<number>();
+  for (const params of searches) {
+    const results = ((await get(`/search?${query(params)}`, signal)) ?? []) as LrcRecord[];
+    for (const record of results) {
+      if (seen.has(record.id)) continue;
+      seen.add(record.id);
+      if (record.duration == null) continue;
+      if (Math.abs(record.duration - wanted) > DURATION_TOLERANCE_SEC) continue;
+      const lyrics = toLyrics(record);
+      if (lyrics) versions.push(lyrics);
+    }
+    if (versions.length > 0) break;
+  }
+  return versions;
+}
+
 export type LyricsCandidate = {
   id: number;
   title: string;

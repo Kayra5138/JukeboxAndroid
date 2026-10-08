@@ -4,11 +4,11 @@ import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SearchField } from './SearchField';
+import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { search } from '../lib/media/search';
 import type { EnrichedTrack } from '../lib/media/merge';
-
-const ACCENT = '#7ab8ff';
+import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 
 /**
  * Picking tracks out of the library to put somewhere.
@@ -37,6 +37,9 @@ export function TrackPicker({
   onAdd: (trackIds: string[]) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(new Set());
 
@@ -64,16 +67,16 @@ export function TrackPicker({
       <Pressable style={styles.backdrop} onPress={close} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
         <View style={styles.head}>
-          <Text style={styles.heading}>Add tracks</Text>
+          <Text style={styles.heading}>{t.lists.trackPicker.heading}</Text>
           <Pressable onPress={close}>
-            <Text style={styles.link}>Done</Text>
+            <Text style={styles.link}>{t.common.done}</Text>
           </Pressable>
         </View>
 
         <SearchField
           value={query}
           onChangeText={setQuery}
-          placeholder="Search the library"
+          placeholder={t.lists.trackPicker.search}
         />
 
         <FlatList
@@ -91,11 +94,12 @@ export function TrackPicker({
             />
           )}
           ListEmptyComponent={
-            <Text style={styles.empty}>Nothing matches “{query}”.</Text>
+            <Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>
           }
         />
 
         <Pressable
+          android_ripple={pressed}
           style={[styles.action, chosen.size === 0 && styles.actionOff]}
           disabled={chosen.size === 0}
           onPress={() => {
@@ -105,9 +109,7 @@ export function TrackPicker({
             setChosen(new Set());
             setQuery('');
           }}>
-          <Text style={styles.actionLabel}>
-            Add {chosen.size} {chosen.size === 1 ? 'track' : 'tracks'}
-          </Text>
+          <Text style={styles.actionLabel}>{t.lists.trackPicker.add(chosen.size)}</Text>
         </Pressable>
       </View>
     </View>
@@ -126,9 +128,12 @@ function Row({
   onPress: () => void;
 }) {
   const artwork = useTrackArtwork(track);
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
 
   return (
-    <Pressable style={styles.row} onPress={onPress} disabled={held}>
+    <Pressable android_ripple={pressed} style={styles.row} onPress={onPress} disabled={held}>
       {artwork ? (
         <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
       ) : (
@@ -139,7 +144,7 @@ function Row({
           {track.title}
         </Text>
         <Text style={styles.artist} numberOfLines={1}>
-          {held ? 'Already in this list' : (track.artist ?? 'Unknown artist')}
+          {held ? t.lists.trackPicker.alreadyHere : (track.artist ?? t.common.unknownArtist)}
         </Text>
       </View>
       <View style={[styles.tick, (ticked || held) && styles.tickOn, held && styles.tickHeld]}>
@@ -149,7 +154,7 @@ function Row({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   layer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   backdrop: {
     position: 'absolute',
@@ -157,7 +162,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#000000cc',
+    backgroundColor: c.scrim,
   },
   sheet: {
     position: 'absolute',
@@ -165,45 +170,46 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: '85%',
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 16,
     paddingHorizontal: 18,
     gap: 12,
+    ...outlined(c),
   },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heading: { color: '#ededed', fontSize: 16, fontWeight: '600' },
-  link: { color: ACCENT, fontSize: 14.5 },
+  heading: { color: c.text, fontSize: 16, fontWeight: '600' },
+  link: { color: c.accent, fontSize: 14.5 },
   list: { flex: 1 },
-  empty: { color: '#6a6a6a', fontSize: 13, paddingVertical: 18, textAlign: 'center' },
+  empty: { color: c.textFaint, fontSize: 13, paddingVertical: 18, textAlign: 'center' },
 
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
   art: { width: 42, height: 42, borderRadius: 6 },
-  artEmpty: { backgroundColor: '#262626' },
+  artEmpty: { backgroundColor: c.surfaceRaised },
   text: { flex: 1, minWidth: 0, gap: 2 },
-  title: { color: '#ededed', fontSize: 14.5 },
-  dim: { color: '#7a7a7a' },
-  artist: { color: '#6a6a6a', fontSize: 12 },
+  title: { color: c.text, fontSize: 14.5 },
+  dim: { color: c.textMuted },
+  artist: { color: c.textFaint, fontSize: 12 },
   tick: {
     width: 22,
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: '#4a4a4a',
+    borderColor: c.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tickOn: { backgroundColor: ACCENT, borderColor: ACCENT },
-  tickHeld: { backgroundColor: '#3a3a3a', borderColor: '#3a3a3a' },
-  dot: { width: 9, height: 9, borderRadius: 2, backgroundColor: '#121212' },
+  tickOn: { backgroundColor: c.accent, borderColor: c.accent },
+  tickHeld: { backgroundColor: c.borderStrong, borderColor: c.borderStrong },
+  dot: { width: 9, height: 9, borderRadius: 2, backgroundColor: c.onAccent },
 
   action: {
     alignItems: 'center',
-    backgroundColor: '#ededed',
+    backgroundColor: c.primary,
     borderRadius: 11,
     paddingVertical: 12,
   },
   actionOff: { opacity: 0.35 },
-  actionLabel: { color: '#121212', fontSize: 15, fontWeight: '600' },
-});
+  actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
+}));

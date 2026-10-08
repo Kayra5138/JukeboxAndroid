@@ -74,7 +74,7 @@ class ImagePicker : AppContextActivityResultContract<ImagePicker.Input, String?>
           if (count < 0) break
           digest.update(bytes, 0, count)
         }
-      } ?: throw IllegalStateException("That picture could not be opened.")
+      } ?: throw Told(R.string.jukebox_picture_not_opened)
 
       val name = digest.digest().joinToString("") { "%02x".format(it) }
       val target = File(directory, "$name.jpg")
@@ -87,7 +87,7 @@ class ImagePicker : AppContextActivityResultContract<ImagePicker.Input, String?>
         BitmapFactory.decodeStream(it, null, bounds)
       }
       if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
-        throw IllegalStateException("That file is not a picture.")
+        throw Told(R.string.jukebox_picture_not_one)
       }
 
       val options = BitmapFactory.Options().apply {
@@ -95,7 +95,7 @@ class ImagePicker : AppContextActivityResultContract<ImagePicker.Input, String?>
       }
       val decoded = context.contentResolver.openInputStream(uri)?.use {
         BitmapFactory.decodeStream(it, null, options)
-      } ?: throw IllegalStateException("That picture could not be read.")
+      } ?: throw Told(R.string.jukebox_picture_not_read)
 
       try {
         val scaled = fit(decoded)
@@ -103,11 +103,11 @@ class ImagePicker : AppContextActivityResultContract<ImagePicker.Input, String?>
           val temporary = File.createTempFile("picked-", ".tmp", directory)
           try {
             temporary.outputStream().use { output ->
-              check(scaled.compress(Bitmap.CompressFormat.JPEG, 90, output)) {
-                "That picture could not be saved."
+              if (!scaled.compress(Bitmap.CompressFormat.JPEG, 90, output)) {
+                throw Told(R.string.jukebox_picture_not_saved)
               }
             }
-            check(temporary.renameTo(target)) { "That picture could not be saved." }
+            if (!temporary.renameTo(target)) throw Told(R.string.jukebox_picture_not_saved)
           } finally {
             temporary.delete()
           }

@@ -461,6 +461,104 @@ const CREDITS = `
   );
 `;
 
+/**
+ * Translations made when a song was taken to be in one language throughout.
+ *
+ * The language was read off the first lines and every line was put through
+ * the model for it, so a song half in Japanese and half in English kept, for
+ * one of its halves, words that were never sung. Nothing in a stored row says
+ * which way it was made, and a translation costs nothing to make again with
+ * the model already on the phone, so they are all let go and made afresh the
+ * next time each is asked for.
+ */
+const TRANSLATIONS_BY_PART = `
+  DELETE FROM lyric_translations;
+`;
+
+/**
+ * What each file looked like when the library last saw it, and which two of
+ * them have been taken for one song.
+ *
+ * Everything the app remembers is filed under the media store's number for a
+ * file, and that number is only good for as long as the file stays put. Copy
+ * it to another card, reformat the card, let the phone rebuild its media
+ * database, and the same song has a new number: its history splits in two,
+ * and its tags, its lyrics and its place in every list are left pointing at
+ * nothing. `track_files` is what makes that recoverable. With a description of
+ * the file each number used to mean, a number that stops turning up can be
+ * recognised in one that has just appeared, and everything moved across.
+ *
+ * A row is not removed because a scan did not return its file. A card can be
+ * out of the phone and a library folder narrowed for months, and a row costs
+ * nothing to keep; it goes only when the app itself erases the file, or when
+ * what was filed under it has been moved to the number the file has now.
+ *
+ * `size` is nullable because a build of the native module from before it was
+ * read does not send one, and `duration_sec` is nought for a file the media
+ * store could not read. `seen_at` is when the description was last written
+ * down, not when the file was last seen: a scan only writes the rows that
+ * have changed, and on most days that is none of them.
+ *
+ * `track_pairs` holds two files that might be one song, and what is to be done
+ * about them. `alike` is two files that are the same to the byte count, both
+ * still there: nothing to do yet, and worth remembering for the day one of
+ * them goes. `asked` is waiting on the user. `apart` is their answer that the
+ * two are different songs, kept so the question is not put again.
+ *
+ * Neither is in a backup. They describe this phone's files, and a scan
+ * rebuilds the first; nothing here is filled in by the migration either, for
+ * the same reason.
+ */
+const TRACK_IDENTITY = `
+  CREATE TABLE IF NOT EXISTS track_files (
+    track_id     TEXT PRIMARY KEY NOT NULL,
+    filename     TEXT,
+    folder       TEXT,
+    title        TEXT,
+    artist       TEXT,
+    duration_sec REAL    NOT NULL,
+    size         INTEGER,
+    seen_at      INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS track_pairs (
+    old_id   TEXT    NOT NULL,
+    new_id   TEXT    NOT NULL,
+    state    TEXT    NOT NULL,
+    noted_at INTEGER NOT NULL,
+    PRIMARY KEY (old_id, new_id)
+  );
+`;
+
+/**
+ * Which listens ListenBrainz has been sent, and which are waiting to be.
+ *
+ * A table beside `plays`, keyed by the listen's row number, rather than a
+ * column on it. Every chart and every count the app draws is a query over
+ * `plays`, and none of them should have to step over a column that is only
+ * about a service most people will never connect; a column would also have
+ * meant a row here for every listen there has ever been, where this holds
+ * nothing at all until somebody connects.
+ *
+ * A listen with no row has never been offered. `queued` is one heard with
+ * sending switched on; `past` is one the user asked to have sent after the
+ * fact, which is what stopping takes back; `sent` was accepted; `skipped`
+ * cannot be sent as it stands -- no artist to give, or refused outright -- and
+ * is kept so that the queue does not jam behind it.
+ *
+ * Not in a backup, and emptied by a restore: a restore writes `plays` again
+ * from the top and the row numbers here would point at other listens.
+ */
+const LISTENBRAINZ_LISTENS = `
+  CREATE TABLE IF NOT EXISTS listenbrainz_listens (
+    play_id INTEGER PRIMARY KEY NOT NULL,
+    state   TEXT    NOT NULL,
+    at      INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS listenbrainz_listens_state ON listenbrainz_listens (state);
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -482,6 +580,9 @@ export const MIGRATIONS: string[] = [
     id TEXT PRIMARY KEY NOT NULL, song_key TEXT NOT NULL, title TEXT NOT NULL,
     artist TEXT NOT NULL, reason TEXT NOT NULL, until_at INTEGER
   );`,
+  TRANSLATIONS_BY_PART,
+  TRACK_IDENTITY,
+  LISTENBRAINZ_LISTENS,
 ];
 
 /**

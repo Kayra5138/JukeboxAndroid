@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 
+import { makeStyles } from '../lib/theme/index';
+
 /** How often a drag is allowed to reach the audio framework, in milliseconds. */
 const SEND_EVERY_MS = 40;
 
@@ -281,6 +283,7 @@ export function Fader({
   onSettle,
   format,
 }: Common & { label: string; height: number }) {
+  const styles = useStyles();
   const travel = height - THUMB;
   const { position, shown, handlers } = useDrag({
     value,
@@ -383,6 +386,7 @@ export function Slider({
   onSettle,
   format,
 }: Common & { label: string; centre?: number }) {
+  const styles = useStyles();
   const [width, setWidth] = useState(0);
   const travel = Math.max(0, width - THUMB);
 
@@ -540,14 +544,14 @@ export function Slider({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   band: { flex: 1, minWidth: 0, alignItems: 'center', gap: 8 },
-  bandValue: { color: '#6a6a6a', fontSize: 11, fontVariant: ['tabular-nums'] },
-  bandLabel: { color: '#6a6a6a', fontSize: 10.5 },
+  bandValue: { color: c.textFaint, fontSize: 11, fontVariant: ['tabular-nums'] },
+  bandLabel: { color: c.textFaint, fontSize: 10.5 },
 
   faderTrack: { width: 34, alignItems: 'center', justifyContent: 'center' },
-  rail: { position: 'absolute', width: TRACK, borderRadius: TRACK / 2, backgroundColor: '#242424' },
-  centreLine: { position: 'absolute', width: 16, height: 1, backgroundColor: '#3a3a3a' },
+  rail: { position: 'absolute', width: TRACK, borderRadius: TRACK / 2, backgroundColor: c.borderStrong },
+  centreLine: { position: 'absolute', width: 16, height: 1, backgroundColor: c.textDisabled },
   fill: { position: 'absolute', width: TRACK, borderRadius: TRACK / 2 },
   thumb: {
     position: 'absolute',
@@ -557,18 +561,18 @@ const styles = StyleSheet.create({
     // Lifted off the rail so the fill running underneath does not read as part
     // of the thumb.
     borderWidth: 3,
-    borderColor: '#121212',
+    borderColor: c.bg,
   },
 
   slider: { gap: 9 },
   sliderHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  sliderLabel: { color: '#ededed', fontSize: 14.5 },
-  sliderValue: { color: '#6a6a6a', fontSize: 13, fontVariant: ['tabular-nums'] },
+  sliderLabel: { color: c.text, fontSize: 14.5 },
+  sliderValue: { color: c.textFaint, fontSize: 13, fontVariant: ['tabular-nums'] },
   sliderTrack: { height: THUMB + 14, justifyContent: 'center' },
-  railWide: { height: TRACK, borderRadius: TRACK / 2, backgroundColor: '#242424' },
+  railWide: { height: TRACK, borderRadius: TRACK / 2, backgroundColor: c.borderStrong },
   // Taller than the rail on purpose: buried inside it, the mark would be lost
   // the moment the thumb rested on top of it.
-  restMark: { position: 'absolute', width: 1, height: 14, backgroundColor: '#4a4a4a' },
+  restMark: { position: 'absolute', width: 1, height: 14, backgroundColor: c.textDisabled },
   fillWide: {
     position: 'absolute',
     left: 0,
@@ -579,4 +583,4 @@ const styles = StyleSheet.create({
   // Pinned to the left edge and moved from there, rather than centred: the
   // thumb has to be able to reach both ends of the rail.
   thumbWide: { left: 0 },
-});
+}));

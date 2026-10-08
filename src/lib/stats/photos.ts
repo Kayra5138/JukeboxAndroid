@@ -1,4 +1,5 @@
 import type { ArtistPhoto } from '../db/artistPhotos.ts';
+import { strings, type Strings } from '../i18n/languages.ts';
 import type { ReportCard } from './report.ts';
 
 /**
@@ -56,9 +57,15 @@ export function pictureFor(
  * Photographer and licence, because that is what the licence asks for and it is
  * short enough to sit in a corner. Where Commons names nobody the licence still
  * has to be stated, so the line keeps its shape and loses only the name.
+ *
+ * The name and the licence are written exactly as they came in whatever [t]
+ * the line is said in: they are the photographer's, and the licence's own
+ * identifier is what makes it one. Only the word in front is translated.
  */
-export function creditLine(photo: ArtistPhoto): string {
-  return photo.credit ? `Photo: ${photo.credit} / ${photo.licence}` : `Photo: ${photo.licence}`;
+export function creditLine(photo: ArtistPhoto, t: Strings = strings()): string {
+  return photo.credit
+    ? t.stats.cards.credit(photo.credit, photo.licence)
+    : t.stats.cards.creditUnnamed(photo.licence);
 }
 
 /**
@@ -69,7 +76,7 @@ export function creditLine(photo: ArtistPhoto): string {
  * card of album covers owes nothing and must stay clean, and a chart showing
  * three photographs by one person says their name once.
  */
-export function creditsOn(card: ReportCard, photos: Photos): string[] {
+export function creditsOn(card: ReportCard, photos: Photos, t: Strings = strings()): string[] {
   const shown: ArtistPhoto[] = [];
 
   if (card.kind === 'ranking' && card.of === 'artists') {
@@ -83,5 +90,5 @@ export function creditsOn(card: ReportCard, photos: Photos): string[] {
     if (photo) shown.push(photo);
   }
 
-  return [...new Set(shown.map(creditLine))];
+  return [...new Set(shown.map((photo) => creditLine(photo, t)))];
 }

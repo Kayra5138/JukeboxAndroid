@@ -1,36 +1,38 @@
 import { StyleSheet } from 'react-native';
 
+import { makeStyles, outlined } from '../../lib/theme/index';
+
 /** What the three tabs of the details screen have in common, so they look like one screen. */
-export const shared = StyleSheet.create({
+export const useShared = makeStyles((c) => StyleSheet.create({
   content: { padding: 20, paddingBottom: 48, gap: 12 },
   section: {
-    color: '#5f5f5f',
+    color: c.textFaint,
     fontSize: 11,
-    textTransform: 'uppercase',
     letterSpacing: 1,
     paddingTop: 18,
   },
   field: { gap: 6 },
-  label: { color: '#9a9a9a', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
+  label: { color: c.textSecondary, fontSize: 12, letterSpacing: 1 },
   input: {
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#2a2a2a',
-    color: '#ededed',
+    borderColor: c.border,
+    color: c.text,
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 11,
+    ...outlined(c),
   },
-  hint: { color: '#5f5f5f', fontSize: 12, lineHeight: 18 },
-  note: { color: '#7ac48a', fontSize: 13 },
-  noteBad: { color: '#e0a085', fontSize: 13 },
-  complaint: { color: '#e0a085', fontSize: 12 },
+  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+  note: { color: c.success, fontSize: 13 },
+  noteBad: { color: c.warning, fontSize: 13 },
+  complaint: { color: c.warning, fontSize: 12 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   action: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ededed',
+    backgroundColor: c.primary,
     borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 18,
@@ -38,15 +40,16 @@ export const shared = StyleSheet.create({
   },
   actionWide: { flex: 1 },
   actionOff: { opacity: 0.35 },
-  actionLabel: { color: '#121212', fontSize: 15, fontWeight: '600' },
+  actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
   button: {
-    backgroundColor: '#252525',
+    backgroundColor: c.surfaceRaised,
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
     minHeight: 44,
     justifyContent: 'center',
+    ...outlined(c),
   },
-  buttonLabel: { color: '#ededed', fontSize: 14 },
-  link: { color: '#7ab8ff', fontSize: 13.5 },
-});
+  buttonLabel: { color: c.text, fontSize: 14 },
+  link: { color: c.accent, fontSize: 13.5 },
+}));

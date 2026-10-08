@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useT } from '../lib/i18n/index';
 import {
   DEFAULT_ROOT,
   ensureAudioPermission,
@@ -11,6 +12,7 @@ import {
   setLibraryRoot,
   type LibraryFolder,
 } from '../lib/media/library';
+import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 
 type Screen =
   | { kind: 'loading' }
@@ -20,6 +22,10 @@ type Screen =
 
 export default function FoldersScreen() {
   const router = useRouter();
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
   // Sideways the cutout sits beside the screen, and a routed screen gets no
   // horizontal inset from the navigator.
   const insets = useSafeAreaInsets();
@@ -64,7 +70,7 @@ export default function FoldersScreen() {
   if (screen.kind === 'loading') {
     return (
       <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color="#f2f2f2" />
+        <ActivityIndicator color={c.text} />
       </View>
     );
   }
@@ -74,11 +80,11 @@ export default function FoldersScreen() {
       <View style={[styles.screen, styles.centered]}>
         <Text style={styles.body}>
           {screen.kind === 'denied'
-            ? 'Jukebox needs access to the audio on this device before it can list any folders.'
+            ? t.library.folders.needsAccess
             : screen.message}
         </Text>
-        <Pressable style={styles.button} onPress={() => void load()}>
-          <Text style={styles.buttonLabel}>Try again</Text>
+        <Pressable android_ripple={pressed} style={styles.button} onPress={() => void load()}>
+          <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
         </Pressable>
       </View>
     );
@@ -91,23 +97,19 @@ export default function FoldersScreen() {
 
   return (
     <View style={[styles.screen, sides]}>
-      <Text style={styles.note}>
-        Jukebox plays everything below the folder you pick, including subfolders.
-        Choosing a subfolder is the way to leave ringtones and game audio out.
-      </Text>
+      <Text style={styles.note}>{t.library.folders.note}</Text>
       <FlatList
         data={options}
         keyExtractor={(folder) => folder.path}
         renderItem={({ item }) => {
           const selected = item.path === current;
           return (
-            <Pressable style={styles.row} onPress={() => choose(item.path)}>
+            <Pressable android_ripple={pressed} style={styles.row} onPress={() => choose(item.path)}>
               <Text style={styles.radio}>{selected ? '●' : '○'}</Text>
               <Text style={[styles.path, selected && styles.pathOn]} numberOfLines={1}>
-                {item.path}
-                {item.path === DEFAULT_ROOT ? '  (everything)' : ''}
+                {item.path === DEFAULT_ROOT ? t.library.folders.everything(item.path) : item.path}
               </Text>
-              <Text style={styles.count}>{item.trackCount}</Text>
+              <Text style={styles.count}>{t.format.number(item.trackCount)}</Text>
             </Pressable>
           );
         }}
@@ -116,18 +118,19 @@ export default function FoldersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  body: { color: '#f2f2f2', fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  body: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   button: {
-    backgroundColor: '#2a2a2a',
+    backgroundColor: c.surfaceRaised,
     borderRadius: 8,
     paddingHorizontal: 18,
     paddingVertical: 12,
+    ...outlined(c),
   },
-  buttonLabel: { color: '#f2f2f2', fontSize: 15 },
-  note: { color: '#9a9a9a', fontSize: 13, lineHeight: 19, padding: 16 },
+  buttonLabel: { color: c.text, fontSize: 15 },
+  note: { color: c.textSecondary, fontSize: 13, lineHeight: 19, padding: 16 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -135,10 +138,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#1e1e1e',
+    borderBottomColor: c.border,
   },
-  radio: { color: '#7ab8ff', fontSize: 16, width: 16 },
-  path: { color: '#c8c8c8', fontSize: 15, flex: 1 },
-  pathOn: { color: '#f2f2f2' },
-  count: { color: '#6a6a6a', fontSize: 13, fontVariant: ['tabular-nums'] },
-});
+  radio: { color: c.accent, fontSize: 16, width: 16 },
+  path: { color: c.textSecondary, fontSize: 15, flex: 1 },
+  pathOn: { color: c.text },
+  count: { color: c.textFaint, fontSize: 13, fontVariant: ['tabular-nums'] },
+}));

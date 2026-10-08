@@ -6,6 +6,7 @@ import type {
   FolderEntry,
   JukeboxAudioEvents,
   LibraryTrack,
+  Loudness,
   PermissionResponse,
   PlayerStatus,
   QueueEntry,
@@ -95,7 +96,54 @@ export type ChartNote = {
   holdMs: number;
 };
 
-declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
+/**
+ * A sleep timer, as the playback service is keeping it.
+ *
+ * Kept there and only reported here: it has to fire with the app swiped away
+ * and the screen off, when there is no JavaScript to fire it.
+ */
+export type SleepTimer = {
+  /** `off` is no timer at all, and what every other field is then is not news. */
+  kind: 'off' | 'duration' | 'endOfTrack';
+  /**
+   * When a duration runs out, in the milliseconds `Date.now()` counts in.
+   *
+   * A moment rather than a time left, so that a countdown is arithmetic done
+   * here once a second and not a question asked across the bridge once a
+   * second. Null where there is nothing to count: the end of a track, or a
+   * duration that has run out and is waiting for one.
+   */
+  endsAt: number | null;
+  /** Whether a duration waits for the track to end rather than cutting it. */
+  finishTrack: boolean;
+  /** Whether the last half minute gets quieter. Never with `finishTrack`. */
+  fade: boolean;
+  /** The time is up and the track is being let finish; the next stop is its end. */
+  finishing: boolean;
+};
+
+/** What to ask for. A new timer always takes the place of the old one. */
+export type SleepTimerRequest =
+  | {
+      kind: 'duration';
+      durationMs: number;
+      /** When the time is up, wait for the track to end. */
+      finishTrack: boolean;
+      /** Left out, the music fades. */
+      fade?: boolean;
+    }
+  | { kind: 'endOfTrack' };
+
+type SleepTimerEvents = {
+  /**
+   * The timer was set, cancelled, fired, or ran out and began waiting for a
+   * track to end. Not sent as it counts down. Never sent by a native module
+   * that predates the timer.
+   */
+  onSleepTimerChange: (event: SleepTimer) => void;
+};
+
+declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & SleepTimerEvents> {
   readonly buildTimestamp?: string;
   downloadArtworkAsync?(url: string): Promise<string>;
   getPermissionsAsync(): Promise<PermissionResponse>;
@@ -212,6 +260,16 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
   deleteTracksAsync(trackIds: string[]): Promise<boolean>;
   setRepeatModeAsync(mode: RepeatMode): Promise<void>;
   /**
+   * Sets a sleep timer in place of any there was, and answers with it.
+   *
+   * When it fires the music is paused, not stopped: the queue and the place in
+   * it are kept. An answer of `off` means it could not be kept -- no playback
+   * service, a duration of nothing, or "end of track" with nothing loaded.
+   */
+  setSleepTimerAsync?(request: SleepTimerRequest): Promise<SleepTimer>;
+  cancelSleepTimerAsync?(): Promise<SleepTimer>;
+  getSleepTimerAsync?(): Promise<SleepTimer>;
+  /**
    * ExoPlayer time-stretches, so `speed` changes tempo while keeping the
    * original pitch, and `pitch` moves independently of it. Both are clamped to
    * 0.25–4.
@@ -224,13 +282,6 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
    * the way back to it. Empty until the session connects.
    */
   getQueueAsync(): Promise<QueueEntry[]>;
-  /**
-   * The equalizer's shape and its current settings, in one read.
-   *
-   * Answers even with nothing playing: what the device can do is written down
-   * the first time it is asked, so the screen draws the same either way and
-   * `attached` is the only difference.
-   */
   /**
    * Asks for a picture and keeps a copy of it, answering with where the copy
    * landed — or null if the user backed out.
@@ -286,19 +337,32 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
    * thing that answers immediately.
    */
   thump?(): void;
+  /**
+   * The equalizer and the tone controls, as they are set, in one read.
+   *
+   * Answers even with nothing playing: the bands are the app's own and are
+   * always there to be set, and `attached` only says whether the phone's
+   * effects have a player to act on yet.
+   */
   getEqualizerAsync?(): Promise<EqualizerState>;
   /**
    * Stores the settings and applies them.
    *
    * All of them at once rather than one field per call, because they are one
    * document on disk — a per-field write would have to read, change and write
-   * it back for every band a drag crosses.
+   * it back for every step of a drag. The player holds whatever it is sent
+   * inside its limits, and changes what is heard without a click.
    *
-   * Answers with the state that resulted, which is not always the state that
-   * was sent: a preset is a curve the device owns, and where it puts the bands
-   * is only knowable afterwards.
+   * Answers with the state that resulted.
    */
   setEqualizerAsync?(settings: EqualizerSettings): Promise<EqualizerState>;
+  /**
+   * Lets the user choose a text file and answers what is in it and what it
+   * is called, or null if they backed out. For importing a headphone
+   * correction saved from AutoEQ. Absent on a build from before the app's
+   * own equalizer; pasting the text needs nothing from the native side.
+   */
+  pickTextFileAsync?(): Promise<{ text: string; name: string | null } | null>;
   /** How one track gives way to the next. Answers even with nothing playing. */
   getTransitionsAsync?(): Promise<Transitions>;
   /**
@@ -309,6 +373,16 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
    * reads these off the disk.
    */
   setTransitionsAsync?(settings: TransitionSettings): Promise<Transitions>;
+  /** Whether tracks are evened out in loudness. Answers even with nothing playing. */
+  getLoudnessAsync?(): Promise<Loudness>;
+  /**
+   * Stores the switch and tells the running player.
+   *
+   * Stored first, like the transitions: the service that plays the next song
+   * may be one started from the widget with no JavaScript anywhere. Absent on
+   * a build from before the feature, where the switch is not offered.
+   */
+  setLoudnessAsync?(settings: Loudness): Promise<Loudness>;
   /**
    * Copies a picture the app has drawn into the gallery, and answers where it
    * landed. Needs no permission: from Android 10 an entry an app inserts into
@@ -329,6 +403,42 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents> {
    * Null where there is no picture to read, so the caller keeps its own.
    */
   coverColoursAsync?(path: string): Promise<string[] | null>;
+  /**
+   * The same three stops, and `main`: the cover's leading colour as it was
+   * found, before the stops were made from it.
+   *
+   * The stops are never colourless — a grey cover's are a dull red, a grey
+   * having no hue and nought being red's — which suits a gradient and misleads
+   * anyone asking what colour a cover is. `main` is the one to ask that of.
+   *
+   * Absent on a build from before it was written, where `coverColoursAsync`
+   * is all there is.
+   */
+  coverReadingAsync?(path: string): Promise<{ stops: string[]; main?: string | null } | null>;
+  /**
+   * The phone's own palette, the one Android 12 and later make from the
+   * wallpaper, for the theme that follows it.
+   *
+   * Four tonal ramps — `accent1`, `accent2`, `neutral1`, `neutral2` — each
+   * thirteen `#rrggbb` colours from white to black, in the order the system
+   * numbers them: 0, 10, 50, 100, 200 and on to 900, 1000. Null before
+   * Android 12, which has no such palette.
+   *
+   * Answers at once rather than with a promise, so it can be read before the
+   * first frame is drawn. Optional because a build from before the app had
+   * themes has no such function.
+   */
+  systemPalette?(): Record<string, string[]> | null;
+  /**
+   * Says which language the app is in, as a BCP-47 tag: `en`, `tr`.
+   *
+   * Everything drawn in Kotlin follows it — the notifications, the widget, a
+   * car's screens, the reasons a download or a write to a file failed — and it
+   * is remembered there, for when they are drawn with no JavaScript running.
+   * A language the native side has no words for is English. Optional because
+   * a build from before the app could change language has no such function.
+   */
+  setAppLanguage?(tag: string): void;
   saveImageAsync?(path: string): Promise<string>;
   /** Saves the picture, then offers it to whatever the reader picks. */
   shareImageAsync?(path: string): Promise<void>;

@@ -18,6 +18,16 @@ import type { Track } from '../types.ts';
 const found = new Map<string, string>();
 
 /**
+ * Forgets the picture found inside a track's file, because the file has just
+ * been written to and may carry another. What was remembered is the address
+ * of a copy made from the file as it was, which the native side clears away
+ * the next time it is asked about the track.
+ */
+export function forgetEmbedded(trackId: string): void {
+  found.delete(trackId);
+}
+
+/**
  * The cover for a track: the picture inside the file, or whatever a lookup
  * turned up for it.
  *

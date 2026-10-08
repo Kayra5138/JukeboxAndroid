@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { search } from '../search.ts';
+import { search, searchNamed } from '../search.ts';
 import type { EnrichedTrack } from '../enriched.ts';
 import { track } from '../../__tests__/support.ts';
 
@@ -82,5 +82,34 @@ describe('search', () => {
 
   it('does not count the same tag twice across tracks', () => {
     assert.deepEqual(search(library, 'pop').matchedTags, ['pop', 'turkish pop']);
+  });
+});
+
+describe('searchNamed', () => {
+  const artists = [{ name: 'Tarkan' }, { name: 'Şebnem Ferah' }, { name: 'the GazettE' }];
+  const folders = [{ path: 'Nirvana/Nevermind' }, { path: 'Tarkan' }, { path: 'Türkçe Pop/90lar' }];
+  const nameOf = (entry: { name: string }) => entry.name;
+  const pathOf = (entry: { path: string }) => entry.path;
+
+  it('hands back everything when nothing has been typed', () => {
+    assert.equal(searchNamed(artists, '  ', nameOf), artists);
+  });
+
+  it('finds an artist by part of the name, through accents and case', () => {
+    assert.deepEqual(searchNamed(artists, 'sebnem', nameOf), [{ name: 'Şebnem Ferah' }]);
+    assert.deepEqual(searchNamed(artists, 'GAZ', nameOf), [{ name: 'the GazettE' }]);
+  });
+
+  it('finds a folder by any step of its path', () => {
+    assert.deepEqual(searchNamed(folders, 'never', pathOf), [{ path: 'Nirvana/Nevermind' }]);
+    assert.deepEqual(searchNamed(folders, 'turkce', pathOf), [{ path: 'Türkçe Pop/90lar' }]);
+  });
+
+  it('reads a slash in what was typed as the slash in a path', () => {
+    assert.deepEqual(searchNamed(folders, 'nirvana/never', pathOf), [{ path: 'Nirvana/Nevermind' }]);
+  });
+
+  it('finds nothing where nothing is called that', () => {
+    assert.deepEqual(searchNamed(artists, 'nirvana', nameOf), []);
   });
 });

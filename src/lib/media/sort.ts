@@ -173,9 +173,10 @@ function arrange<T>(entries: Ranked<T>[], order: SortOrder): T[] {
 /**
  * The most recent of a set of dates, or null when none of them is one.
  *
- * What a record's own date is made of — see {@link sortAlbums}.
+ * What a record's own date is made of — see {@link sortAlbums} — and an
+ * artist's and a folder's after it, which are dated by the same rule.
  */
-function latestOf(dates: (number | null)[]): number | null {
+export function latestOf(dates: (number | null)[]): number | null {
   let newest: number | null = null;
   for (const at of dates) {
     if (at != null && (newest == null || at > newest)) newest = at;

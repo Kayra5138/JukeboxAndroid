@@ -15,10 +15,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 
 import { ReportCardView, type Covers, type Photos, type Tints } from './ReportCards';
+import { useT } from '../../lib/i18n/index';
 import { artistPhotoFor } from '../../lib/media/artistPhotos';
 import { artworkFor } from '../../lib/media/artwork';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import type { ReportCard } from '../../lib/stats/report';
+import { makeStyles, useColours } from '../../lib/theme/index';
 
 /**
  * How much bigger the written-out card is than the one on screen.
@@ -33,6 +35,16 @@ const POSTER = 3;
 /** Nine by sixteen, because that is the shape everything else shares. */
 const SHAPE = 16 / 9;
 
+/**
+ * The cards, and the room they are shown in.
+ *
+ * Two things with two looks. Everything this file draws for itself — the page
+ * behind the card, the close mark, the dots, the note and the two buttons — is
+ * the app, and follows the theme like any other screen. The card is
+ * `ReportCardView`, which is the same in every theme and keeps its own
+ * colours; the line between them is exactly the edge of that component, on
+ * screen and in the copy that is written out.
+ */
 export function ReportViewer({
   cards,
   stamp,
@@ -46,6 +58,8 @@ export function ReportViewer({
 }) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const styles = useStyles();
   const [at, setAt] = useState(0);
   const [busy, setBusy] = useState<'save' | 'share' | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -184,25 +198,25 @@ export function ReportViewer({
       // Both arrive with the native module, so an older APK under a newer
       // bundle says so rather than failing as though the picture were at fault.
       if (how === 'save') {
-        if (!JukeboxAudio.saveImageAsync) throw new Error('Install the updated Android build to save pictures.');
+        if (!JukeboxAudio.saveImageAsync) throw new Error(t.stats.viewer.cannotSave);
         await JukeboxAudio.saveImageAsync(file);
-        setNote('Saved to your gallery.');
+        setNote(t.stats.viewer.saved);
       } else {
-        if (!JukeboxAudio.shareImageAsync) throw new Error('Install the updated Android build to share pictures.');
+        if (!JukeboxAudio.shareImageAsync) throw new Error(t.stats.viewer.cannotShare);
         await JukeboxAudio.shareImageAsync(file);
       }
     } catch (failure) {
-      setNote(failure instanceof Error ? failure.message : 'That did not work. Please try again.');
+      setNote(failure instanceof Error ? failure.message : t.stats.viewer.failed);
     } finally {
       setBusy(null);
     }
-  }, [busy]);
+  }, [busy, t]);
 
   return (
     <Modal visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
         <View style={styles.bar}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t.common.close} onPress={onClose} style={styles.close}>
             <Text style={styles.closeMark}>×</Text>
           </Pressable>
           <View style={styles.dots}>
@@ -234,13 +248,13 @@ export function ReportViewer({
           </Text>
           <View style={styles.actions}>
             <Action
-              label="Save"
+              label={t.common.save}
               busy={busy === 'save'}
               disabled={busy !== null}
               onPress={() => void write('save')}
             />
             <Action
-              label="Share"
+              label={t.stats.viewer.share}
               primary
               busy={busy === 'share'}
               disabled={busy !== null}
@@ -284,6 +298,8 @@ function Action({
   disabled: boolean;
   primary?: boolean;
 }) {
+  const c = useColours();
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -292,7 +308,7 @@ function Action({
       onPress={onPress}
       style={[styles.action, primary && styles.actionPrimary, disabled && styles.actionOff]}>
       {busy ? (
-        <ActivityIndicator color={primary ? '#121212' : '#ededed'} size="small" />
+        <ActivityIndicator color={primary ? c.onPrimary : c.text} size="small" />
       ) : (
         <Text style={[styles.actionLabel, primary && styles.actionLabelPrimary]}>{label}</Text>
       )}
@@ -300,19 +316,19 @@ function Action({
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#0b0b0b' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 44 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  closeMark: { color: '#ededed', fontSize: 28, lineHeight: 30 },
+  closeMark: { color: c.text, fontSize: 28, lineHeight: 30 },
   dots: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
-  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#3a3a3a' },
-  dotOn: { backgroundColor: '#ededed', width: 18 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: c.borderStrong },
+  dotOn: { backgroundColor: c.text, width: 18 },
 
   page: { alignItems: 'center', justifyContent: 'center' },
 
   footer: { paddingHorizontal: 24, paddingTop: 10, gap: 10 },
-  note: { color: '#8a8a8a', fontSize: 12.5, lineHeight: 17, minHeight: 34 },
+  note: { color: c.textMuted, fontSize: 12.5, lineHeight: 17, minHeight: 34 },
   // Bottom right, where a thumb already is.
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
   action: {
@@ -321,12 +337,12 @@ const styles = StyleSheet.create({
     borderRadius: 23,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1f1f1f',
+    backgroundColor: c.surfaceRaised,
   },
-  actionPrimary: { backgroundColor: '#ededed' },
+  actionPrimary: { backgroundColor: c.primary },
   actionOff: { opacity: 0.5 },
-  actionLabel: { color: '#ededed', fontSize: 14.5, fontWeight: '600' },
-  actionLabelPrimary: { color: '#121212' },
+  actionLabel: { color: c.text, fontSize: 14.5, fontWeight: '600' },
+  actionLabelPrimary: { color: c.onPrimary },
 
   offstage: { position: 'absolute', left: -10000, top: 0 },
-});
+}));

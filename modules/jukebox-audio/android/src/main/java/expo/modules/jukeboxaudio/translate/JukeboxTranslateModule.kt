@@ -59,12 +59,30 @@ class JukeboxTranslateModule : Module() {
       bergamot && BergamotTranslator.isModelReady(context, language)
     }.runOnQueue(io)
 
+    /*
+      The three below ask about both ends. The two above only ever asked
+      whether a language could be read, with English taken as where it was
+      going, which was the whole question while English was the only place
+      lyrics went. They are kept as they were for callers that still mean that.
+    */
+    AsyncFunction("isTargetSupportedAsync") { target: String ->
+      bergamot && BergamotTranslator.isTargetSupported(context, target)
+    }.runOnQueue(io)
+
+    AsyncFunction("isPairSupportedAsync") { source: String, target: String ->
+      bergamot && BergamotTranslator.isPairSupported(context, source, target)
+    }.runOnQueue(io)
+
+    AsyncFunction("isPairReadyAsync") { source: String, target: String ->
+      bergamot && BergamotTranslator.isPairReady(context, source, target)
+    }.runOnQueue(io)
+
     AsyncFunction("translateLinesAsync") { lines: List<String>, source: String, target: String ->
       // Logged because a failure here is otherwise invisible: the screen simply
       // shows no translation, which is also what an unsupported language looks
       // like, and the two want different answers from whoever is debugging it.
       BergamotTranslator.translate(context, lines, source, target).also {
-        Log.i(TAG, "Translated ${lines.size} lines from $source")
+        Log.i(TAG, "Translated ${lines.size} lines from $source to $target")
       }
     }.runOnQueue(io)
   }

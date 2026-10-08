@@ -2,18 +2,26 @@ package expo.modules.jukeboxaudio
 
 import android.content.Context
 import android.media.audiofx.BassBoost
-import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
+import expo.modules.jukeboxaudio.equalizer.Parametric
+import expo.modules.jukeboxaudio.equalizer.ParametricSettings
 
 /**
- * The equalizer and the three tone controls beside it.
+ * The equalizer's switch, and the three tone controls beside it.
  *
- * These are Android's own effects, running in the audio framework rather than
- * in this process. That is the whole reason to use them: the filtering happens
- * below the player, on the mix, and moving a slider costs one call — no audio
- * ever passes through JavaScript, so a drag across five bands cannot make a
- * song stutter.
+ * Two kinds of thing answer to that switch. The equalizer itself is the
+ * app's own, a stage in the player's audio chain ([Parametric]); what this
+ * does for it is read its settings off the disk and put them in force. The
+ * bass boost, the surround and the loudness are Android's effects, running
+ * in the audio framework rather than in this process, below the player, on
+ * the mix -- and the rest of this file is about those.
+ *
+ * It used to drive Android's equalizer as well. That one is whatever the
+ * phone makes of it -- five bands on most, at frequencies nobody chose --
+ * and it is no longer touched: no [android.media.audiofx.Equalizer] is
+ * built, so none is in the way of the app's own. What had been set on it is
+ * carried over once; see [EffectsStore.parametric].
  *
  * An effect is bound to an audio session, which belongs to the player, which
  * belongs to [PlaybackService]. So this is a singleton the service hands a
@@ -23,8 +31,7 @@ import android.media.audiofx.Virtualizer
  * and the music should still sound the way it was left.
  *
  * Every construction here is guarded. Which effects a device actually has is up
- * to the device: the equalizer is near universal, the other three are not, and
- * a phone that refuses one of them must still play music.
+ * to the device, and a phone that refuses one of them must still play music.
  */
 object AudioEffects {
   /**
@@ -37,10 +44,23 @@ object AudioEffects {
   /** Loudness above this stops being a boost and starts being distortion. */
   private const val MAX_LOUDNESS_MB = 2_000
 
-  private var equalizer: Equalizer? = null
+  /** The session the effects are on, or zero while there is none. */
+  private var session = 0
   private var bassBoost: BassBoost? = null
   private var virtualizer: Virtualizer? = null
   private var loudness: LoudnessEnhancer? = null
+
+  /**
+   * Puts the app's own equalizer the way it was left.
+   *
+   * Apart from [attach], and before it: this needs no session, and it has to
+   * have happened before the player's audio chain is built, so that the
+   * first buffer through it is already shaped.
+   */
+  @Synchronized
+  fun load(context: Context) {
+    Parametric.publish(EffectsStore.parametric(context).curve(EffectsStore.read(context).enabled))
+  }
 
   /**
    * Binds every effect to [sessionId] and puts the stored settings back.
@@ -53,80 +73,39 @@ object AudioEffects {
   fun attach(context: Context, sessionId: Int) {
     release()
     if (sessionId == 0) return
+    session = sessionId
 
-    equalizer = runCatching { Equalizer(PRIORITY, sessionId) }.getOrNull()
     bassBoost = runCatching { BassBoost(PRIORITY, sessionId) }.getOrNull()
     virtualizer = runCatching { Virtualizer(PRIORITY, sessionId) }.getOrNull()
     loudness = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
 
-    // Written down as soon as they are known, so the settings screen can draw
-    // the right number of sliders at the right frequencies even when nothing
-    // is playing and there is no session to ask.
-    capabilities()?.let { EffectsStore.saveBands(context, it) }
     apply(EffectsStore.read(context))
   }
 
   @Synchronized
   fun release() {
-    runCatching { equalizer?.release() }
     runCatching { bassBoost?.release() }
     runCatching { virtualizer?.release() }
     runCatching { loudness?.release() }
-    equalizer = null
+    session = 0
     bassBoost = null
     virtualizer = null
     loudness = null
   }
 
-  /** What this device's equalizer can actually do, or null while unattached. */
-  @Synchronized
-  fun capabilities(): EffectsStore.Bands? {
-    val eq = equalizer ?: return null
-    return runCatching {
-      val range = eq.bandLevelRange
-      EffectsStore.Bands(
-        count = eq.numberOfBands.toInt(),
-        minMb = range[0].toInt(),
-        maxMb = range[1].toInt(),
-        // Reported in millihertz, which is a unit nobody thinks in. Hertz is
-        // what the labels say, so hertz is what is stored.
-        centresHz = (0 until eq.numberOfBands).map { eq.getCenterFreq(it.toShort()) / 1000 },
-        presets = (0 until eq.numberOfPresets).map { eq.getPresetName(it.toShort()) }
-      )
-    }.getOrNull()
-  }
-
   /**
    * Puts [settings] into effect.
    *
-   * The enabled flag is the master switch for all four: turning the equalizer
-   * off has to turn off the bass boost with it, or half the colouring stays
-   * behind and the switch looks broken.
+   * The enabled flag is the master switch for all of it: turning the
+   * equalizer off has to turn off the bass boost with it, or half the
+   * colouring stays behind and the switch looks broken.
    *
    * Each effect is set on its own and failures are swallowed one at a time,
-   * so a device that refuses the virtualizer still gets its equalizer.
+   * so a device that refuses the virtualizer still gets its bass boost.
    */
   @Synchronized
   fun apply(settings: EffectsStore.Settings) {
-    equalizer?.let { eq ->
-      runCatching {
-        eq.enabled = settings.enabled
-        if (settings.preset >= 0 && settings.preset < eq.numberOfPresets) {
-          eq.usePreset(settings.preset.toShort())
-        } else {
-          val range = eq.bandLevelRange
-          for (band in 0 until eq.numberOfBands) {
-            val level = settings.bands.getOrElse(band.toInt()) { 0 }
-            eq.setBandLevel(
-              band.toShort(),
-              level.coerceIn(range[0].toInt(), range[1].toInt()).toShort()
-            )
-          }
-        }
-      }
-    }
-
-    // The three below are switched off at zero rather than left enabled with
+    // Each is switched off at zero rather than left enabled with
     // nothing to do: an effect in the chain still costs a pass over the audio,
     // and a strength of zero is the user saying they do not want it.
     bassBoost?.let { effect ->
@@ -154,57 +133,49 @@ object AudioEffects {
   }
 
   /**
-   * Applies [settings], stores what they actually came to, and says so.
+   * Stores [settings] and puts them in force, and says what resulted.
    *
-   * The distinction matters for presets. Choosing one hands the curve to the
-   * device, which knows what "Classical" means here and this app does not; the
-   * band levels are then read back out so the faders can show it. Storing what
-   * was asked for instead would leave them sitting wherever they were before,
-   * describing a curve that is no longer in force.
+   * [parametric] is the app's own equalizer, or null to leave it as it is --
+   * which is what a caller that knows nothing of it sends, a backup from
+   * before it existed among them.
+   *
+   * Stored first: the service that plays the next song may be one that has
+   * not started yet. The running players need telling nothing more than the
+   * publish below; their processors read the curve on their next buffer.
    *
    * What comes back is the whole state, so the screen that called this can
    * take the answer as its new truth rather than guessing at one.
    */
   @Synchronized
-  fun update(context: Context, settings: EffectsStore.Settings): Map<String, Any?> {
+  fun update(
+    context: Context,
+    settings: EffectsStore.Settings,
+    parametric: ParametricSettings?
+  ): Map<String, Any?> {
+    EffectsStore.write(context, settings)
+    // A note about the old equalizer has been seen by the time anything is
+    // changed from the screen that shows it, and is not shown again.
+    parametric?.let { EffectsStore.writeParametric(context, it.copy(notice = null)) }
+    load(context)
     apply(settings)
-
-    val effective =
-      if (settings.preset >= 0) levels() ?: settings.bands else settings.bands
-    EffectsStore.write(context, settings.copy(bands = effective))
     return describe(context)
-  }
-
-  /** Where the bands actually sit, which after a preset is not what was sent. */
-  private fun levels(): List<Int>? {
-    val eq = equalizer ?: return null
-    return runCatching {
-      (0 until eq.numberOfBands).map { eq.getBandLevel(it.toShort()).toInt() }
-    }.getOrNull()
   }
 
   /**
    * Everything the settings screen needs, in one read.
    *
-   * The capabilities come from the live equalizer when there is one and from
-   * what was written down last time when there is not, so the sliders are drawn
-   * the same either way — and the note about nothing playing is the only
-   * difference the user sees.
+   * The same with nothing playing as with something: the equalizer is the
+   * app's own and is always there to be set, and the three effects that are
+   * the phone's are taken to be there until a session says otherwise. The
+   * note about nothing playing is the only difference the user sees.
    */
   @Synchronized
   fun describe(context: Context): Map<String, Any?> {
-    val bands = capabilities() ?: EffectsStore.readBands(context)
     val settings = EffectsStore.read(context)
     return mapOf(
-      "attached" to (equalizer != null),
-      "bandCount" to bands.count,
-      "minMb" to bands.minMb,
-      "maxMb" to bands.maxMb,
-      "centresHz" to bands.centresHz,
-      "presets" to bands.presets,
+      "attached" to (session != 0),
       "enabled" to settings.enabled,
-      "preset" to settings.preset,
-      "bands" to List(bands.count) { settings.bands.getOrElse(it) { 0 } },
+      "parametric" to EffectsStore.parametric(context).toMap(),
       "bass" to settings.bass,
       "virtualizer" to settings.virtualizer,
       "loudness" to settings.loudness,

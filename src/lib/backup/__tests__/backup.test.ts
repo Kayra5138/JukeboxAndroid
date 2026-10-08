@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { migrate, type MigrationTarget } from '../../db/migrations.ts';
+import { stringsFor } from '../../i18n/languages.ts';
 import {
   artworkName,
   mergeTables,
@@ -117,6 +118,15 @@ describe('reading a backup', () => {
     );
   });
 
+  it('refuses in Turkish when that is the language', () => {
+    const tr = stringsFor('tr');
+    assert.throws(() => parseBackup('not json', tr), /Jukebox yedeği değil/);
+    assert.throws(
+      () => parseBackup(JSON.stringify({ format: BACKUP_FORMAT + 1, tables: {} }), tr),
+      /daha yeni bir Jukebox/
+    );
+  });
+
   it('keeps a whole row and leaves out one that cannot be made whole', () => {
     const backup = parseBackup(
       wrap({ tables: { plays: [play('1', 10), { track_id: '2', title: 'no clock on it' }, 'junk', null] } })
@@ -158,6 +168,23 @@ describe('reading a backup', () => {
       })
     );
     assert.deepEqual(backup.settings, { 'player:repeat': 'all' });
+  });
+
+  it('does not take a ListenBrainz token, or anything else about that connection, from a file', () => {
+    const backup = parseBackup(
+      JSON.stringify({
+        format: BACKUP_FORMAT,
+        tables: {},
+        settings: {
+          'listenbrainz:token': 'somebody-elses',
+          'listenbrainz:user': 'somebody',
+          'listenbrainz:sending': 'true',
+          'listenbrainz:since': '1',
+          'stats:period': 'year',
+        },
+      })
+    );
+    assert.deepEqual(backup.settings, { 'stats:period': 'year' });
   });
 });
 
@@ -207,6 +234,63 @@ describe('finding a song again', () => {
   it('leaves alone what is not here', () => {
     assert.equal(matchTracks([backed('1', 'gone.mp3', { title: 'Gone' })], library).size, 0);
   });
+
+  // Every record has an intro, and a great many of them are file number one.
+  const intro = local('5', '01 - Intro.mp3', { folder: 'Music/Kid A/', title: 'Intro', artist: 'One', durationSec: 62 });
+
+  it('does not take two songs for one because their files share a name', () => {
+    const mine = backed('20', '01 - Intro.mp3', { folder: 'Music/Kid A/', title: 'Intro', artist: 'One', durationSec: 62 });
+    const other = backed('21', '01 - Intro.mp3', { folder: 'Music/Low/', title: 'Intro', artist: 'Two', durationSec: 95 });
+    const found = matchTracks([mine, other], [intro]);
+    assert.equal(found.get('20'), '5');
+    assert.equal(found.has('21'), false, 'half a minute longer is another song, whatever it is called');
+    assert.equal(matchTracks([other], [intro]).has('21'), false, 'and is no more this one for being asked alone');
+  });
+
+  it('does not believe the folder either when the length says otherwise', () => {
+    // The same place and the same name: a record that was replaced by another.
+    const wanted = backed('20', '01 - Intro.mp3', { folder: 'Music/Kid A/', durationSec: 140 });
+    assert.equal(matchTracks([wanted], [intro]).has('20'), false);
+  });
+
+  // What a deleted song looks like in a backup: its last listen, and no more.
+  const gone = (id: string, extra: Partial<BackupTrack> = {}) =>
+    backed(id, '01 - Intro.mp3', { folder: null, durationSec: null, title: 'Intro', artist: 'One', ...extra });
+
+  it('takes the title and artist for a deleted song, which has no length', () => {
+    const found = matchTracks([gone('30'), gone('31', { artist: 'Two' })], [intro]);
+    assert.equal(found.get('30'), '5');
+    assert.equal(found.has('31'), false, 'the name fits two songs and the artist only one');
+  });
+
+  it('still joins a history that a moved file split in two', () => {
+    const found = matchTracks([backed('5', '01 - Intro.mp3', { folder: 'Music/Kid A/', durationSec: 62 }), gone('30')], [intro]);
+    assert.equal(found.get('5'), '5');
+    assert.equal(found.get('30'), '5');
+  });
+
+  it('places one song on a name alone, and never two', () => {
+    // Untagged, so the title is the file name over again and says nothing.
+    const bare = local('6', 'intro.mp3', { title: 'intro', artist: null });
+    const nameless = (id: string) => gone(id, { filename: 'intro.mp3', title: 'intro', artist: null });
+
+    assert.equal(matchTracks([nameless('40')], [bare]).get('40'), '6', 'nothing against it, and nobody else asking');
+    assert.equal(matchTracks([nameless('40'), nameless('41')], [bare]).size, 0, 'two cannot both be it');
+
+    const found = matchTracks([backed('6', 'intro.mp3', { title: 'intro', artist: null }), nameless('40')], [bare]);
+    assert.equal(found.get('6'), '6');
+    assert.equal(found.has('40'), false, 'the track is spoken for by a song that could prove it');
+  });
+
+  it('does not let a corrected title count against a name', () => {
+    const found = matchTracks([gone('30', { title: 'Intro (2009 Remaster)' })], [intro]);
+    assert.equal(found.get('30'), '5');
+  });
+
+  it('reads a length of nothing as no length', () => {
+    const unread = local('6', 'x.mp3', { title: 'X', durationSec: 0 });
+    assert.equal(matchTracks([backed('50', 'x.mp3', { title: 'X', folder: 'Other/' })], [unread]).get('50'), '6');
+  });
 });
 
 describe('re-addressing a backup', () => {
@@ -232,6 +316,41 @@ describe('re-addressing a backup', () => {
     assert.match(id, /^absent:[0-9a-f]{8}$/);
     assert.notEqual(id, '2', "another phone's 2 is somebody else's song here");
     assert.equal(out.plays[1]!.track_id, id, 'the same missing song is one song');
+  });
+
+  it('keeps two missing songs apart when their files had one name', () => {
+    const missing = [
+      backed('2', '01 - Intro.mp3', { folder: null, durationSec: null, title: 'Intro', artist: 'One' }),
+      backed('3', '01 - Intro.mp3', { folder: null, durationSec: null, title: 'Intro', artist: 'Two' }),
+      // And a third that nothing but the backup's own number tells from the first.
+      backed('4', '01 - Intro.mp3', { folder: null, durationSec: null, title: 'Intro', artist: 'One' }),
+    ];
+    const listens = tables({ plays: [play('2', 10), play('3', 20), play('4', 30), play('2', 40)] });
+    const { tables: out } = remapTables(listens, new Map(), missing, HOME);
+    const ids = out.plays.map((row) => row.track_id as string);
+
+    for (const id of ids) assert.match(id, /^absent:[0-9a-f]{8}$/);
+    assert.equal(new Set(ids).size, 3, 'three songs are three songs');
+    assert.equal(ids[3], ids[0], 'and each is the same song every time');
+
+    const again = remapTables(listens, new Map(), missing, HOME).tables.plays.map((row) => row.track_id);
+    assert.deepEqual(again, ids, 'the same backup comes out the same way twice');
+  });
+
+  it('gives a missing song the id an earlier import gave it', () => {
+    const alone = remapTables(tables({ plays: [play('2', 10)] }), new Map(), [backed('2', 'x.mp3')], HOME);
+    const among = remapTables(
+      tables({ plays: [play('2', 10), play('3', 20)] }),
+      new Map(),
+      [backed('2', 'x.mp3'), backed('3', 'x.mp3', { title: 'Another' })],
+      HOME
+    );
+    assert.equal(among.tables.plays[0]!.track_id, alone.tables.plays[0]!.track_id);
+
+    // A backup made after such an import describes the song by that id.
+    const id = alone.tables.plays[0]!.track_id as string;
+    const back = remapTables(tables({ plays: [play(id, 10)] }), new Map(), [backed(id, 'x.mp3')], HOME);
+    assert.equal(back.tables.plays[0]!.track_id, id);
   });
 
   it('drops what was said about a song that is not here, and counts it', () => {
@@ -542,6 +661,69 @@ describe('the database, there and back', () => {
       database.all<{ key: string; value: string }>('SELECT key, value FROM settings').map((row) => [row.key, row.value])
     );
     assert.deepEqual(all, { 'player:repeat': 'one', 'stats:period': 'year', 'youtube:playlist-imports:v1': '[]' });
+  });
+
+  /*
+    The token is a password in all but name. It must not be in the file, which
+    is the kind of thing that gets sent to people; and a file must not be able
+    to put one on a phone, or sign a phone out of the one it has.
+  */
+  const CONNECTION = `('listenbrainz:token', 'secret-token'), ('listenbrainz:user', 'kayra'),
+    ('listenbrainz:sending', 'true'), ('listenbrainz:since', '1000')`;
+  const connection = {
+    'listenbrainz:token': 'secret-token',
+    'listenbrainz:user': 'kayra',
+    'listenbrainz:sending': 'true',
+    'listenbrainz:since': '1000',
+  };
+  const hostile = {
+    'listenbrainz:token': 'from-the-file',
+    'listenbrainz:user': 'somebody-else',
+    'listenbrainz:sending': 'false',
+  };
+  const settingsOf = (database: BackupDb) =>
+    Object.fromEntries(
+      database.all<{ key: string; value: string }>('SELECT key, value FROM settings').map((row) => [row.key, row.value])
+    );
+
+  it('writes nothing about ListenBrainz into a backup, the token least of all', () => {
+    const { raw, database } = open();
+    raw.exec(`INSERT INTO settings (key, value) VALUES ('player:repeat', 'one'), ${CONNECTION}`);
+    const settings = readSettings(database);
+    assert.deepEqual(settings, { 'player:repeat': 'one' });
+    const file = JSON.stringify({ settings, tables: readTables(database) });
+    assert.equal(file.includes('secret-token'), false);
+    assert.equal(file.includes('listenbrainz'), false);
+  });
+
+  it('leaves the connection as it was when a backup replaces everything else', () => {
+    const { raw, database } = open();
+    raw.exec(`INSERT INTO settings (key, value) VALUES ('player:repeat', 'one'), ${CONNECTION}`);
+    restore(database, emptyTables(), { 'player:repeat': 'all', ...hostile }, 'replace');
+    assert.deepEqual(settingsOf(database), { 'player:repeat': 'all', ...connection });
+  });
+
+  it('leaves the connection as it was when merging, and makes none where there was none', () => {
+    const { raw, database } = open();
+    raw.exec(`INSERT INTO settings (key, value) VALUES ${CONNECTION}`);
+    restore(database, emptyTables(), hostile, 'merge');
+    assert.deepEqual(settingsOf(database), connection);
+
+    for (const mode of ['merge', 'replace'] as const) {
+      const fresh = open().database;
+      restore(fresh, emptyTables(), hostile, mode);
+      assert.deepEqual(settingsOf(fresh), {}, mode);
+    }
+  });
+
+  it('forgets which listens were sent, since a restore numbers them all again', () => {
+    for (const mode of ['merge', 'replace'] as const) {
+      const { raw, database } = open();
+      restore(database, tables({ plays: [play('1', 10), play('2', 20)] }), {}, 'replace');
+      raw.exec(`INSERT INTO listenbrainz_listens (play_id, state, at) VALUES (1, 'sent', 5), (2, 'queued', 5)`);
+      restore(database, tables({ plays: [play('0', 1), play('1', 10), play('2', 20)] }), {}, mode);
+      assert.deepEqual(database.all('SELECT * FROM listenbrainz_listens'), [], mode);
+    }
   });
 
   it('leaves the database as it was if any of it cannot be written', () => {

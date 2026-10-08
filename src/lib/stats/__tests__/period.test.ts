@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { stringsFor } from '../../i18n/languages.ts';
 import {
   bucketsOf,
   busiestHour,
   changeBetween,
   columnHolding,
+  comparisonOf,
   formatDuration,
   longestStreak,
   previousRange,
   rangeOf,
   tally,
+  titleOf,
   type Listen,
   type PeriodId,
 } from '../period.ts';
@@ -336,6 +339,68 @@ describe('formatDuration', () => {
 
   it('has something to say about nothing', () => {
     assert.equal(formatDuration(0), '0s');
+  });
+
+  it('is said in Turkish when asked', () => {
+    const tr = stringsFor('tr');
+    assert.equal(formatDuration(45, tr), '45sn');
+    assert.equal(formatDuration(38 * 60, tr), '38dk');
+    assert.equal(formatDuration(2 * 3600, tr), '2sa');
+    assert.equal(formatDuration(4 * 3600 + 12 * 60, tr), '4sa 12dk');
+  });
+});
+
+describe('how a period is worded', () => {
+  const thursday = at(2026, 9, 24, 14);
+
+  it('is titled and compared in English unless told otherwise', () => {
+    assert.equal(titleOf('day', thursday), 'Today');
+    assert.equal(titleOf('week', thursday), 'This week');
+    assert.equal(titleOf('month', thursday), 'Sep 2026');
+    assert.equal(titleOf('year', thursday), '2026');
+    assert.equal(titleOf('all', thursday), 'All time');
+    assert.equal(comparisonOf('day'), 'vs yesterday');
+    assert.equal(comparisonOf('year'), 'vs last year');
+    assert.equal(comparisonOf('all'), '');
+  });
+
+  it('is titled and compared in Turkish', () => {
+    const tr = stringsFor('tr');
+    assert.equal(titleOf('day', thursday, tr), 'Bugün');
+    assert.equal(titleOf('week', thursday, tr), 'Bu hafta');
+    assert.equal(titleOf('month', thursday, tr), 'Eyl 2026');
+    assert.equal(titleOf('year', thursday, tr), '2026');
+    assert.equal(titleOf('all', thursday, tr), 'Tüm zamanlar');
+    assert.equal(comparisonOf('week', tr), 'geçen haftaya göre');
+    assert.equal(comparisonOf('all', tr), '');
+  });
+
+  it('names the columns in Turkish, and still begins the week on Monday', () => {
+    const tr = stringsFor('tr');
+    const week = bucketsOf('week', thursday, null, tr);
+    assert.equal(week[0].label, 'Pzt');
+    assert.equal(week[6].label, 'Paz');
+    assert.equal(new Date(week[0].start).getDay(), 1);
+    // The same columns as in English, to the millisecond: only the names differ.
+    assert.deepEqual(
+      week.map((bucket) => [bucket.start, bucket.end, bucket.major]),
+      bucketsOf('week', thursday).map((bucket) => [bucket.start, bucket.end, bucket.major])
+    );
+    assert.equal(bucketsOf('year', thursday, null, tr)[1].label, 'Ş');
+    assert.equal(bucketsOf('all', at(2026, 3, 10), at(2026, 2, 1), tr)[0].label, 'Şub');
+  });
+
+  it('says a column in full, in the order each language says a date', () => {
+    const day = new Date(2026, 8, 24);
+    assert.equal(stringsFor('en').stats.chart.day(day), 'Thursday 24 September');
+    assert.equal(stringsFor('en').stats.chart.month(day), 'September 2026');
+    assert.equal(stringsFor('tr').stats.chart.day(day), '24 Eylül Perşembe');
+    assert.equal(stringsFor('tr').stats.chart.month(day), 'Eylül 2026');
+  });
+
+  it('writes capitals with both Turkish letters i', () => {
+    assert.equal(stringsFor('tr').format.upper('Dinlenme ışığı'), 'DİNLENME IŞIĞI');
+    assert.equal(stringsFor('en').format.upper('This week'), 'THIS WEEK');
   });
 });
 

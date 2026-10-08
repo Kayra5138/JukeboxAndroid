@@ -10,19 +10,19 @@ object YouTubeData {
   private val hosts = setOf("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be", "www.youtu.be")
 
   fun url(id: String): String {
-    require(videoId.matches(id)) { "Invalid YouTube video." }
+    if (!videoId.matches(id)) throw YouTubeTrouble(Failure.INVALID_VIDEO)
     return "https://www.youtube.com/watch?v=$id"
   }
 
   fun input(text: String): String {
     val value = text.trim()
-    require(value.isNotEmpty() && value.length <= 500) { "Enter a song, artist or YouTube link (up to 500 characters)." }
+    if (value.isEmpty() || value.length > 500) throw YouTubeTrouble(Failure.QUERY)
     if (!value.contains("://") && !value.startsWith("www.") &&
       !value.startsWith("youtu.be/") && !value.startsWith("youtube.com/") &&
       !value.startsWith("music.youtube.com/") && !value.startsWith("m.youtube.com/")) return "ytsearch20:$value"
     val uri = URI(if (value.contains("://")) value else "https://$value")
-    require(uri.scheme?.lowercase() in setOf("http", "https") && uri.host?.lowercase() in hosts && uri.userInfo == null && uri.port == -1) {
-      "Use a YouTube video link or search by song name."
+    if (!(uri.scheme?.lowercase() in setOf("http", "https") && uri.host?.lowercase() in hosts && uri.userInfo == null && uri.port == -1)) {
+      throw YouTubeTrouble(Failure.VIDEO_LINK)
     }
     val segments = uri.path.orEmpty().split('/').filter { it.isNotEmpty() }
     val id = when {
@@ -31,13 +31,13 @@ object YouTubeData {
       uri.path == "/watch" -> uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("v=") }?.substring(2)
       else -> null
     }
-    require(id != null && videoId.matches(id)) { "Use a video link, or open Playlist for playlist links." }
+    if (id == null || !videoId.matches(id)) throw YouTubeTrouble(Failure.NOT_A_VIDEO)
     return url(id)
   }
 
   fun playlistQuery(text: String): String {
     val value = text.trim()
-    require(value.length in 1..500) { "Enter a playlist name or paste a YouTube playlist link." }
+    if (value.length !in 1..500) throw YouTubeTrouble(Failure.PLAYLIST_QUERY)
     if (value.contains("://") || value.startsWith("www.") || value.startsWith("youtube.com/") ||
       value.startsWith("m.youtube.com/") || value.startsWith("music.youtube.com/") || value.startsWith("youtu.be/")) return playlistInput(value)
     return "https://www.youtube.com/results?search_query=${URLEncoder.encode(value, "UTF-8")}&sp=EgIQAw%3D%3D"
@@ -60,13 +60,13 @@ object YouTubeData {
 
   fun playlistInput(text: String): String {
     val value = text.trim()
-    require(value.length in 1..500) { "Paste a YouTube playlist link." }
+    if (value.length !in 1..500) throw YouTubeTrouble(Failure.PLAYLIST_LINK)
     val uri = URI(if (value.contains("://")) value else "https://$value")
-    require(uri.scheme?.lowercase() in setOf("http", "https") && uri.host?.lowercase() in hosts && uri.userInfo == null && uri.port == -1) {
-      "Paste a YouTube playlist link."
+    if (!(uri.scheme?.lowercase() in setOf("http", "https") && uri.host?.lowercase() in hosts && uri.userInfo == null && uri.port == -1)) {
+      throw YouTubeTrouble(Failure.PLAYLIST_LINK)
     }
     val id = uri.rawQuery.orEmpty().split('&').firstOrNull { it.startsWith("list=") }?.substring(5)
-    require(id != null && Regex("[A-Za-z0-9_-]{2,150}").matches(id)) { "This link does not contain a playlist." }
+    if (id == null || !Regex("[A-Za-z0-9_-]{2,150}").matches(id)) throw YouTubeTrouble(Failure.NO_PLAYLIST)
     return "https://www.youtube.com/playlist?list=$id"
   }
 
@@ -92,8 +92,8 @@ object YouTubeData {
 
   fun folder(value: String): String {
     val parts = value.trim('/').split('/')
-    require(parts.firstOrNull() == "Music" && parts.none { it.isBlank() || it == "." || it == ".." || it.contains('\\') }) {
-      "Choose a folder inside Music."
+    if (parts.firstOrNull() != "Music" || parts.any { it.isBlank() || it == "." || it == ".." || it.contains('\\') }) {
+      throw YouTubeTrouble(Failure.FOLDER)
     }
     return parts.joinToString("/")
   }

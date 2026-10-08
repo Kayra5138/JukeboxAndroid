@@ -2,7 +2,11 @@ import { db, readSetting, writeSetting } from '../db/index.ts';
 import type { Discovery } from '../db/discover.ts';
 import type { Track } from '../types.ts';
 import { DAY, settingsFrom, songKey, type DiscoverSettings } from './policy.ts';
-export type Entry = Discovery & { familiar: boolean; score: number; tags?: string[]; durationSec?: number | null; jobId?: string; track?: Track; error?: string };
+export type Entry = Discovery & { familiar: boolean; score: number; tags?: string[]; durationSec?: number | null; jobId?: string; track?: Track; error?: string; errorCode?: string };
+/*
+  `errorCode` came later than `error` and is absent from every entry stored
+  before it, which is read as it always was: by its words.
+*/
 export type Snapshot = { entries: Entry[]; pool: Entry[]; refreshedAt: number; retired: string[]; pending?: Entry[]; pendingRejected?: string[] };
 export function readDiscoverSettings(): DiscoverSettings {
   try { return settingsFrom(JSON.parse(readSetting('discover:settings') ?? '{}')); } catch { return settingsFrom(null); }

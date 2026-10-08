@@ -1,4 +1,4 @@
-import { request, sleep } from './http.ts';
+import { asThrottle, request, sleep, statusOf } from './http.ts';
 import { identify } from './identify.ts';
 import { foldForMatch, matchScore, tokens } from './text.ts';
 import type { Track } from '../types.ts';
@@ -121,11 +121,14 @@ async function searchStorefront(
 
   // A refusal is raised rather than believed: 403 means the rate limit was hit,
   // and recording "not found" for a track that was never looked up is worse
-  // than looking it up again later.
+  // than looking it up again later. Raised *as* a throttle, because to anyone
+  // who only sees the number a 403 is a question that was wrong.
   const body = await paced(
     () => request<{ results?: ItunesResult[] }>(`iTunes ${storefront}`, url, {}, signal),
     signal
-  );
+  ).catch((error: unknown) => {
+    throw statusOf(error) === 403 ? asThrottle(error) : error;
+  });
 
   let best: ItunesMatch | null = null;
   for (const result of body.results ?? []) {

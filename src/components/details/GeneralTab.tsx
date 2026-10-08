@@ -19,18 +19,23 @@ import {
   type TrackMetadata,
 } from '../../lib/db/metadata';
 import { tagsFor } from '../../lib/db/tags';
+import { canWriteFiles, lineFor, writable, writeToFiles } from '../../lib/filetags';
 import { formatDateTime } from '../../lib/format/date';
+import { useT, type Strings } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
 import { artworkChanged } from '../../lib/media/artworkEvents';
+import type { EnrichedTrack } from '../../lib/media/enriched';
 import { isAbortError } from '../../lib/metadata/http';
+import { usePlayerState } from '../../lib/player/PlayerProvider';
 import {
   lookUpGeneral,
   numberComplaint,
   typedPlace,
   typedYear,
 } from '../../lib/metadata/single';
+import { makeStyles, useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
-import { shared } from './styles';
+import { useShared } from './styles';
 
 type Fields = {
   title: string;
@@ -41,13 +46,13 @@ type Fields = {
   discNumber: string;
 };
 
-const FIELDS: { key: keyof Fields; label: string; number?: 'year' | 'place' }[] = [
-  { key: 'title', label: 'Title' },
-  { key: 'artist', label: 'Artist' },
-  { key: 'album', label: 'Album' },
-  { key: 'year', label: 'Release year', number: 'year' },
-  { key: 'trackNumber', label: 'Track number', number: 'place' },
-  { key: 'discNumber', label: 'Disc number', number: 'place' },
+const FIELDS: { key: keyof Fields; number?: 'year' | 'place' }[] = [
+  { key: 'title' },
+  { key: 'artist' },
+  { key: 'album' },
+  { key: 'year', number: 'year' },
+  { key: 'trackNumber', number: 'place' },
+  { key: 'discNumber', number: 'place' },
 ];
 
 /**
@@ -60,28 +65,30 @@ type Cover = { kind: 'kept' } | { kind: 'chosen'; uri: string } | { kind: 'remov
 
 const SOURCE_NAMES = { musicbrainz: 'MusicBrainz', itunes: 'Apple' } as const;
 
-function formatDuration(seconds: number): string {
-  if (seconds <= 0) return 'unknown';
+function formatDuration(seconds: number, t: Strings): string {
+  if (seconds <= 0) return t.details.general.unknown;
   const total = Math.round(seconds);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
-function formatListened(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)} seconds`;
+function formatListened(seconds: number, t: Strings): string {
+  const said = t.details.general;
+  if (seconds < 60) return said.listenedSeconds(Math.round(seconds));
   const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes} minutes`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  if (minutes < 60) return said.listenedMinutes(minutes);
+  return said.listenedHours(Math.floor(minutes / 60), minutes % 60);
 }
 
-function formatPlayed(timestamp: number | null): string {
-  return timestamp ? formatDateTime(new Date(timestamp)) : 'never';
+function formatPlayed(timestamp: number | null, t: Strings): string {
+  return timestamp ? formatDateTime(new Date(timestamp), t) : t.details.general.never;
 }
 
-function cameFrom(stored: TrackMetadata | null): string {
-  if (!stored) return 'not looked up';
-  if (stored.status === 'manual') return 'your edit';
-  if (stored.status === 'not_found') return 'not found';
-  return stored.source === 'itunes' ? 'Apple' : stored.source === 'musicbrainz' ? 'MusicBrainz' : (stored.source ?? 'a lookup');
+function cameFrom(stored: TrackMetadata | null, t: Strings): string {
+  const from = t.details.general.from;
+  if (!stored) return from.notLookedUp;
+  if (stored.status === 'manual') return from.yourEdit;
+  if (stored.status === 'not_found') return from.notFound;
+  return stored.source === 'itunes' ? 'Apple' : stored.source === 'musicbrainz' ? 'MusicBrainz' : (stored.source ?? from.lookup);
 }
 
 /** What is known of the track, with the file's own word where nothing better is. */
@@ -99,6 +106,7 @@ function fieldsOf(track: Track, stored: TrackMetadata | null): Fields {
 }
 
 function Row({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -118,13 +126,20 @@ function Row({ label, value }: { label: string; value: string }) {
  * Nothing here is written until Save. A lookup fills the fields in and stops,
  * because a catalogue can come back with another recording of the same song
  * and the person looking at it is the one who can tell.
+ *
+ * Save writes to the app's own database and never to the song. Putting what
+ * is saved into the file itself is a separate button further down, pressed on
+ * purpose, and nothing else on this screen does it.
  */
 export function GeneralTab({
   track,
+  shown: merged,
   onChanged,
 }: {
   /** As the library reads it, before anything looked up or typed is laid over it. */
   track: Track;
+  /** The same track as the app shows it, which is what Write to file writes. */
+  shown: EnrichedTrack;
   /** Told after a save or a discard, so whatever shows the track can read it again. */
   onChanged: () => void;
 }) {
@@ -136,8 +151,18 @@ export function GeneralTab({
   const [listening, setListening] = useState<TrackListening | null>(null);
   const [looking, setLooking] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  const [writing, setWriting] = useState(false);
+  /** What became of the last Write to file, kept apart from what Save says. */
+  const [fileNote, setFileNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  const { current: playing } = usePlayerState();
   const current = useTrackArtwork(track);
   const search = useRef<AbortController | null>(null);
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const shared = useShared();
+  const pressed = usePressed();
+  const said = t.details.general;
 
   useEffect(() => () => search.current?.abort(), []);
 
@@ -156,6 +181,7 @@ export function GeneralTab({
     reset();
     setListening(listeningFor(track.id));
     setNote(null);
+    setFileNote(null);
     let cancelled = false;
     void JukeboxAudio.getEmbeddedArtworkAsync(track.id)
       .then((uri) => {
@@ -174,12 +200,13 @@ export function GeneralTab({
   const shown =
     cover.kind === 'chosen' ? cover.uri : cover.kind === 'removed' ? embedded : current;
   // Only a cover of the app's own can be taken off. The picture inside the
-  // file is the file's, and this screen does not write to files.
+  // file is the file's, and taking one out of a file is not something this
+  // app does.
   const removable =
     cover.kind === 'chosen' || (cover.kind === 'kept' && Boolean(stored?.artworkUrl));
 
   const complaints = FIELDS.map((field) =>
-    field.number ? numberComplaint(fields[field.key], field.number) : null
+    field.number ? numberComplaint(fields[field.key], field.number, t) : null
   );
   const valid = complaints.every((complaint) => complaint == null);
 
@@ -189,15 +216,15 @@ export function GeneralTab({
       // Null is backing out of the gallery, which changes nothing.
       if (picked) {
         setCover({ kind: 'chosen', uri: picked });
-        setNote({ text: 'Cover chosen. Save to keep it.' });
+        setNote({ text: said.coverChosen });
       }
     } catch (error) {
       setNote({
-        text: error instanceof Error ? error.message : 'That picture would not load.',
+        text: error instanceof Error ? error.message : t.common.pictureFailed,
         bad: true,
       });
     }
-  }, []);
+  }, [said]);
 
   const lookUp = useCallback(async () => {
     search.current?.abort();
@@ -219,7 +246,7 @@ export function GeneralTab({
       );
       if (controller.signal.aborted) return;
       if (!found) {
-        setNote({ text: 'Nothing was found for that title and artist.', bad: true });
+        setNote({ text: said.nothingFound, bad: true });
         return;
       }
       if (found.credit) saveCredit(found.credit.text, found.credit.oneArtist);
@@ -245,17 +272,16 @@ export function GeneralTab({
         }
       }
 
-      const names = found.sources.map((source) => SOURCE_NAMES[source]).join(' and ');
       setNote({
-        text: `Found on ${names}${withCover ? ', cover included' : ''}. Check it, then save to keep it.`,
+        text: said.found(found.sources.map((source) => SOURCE_NAMES[source]), withCover),
       });
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
-      setNote({ text: 'The search did not get through.', bad: true });
+      setNote({ text: t.details.searchFailed, bad: true });
     } finally {
       if (!controller.signal.aborted) setLooking(false);
     }
-  }, [track, fields.title, fields.artist, fields.album]);
+  }, [track, fields.title, fields.artist, fields.album, t, said]);
 
   const save = useCallback(() => {
     if (!valid) return;
@@ -282,9 +308,9 @@ export function GeneralTab({
     });
     artworkChanged();
     reset();
-    setNote({ text: 'Saved.' });
+    setNote({ text: t.common.saved });
     onChanged();
-  }, [valid, track, fields, cover, reset, onChanged]);
+  }, [valid, track, fields, cover, reset, onChanged, t]);
 
   const discard = useCallback(() => {
     // The row and nothing else. The tags are edited in their own tab, and
@@ -292,57 +318,91 @@ export function GeneralTab({
     forgetMetadata([track.id], true);
     artworkChanged();
     reset();
-    setNote({ text: 'Your edit is gone. A lookup can fill this in again.' });
+    setNote({ text: said.editGone });
     onChanged();
-  }, [track.id, reset, onChanged]);
+  }, [track.id, reset, onChanged, said]);
+
+  // Anything typed or chosen and not yet saved. What goes into the file is
+  // what is saved, so with this true the fields on screen and the file would
+  // end up saying different things, and the button waits for Save.
+  const asSaved = fieldsOf(track, stored);
+  const unsaved =
+    cover.kind !== 'kept' || FIELDS.some((field) => fields[field.key] !== asSaved[field.key]);
+
+  /**
+   * Writes what the app shows for this track into the file.
+   *
+   * The system asks first. Backing out of that is not an error and changes
+   * nothing, and is said as plainly as a write is.
+   */
+  const writeFile = useCallback(async () => {
+    setWriting(true);
+    setFileNote(null);
+    try {
+      const outcomes = await writeToFiles([merged], { playingId: playing?.id ?? null });
+      const result = outcomes?.[0]?.result;
+      if (!result) {
+        setFileNote({ text: said.nothingWritten });
+        return;
+      }
+      setFileNote({ text: lineFor(result, t), bad: result.status === 'failed' || result.status === 'skipped' });
+      // The file's own tags are different now, and the rows below show them.
+      if (result.status === 'written') onChanged();
+    } catch (error) {
+      setFileNote({
+        text: error instanceof Error ? error.message : said.couldNotWrite,
+        bad: true,
+      });
+    } finally {
+      setWriting(false);
+    }
+  }, [merged, playing?.id, onChanged, t, said]);
 
   return (
     <FormScroll contentContainerStyle={shared.content}>
       <View style={styles.coverRow}>
-        <Pressable onPress={() => void pick()} accessibilityLabel="Choose a cover from the gallery">
+        <Pressable onPress={() => void pick()} accessibilityLabel={said.chooseCoverLabel}>
           {shown ? (
             <Image source={{ uri: shown }} style={styles.cover} contentFit="cover" />
           ) : (
             <View style={[styles.cover, styles.coverEmpty]}>
-              <Text style={styles.coverEmptyLabel}>No cover</Text>
+              <Text style={styles.coverEmptyLabel}>{said.noCover}</Text>
             </View>
           )}
         </Pressable>
         <View style={styles.coverActions}>
-          <Pressable style={shared.button} onPress={() => void pick()}>
-            <Text style={shared.buttonLabel}>Choose from gallery</Text>
+          <Pressable android_ripple={pressed} style={shared.button} onPress={() => void pick()}>
+            <Text style={shared.buttonLabel}>{said.chooseFromGallery}</Text>
           </Pressable>
           {removable ? (
-            <Pressable style={shared.button} onPress={() => setCover({ kind: 'removed' })}>
-              <Text style={shared.buttonLabel}>Remove cover</Text>
+            <Pressable android_ripple={pressed} style={shared.button} onPress={() => setCover({ kind: 'removed' })}>
+              <Text style={shared.buttonLabel}>{said.removeCover}</Text>
             </Pressable>
           ) : null}
           {cover.kind !== 'kept' ? (
             <Pressable onPress={() => setCover({ kind: 'kept' })}>
-              <Text style={shared.link}>Keep the one it had</Text>
+              <Text style={shared.link}>{said.keepCover}</Text>
             </Pressable>
           ) : null}
         </View>
       </View>
 
       <Pressable
+        android_ripple={pressed}
         style={[shared.action, looking && shared.actionOff]}
         disabled={looking}
         onPress={() => void lookUp()}>
         {looking ? (
-          <ActivityIndicator color="#121212" />
+          <ActivityIndicator color={c.onPrimary} />
         ) : (
-          <Text style={shared.actionLabel}>Look up</Text>
+          <Text style={shared.actionLabel}>{t.details.lookUp}</Text>
         )}
       </Pressable>
-      <Text style={shared.hint}>
-        Searches for the title and artist as they are written below, and fills in what it
-        finds: names, album, year, place on the record and cover.
-      </Text>
+      <Text style={shared.hint}>{said.lookUpHint}</Text>
 
       {FIELDS.map((field, index) => (
         <View key={field.key} style={shared.field}>
-          <Text style={shared.label}>{field.label}</Text>
+          <Text style={shared.label}>{t.format.upper(said.fields[field.key])}</Text>
           <TextField
             style={shared.input}
             value={fields[field.key]}
@@ -359,55 +419,88 @@ export function GeneralTab({
 
       <View style={shared.actions}>
         <Pressable
+          android_ripple={pressed}
           style={[shared.action, shared.actionWide, !valid && shared.actionOff]}
           disabled={!valid}
           onPress={save}>
-          <Text style={shared.actionLabel}>Save</Text>
+          <Text style={shared.actionLabel}>{t.common.save}</Text>
         </Pressable>
         {stored?.status === 'manual' ? (
-          <Pressable style={shared.button} onPress={discard}>
-            <Text style={shared.buttonLabel}>Discard my edit</Text>
+          <Pressable android_ripple={pressed} style={shared.button} onPress={discard}>
+            <Text style={shared.buttonLabel}>{said.discard}</Text>
           </Pressable>
         ) : null}
       </View>
-      <Text style={shared.hint}>
-        What is saved here is kept as yours: looking the library up again will leave this
-        track alone rather than write over it.
-      </Text>
+      <Text style={shared.hint}>{said.saveHint}</Text>
 
-      {listening ? (
+      {/* Not drawn at all where it cannot be done: Android 10, or a build of
+          the native side from before it could. */}
+      {canWriteFiles() ? (
         <>
-          <Text style={shared.section}>Listening</Text>
-          <Row label="Times played" value={String(listening.playCount)} />
-          <Row label="Played to the end" value={String(listening.completedCount)} />
-          <Row label="Time spent" value={formatListened(listening.totalSeconds)} />
-          <Row label="First played" value={formatPlayed(listening.firstPlayed)} />
-          <Row label="Last played" value={formatPlayed(listening.lastPlayed)} />
+          <Text style={shared.section}>{t.format.upper(said.inFile)}</Text>
+          {writable(track) ? (
+            <>
+              <Pressable
+                android_ripple={pressed}
+                style={[shared.button, styles.fileButton, (writing || unsaved) && shared.actionOff]}
+                disabled={writing || unsaved}
+                accessibilityRole="button"
+                accessibilityLabel={said.writeLabel}
+                accessibilityState={{ disabled: writing || unsaved, busy: writing }}
+                onPress={() => void writeFile()}>
+                {writing ? (
+                  <ActivityIndicator color={c.text} />
+                ) : (
+                  <Text style={shared.buttonLabel}>{said.writeToFile}</Text>
+                )}
+              </Pressable>
+              <Text style={shared.hint}>{unsaved ? said.saveFirst : said.writeHint}</Text>
+            </>
+          ) : (
+            <Text style={shared.hint}>{said.cannotWrite}</Text>
+          )}
+          {fileNote ? (
+            <Text style={fileNote.bad ? shared.noteBad : shared.note} accessibilityLiveRegion="polite">
+              {fileNote.text}
+            </Text>
+          ) : null}
         </>
       ) : null}
 
-      <Text style={shared.section}>File</Text>
-      <Row label="Name" value={track.filename ?? 'unknown'} />
-      <Row label="Folder" value={track.folder ?? 'unknown'} />
-      <Row label="Length" value={formatDuration(track.durationSec)} />
-      <Row label="Details from" value={cameFrom(stored)} />
+      {listening ? (
+        <>
+          <Text style={shared.section}>{t.format.upper(said.listening)}</Text>
+          <Row label={said.timesPlayed} value={t.format.number(listening.playCount)} />
+          <Row label={said.playedToEnd} value={t.format.number(listening.completedCount)} />
+          <Row label={said.timeSpent} value={formatListened(listening.totalSeconds, t)} />
+          <Row label={said.firstPlayed} value={formatPlayed(listening.firstPlayed, t)} />
+          <Row label={said.lastPlayed} value={formatPlayed(listening.lastPlayed, t)} />
+        </>
+      ) : null}
+
+      <Text style={shared.section}>{t.format.upper(said.file)}</Text>
+      <Row label={said.name} value={track.filename ?? said.unknown} />
+      <Row label={said.folder} value={track.folder ?? said.unknown} />
+      <Row label={said.length} value={formatDuration(track.durationSec, t)} />
+      <Row label={said.detailsFrom} value={cameFrom(stored, t)} />
     </FormScroll>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   coverRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   cover: { width: 124, height: 124, borderRadius: 10 },
   coverEmpty: {
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surfaceRaised,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#2a2a2a',
+    borderColor: c.border,
   },
-  coverEmptyLabel: { color: '#5f5f5f', fontSize: 12 },
+  coverEmptyLabel: { color: c.textFaint, fontSize: 12 },
   coverActions: { flex: 1, gap: 10, alignItems: 'flex-start' },
   row: { flexDirection: 'row', justifyContent: 'space-between', gap: 20, paddingVertical: 7 },
-  rowLabel: { color: '#7a7a7a', fontSize: 13.5 },
-  rowValue: { color: '#ededed', fontSize: 13.5, flexShrink: 1, textAlign: 'right' },
-});
+  rowLabel: { color: c.textMuted, fontSize: 13.5 },
+  rowValue: { color: c.text, fontSize: 13.5, flexShrink: 1, textAlign: 'right' },
+  fileButton: { alignSelf: 'flex-start', alignItems: 'center', minWidth: 132 },
+}));

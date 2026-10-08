@@ -1,6 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 
+import { useColours } from '../lib/theme/index';
+
 /**
  * Transport icons drawn from plain views rather than written as characters.
  *
@@ -9,7 +11,18 @@ import { Image } from 'expo-image';
  * button came out orange. Shapes made of views take the colour they are given.
  */
 
-const COLOUR = '#f2f2f2';
+/**
+ * The colour an icon is drawn in: the one it was asked for, or else the
+ * colour of words in the theme it finds itself in.
+ *
+ * So an icon given no colour is right on a page of either theme, and right
+ * again inside a `ThemeScope` — on a surface coloured from a cover, which is
+ * held dark, it comes out light without the player having to say so.
+ */
+function useInk(asked: string | undefined): string {
+  const c = useColours();
+  return asked ?? c.text;
+}
 
 /**
  * Play and pause take up exactly the same room, whatever is drawn inside.
@@ -31,7 +44,8 @@ function Transport({ size, children }: { size: number; children: React.ReactNode
   return <View style={[styles.centre, { width: size, height: size }]}>{children}</View>;
 }
 
-export function PlayIcon({ size = 28, color = COLOUR }: { size?: number; color?: string }) {
+export function PlayIcon({ size = 28, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return (
     <Transport size={size}>
       <View
@@ -53,7 +67,8 @@ export function PlayIcon({ size = 28, color = COLOUR }: { size?: number; color?:
   );
 }
 
-export function PauseIcon({ size = 28, color = COLOUR }: { size?: number; color?: string }) {
+export function PauseIcon({ size = 28, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   const bar = { width: size * 0.26, height: size * 0.86, backgroundColor: color, borderRadius: 1 };
   return (
     <Transport size={size}>
@@ -91,7 +106,8 @@ function Triangle({ size, color, pointsLeft }: { size: number; color: string; po
  * falls back to. The head is two bars turned about the tip, so the point is a
  * point at every size rather than whatever a glyph was hinted to.
  */
-export function BackIcon({ size = 22, color = COLOUR }: { size?: number; color?: string }) {
+export function BackIcon({ size = 22, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   const stroke = Math.max(2, size * 0.11);
   const head = size * 0.5;
   const tip = size * 0.08;
@@ -120,7 +136,8 @@ export function BackIcon({ size = 22, color = COLOUR }: { size?: number; color?:
   );
 }
 
-export function PreviousIcon({ size = 22, color = COLOUR }: { size?: number; color?: string }) {
+export function PreviousIcon({ size = 22, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return (
     <View style={styles.row}>
       <View style={{ width: size * 0.16, height: size, backgroundColor: color, borderRadius: 1 }} />
@@ -129,7 +146,8 @@ export function PreviousIcon({ size = 22, color = COLOUR }: { size?: number; col
   );
 }
 
-export function NextIcon({ size = 22, color = COLOUR }: { size?: number; color?: string }) {
+export function NextIcon({ size = 22, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return (
     <View style={styles.row}>
       <Triangle size={size} color={color} pointsLeft={false} />
@@ -144,7 +162,8 @@ function VectorIcon({ source, size, color }: { source: number; size: number; col
     contentFit="contain" transition={0} accessible={false} />;
 }
 
-export function SettingsIcon({ size = 20, color = COLOUR }: { size?: number; color?: string }) {
+export function SettingsIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/settings.svg')} size={size} color={color} />;
 }
 
@@ -168,7 +187,7 @@ const CHEVRON_ASPECT = 17 / 24;
  */
 export function JumpIcon({
   size = 22,
-  color = COLOUR,
+  color: asked,
   seconds,
   back = false,
 }: {
@@ -177,6 +196,7 @@ export function JumpIcon({
   seconds: number;
   back?: boolean;
 }) {
+  const color = useInk(asked);
   const chevrons = (
     <Image
       source={back ? require('../../assets/icons/jump-back.svg') : require('../../assets/icons/jump-forward.svg')}
@@ -251,19 +271,22 @@ function Bar({
   );
 }
 
-export function ShuffleIcon({ size = 20, color = COLOUR }: { size?: number; color?: string }) {
+export function ShuffleIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/shuffle.svg')} size={size} color={color} />;
 }
 
-export function RepeatIcon({ size = 20, color = COLOUR, once = false }: {
+export function RepeatIcon({ size = 20, color: asked, once = false }: {
   size?: number; color?: string; once?: boolean;
 }) {
+  const color = useInk(asked);
   return <VectorIcon source={once ? require('../../assets/icons/repeat-one.svg') : require('../../assets/icons/repeat.svg')}
     size={size} color={color} />;
 }
 
 /** Lines of writing, shortening the way a verse does. */
-export function LyricsIcon({ size = 20, color = COLOUR }: { size?: number; color?: string }) {
+export function LyricsIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   const stroke = Math.max(1.6, size * 0.1);
   const widths = [0.86, 0.62, 0.78, 0.5];
   return (
@@ -284,12 +307,14 @@ export function LyricsIcon({ size = 20, color = COLOUR }: { size?: number; color
 }
 
 /** Two writing systems: language translation, rather than a web/globe symbol. */
-export function TranslateIcon({ size = 20, color = COLOUR }: { size?: number; color?: string }) {
+export function TranslateIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/translate.svg')} size={size} color={color} />;
 }
 
 /** A ticked box: the sign for turning a list into something to choose from. */
-export function SelectIcon({ size = 20, color = COLOUR }: { size?: number; color?: string }) {
+export function SelectIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   const stroke = Math.max(1.6, size * 0.09);
   return (
     <View style={[styles.centre, { width: size, height: size }]}>
@@ -310,14 +335,17 @@ export function SelectIcon({ size = 20, color = COLOUR }: { size?: number; color
 }
 
 /** Stacked music cards represent the library. */
-export function LibraryIcon({ size = 22, color = COLOUR }: { size?: number; color?: string }) {
+export function LibraryIcon({ size = 22, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/library.svg')} size={size} color={color} />;
 }
 
-export function ListsIcon({ size = 22, color = COLOUR }: { size?: number; color?: string }) {
+export function ListsIcon({ size = 22, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/lists.svg')} size={size} color={color} />;
 }
 
-export function SearchIcon({ size = 22, color = COLOUR }: { size?: number; color?: string }) {
+export function SearchIcon({ size = 22, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/search.svg')} size={size} color={color} />;
 }

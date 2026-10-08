@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../lib/i18n/index';
 import { lineAt, parseLrc } from '../lib/lyrics/lrc';
 import type { LyricsState } from '../lib/lyrics/useLyrics';
 import { useTranslation } from '../lib/lyrics/useTranslation';
+import { makeStyles, useColours } from '../lib/theme/index';
 
 const LINE_HEIGHT = 34;
 
@@ -45,6 +47,9 @@ export function LyricsView({
   /** Whether to show a translation beneath each line. */
   translated: boolean;
 }) {
+  const t = useT();
+  const styles = useStyles();
+  const c = useColours();
   const scroll = useRef<ScrollView>(null);
   const shown = useRef(-1);
   /*
@@ -81,7 +86,13 @@ export function LyricsView({
     () => (lines.length > 0 ? lines.map((line) => line.text) : plainLines),
     [lines, plainLines]
   );
-  const translation = useTranslation(trackId, sourceLines, translated);
+  // The timings go along for one case: romanised words, whose translation is
+  // made from another entry of the song and has to be laid against these.
+  const sourceTimes = useMemo(
+    () => (lines.length > 0 ? lines.map((line) => line.at) : null),
+    [lines]
+  );
+  const translation = useTranslation(trackId, sourceLines, translated, undefined, sourceTimes);
 
   /*
     The line being sung is held a fixed distance down the view, whatever the
@@ -170,7 +181,7 @@ export function LyricsView({
   if (state.looking) {
     return (
       <View style={[styles.centred, { height }]}>
-        <ActivityIndicator color="#5f5f5f" />
+        <ActivityIndicator color={c.textFaint} />
       </View>
     );
   }
@@ -178,7 +189,7 @@ export function LyricsView({
   if (!state.lyrics) {
     return (
       <View style={[styles.centred, { height }]}>
-        <Text style={styles.none}>No lyrics found.</Text>
+        <Text style={styles.none}>{t.lyrics.none}</Text>
       </View>
     );
   }
@@ -186,7 +197,7 @@ export function LyricsView({
   // Said once, above the words, rather than in place of them: a translation
   // that is still arriving or will not arrive is no reason to hide the song.
   const aside = translation.working
-    ? 'Translating…'
+    ? t.lyrics.translating
     : translated
       ? translation.note
       : null;
@@ -244,7 +255,7 @@ export function LyricsView({
               collapsable={false}>
               <Text
                 accessibilityRole="button"
-                accessibilityLabel={`Seek to ${(line.at + offsetSec).toFixed(1)} seconds`}
+                accessibilityLabel={t.lyrics.seekTo(t.format.decimal(line.at + offsetSec, 1))}
                 onPress={() => onSeek(line.at + offsetSec)}
                 style={[styles.line, index === active && styles.lineNow]}>
                 {line.text}
@@ -264,34 +275,34 @@ export function LyricsView({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   centred: { alignItems: 'center', justifyContent: 'center' },
-  none: { color: '#5f5f5f', fontSize: 13 },
+  none: { color: c.textFaint, fontSize: 13 },
   line: {
-    color: '#5a5a5a',
+    color: c.textFaint,
     fontSize: 16,
     lineHeight: LINE_HEIGHT,
     textAlign: 'center',
     paddingHorizontal: 8,
   },
-  lineNow: { color: '#ededed', fontWeight: '600' },
+  lineNow: { color: c.text, fontWeight: '600' },
   translated: {
-    color: '#4a4a4a',
+    color: c.textDisabled,
     fontSize: 13.5,
     lineHeight: 20,
     textAlign: 'center',
     paddingHorizontal: 8,
     paddingBottom: 6,
   },
-  translatedNow: { color: '#8fa8c4' },
-  aside: { color: '#5f5f5f', fontSize: 12, textAlign: 'center', paddingBottom: 10 },
+  translatedNow: { color: c.accent },
+  aside: { color: c.textFaint, fontSize: 12, textAlign: 'center', paddingBottom: 10 },
   plainBody: { paddingVertical: 8 },
-  plain: { color: '#c8c8c8', fontSize: 15, lineHeight: 26, textAlign: 'center' },
+  plain: { color: c.textSecondary, fontSize: 15, lineHeight: 26, textAlign: 'center' },
   plainTranslated: {
-    color: '#6a6a6a',
+    color: c.textFaint,
     fontSize: 13,
     lineHeight: 20,
     textAlign: 'center',
     paddingBottom: 4,
   },
-});
+}));

@@ -31,6 +31,15 @@ export type LibraryTrack = {
    * arrived, and it is the only such answer anything records at all.
    */
   addedAt: number | null;
+  /**
+   * How big the file is, in bytes, or null where the media store will not say.
+   *
+   * Optional because a build of the native module from before it was read does
+   * not send it. Nothing shown is made from it: it is half of how a file is
+   * recognised again once the store has given it a new id, the other half
+   * being how long it runs.
+   */
+  size?: number | null;
 };
 
 /** A folder holding music, and how much of it. */
@@ -75,6 +84,16 @@ export type PlaybackErrorEvent = {
   trackId: string | null;
   /** ExoPlayer's own wording — a missing file, a codec, a lost permission. */
   message: string;
+  /**
+   * ExoPlayer's name for what went wrong, which does not change with the
+   * language: `ERROR_CODE_IO_FILE_NOT_FOUND`. Missing from an older build.
+   */
+  code?: string;
+  /**
+   * The same thing as a sentence fit to show, in the app's language: "This
+   * file could not be found." Less exact than `message`, and readable.
+   */
+  text?: string;
 };
 
 export type PlayerStatus = {
@@ -132,49 +151,113 @@ export type JukeboxAudioEvents = {
   onPlaybackStateChange: (event: { isPlaying: boolean; playWhenReady: boolean }) => void;
   onQueueEnded: () => void;
   onPlaybackError: (event: PlaybackErrorEvent) => void;
+  /**
+   * The player was given a queue by something other than this app's own calls:
+   * a car choosing a record, or a press of play on the widget putting the saved
+   * queue back. Carries nothing, because there is nothing short to say — the
+   * queue has to be read again, with `getQueueAsync` and `getStatusAsync`.
+   *
+   * Arrives ahead of the `onTrackChange` the same replacement causes. Never
+   * sent by a native module that predates it, so it cannot be the only thing
+   * relied on to notice.
+   */
+  onQueueReplaced: () => void;
 };
 
 
+/** The three shapes a band of the equalizer can be. */
+export type EqualizerBandType = 'peak' | 'lowShelf' | 'highShelf';
+
 /**
- * The device's equalizer, and what has been asked of it.
+ * One band: a filter that turns the sound around `frequencyHz` up or down by
+ * `gainDb`. A peak does it around that frequency and `q` is how narrowly; a
+ * shelf does it to everything below, or above, and `q` is how sharp the
+ * corner is.
+ */
+export type EqualizerBand = {
+  type: EqualizerBandType;
+  /** 20 to 20,000. */
+  frequencyHz: number;
+  /** Decibels, 20 either way. */
+  gainDb: number;
+  /** 0.1 to 10. */
+  q: number;
+};
+
+/** A curve kept under a name. */
+export type EqualizerPreset = {
+  name: string;
+  /** The level trim that goes with it, or null for the one worked out from the bands. */
+  preampDb: number | null;
+  bands: EqualizerBand[];
+};
+
+/**
+ * The app's own equalizer, as it is set.
  *
- * The shape of the thing and the settings for it arrive together on purpose:
- * how many bands there are, and what range each one moves in, is up to the
- * device, and sliders drawn from one set of numbers holding another set's
- * values would be wrong in a way nothing later could fix.
- *
- * Gains are in millibels — hundredths of a decibel, the audio framework's own
- * unit — so `600` is +6 dB.
+ * The same on every phone, which the phone's equalizer never was: up to
+ * twelve bands, each wherever it is put. The filtering is done in the
+ * player's own audio chain.
+ */
+export type ParametricEqualizer = {
+  bands: EqualizerBand[];
+  /**
+   * Level trim in decibels, or null for automatic: down by as much as the
+   * bands' highest point goes up, so a boost has room and does not clip.
+   */
+  preampDb: number | null;
+  /** The curves the user has kept. The starting points the screen offers are not among them. */
+  presets: EqualizerPreset[];
+  /**
+   * Something to say once, about the phone's equalizer this took over from:
+   * `carried` if what was set on it was brought across (and kept as a preset),
+   * `lost` if it could not be. Read only, and gone after the next change.
+   */
+  notice?: 'carried' | 'lost' | null;
+};
+
+/**
+ * The equalizer and the tone controls beside it, and what has been asked of
+ * them.
  */
 export type EqualizerState = {
-  /** Whether the effects are bound to a live audio session right now. */
+  /** Whether the phone's effects are bound to a live audio session right now. */
   attached: boolean;
-  bandCount: number;
-  minMb: number;
-  maxMb: number;
-  /** Centre frequency of each band, in hertz. */
-  centresHz: number[];
-  /** The device's own named curves, in the order `preset` indexes them. */
-  presets: string[];
+  /** The one switch, for the bands and the three controls below alike. */
   enabled: boolean;
-  /** An index into `presets`, or -1 when the bands below are what is in force. */
-  preset: number;
-  bands: number[];
+  /**
+   * The bands. Absent on a build of the native module from before the app had
+   * an equalizer of its own, which is how the screen knows to say so.
+   */
+  parametric?: ParametricEqualizer;
   /** 0–1000, Android's own scale for both of these. */
   bass: number;
   virtualizer: number;
-  /** Millibels of make-up gain, 0 for none. */
+  /** Millibels — hundredths of a decibel — of make-up gain, 0 for none. */
   loudness: number;
   bassSupported: boolean;
   virtualizerSupported: boolean;
   maxLoudnessMb: number;
+  /*
+    What a native build from before sends instead of `parametric`: the phone's
+    own equalizer, an index into its presets and a level per band in
+    millibels. Nothing draws them now. They are only ever handed back as they
+    came, so that moving the bass slider on such a build does not flatten
+    bands the screen can no longer show.
+  */
+  preset?: number;
+  bands?: number[];
+  bandCount?: number;
 };
 
 /** The part of [EqualizerState] that is a choice rather than a fact. */
 export type EqualizerSettings = Pick<
   EqualizerState,
-  'enabled' | 'preset' | 'bands' | 'bass' | 'virtualizer' | 'loudness'
->;
+  'enabled' | 'bass' | 'virtualizer' | 'loudness' | 'preset' | 'bands'
+> & {
+  /** Left out, the bands are left as they are. */
+  parametric?: Omit<ParametricEqualizer, 'notice'>;
+};
 
 /**
  * How one track gives way to the next.
@@ -226,3 +309,14 @@ export type TransitionSettings = Omit<
   Transitions,
   'maxAutoMs' | 'maxManualMs' | 'maxPauseMs' | 'maxSeekMs' | 'defaults'
 >;
+
+/**
+ * Whether tracks are brought to one loudness as they play.
+ *
+ * One switch and nothing else. What each track is turned by is found by the
+ * playback service from the files themselves — their ReplayGain tags, or a
+ * measurement made on the phone and kept — and never passes through here.
+ */
+export type Loudness = {
+  enabled: boolean;
+};

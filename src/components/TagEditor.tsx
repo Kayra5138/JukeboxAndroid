@@ -2,7 +2,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { TextField } from './FormScroll';
 
+import { useT } from '../lib/i18n/index';
 import { canonicalLabel, foldForMatch } from '../lib/metadata/text';
+import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import type { TagEdit } from '../lib/db/tags';
 
 /**
@@ -31,6 +33,11 @@ export function TagEditor({
   onDraft: (value: string) => void;
   onChange: (tags: TagEdit[]) => void;
 }) {
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
+
   const add = (raw: string) => {
     // The one spelling tags are kept in, so holding shift is not a decision.
     // The plain rule turned `İ` into a letter with a mark after it, which
@@ -74,7 +81,7 @@ export function TagEditor({
 
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Tags</Text>
+      <Text style={styles.label}>{t.format.upper(t.details.editor.label)}</Text>
 
       {tags.map((entry, index) => (
         <View key={entry.tag} style={styles.row}>
@@ -82,16 +89,18 @@ export function TagEditor({
           <Text style={styles.tag} numberOfLines={1}>
             {entry.tag}
           </Text>
-          <Pressable style={styles.action} onPress={() => move(index, -1)} disabled={index === 0}>
+          <Pressable android_ripple={pressed} style={styles.action} onPress={() => move(index, -1)} disabled={index === 0}>
             <Text style={index === 0 ? styles.actionOff : styles.actionLabel}>↑</Text>
           </Pressable>
           <Pressable
+            android_ripple={pressed}
             style={styles.action}
             onPress={() => move(index, 1)}
             disabled={index === tags.length - 1}>
             <Text style={index === tags.length - 1 ? styles.actionOff : styles.actionLabel}>↓</Text>
           </Pressable>
           <Pressable
+            android_ripple={pressed}
             style={styles.action}
             onPress={() => onChange(tags.filter((candidate) => candidate.tag !== entry.tag))}>
             <Text style={styles.actionLabel}>×</Text>
@@ -104,8 +113,8 @@ export function TagEditor({
         value={draft}
         onChangeText={onDraft}
         onSubmitEditing={() => add(draft)}
-        placeholder="Add a tag"
-        placeholderTextColor="#5a5a5a"
+        placeholder={t.details.editor.add}
+        placeholderTextColor={c.textDisabled}
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="done"
@@ -114,7 +123,7 @@ export function TagEditor({
       {offered.length > 0 ? (
         <View style={styles.suggestions}>
           {offered.map((tag) => (
-            <Pressable key={tag} style={styles.suggestion} onPress={() => add(tag)}>
+            <Pressable android_ripple={pressed} key={tag} style={styles.suggestion} onPress={() => add(tag)}>
               <Text style={styles.suggestionLabel}>{tag}</Text>
             </Pressable>
           ))}
@@ -124,41 +133,43 @@ export function TagEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   container: { gap: 8 },
-  label: { color: '#9a9a9a', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
+  label: { color: c.textSecondary, fontSize: 12, letterSpacing: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderRadius: 8,
     paddingLeft: 12,
     paddingRight: 4,
     paddingVertical: 6,
+    ...outlined(c),
   },
-  position: { color: '#5a5a5a', fontSize: 12, width: 14, fontVariant: ['tabular-nums'] },
-  tag: { color: '#f2f2f2', fontSize: 15, flex: 1 },
+  position: { color: c.textFaint, fontSize: 12, width: 14, fontVariant: ['tabular-nums'] },
+  tag: { color: c.text, fontSize: 15, flex: 1 },
   action: { paddingHorizontal: 10, paddingVertical: 6 },
-  actionLabel: { color: '#f2f2f2', fontSize: 16 },
-  actionOff: { color: '#3a3a3a', fontSize: 16 },
+  actionLabel: { color: c.text, fontSize: 16 },
+  actionOff: { color: c.textDisabled, fontSize: 16 },
   input: {
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#2a2a2a',
-    color: '#f2f2f2',
+    borderColor: c.border,
+    color: c.text,
     fontSize: 15,
     paddingHorizontal: 12,
     paddingVertical: 10,
+    ...outlined(c),
   },
   suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   suggestion: {
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#3a3a3a',
+    borderColor: c.borderStrong,
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  suggestionLabel: { color: '#c8c8c8', fontSize: 13 },
-});
+  suggestionLabel: { color: c.textSecondary, fontSize: 13 },
+}));

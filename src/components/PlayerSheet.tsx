@@ -27,10 +27,14 @@ import {
   TranslateIcon,
 } from './Icons';
 import { PlayerSettings } from './PlayerSettings';
+import { useT } from '../lib/i18n/index';
 import { useCoveredByRoute } from '../lib/player/overlayRoutes';
 import { LyricsView } from './LyricsView';
 import { QueueList } from './QueueList';
+import { useTrackMenu } from './useTrackMenu';
+import { creditReader } from '../lib/db/credits';
 import { albumKey } from '../lib/media/albums';
+import { foldForMatch } from '../lib/metadata/text';
 import { useLyrics } from '../lib/lyrics/useLyrics';
 import { jumpTo, stepFrom } from '../lib/player/jump';
 import { readSetting, SETTINGS } from '../lib/db/index';
@@ -40,12 +44,16 @@ import {
   usePlayerPosition,
   usePlayerState,
 } from '../lib/player/PlayerProvider';
+import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 
-const REPEAT_LABEL = { off: 'Repeat', all: 'Repeat all', one: 'Repeat one' } as const;
-
-/** One colour, lit or not: the whole of what these buttons say about state. */
-const ON = '#f2f2f2';
-const OFF = '#5a5a5a';
+/*
+  How far outside its picture a transport button can still be pressed, which
+  brings the smallest of them up to 44 either way without moving anything.
+  Kept under half the gap between two of them, so no two reach for the same
+  spot.
+*/
+const CONTROL_SLOP = { top: 2, bottom: 2 };
+const CONTROL_SLOP_WIDE = { top: 6, bottom: 6, left: 4, right: 4 };
 
 const clamp = (value: number) => Math.min(Math.max(value, 0), 1);
 
@@ -80,6 +88,7 @@ function Scrubber({
   durationSec: number;
   onSeek: (seconds: number) => void;
 }) {
+  const styles = useStyles();
   const [width, setWidth] = useState(0);
   /** The time under the finger, or null when nobody is scrubbing. */
   const [scrubbed, setScrubbed] = useState<number | null>(null);
@@ -226,6 +235,13 @@ function Scrubber({
  */
 export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
+  const c = useColours();
+  /** One colour, lit or not: the whole of what these buttons say about state. */
+  const ON = c.text;
+  const OFF = c.textDisabled;
   const { current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error } =
     usePlayerState();
   const {
@@ -390,6 +406,18 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     return () => subscription.remove();
   }, [covered, onClose, playbackOpen]);
 
+  /*
+    The menu of a row in the queue. Nothing to read again afterwards: the
+    queue is the player's, and an erased file is taken out of it by the menu.
+
+    Registered after the handler above, so with the list picker up it is the
+    picker a back press closes and not the player under it.
+
+    The entries that go to another screen close the player first, for the
+    reason the album's name under the title does.
+  */
+  const menu = useTrackMenu({ beforeLeaving: onClose });
+
   const onSeek = useCallback((seconds: number) => void seekTo(seconds), [seekTo]);
 
   /*
@@ -407,11 +435,25 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   );
 
   const album = current?.album?.trim() || null;
+  /*
+    Who the credit names, one by one. Read through the same reader the Artists
+    view groups by, so a name pressed here is a page that exists there. Not the
+    guests a title names: this line shows what the artist tag says, and a name
+    appearing in it that the tag does not hold would look like an edit.
+  */
+  const credit = current?.artist?.trim() || null;
+  const credited = useMemo(() => {
+    if (!credit) return [];
+    const names = creditReader()({ artist: credit, title: null }).filter(
+      (name) => foldForMatch(name).length > 0
+    );
+    return names.length > 0 ? names : [credit];
+  }, [credit]);
 
   if (!current) {
     return (
       <View style={[styles.screen, styles.centered]}>
-        <Text style={styles.muted}>Nothing playing.</Text>
+        <Text style={styles.muted}>{t.player.sheet.nothingPlaying}</Text>
       </View>
     );
   }
@@ -448,6 +490,9 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const playIcon = landscape ? 27 : 32;
   const modeIcon = landscape ? 18 : 21;
   const control = landscape ? styles.controlWide : styles.control;
+  // Sideways the buttons are drawn smaller to fit; they are not any harder to
+  // aim for than they were, only to see.
+  const controlSlop = landscape ? CONTROL_SLOP_WIDE : CONTROL_SLOP;
 
   const wideArt = Math.max(
     0,
@@ -471,6 +516,10 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
       onSelect={(index) => void skipToIndex(index)}
       onMove={(from, to) => void moveInQueue(from, to)}
       onRemove={(index) => void removeFromQueue(index)}
+      onLongPress={(index) => {
+        const track = queue[index];
+        if (track) menu.open(track);
+      }}
     />
   );
 
@@ -575,18 +624,37 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             {current.title}
           </Text>
           <Text style={[styles.artist, landscape && styles.artistWide]} numberOfLines={1}>
-            {current.artist ?? 'Unknown artist'}
+            {/*
+              Each name goes to its own artist, the way the album goes to the
+              record. A credit of two people is two names to press rather than
+              one that would have to pick between them, split the way the
+              Artists view splits it, so the page reached is the one that view
+              lists. Nothing marks them as links: they are the artist and the
+              album, and pressing one to see more of it is what is expected.
+
+              The player is a layer over the navigator, so it has to go before
+              the page can arrive — otherwise it opens underneath and the back
+              button lands on a screen nobody can see.
+            */}
+            {credited.length === 0
+              ? t.common.unknownArtist
+              : credited.map((name, place) => (
+                  <Text
+                    key={name}
+                    accessibilityRole="link"
+                    onPress={() => {
+                      onClose();
+                      router.push({ pathname: '/playlist', params: { artist: foldForMatch(name) } });
+                    }}>
+                    {place > 0 ? ', ' : ''}
+                    {name}
+                  </Text>
+                ))}
             {album ? (
               <>
                 {' · '}
-                {/*
-                  The player is a layer over the navigator, so it has to go
-                  before the record can arrive — otherwise the album opens
-                  underneath it and the back button lands on a screen nobody
-                  can see.
-                */}
                 <Text
-                  style={styles.albumLink}
+                  accessibilityRole="link"
                   onPress={() => {
                     onClose();
                     router.push({ pathname: '/playlist', params: { album: albumKey(album) } });
@@ -609,7 +677,13 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         />
 
         <View style={[styles.transport, landscape && styles.transportWide]}>
-          <Pressable style={control} onPress={() => void previous()}>
+          <Pressable
+            android_ripple={pressed}
+            style={control}
+            hitSlop={controlSlop}
+            accessibilityRole="button"
+            accessibilityLabel={t.common.previousTrack}
+            onPress={() => void previous()}>
             <PreviousIcon size={skipIcon} />
           </Pressable>
           {/*
@@ -618,40 +692,59 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             which is the order of how far each one moves.
           */}
           <Pressable
+            android_ripple={pressed}
             style={control}
+            hitSlop={controlSlop}
             accessibilityRole="button"
-            accessibilityLabel={`Back ${step} seconds`}
+            accessibilityLabel={t.player.sheet.back(step)}
             onPress={() => jump(-step)}>
             <JumpIcon size={skipIcon} seconds={step} back />
           </Pressable>
-          <Pressable style={control} onPress={() => void toggle()}>
+          <Pressable
+            android_ripple={pressed}
+            style={control}
+            hitSlop={controlSlop}
+            accessibilityRole="button"
+            accessibilityLabel={playWhenReady ? t.common.pause : t.common.play}
+            onPress={() => void toggle()}>
             {playWhenReady ? <PauseIcon size={playIcon} /> : <PlayIcon size={playIcon} />}
           </Pressable>
           <Pressable
+            android_ripple={pressed}
             style={control}
+            hitSlop={controlSlop}
             accessibilityRole="button"
-            accessibilityLabel={`Forward ${step} seconds`}
+            accessibilityLabel={t.player.sheet.forward(step)}
             onPress={() => jump(step)}>
             <JumpIcon size={skipIcon} seconds={step} />
           </Pressable>
-          <Pressable style={control} onPress={() => void next()}>
+          <Pressable
+            android_ripple={pressed}
+            style={control}
+            hitSlop={controlSlop}
+            accessibilityRole="button"
+            accessibilityLabel={t.common.nextTrack}
+            onPress={() => void next()}>
             <NextIcon size={skipIcon} />
           </Pressable>
         </View>
 
         <View style={styles.options}>
           <Pressable
-            style={styles.mode}
+            android_ripple={pressed}
+            style={[styles.mode, shuffled && styles.modeOn]}
             accessibilityRole="button"
-            accessibilityLabel="Shuffle the queue"
+            accessibilityLabel={t.player.sheet.shuffleQueue}
             accessibilityState={{ selected: shuffled }}
             onPress={() => void shuffleQueue()}>
             <ShuffleIcon size={modeIcon} color={shuffled ? ON : OFF} />
           </Pressable>
           <Pressable
-            style={styles.mode}
+            android_ripple={pressed}
+            style={[styles.mode, repeat !== 'off' && styles.modeOn]}
             accessibilityRole="button"
-            accessibilityLabel={REPEAT_LABEL[repeat]}
+            accessibilityLabel={t.player.sheet.repeat[repeat]}
+            accessibilityState={{ selected: repeat !== 'off' }}
             onPress={() => void cycleRepeat()}>
             <RepeatIcon
               size={modeIcon}
@@ -660,17 +753,19 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             />
           </Pressable>
           <Pressable
+            android_ripple={pressed}
             style={styles.mode}
             accessibilityRole="button"
-            accessibilityLabel="Playback settings"
+            accessibilityLabel={t.player.sheet.playbackSettings}
             accessibilityState={{ expanded: playbackOpen }}
             onPress={() => setPlaybackOpen(true)}>
             <SettingsIcon size={modeIcon} color={OFF} />
           </Pressable>
           <Pressable
-            style={styles.mode}
+            android_ripple={pressed}
+            style={[styles.mode, showLyrics && styles.modeOn]}
             accessibilityRole="button"
-            accessibilityLabel="Lyrics"
+            accessibilityLabel={t.player.sheet.lyrics}
             accessibilityState={{ selected: showLyrics }}
             onPress={() => setShowLyrics(!showLyrics)}>
             <LyricsIcon size={modeIcon} color={showLyrics ? ON : OFF} />
@@ -678,9 +773,10 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           {/* Only offered where it would do something. */}
           {showLyrics ? (
             <Pressable
-              style={styles.mode}
+              android_ripple={pressed}
+              style={[styles.mode, showTranslation && styles.modeOn]}
               accessibilityRole="button"
-              accessibilityLabel="Translate the lyrics"
+              accessibilityLabel={t.player.sheet.translateLyrics}
               accessibilityState={{ selected: showTranslation }}
               onPress={() => setShowTranslation(!showTranslation)}>
               <TranslateIcon size={modeIcon} color={showTranslation ? ON : OFF} />
@@ -728,7 +824,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             style={styles.playerHalf}>{playerColumn}</View>
           <View style={styles.queueHalf}>
             <Text style={[styles.queueLabel, styles.queueHeading]}>
-              {showLyrics ? 'Lyrics' : `Up next · ${queue.length}`}
+              {t.format.upper(showLyrics ? t.player.sheet.lyrics : t.player.sheet.upNext(queue.length))}
             </Text>
             {/*
               The words take the second column rather than the artwork's place.
@@ -761,6 +857,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           </View>
         </View>
         {settings}
+        {menu.element}
       </Animated.View>
     );
   }
@@ -792,21 +889,27 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
       <View style={[styles.queue, { paddingBottom: insets.bottom }]}>
         <View style={styles.queueHandle} {...queueHandle.panHandlers}>
-          <Pressable onPress={() => toggleQueue(!expanded)} style={styles.queueHandleHit}>
+          <Pressable
+            android_ripple={pressed}
+            onPress={() => toggleQueue(!expanded)}
+            style={styles.queueHandleHit}
+            accessibilityRole="button"
+            accessibilityState={{ expanded }}>
             <View style={styles.queueGrip} />
-            <Text style={styles.queueLabel}>Up next · {queue.length}</Text>
+            <Text style={styles.queueLabel}>{t.format.upper(t.player.sheet.upNext(queue.length))}</Text>
           </Pressable>
         </View>
 
         <Animated.View style={{ height: queueHeight }}>{queueList}</Animated.View>
       </View>
       {settings}
+      {menu.element}
     </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   centered: { alignItems: 'center', justifyContent: 'center' },
 
   player: { paddingHorizontal: 20, paddingBottom: 12, gap: 16 },
@@ -826,7 +929,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: '#242424',
+    borderLeftColor: c.border,
   },
   queueHeading: { paddingTop: 14, paddingBottom: 6, textAlign: 'center' },
   queueFill: { flex: 1 },
@@ -849,22 +952,21 @@ const styles = StyleSheet.create({
   // Tighter than upright, where the gaps are the difference between fitting
   // and not on a short screen.
   playerWide: { flex: 1, minHeight: 0, gap: 8, paddingBottom: 18 },
-  artEmpty: { backgroundColor: '#1c1c1c' },
+  artEmpty: { backgroundColor: c.surfaceRaised },
   titles: { gap: 3, alignItems: 'center' },
   titleWide: { fontSize: 16 },
   artistWide: { fontSize: 12.5 },
-  title: { color: '#ededed', fontSize: 19, fontWeight: '600' },
+  title: { color: c.text, fontSize: 19, fontWeight: '600' },
   // Underlined rather than coloured: it sits inside a line of ordinary text,
   // and a blue word in the middle of the subtitle reads as an error.
-  albumLink: { textDecorationLine: 'underline' },
-  artist: { color: '#7a7a7a', fontSize: 14 },
-  error: { color: '#e08585', fontSize: 13, textAlign: 'center' },
+  artist: { color: c.textMuted, fontSize: 14 },
+  error: { color: c.danger, fontSize: 13, textAlign: 'center' },
 
   scrubHitArea: { paddingVertical: 10, justifyContent: 'center' },
-  scrubTrack: { height: 3, borderRadius: 2, backgroundColor: '#2f2f2f', overflow: 'hidden' },
-  scrubFill: { height: 3, backgroundColor: '#ededed' },
+  scrubTrack: { height: 3, borderRadius: 2, backgroundColor: c.borderStrong, overflow: 'hidden' },
+  scrubFill: { height: 3, backgroundColor: c.text },
   times: { flexDirection: 'row', justifyContent: 'space-between' },
-  time: { color: '#5f5f5f', fontSize: 11, fontVariant: ['tabular-nums'] },
+  time: { color: c.textFaint, fontSize: 11, fontVariant: ['tabular-nums'] },
 
   /*
     Five buttons, so the gaps are what gives. Three of them sat comfortably at
@@ -894,10 +996,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
   },
-  mode: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  /*
+    Lit or not is all these say about themselves, and lit is a shade. Where a
+    theme draws outlines, one that is on is ringed in the accent as well. The
+    ring's room is kept round the ones that are off, in no colour, so that
+    turning one on moves nothing; the picture is centred in a box that was
+    already bigger than it either way.
+  */
+  mode: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 22,
+    ...outlined(c, 'transparent'),
+  },
+  modeOn: outlined(c, c.accent),
 
   gap: { flex: 1, overflow: 'hidden' },
-  queue: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#242424' },
+  queue: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
   queueHandle: { alignItems: 'center' },
   queueHandleHit: {
     alignItems: 'center',
@@ -906,12 +1023,11 @@ const styles = StyleSheet.create({
     gap: 8,
     alignSelf: 'stretch',
   },
-  queueGrip: { width: 36, height: 3, borderRadius: 2, backgroundColor: '#3a3a3a' },
+  queueGrip: { width: 36, height: 3, borderRadius: 2, backgroundColor: c.borderStrong },
   queueLabel: {
-    color: '#5f5f5f',
+    color: c.textFaint,
     fontSize: 11,
-    textTransform: 'uppercase',
     letterSpacing: 1,
   },
-  muted: { color: '#7a7a7a', fontSize: 15 },
-});
+  muted: { color: c.textMuted, fontSize: 15 },
+}));

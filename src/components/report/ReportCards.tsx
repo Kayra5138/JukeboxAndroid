@@ -2,10 +2,12 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { useT } from '../../lib/i18n/index';
 import { formatDuration, formatHour } from '../../lib/stats/period';
 import { creditsOn, photoFor, pictureFor } from '../../lib/stats/photos';
 import type { Covers, Photos } from '../../lib/stats/photos';
 import type { RankedEntry, ReportCard } from '../../lib/stats/report';
+import { ThemeScope } from '../../lib/theme/index';
 
 export type { Covers, Photos };
 
@@ -51,6 +53,12 @@ function paletteFor(card: ReportCard, tints: Tints): readonly [string, string, s
  * Sized by the caller rather than by itself: the same card is both the thing
  * on screen and the thing written to a file, and those are not the same number
  * of points.
+ *
+ * Its colours are its own, written out at the foot of this file, and are the
+ * same in every theme: a card is a designed thing that ends up as a picture in
+ * somebody's gallery, and it should not come out pale because the app was. The
+ * scope around it says so to anything inside that might ask. Its words do
+ * follow the language, since they are read by whoever it is shared with.
  */
 export function ReportCardView({
   card,
@@ -75,6 +83,7 @@ export function ReportCardView({
 }) {
   // Everything scales off the card's width so a card written out at twice the
   // size is the same design rather than the same design with bigger margins.
+  const t = useT();
   const unit = width / 360;
   const pad = 26 * unit;
 
@@ -85,55 +94,57 @@ export function ReportCardView({
     rather than left to whatever the app could say around it, which does not
     survive being shared. Empty on every card that shows only album covers.
   */
-  const credits = creditsOn(card, photos);
+  const credits = creditsOn(card, photos, t);
 
   return (
-    <LinearGradient
-      colors={paletteFor(card, tints)}
-      start={{ x: 0.1, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      locations={[0, 0.55, 1]}
-      style={[styles.card, { width, height, borderRadius: 26 * unit, padding: pad }]}>
-      <View style={styles.header}>
-        <Text style={[styles.wordmark, { fontSize: 11 * unit, letterSpacing: 2 * unit }]}>
-          JUKEBOX
-        </Text>
-        <Text style={[styles.stamp, { fontSize: 11 * unit, letterSpacing: 1 * unit }]}>
-          {stamp.toUpperCase()}
-        </Text>
-      </View>
+    <ThemeScope theme="dark">
+      <LinearGradient
+        colors={paletteFor(card, tints)}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        locations={[0, 0.55, 1]}
+        style={[styles.card, { width, height, borderRadius: 26 * unit, padding: pad }]}>
+        <View style={styles.header}>
+          <Text style={[styles.wordmark, { fontSize: 11 * unit, letterSpacing: 2 * unit }]}>
+            JUKEBOX
+          </Text>
+          <Text style={[styles.stamp, { fontSize: 11 * unit, letterSpacing: 1 * unit }]}>
+            {t.format.upper(stamp)}
+          </Text>
+        </View>
 
-      {/*
-        The wall sits inside the gradient rather than under it, so the colour
-        still carries the card and the covers only give it texture.
-      */}
-      {(card.kind === 'opening' || card.kind === 'numbers') && card.wall.length > 0 ? (
-        <>
-          <Wall ids={card.wall} covers={covers} radius={26 * unit} />
-          {/*
-            A band of shade across the middle, where the number sits. Without
-            it the covers read straight through the type — white on a busy
-            wall is legible but never crisp, and this card is mostly one word.
-          */}
-          <LinearGradient
-            pointerEvents="none"
-            colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.5)', 'transparent']}
-            locations={[0.18, 0.4, 0.62, 0.86]}
-            style={styles.shade}
-          />
-        </>
-      ) : null}
-      <View style={styles.body}>{body(card, unit, covers, photos)}</View>
-      {/*
-        In the flow of the card rather than laid over it, so the line can never
-        land on top of a name: the body gives up the few points it takes.
-      */}
-      {credits.length > 0 ? (
-        <Text style={[styles.credit, { fontSize: 8.5 * unit, lineHeight: 11.5 * unit, marginTop: 10 * unit }]}>
-          {credits.join('   ·   ')}
-        </Text>
-      ) : null}
-    </LinearGradient>
+        {/*
+          The wall sits inside the gradient rather than under it, so the colour
+          still carries the card and the covers only give it texture.
+        */}
+        {(card.kind === 'opening' || card.kind === 'numbers') && card.wall.length > 0 ? (
+          <>
+            <Wall ids={card.wall} covers={covers} radius={26 * unit} />
+            {/*
+              A band of shade across the middle, where the number sits. Without
+              it the covers read straight through the type — white on a busy
+              wall is legible but never crisp, and this card is mostly one word.
+            */}
+            <LinearGradient
+              pointerEvents="none"
+              colors={['transparent', 'rgba(0,0,0,0.5)', 'rgba(0,0,0,0.5)', 'transparent']}
+              locations={[0.18, 0.4, 0.62, 0.86]}
+              style={styles.shade}
+            />
+          </>
+        ) : null}
+        <View style={styles.body}>{body(card, unit, covers, photos)}</View>
+        {/*
+          In the flow of the card rather than laid over it, so the line can never
+          land on top of a name: the body gives up the few points it takes.
+        */}
+        {credits.length > 0 ? (
+          <Text style={[styles.credit, { fontSize: 8.5 * unit, lineHeight: 11.5 * unit, marginTop: 10 * unit }]}>
+            {credits.join('   ·   ')}
+          </Text>
+        ) : null}
+      </LinearGradient>
+    </ThemeScope>
   );
 }
 
@@ -197,9 +208,10 @@ function Cover({ uri, size, round }: { uri: string | undefined; size: number; ro
 }
 
 function Opening({ card, unit }: { card: Extract<ReportCard, { kind: 'opening' }>; unit: number }) {
+  const t = useT();
   return (
     <View style={styles.centred}>
-      <Text style={[styles.lead, { fontSize: 15 * unit }]}>You listened for</Text>
+      <Text style={[styles.lead, { fontSize: 15 * unit }]}>{t.stats.cards.listenedFor}</Text>
       {/*
         The one number the card exists for. Left to shrink rather than wrap,
         because "1h 20m" and "132h" want the same line and not the same size.
@@ -208,12 +220,12 @@ function Opening({ card, unit }: { card: Extract<ReportCard, { kind: 'opening' }
         adjustsFontSizeToFit
         numberOfLines={1}
         style={[styles.hero, { fontSize: 64 * unit, lineHeight: 74 * unit }]}>
-        {formatDuration(card.seconds)}
+        {formatDuration(card.seconds, t)}
       </Text>
       {card.change == null ? null : (
         <View style={[styles.chip, { paddingHorizontal: 12 * unit, paddingVertical: 6 * unit, borderRadius: 999 }]}>
           <Text style={[styles.chipText, { fontSize: 13 * unit }]}>
-            {card.change >= 0 ? '↑' : '↓'} {Math.abs(card.change)}% vs {card.comparison}
+            {t.stats.cards.change(card.change, card.comparison)}
           </Text>
         </View>
       )}
@@ -286,12 +298,13 @@ function Leader({
   art: string | undefined;
   round: boolean;
 }) {
+  const t = useT();
   return (
     <View style={[styles.leader, { gap: 14 * unit }]}>
       <Cover uri={art} size={108 * unit} round={round} />
       <View style={styles.fill}>
         <Text style={[styles.leaderPlace, { fontSize: 11 * unit, letterSpacing: 1.4 * unit }]}>
-          NUMBER ONE
+          {t.stats.cards.numberOne}
         </Text>
         <Text numberOfLines={2} style={[styles.leaderLabel, { fontSize: 25 * unit, lineHeight: 29 * unit }]}>
           {entry.label}
@@ -302,7 +315,7 @@ function Leader({
           </Text>
         ) : null}
         <Text style={[styles.leaderPlays, { fontSize: 13 * unit, marginTop: 6 * unit }]}>
-          {entry.plays} plays
+          {t.stats.cards.plays(entry.plays)}
         </Text>
       </View>
     </View>
@@ -515,6 +528,7 @@ function Closing({
     card.artist ? photos.get(card.artist) : undefined
   );
   const big = 148 * unit;
+  const t = useT();
 
   return (
     <View style={styles.centred}>
@@ -556,23 +570,24 @@ function Closing({
       ) : null}
       <Text style={[styles.lead, { fontSize: 15 * unit }]}>{card.title}</Text>
       <Text style={[styles.closingTime, { fontSize: 44 * unit, lineHeight: 52 * unit }]}>
-        {formatDuration(card.seconds)}
+        {formatDuration(card.seconds, t)}
       </Text>
       {card.track ? (
-        <Named label="Most played" value={card.track} unit={unit} />
+        <Named label={t.stats.cards.mostPlayed} value={card.track} unit={unit} />
       ) : null}
       {card.artist ? (
-        <Named label="Most played artist" value={card.artist} unit={unit} />
+        <Named label={t.stats.cards.mostPlayedArtist} value={card.artist} unit={unit} />
       ) : null}
     </View>
   );
 }
 
 function Named({ label, value, unit }: { label: string; value: string; unit: number }) {
+  const t = useT();
   return (
     <View style={{ marginTop: 22 * unit, alignItems: 'center' }}>
       <Text style={[styles.namedLabel, { fontSize: 11 * unit, letterSpacing: 1.4 * unit }]}>
-        {label.toUpperCase()}
+        {t.format.upper(label)}
       </Text>
       <Text numberOfLines={2} style={[styles.namedValue, { fontSize: 20 * unit }]}>
         {value}

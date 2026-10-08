@@ -13,7 +13,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 object YouTubeEngine {
-  private const val VERSION = "2026.08.19"
   private var initialized = false
   private val timer = Executors.newSingleThreadScheduledExecutor()
   private val searches = ConcurrentHashMap<String, AtomicBoolean>()
@@ -27,11 +26,13 @@ object YouTubeEngine {
     FFmpeg.getInstance().init(context)
     val directory = File(context.noBackupFilesDir, "${YoutubeDL.baseName}/${YoutubeDL.ytdlpDirName}")
     val versionFile = File(directory, "jukebox-version")
-    if (!File(directory, YoutubeDL.ytdlpBin).exists() || !versionFile.exists() || versionFile.readText() != VERSION) {
+    // Written by the build next to the extractor it fetched; see build.gradle.
+    val version = context.assets.open("jukebox-yt-dlp-version").use { it.readBytes().decodeToString().trim() }
+    if (!File(directory, YoutubeDL.ytdlpBin).exists() || !versionFile.exists() || versionFile.readText() != version) {
       val target = File(directory, "jukebox-new")
       context.assets.open("jukebox-yt-dlp").use { input -> target.outputStream().use { input.copyTo(it) } }
-      check(target.renameTo(File(directory, YoutubeDL.ytdlpBin))) { "Could not prepare the YouTube engine." }
-      versionFile.writeText(VERSION)
+      if (!target.renameTo(File(directory, YoutubeDL.ytdlpBin))) throw YouTubeTrouble(Failure.ENGINE)
+      versionFile.writeText(version)
     }
     initialized = true
   }
@@ -58,10 +59,11 @@ object YouTubeEngine {
     }, 0, 250, TimeUnit.MILLISECONDS)
     try {
       val response = YoutubeDL.execute(request, processId, progress)
-      check(!cancelled.get() && !timedOut.get()) { if (timedOut.get()) "YouTube took too long to respond. Try again." else "Cancelled" }
+      if (timedOut.get()) throw YouTubeTrouble(Failure.TIMED_OUT)
+      check(!cancelled.get()) { "Cancelled" }
       return response.out
     } catch (error: Exception) {
-      if (timedOut.get()) throw IllegalStateException("YouTube took too long to respond. Try again.", error)
+      if (timedOut.get() && error !is YouTubeTrouble) throw YouTubeTrouble(Failure.TIMED_OUT, cause = error)
       throw error
     } finally { watch.cancel(false) }
   }
@@ -116,8 +118,8 @@ object YouTubeEngine {
     val info = JSONObject(execute(request(url).apply {
       addOption("--skip-download"); addOption("--dump-single-json")
     }, cancelled, 60))
-    val video = YouTubeData.video(info) ?: error("Live streams and upcoming videos cannot be downloaded.")
-    require(info.optDouble("duration", 0.0) <= 7200) { "Choose a recording shorter than two hours." }
+    val video = YouTubeData.video(info) ?: throw YouTubeTrouble(Failure.LIVE)
+    if (info.optDouble("duration", 0.0) > 7200) throw YouTubeTrouble(Failure.TOO_LONG)
     directory.mkdirs()
     DownloadMetadata.prepare(info)
     // The catalogue lookup supplies both credits and artwork, before the file is tagged.
@@ -147,7 +149,7 @@ object YouTubeEngine {
     }
     val audio = directory.listFiles()?.singleOrNull {
       it.isFile && it.extension.lowercase() in setOf("mp3", "m4a", "opus", "ogg", "aac", "flac", "wav", "mp4")
-    } ?: error("YouTube did not produce an audio file.")
+    } ?: throw YouTubeTrouble(Failure.NO_AUDIO)
     return audio to video
   }
 }

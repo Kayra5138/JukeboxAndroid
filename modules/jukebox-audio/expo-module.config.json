@@ -6,7 +6,8 @@
     "modules": [
       "expo.modules.jukeboxaudio.JukeboxAudioModule",
       "expo.modules.jukeboxaudio.downloads.JukeboxDownloadsModule",
-      "expo.modules.jukeboxaudio.translate.JukeboxTranslateModule"
+      "expo.modules.jukeboxaudio.translate.JukeboxTranslateModule",
+      "expo.modules.jukeboxaudio.tags.JukeboxTagsModule"
     ]
   }
 }

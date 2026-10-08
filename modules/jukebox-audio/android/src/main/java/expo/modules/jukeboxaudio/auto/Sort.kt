@@ -1,6 +1,8 @@
 package expo.modules.jukeboxaudio.auto
 
 import android.content.Context
+import androidx.annotation.StringRes
+import expo.modules.jukeboxaudio.R
 
 /**
  * The order a shelf is shown in, in the car.
@@ -13,15 +15,18 @@ import android.content.Context
  * Kept apart from the phone's own sorting, and on purpose. What somebody wants
  * first on a dashboard, glanced at, is not what they want in a list they are
  * sitting down to read.
+ *
+ * Each is known by its key, which is what is written down, and named by a
+ * string resource, because the name is in whatever language the app is in.
  */
-internal enum class Sort(val key: String, val label: String) {
-  TITLE("title", "Name"),
-  ARTIST("artist", "Artist"),
-  ADDED("added", "Recently added"),
-  MOST("most", "Most played"),
-  RECENT("recent", "Recently played"),
-  CHANGED("changed", "Recently changed"),
-  SIZE("size", "Longest");
+internal enum class Sort(val key: String, @StringRes val label: Int) {
+  TITLE("title", R.string.jukebox_auto_sort_name),
+  ARTIST("artist", R.string.jukebox_auto_sort_artist),
+  ADDED("added", R.string.jukebox_auto_sort_added),
+  MOST("most", R.string.jukebox_auto_sort_most),
+  RECENT("recent", R.string.jukebox_auto_sort_recent),
+  CHANGED("changed", R.string.jukebox_auto_sort_changed),
+  SIZE("size", R.string.jukebox_auto_sort_size);
 
   companion object {
     /** What each shelf can be put in order by, the first being how it starts out. */

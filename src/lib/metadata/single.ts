@@ -4,6 +4,7 @@ import { lookupTrack as lookupItunes, type ItunesMatch } from './itunes.ts';
 import { lookupTrack as lookupMusicBrainz, type MusicBrainzMatch } from './musicbrainz.ts';
 import { canonicalLabel } from './text.ts';
 import type { TagEdit, TagSource } from '../db/tags.ts';
+import { strings, type Strings } from '../i18n/languages.ts';
 import type { Track } from '../types.ts';
 
 /**
@@ -177,8 +178,12 @@ export function typedPlace(text: string): number | null {
 }
 
 /** What a field that takes a number is told about what is in it, or null if it is fine. */
-export function numberComplaint(text: string, kind: 'year' | 'place'): string | null {
+export function numberComplaint(
+  text: string,
+  kind: 'year' | 'place',
+  t: Strings = strings()
+): string | null {
   if (text.trim() === '') return null;
-  if (kind === 'year') return typedYear(text) == null ? 'That is not a year.' : null;
-  return typedPlace(text) == null ? 'A whole number, from 1 up.' : null;
+  if (kind === 'year') return typedYear(text) == null ? t.details.general.notAYear : null;
+  return typedPlace(text) == null ? t.details.general.notAPlace : null;
 }

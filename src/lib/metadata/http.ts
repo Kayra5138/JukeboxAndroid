@@ -26,11 +26,23 @@ export const REQUEST_TIMEOUT_MS = 15_000;
  */
 export const USER_AGENT = 'Jukebox/0.1 ( https://github.com/Kayra5138/JukeboxAndroid )';
 
-type Classified = { status?: number; network?: boolean };
+type Classified = { status?: number; network?: boolean; throttled?: boolean; said?: string | null; headers?: Headers };
 
 /** The service answered, and the answer was a refusal. */
 export function httpError(service: string, status: number): Error {
   return Object.assign(new Error(`${service} responded ${status}`), { status });
+}
+
+/**
+ * The same refusal, marked as "slow down" by the one place that knows it is.
+ *
+ * A status says what the service answered, not what it meant: 403 is a wrong
+ * question to most of them and the rate limit to Apple. Whoever asked knows
+ * which service it was, so the meaning is attached there and travels with the
+ * error, rather than being guessed again from the number further up.
+ */
+export function asThrottle(error: unknown): unknown {
+  return error instanceof Error ? Object.assign(error, { throttled: true }) : error;
 }
 
 /** Nothing answered: no route, no name resolution, or no reply in time. */
@@ -56,10 +68,55 @@ export function isNetworkError(error: unknown): boolean {
   return (error as Classified | null)?.network === true;
 }
 
+/** Whether a failure means "ask again later" rather than "no". */
+export function isThrottle(error: unknown): boolean {
+  return (error as Classified | null)?.throttled === true || statusOf(error) === 429;
+}
+
 /** The status a failure carried, or null when it never got an answer at all. */
 export function statusOf(error: unknown): number | null {
   const status = (error as Classified | null)?.status;
   return typeof status === 'number' ? status : null;
+}
+
+/**
+ * A header of the answer a refusal came with, or null.
+ *
+ * Only {@link request} attaches them, and only to a refusal: that is where a
+ * service says how long to stay away, and the status alone does not carry it.
+ */
+export function headerOf(error: unknown, name: string): string | null {
+  return (error as Classified | null)?.headers?.get(name) ?? null;
+}
+
+/**
+ * What the service said about a refusal, in its own words, or null.
+ *
+ * A status says a request was refused and not why, and the why is sometimes
+ * the only useful part: 401 from a service that has just accepted the same
+ * token is not "your token is wrong", and only the body says what it is.
+ * Never the request's own contents, which a service does not echo.
+ */
+export function saidOf(error: unknown): string | null {
+  return (error as Classified | null)?.said ?? null;
+}
+
+/** The body of a refusal, cut short; a JSON `error` or `message` if that is what it is. */
+async function saidBy(response: Response): Promise<string | null> {
+  try {
+    const text = (await response.text()).trim();
+    if (!text) return null;
+    try {
+      const body = JSON.parse(text) as { error?: unknown; message?: unknown };
+      const words = typeof body.error === 'string' ? body.error : body.message;
+      if (typeof words === 'string' && words.trim()) return words.trim().slice(0, 300);
+    } catch {
+      // Not JSON, so it is said as it came.
+    }
+    return text.slice(0, 300);
+  } catch {
+    return null;
+  }
 }
 
 /** Wait, unless the caller stops first — in which case fail. */
@@ -132,7 +189,12 @@ export async function request<T>(
 
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
-    if (!response.ok) throw httpError(service, response.status);
+    if (!response.ok) {
+      throw Object.assign(httpError(service, response.status), {
+        headers: response.headers,
+        said: await saidBy(response),
+      });
+    }
     /*
       The body is read here rather than by the caller, so that it is covered by
       the deadline and by the caller's signal.

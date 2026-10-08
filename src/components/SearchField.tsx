@@ -1,5 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+
+import { useT } from '../lib/i18n/index';
+import { hintKey, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 
 /**
  * A search box with a way out of it.
@@ -24,6 +28,36 @@ export function SearchField({
   onBlur?: () => void;
 }) {
   const input = useRef<TextInput>(null);
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
+
+  /*
+    The field is made again when its hint or its colours change -- but only
+    once its screen is the one in front.
+
+    Android lays a field's hint out once, so new words or new colours need a
+    new field; see `hintKey`. That alone was not enough, and for a reason that
+    took two goes to see: the language and the theme are changed in Settings,
+    which is another tab, and a field made while its own tab is out of sight
+    is measured with no width to measure against. Its hint came out on two
+    lines either way, until it was touched. So the key is held at what it was
+    while the screen is away, and moved on when the screen comes back, where
+    the new field has a real width to be laid out in.
+  */
+  const wanted = hintKey(c, placeholder);
+  const [made, setMade] = useState(wanted);
+  const [inFront, setInFront] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setInFront(true);
+      return () => setInFront(false);
+    }, [])
+  );
+  useEffect(() => {
+    if (inFront && made !== wanted) setMade(wanted);
+  }, [inFront, made, wanted]);
 
   /*
     Letting go of the keyboard is letting go of the box.
@@ -41,6 +75,7 @@ export function SearchField({
   return (
     <View style={styles.field}>
       <TextInput
+        key={made}
         ref={input}
         style={styles.input}
         value={value}
@@ -48,7 +83,7 @@ export function SearchField({
         onFocus={onFocus}
         onBlur={onBlur}
         placeholder={placeholder}
-        placeholderTextColor="#5f5f5f"
+        placeholderTextColor={c.textDisabled}
         accessibilityLabel={accessibilityLabel ?? placeholder}
         autoCapitalize="none"
         autoCorrect={false}
@@ -65,8 +100,9 @@ export function SearchField({
       />
       {value.length > 0 ? (
         <Pressable
+          android_ripple={pressed}
           accessibilityRole="button"
-          accessibilityLabel="Clear the search"
+          accessibilityLabel={t.common.clearSearch}
           // Larger than it looks: a cross drawn at the size it should appear is
           // smaller than a fingertip, so the padding is the target.
           hitSlop={10}
@@ -81,17 +117,18 @@ export function SearchField({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   field: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderRadius: 10,
     paddingRight: 6,
+    ...outlined(c),
   },
   input: {
     flex: 1,
-    color: '#ededed',
+    color: c.text,
     fontSize: 15,
     paddingHorizontal: 14,
     paddingVertical: 11,
@@ -101,15 +138,17 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: '#3a3a3a',
+    backgroundColor: c.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
   clearMark: {
-    color: '#121212',
+    // Cut out of the circle rather than written on it: the colour of what the
+    // field itself lies on.
+    color: c.surface,
     fontSize: 15,
     fontWeight: '700',
     // The glyph sits high in its line box; this drops it onto the centre.
     lineHeight: 17,
   },
-});
+}));

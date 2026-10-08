@@ -1,4 +1,5 @@
 import { TextPrompt } from './TextPrompt';
+import { useT } from '../lib/i18n/index';
 
 /** Asks for one tag to put on a run of tracks. */
 export function TagPrompt({
@@ -12,12 +13,13 @@ export function TagPrompt({
   onSubmit: (tag: string) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   return (
     <TextPrompt
       visible={visible}
-      heading={`Add a tag to ${count} ${count === 1 ? 'track' : 'tracks'}`}
-      placeholder="Tag"
-      confirmLabel="Add"
+      heading={t.details.tagPrompt.heading(count)}
+      placeholder={t.details.tagPrompt.placeholder}
+      confirmLabel={t.common.add}
       onSubmit={onSubmit}
       onClose={onClose}
     />

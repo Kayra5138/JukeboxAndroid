@@ -23,8 +23,24 @@ import kotlinx.coroutines.sync.withLock
  * through a native module interface that has no use for them.
  */
 object BergamotTranslator {
-  /** What lyrics are put into, and the only language every model reaches. */
+  /** The language every model has on one side, and so the way from any language to any other. */
   private const val PIVOT = "en"
+
+  /**
+   * The models it takes to get from [source] to [target], in order.
+   *
+   * None for a language into itself, one where either end is English, two
+   * otherwise. English lyrics read in Turkish are the case that matters:
+   * that is one model, English to Turkish, and asking for an "English to
+   * English" one first — which is what treating every translation as two
+   * hops comes to — is asking for a model nobody publishes.
+   */
+  internal fun hops(source: String, target: String): List<Pair<String, String>> = when {
+    source == target -> emptyList()
+    source == PIVOT -> listOf(PIVOT to target)
+    target == PIVOT -> listOf(source to PIVOT)
+    else -> listOf(source to PIVOT, PIVOT to target)
+  }
 
   /**
    * Guards creation rather than use. The client is expensive to build and safe
@@ -64,6 +80,28 @@ object BergamotTranslator {
   }
 
   /**
+   * False for a language lyrics cannot be put into.
+   *
+   * The other half of [isSupported], which only ever asked about reading a
+   * language and took English as where it was going. English itself needs no
+   * model and is always true.
+   */
+  fun isTargetSupported(context: Context, target: String): Boolean =
+    target == PIVOT || isPairSupported(context, PIVOT, target)
+
+  /** True when every model between [source] and [target] is one Mozilla publishes. */
+  fun isPairSupported(context: Context, source: String, target: String): Boolean = runBlocking {
+    val models = engine(context).models
+    hops(source, target).all { (from, into) -> models.findBundled(LanguagePair(from, into)) != null }
+  }
+
+  /** True when every model between [source] and [target] is already on the device. */
+  fun isPairReady(context: Context, source: String, target: String): Boolean = runBlocking {
+    val models = engine(context).models
+    hops(source, target).all { (from, into) -> models.findUsable(LanguagePair(from, into)) != null }
+  }
+
+  /**
    * Translates [lines] one by one, keeping them in step with the originals.
    *
    * The engine takes a whole list and gives one back, which is what is wanted
@@ -79,20 +117,20 @@ object BergamotTranslator {
 
     return runBlocking {
       val foxlet = engine(context)
-      // Downloads it if it is not already here. Deliberately not restricted to
-      // wifi: the download only ever happens because someone asked for a
-      // translation, and a condition that silently refuses to be met would look
-      // exactly like the feature being broken.
-      val from = foxlet.models.prepare(LanguagePair(source, PIVOT))
       val spoken = lines.filter { it.isNotBlank() }
       if (spoken.isEmpty()) return@runBlocking lines
 
-      val said = if (target == PIVOT) {
-        foxlet.translator.translate(spoken, from, TextFormat.Plain)
+      // Downloads each if it is not already here. Deliberately not restricted
+      // to wifi: the download only ever happens because someone asked for a
+      // translation, and a condition that silently refuses to be met would look
+      // exactly like the feature being broken.
+      val models = hops(source, target).map { (from, into) -> foxlet.models.prepare(LanguagePair(from, into)) }
+
+      val said = if (models.size == 1) {
+        foxlet.translator.translate(spoken, models[0], TextFormat.Plain)
       } else {
         // Every model has English on one side, so anything else is two hops.
-        val into = foxlet.models.prepare(LanguagePair(PIVOT, target))
-        foxlet.translator.translatePivot(spoken, from, into, TextFormat.Plain)
+        foxlet.translator.translatePivot(spoken, models[0], models[1], TextFormat.Plain)
       }
 
       // Put the silences back where they were.

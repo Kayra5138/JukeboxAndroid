@@ -112,11 +112,43 @@ export function remapTables(
   artworkHome: string
 ): Remapped {
   const described = new Map(tracks.map((track) => [track.id, track]));
+
+  /*
+    The made-up id of a song that is not here: one for each song the backup
+    tells apart, and the same one every time that song comes up.
+
+    It used to be made from the file name alone, and two deleted songs that
+    shared one -- an `01 - Intro.mp3` each, off two records -- came back as a
+    single song with both their histories. The name is still tried first, so a
+    song that was given an id by an earlier import is given the same one now
+    and its listens stay together. Only when that id already belongs to another
+    of the backup's songs is more of the description brought in, and in the
+    end the backup's own number: hashed with the rest, which tells two songs
+    apart without ever letting that number stand as an id here.
+  */
+  const made = new Map<string, string>();
+  const owner = new Map<string, string>();
   const absent = (id: string, row: Row) => {
+    const already = made.get(id);
+    if (already) return already;
+
     const track = described.get(id);
     const name = fold(track?.filename ?? row.filename);
     const song = `${fold(track?.title ?? row.title)}\u0000${fold(track?.artist ?? row.artist)}`;
-    return `absent:${hash(name || song)}`;
+    const tries = [
+      // A song that was not there when the backup was made already has an id
+      // of this kind, and keeps it.
+      /^absent:[0-9a-f]{8}$/.test(id) ? id : null,
+      `absent:${hash(name || song)}`,
+      `absent:${hash(`${name}\u0000${song}`)}`,
+    ];
+    for (let salt = 0; ; salt++) {
+      const next = tries[salt] ?? `absent:${hash(`${name}\u0000${song}\u0000${id}\u0000${salt}`)}`;
+      if (next === null || (owner.get(next) ?? id) !== id) continue;
+      owner.set(next, id);
+      made.set(id, next);
+      return next;
+    }
   };
 
   const out = emptyTables();
@@ -320,6 +352,20 @@ function mergeKeyed(here: Tables, there: Tables): Omit<Tables, 'playlists' | 'pl
       newerTranslation
     ),
   };
+}
+
+/**
+ * What is kept about each song when some of the phone's own songs turn out to
+ * be others of them, under the id the file had before it was moved.
+ *
+ * The same rules as bringing a backup in, because it is the same question: two
+ * rows where the database allows one, and one of them was already here. Only
+ * the tables with a row or a set of rows to a song are answered for. Listens
+ * do not clash and lists number their members across the whole list, so both
+ * are moved where they are, by whoever is doing the moving.
+ */
+export function joinSongs(here: Tables, there: Tables): Tables {
+  return { ...emptyTables(), ...mergeKeyed(here, there), plays: [], skips: [], discover_exclusions: [] };
 }
 
 /**

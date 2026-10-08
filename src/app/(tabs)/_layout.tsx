@@ -2,10 +2,14 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { SettingsIcon, LibraryIcon, ListsIcon, SearchIcon } from '../../components/Icons';
 import { TabBar } from '../../components/TabBar';
+import { useT } from '../../lib/i18n/index';
+import { useColours } from '../../lib/theme/index';
 import { useLandscape } from '../../lib/ui/layout';
 
 export default function MainTabs() {
   const landscape = useLandscape();
+  const t = useT();
+  const c = useColours();
 
   return (
     <Tabs
@@ -23,30 +27,30 @@ export default function MainTabs() {
         above it, and reserve the right edge for it.
       */
       tabBarPosition: landscape ? 'left' : 'bottom',
-      headerStyle: { backgroundColor: '#121212' },
-      headerTintColor: '#f2f2f2',
-      sceneStyle: { backgroundColor: '#121212' },
+      headerStyle: { backgroundColor: c.bg },
+      headerTintColor: c.text,
+      sceneStyle: { backgroundColor: c.bg },
       tabBarHideOnKeyboard: true,
     }}>
       <Tabs.Screen name="index" options={{
-        title: 'Library', headerShown: false,
-        tabBarIcon: ({ color }) => <LibraryIcon size={22} color={typeof color === 'string' ? color : '#f2f2f2'} />,
+        title: t.nav.library, headerShown: false,
+        tabBarIcon: ({ color }) => <LibraryIcon size={22} color={typeof color === 'string' ? color : c.text} />,
       }} />
       <Tabs.Screen name="lists" options={{
-        title: 'Lists', headerShown: false,
-        tabBarIcon: ({ color }) => <ListsIcon size={22} color={typeof color === 'string' ? color : '#f2f2f2'} />,
+        title: t.nav.lists, headerShown: false,
+        tabBarIcon: ({ color }) => <ListsIcon size={22} color={typeof color === 'string' ? color : c.text} />,
       }} />
       <Tabs.Screen name="search" options={{
-        title: 'Search', headerShown: false,
-        tabBarIcon: ({ color }) => <SearchIcon size={22} color={typeof color === 'string' ? color : '#f2f2f2'} />,
+        title: t.nav.search, headerShown: false,
+        tabBarIcon: ({ color }) => <SearchIcon size={22} color={typeof color === 'string' ? color : c.text} />,
       }} />
       <Tabs.Screen name="stats" options={{
-        title: 'Stats', headerShown: false,
+        title: t.nav.stats, headerShown: false,
         tabBarIcon: ({ color }) => <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 22, gap: 3 }}>{[10, 20, 15].map((height, i) => <View key={i} style={{ width: 4, height, backgroundColor: color }} />)}</View>,
       }} />
       <Tabs.Screen name="settings" options={{
-        title: 'Settings', headerShown: false,
-        tabBarIcon: ({ focused }) => <SettingsIcon size={22} color={focused ? '#f2f2f2' : '#777'} />,
+        title: t.nav.settings, headerShown: false,
+        tabBarIcon: ({ focused }) => <SettingsIcon size={22} color={focused ? c.text : c.textMuted} />,
       }} />
     </Tabs>
   );

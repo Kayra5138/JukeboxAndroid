@@ -1,5 +1,7 @@
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { db } from '../db/index.ts';
+import { dropFromEveryList } from '../db/playlists.ts';
+import { forgetErased } from '../identity/index.ts';
 
 /**
  * Erases tracks from the device.
@@ -31,7 +33,7 @@ function forgetEverythingAbout(trackIds: string[]): void {
   const placeholders = trackIds.map(() => '?').join(',');
   const database = db();
 
-  // One change, not four. Interrupted half way — a throw, the process killed —
+  // One change, not several. Interrupted half way — a throw, the process killed —
   // the rows left behind belong to a track that no longer exists, and nothing
   // ever visits them again to notice.
   database.withTransactionSync(() => {
@@ -41,5 +43,9 @@ function forgetEverythingAbout(trackIds: string[]): void {
         ...trackIds
       );
     }
+    dropFromEveryList(trackIds);
+    // And it stops being looked for. Until now a file that had gone might
+    // have been moved; this one is known to have been erased.
+    forgetErased(trackIds);
   });
 }

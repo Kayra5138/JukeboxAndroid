@@ -1,10 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type Ref,
+} from 'react';
 import { Image } from 'expo-image';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
+import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import type { Album } from '../lib/media/albums';
+import { makeStyles } from '../lib/theme/index';
 
 /**
  * A rack of records you flick through, with the one in front turned to face
@@ -140,15 +150,37 @@ const HALF_SPAN =
 /** How much of a sleeve its reflection takes up on the shelf below it. */
 const MIRROR = 0.38;
 
+/** Where a sleeve is on the glass, measured from the window's top left. */
+export type Sleeve = { x: number; y: number; width: number; height: number };
+
+/** What the screen holding the rack can ask of it. */
+export type Rack = {
+  /**
+   * Where a record's sleeve is now, or null if it is not the one square on.
+   *
+   * Asked when a record that was opened is being put back, which can be long
+   * after it was taken out: the phone may have been turned since, or the
+   * player's panel may have arrived and taken a share of the width. Where the
+   * sleeve was when it was tapped is not where it has to be returned to.
+   */
+  sleeveOf: (key: string, then: (sleeve: Sleeve | null) => void) => void;
+};
 
 export function CoverFlow({
   albums,
-  onPlay,
+  onOpen,
+  ref,
 }: {
   albums: Album[];
-  /** Play the record from a track, which is what the back of a card offers. */
-  onPlay: (album: Album, index: number) => void;
+  /**
+   * Open the record in front, given where its sleeve is so that whatever
+   * opens can start out as that sleeve.
+   */
+  onOpen: (album: Album, sleeve: Sleeve) => void;
+  ref?: Ref<Rack>;
 }) {
+  const t = useT();
+  const styles = useStyles();
   /*
     Its own size, not the window's. The rack sits under a header and over a tab
     bar, and centring on the window put the front record low enough to sit on
@@ -184,22 +216,8 @@ export function CoverFlow({
 
   const scroll = useRef(new Animated.Value(0)).current;
   const rail = useRef<ScrollView>(null);
+  const stage = useRef<View>(null);
   const [front, setFront] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const flip = useRef(new Animated.Value(0)).current;
-
-  const turn = useCallback(
-    (open: boolean) => {
-      setFlipped(open);
-      Animated.spring(flip, {
-        toValue: open ? 1 : 0,
-        useNativeDriver: true,
-        bounciness: 3,
-        speed: 12,
-      }).start();
-    },
-    [flip]
-  );
 
   /**
    * Where the rail is, in sleeves. A whole number means a record is square on.
@@ -226,8 +244,55 @@ export function CoverFlow({
     );
   }, [step]);
 
-  /** True when a record is square on, near enough to be worth turning over. */
+  /** True when a record is square on, near enough to be worth opening. */
   const squared = () => Math.abs(at.current - Math.round(at.current)) < SQUARE_ENOUGH;
+
+  /**
+   * Where the sleeve in front is on the glass.
+   *
+   * Only the frame is measured, and the sleeve is placed inside it by the same
+   * arithmetic that draws it. Measuring the sleeve itself would be asking the
+   * layout about a view that is put where it is by transforms the layout never
+   * hears of — they are the native driver's, set from the scroll — and the
+   * answer is where the record would have been with the rail at its start.
+   * Square on, those transforms come to nothing, so what is left is the middle
+   * of the frame across and the middle of what the reflection leaves through.
+   */
+  const sleeve = (then: (found: Sleeve | null) => void) => {
+    const frame = stage.current;
+    if (!frame) return then(null);
+    frame.measureInWindow((x, y) =>
+      then({
+        x: x + (width - card) / 2,
+        y: y + (height - mirror - card) / 2,
+        width: card,
+        height: card,
+      })
+    );
+  };
+
+  /**
+   * Opens the record in front, or brings it round first.
+   *
+   * Tapped mid-flick it is square to nothing, and whatever it opens into would
+   * set out from a sleeve that is not where it was said to be. So it is settled
+   * and opening waits for the next tap.
+   */
+  const open = () => {
+    const album = albums[front];
+    if (!album) return;
+    if (!squared()) return settle();
+    sleeve((found) => {
+      if (found) onOpen(album, found);
+    });
+  };
+
+  useImperativeHandle(ref, () => ({
+    sleeveOf: (key, then) => {
+      if (albums[front]?.key !== key || !squared()) return then(null);
+      sleeve(then);
+    },
+  }));
 
   /*
     Turning the phone changes how far apart the records sit, and the rail is
@@ -237,10 +302,6 @@ export function CoverFlow({
   */
   useEffect(() => {
     if (step <= 0) return;
-    // Anything open is put away first. Turning the phone rebuilds the rack
-    // around it, and a record left open through that is one the listener is
-    // no longer looking at.
-    if (flipped) turn(false);
 
     /*
       Only the rail is moved, and the value that drives the fan is left to
@@ -280,14 +341,11 @@ export function CoverFlow({
             // Fired from here rather than from an effect so it lands with the
             // movement rather than a frame after it.
             JukeboxAudio.tick?.();
-            // Turning the rack puts whatever was open away, the same as
-            // closing a case to reach for the next one.
-            if (flipped) turn(false);
             return index;
           });
         },
       }),
-    [flipped, scroll, step, turn]
+    [scroll, step]
   );
 
   /**
@@ -335,10 +393,7 @@ export function CoverFlow({
           setBox((held) => (held.width === w && held.height === h ? held : { width: w, height: h }));
         }}>
         {albums.length === 0 ? (
-          <Text style={styles.emptyText}>
-            No albums yet. A record only appears once its tracks have been
-            looked up — the folder a file sits in is not an album.
-          </Text>
+          <Text style={styles.emptyText}>{t.library.noAlbums}</Text>
         ) : null}
       </View>
     );
@@ -348,26 +403,14 @@ export function CoverFlow({
 
   return (
     <View
+      ref={stage}
       style={styles.stage}
       onLayout={(event) => {
         const { width: w, height: h } = event.nativeEvent.layout;
         setBox((held) => (held.width === w && held.height === h ? held : { width: w, height: h }));
       }}>
       {/*
-        Visual only while the rack is closed. The rail sits over the top so
-        that a flick anywhere works, which means the cards themselves never see
-        a touch — the slots inside the rail stand in for them. Once a record is
-        open its own children have to be reachable, so it starts catching
-        touches again and the rail keeps whatever falls outside the card.
-      */}
-      {/*
         The rail. Nothing in it is ever seen; it is here for the flick.
-
-        Under the rack rather than over it. Over it, it took every touch —
-        including the ones meant for an open record's listing, which is why
-        tapping a track closed the record instead of playing it. Under it, the
-        rack lets everything through until a record is open, and then only its
-        own listing catches anything.
 
         Animated.ScrollView rather than a plain one, because a natively driven
         `Animated.event` is an object the view has to know how to attach. A
@@ -411,14 +454,9 @@ export function CoverFlow({
               key={album.key}
               style={{ width: step, height: '100%' }}
               onPress={() => {
-                // The one in front turns over; any other comes to the front,
-                // which is what reaching past it into the rack would do.
-                // Tapped mid-flick it is square to nothing, so it is brought
-                // round first and opening waits for the next tap.
-                if (index === front) {
-                  if (squared()) turn(!flipped);
-                  else settle();
-                }
+                // The one in front opens; any other comes to the front, which
+                // is what reaching past it into the rack would do.
+                if (index === front) open();
                 else rail.current?.scrollTo({ x: index * step, animated: true });
               }}
             />
@@ -428,11 +466,10 @@ export function CoverFlow({
           The records, inside the rail rather than beside it.
 
           Beside it they were a sibling of the thing that scrolls, and the two
-          could not share a gesture: whichever took a touch kept it. A drag on
-          an open record scrolled nothing, and a tap on a neighbour reached
-          that neighbour's own listing — which played it instead of bringing
-          it forward. Inside, the rail is an ancestor: it takes drags and
-          passes taps down, which is what a scroll view is for.
+          could not share a gesture: whichever took a touch kept it, and a
+          drag that began on the record in front scrolled nothing. Inside, the
+          rail is an ancestor: it takes drags and passes taps down, which is
+          what a scroll view is for.
 
           Absolutely placed rather than laid out in the slots, so they can be
           painted back to front — a record overlaps its neighbours by more
@@ -466,8 +503,8 @@ export function CoverFlow({
                 },
               ]}
               /*
-                The one in front takes its own taps, open or closed, so that a
-                tap anywhere on its sleeve opens it. Everything else is left to
+                The one in front takes its own taps, so that a tap anywhere on
+                its sleeve opens it. Everything else is left to
                 the rail beneath, which is what brings a neighbour forward
                 rather than opening it where it stands.
               */
@@ -477,12 +514,10 @@ export function CoverFlow({
                 offset={offsetOf(index)}
                 step={step}
                 size={card}
-                flip={index === front ? flip : null}
-                open={flipped && index === front}
+                inFront={index === front}
                 onPress={() => {
-                  if (index === front) turn(!flipped);
+                  if (index === front) open();
                 }}
-                onPlay={(track) => onPlay(albums[index], track)}
               />
             </View>
           ))}
@@ -507,10 +542,8 @@ function Card({
   offset,
   step,
   size,
-  flip,
-  open,
+  inFront,
   onPress,
-  onPlay,
 }: {
   album: Album;
   /** Where this card sits relative to the front one, in cards. */
@@ -518,13 +551,12 @@ function Card({
   /** How far apart two slots are, which is what the rail has already moved it by. */
   step: number;
   size: number;
-  /** Non-null only for the card at the front, which is the one that turns. */
-  flip: Animated.Value | null;
-  /** Turned over, so the listing is the side facing out. */
-  open: boolean;
+  /** The one square on, which is the only one a tap opens. */
+  inFront: boolean;
   onPress: () => void;
-  onPlay: (index: number) => void;
 }) {
+  const t = useT();
+  const styles = useStyles();
   const artwork = useTrackArtwork(album.tracks[0] ?? null);
 
   /*
@@ -564,13 +596,6 @@ function Card({
     extrapolate: 'clamp',
   });
 
-  const turned = flip
-    ? flip.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
-    : '0deg';
-  const back = flip
-    ? flip.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] })
-    : '180deg';
-
   /*
     Perspective has to be the first entry, and the lean has to come after the
     slide: rotating first would turn the axis the card then moves along, and
@@ -586,92 +611,25 @@ function Card({
   return (
     <Animated.View
       style={[styles.card, { width: size, height: size, opacity: fade, transform: placement }]}>
-      <>
-        {/*
-          Each face takes touches only while it is the one being looked at.
-
-          `backfaceVisibility` hides the side turned away, but only from the
-          eye — a touch is still offered to it, and being the later sibling it
-          is offered first. So a shut record had an invisible listing lying
-          over its sleeve, and a tap meant for the sleeve reached a track row
-          and started playing it.
-        */}
-        <Animated.View
-          pointerEvents={open ? 'none' : 'auto'}
-          style={[
-            styles.face,
-            { width: size, height: size, transform: [{ perspective: PERSPECTIVE }, { rotateY: turned }] },
-          ]}>
-          <Pressable style={styles.art} onPress={onPress}>
-            {artwork ? (
-              <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
-            ) : (
-              <View style={[styles.art, styles.artEmpty]} />
-            )}
-          </Pressable>
-        </Animated.View>
-
-        {/*
-          Only the record that can be turned has a back at all. Rendering one
-          for every record in the rack left a neighbour showing a listing
-          whenever the turn value was still up from a record that had since
-          stopped being the front one.
-        */}
-        {flip ? (
-        <Animated.View
-          pointerEvents={open ? 'auto' : 'none'}
-          style={[
-            styles.face,
-            styles.reverse,
-            { width: size, height: size, transform: [{ perspective: PERSPECTIVE }, { rotateY: back }] },
-          ]}>
-          {/*
-            Anywhere on the face that is not a track turns the record back
-            over — the heading, the margins, the empty space below a short
-            listing. The rows are nested inside this and win a tap of their
-            own, which they only do now that the thing carrying the flick is
-            an ancestor rather than a sibling painted over everything.
-          */}
-          <Pressable style={styles.reverseBody} onPress={onPress}>
-            <View style={styles.listingHead}>
-              <Text style={styles.listingTitle} numberOfLines={2}>
-                {album.name}
-              </Text>
-              <Text style={styles.listingDetail} numberOfLines={1}>
-                {[
-                  album.artist,
-                  `${album.tracks.length} ${album.tracks.length === 1 ? 'track' : 'tracks'}`,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </Text>
-            </View>
-            <ScrollView
-              style={styles.listing}
-              contentContainerStyle={styles.listingBody}
-              // Lets a long listing scroll on its own and hand the rest of the
-              // drag back to the rack once it reaches its end.
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}>
-              {album.tracks.map((track, index) => (
-                <Pressable
-                  key={track.id}
-                  onPress={() => onPlay(index)}
-                  style={({ pressed }) => [styles.line, pressed && styles.linePressed]}>
-                  <Text style={styles.lineNumber}>{index + 1}</Text>
-                  <Text style={styles.lineTitle} numberOfLines={1}>
-                    {track.title}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </Pressable>
-        </Animated.View>
-        ) : null}
-      </>
+      <View style={[styles.face, { width: size, height: size }]}>
+        <Pressable
+          style={styles.art}
+          accessibilityRole="button"
+          // Only the one in front says so, because only it does: a neighbour
+          // is brought forward by the slot it stands in, not opened.
+          accessibilityLabel={inFront ? t.library.rack.open(album.name) : album.name}
+          accessibilityHint={inFront ? t.library.rack.openHint : undefined}
+          onPress={onPress}>
+          {artwork ? (
+            <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
+          ) : (
+            <View style={[styles.art, styles.artEmpty]} />
+          )}
+        </Pressable>
+      </View>
 
       {/* The shelf the records are standing on. */}
-      <Mirror uri={artwork} size={size} flip={flip} />
+      <Mirror uri={artwork} size={size} />
     </Animated.View>
   );
 }
@@ -683,31 +641,14 @@ function Card({
  * picture's reflection does not justify adding a drawing library; six steps at
  * this size is below what the eye separates.
  */
-function Mirror({
-  uri,
-  size,
-  flip,
-}: {
-  uri: string | null;
-  size: number;
-  /** Non-null on the record that can be turned over. */
-  flip: Animated.Value | null;
-}) {
+function Mirror({ uri, size }: { uri: string | null; size: number }) {
+  const styles = useStyles();
   const depth = size * MIRROR;
   /* Pinned by the edge it reflects off, which is the sleeve's bottom. */
   const frame = { width: size, height: depth, top: '100%' as const };
 
-  /*
-    Goes as the record turns. A reflection is of the face that was showing, so
-    once that face is away it is a picture of something that is no longer
-    there — and the listing on the back has no reflection to give.
-  */
-  const showing = flip
-    ? flip.interpolate({ inputRange: [0, 0.4, 1], outputRange: [1, 0, 0] })
-    : 1;
-
   return (
-    <Animated.View style={[styles.mirror, frame, { opacity: showing }]} pointerEvents="none">
+    <View style={[styles.mirror, frame]} pointerEvents="none">
       {uri ? (
         <Image
           source={{ uri }}
@@ -732,12 +673,12 @@ function Mirror({
           />
         );
       })}
-    </Animated.View>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  stage: { flex: 1, backgroundColor: '#000000' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  stage: { flex: 1, backgroundColor: c.bg },
   /*
     One record's place in the rail, the width of a slot. The record itself is
     far wider and centres on it, spilling over its neighbours — which is the
@@ -754,53 +695,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   empty: { alignItems: 'center', justifyContent: 'center', padding: 36 },
-  emptyText: { color: '#6a6a6a', fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  emptyText: { color: c.textFaint, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 
   card: { position: 'absolute', alignItems: 'center' },
   face: {
-    backfaceVisibility: 'hidden',
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: '#141414',
+    backgroundColor: c.surface,
   },
-  reverse: { position: 'absolute', top: 0, left: 0, backgroundColor: '#1b1b1b' },
   art: { width: '100%', height: '100%' },
-  artEmpty: { backgroundColor: '#1e1e1e' },
-
-  reverseBody: { flex: 1 },
-  listingHead: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 10,
-    gap: 3,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#2a2a2a',
-  },
-  listingTitle: { color: '#f2f2f2', fontSize: 14.5, fontWeight: '600' },
-  listingDetail: { color: '#7a7a7a', fontSize: 11.5 },
-  listing: { flex: 1 },
-  listingBody: { paddingVertical: 6 },
-  line: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-  },
-  linePressed: { backgroundColor: '#242424' },
-  lineNumber: {
-    color: '#5f5f5f',
-    fontSize: 11.5,
-    width: 18,
-    textAlign: 'right',
-    fontVariant: ['tabular-nums'],
-  },
-  lineTitle: { color: '#ededed', fontSize: 13.5, flex: 1, minWidth: 0 },
+  artEmpty: { backgroundColor: c.surfaceRaised },
 
   // Sits against the sleeve, in the card's own transformed space, so it leans
   // and recedes with it.
   mirror: { position: 'absolute', overflow: 'hidden' },
-  band: { position: 'absolute', backgroundColor: '#000000' },
+  // The stage's own colour, since what a reflection fades into is whatever
+  // it is standing on.
+  band: { position: 'absolute', backgroundColor: c.bg },
 
   slots: { flexDirection: 'column' },
   slotsWide: { flexDirection: 'row' },
@@ -823,20 +734,24 @@ const styles = StyleSheet.create({
     whatever sleeve happens to be there. Upright that is a run of artwork right
     under the words. The shadow is what keeps them legible against a bright
     one without having to put a bar behind them and take the height back.
+
+    In the stage's colour rather than in black: the words are the theme's, so
+    what sets them off from a sleeve has to be the shade they were chosen to be
+    read on, which is black only in a dark theme.
   */
   name: {
-    color: '#f2f2f2',
+    color: c.text,
     fontSize: 16,
     fontWeight: '600',
-    textShadowColor: '#000000cc',
+    textShadowColor: c.bg,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 6,
   },
   detail: {
-    color: '#a2a2a2',
+    color: c.textSecondary,
     fontSize: 12.5,
-    textShadowColor: '#000000cc',
+    textShadowColor: c.bg,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 5,
   },
-});
+}));

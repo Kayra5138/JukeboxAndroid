@@ -2,9 +2,10 @@
 
 A music player for Android that plays the files already on your phone.
 
-No account, no server, no ads, no tracking. Your library, your listening history
-and your stats never leave the device. It is free software (GPL-3.0-or-later),
-and it comes with a rhythm game built out of your own songs, because why not.
+No account needed, no server, no ads, no tracking. Your library, your listening
+history and your stats stay on the device, unless you choose to connect
+ListenBrainz and switch sending on. It is free software (GPL-3.0-or-later), and
+it comes with a rhythm game built out of your own songs, because why not.
 
 ## Features
 
@@ -14,17 +15,31 @@ and it comes with a rhythm game built out of your own songs, because why not.
   included.
 - Browse by track or by album. Sort by name, date added or most played, and
   search as you type.
+- Or by artist, where a song by two artists is under both, or by the folders
+  the files are kept in. Settings chooses which of the four views are offered,
+  and each keeps its own sort order.
 - Swipe a track right to play it next, left to add it to the end of the queue.
 - Long-press a track for the full menu: play next, add to queue, go to album,
-  add to a list, piano tiles, view & edit details, delete.
-- Select several tracks at once to add them to a list or delete them.
+  add to a list, piano tiles, view & edit details, delete from the phone. The
+  same menu opens on an album, artist, folder or list page and in the queue.
+- Select several tracks at once to queue them, add them to a list, tag them,
+  write their details into the files or delete them. In the album, artist and
+  folder views a tick takes the whole group, and shows a dash when only part
+  of it is chosen.
+- In the player, the artist's name and the album under the title open that
+  artist and that record.
 - A queue you can reorder, trim and jump around in.
 - Repeat off, one or all.
 - Jump back and forward by 5, 10, 15, 30 or 60 seconds (your pick).
 - Speed and pitch sliders that work independently: slow a song down without
   dropping its pitch, or shift the pitch in semitones at normal speed.
-- Deleting a track goes through Android's own confirmation, so the app never
-  needs write access to your storage.
+- A sleep timer: 15 to 90 minutes or a number you type, or "at the end of
+  this track". It can let the current track finish, the last half minute
+  fades out, and it runs in the playback service, so it works with the app
+  closed and the screen off.
+- Deleting a track goes through Android's own confirmation, and so does
+  writing details into a file, so the app never needs standing write access to
+  your storage.
 
 ### A shuffle that feels random
 
@@ -36,9 +51,13 @@ and it comes with a rhythm game built out of your own songs, because why not.
 
 ### Sound
 
-- Equalizer: the device's own bands and presets, plus bass boost, surround and
-  loudness.
-- Real crossfade. A second player carries the tail of the outgoing track.
+- Equalizer: the app's own, the same on every phone. Up to twelve bands, each
+  a peak or a shelf with its own frequency, gain and Q, a curve that shows what
+  they add up to, a preamp that makes room for the boosts, and presets you can
+  keep. Imports AutoEQ's headphone corrections (`ParametricEQ.txt`), pasted or
+  from a file. Plus the phone's bass boost, surround and loudness.
+- Real crossfade. A second player carries the tail of the outgoing track,
+  started early and in silence so that the overlap begins without a gap.
   Separate lengths for a track ending, a skip, a pause and a seek.
 - Stereo effects: width, balance, channel swap, headphone crossfeed, slow
   rotation ("8D") and a preamp.
@@ -46,12 +65,25 @@ and it comes with a rhythm game built out of your own songs, because why not.
 - Voice effects: Robot, Vintage, Swirl, Chipmunk, More chipmunk.
 - Presets and voices are one tap away in the player's own settings sheet. The
   fine-tuning sliders live on their own screen.
+- Even loudness (ReplayGain): a switch in Settings brings every track to
+  -18 LUFS. A file's own ReplayGain or R128 tags are used where it has them;
+  anything else, downloads included, is measured on the phone once (EBU R 128)
+  and remembered. An album played in order keeps one gain. Nothing is turned up
+  past a decibel under clipping.
 
 ### Lyrics
 
 - Fetched from LRCLIB, synced line by line when a timed version exists.
 - On-device translation with Bergamot, the engine behind Firefox Translations.
   Models come from Mozilla. No account, no key.
+- A song in two languages is translated as two: a Japanese song with an
+  English hook has each part put through its own model, and the lines already
+  in your language are left alone.
+- Romanised Japanese cannot be translated as it stands, so the same song's
+  words in the original writing are looked for on LRCLIB and translated
+  instead, line against line.
+- Translations are into English unless Settings says another language. Any
+  other goes through English and needs a second model.
 - Fix things by hand: nudge the timing in quarter-second steps, search the
   catalogue yourself, or paste your own lyrics.
 - The stored lyrics are editable where they stand. Fix one wrong line without
@@ -74,6 +106,18 @@ and it comes with a rhythm game built out of your own songs, because why not.
 - Each tab has its own **Look up**. In General and Tags it only fills the form
   in: nothing is kept until you press Save.
 - `Rock` and `rock` are the same tag.
+- All of this is kept in the app and your files are left as they are, unless
+  you press **Write to file**: on the General tab for one song, or **Write to
+  files** in the Library's selection for many. It never happens by itself.
+- Write to file puts what the app shows into the file: title, artist, album,
+  year, track and disc number, the first tag as the genre, and a cover saved in
+  the app. MP3 (ID3v2) and FLAC only, on Android 11 or newer. Android asks
+  before anything is changed, and lyrics are not written.
+- The file itself is not worked on. A copy is tagged with TagLib and read back,
+  its sound is compared byte for byte with the original's, and only then is it
+  written over the original. A failure before that leaves the file untouched.
+- A v2.3 tag stays v2.3, for the car stereos that read nothing newer. Other
+  tags, comments, ReplayGain and extra pictures in the file are kept.
 
 ### Lists and albums
 
@@ -85,8 +129,12 @@ and it comes with a rhythm game built out of your own songs, because why not.
   weigh more than common ones.
 - Four automatic lists built from your history: Most played, New this month,
   Forgotten and Skipped most.
+- A list keeps a song whose file is not in the library just now (the folder
+  narrowed, a card out) and says how many are away. Only erasing the file
+  takes it off.
 - Albums are assembled from your tags. In landscape you can flick through them
-  as a rack of sleeves instead of a list.
+  as a rack of sleeves instead of a list; the one in front opens into the
+  record's full list and closes back to where the rack was.
 
 ### Stats and recap
 
@@ -97,6 +145,32 @@ and it comes with a rhythm game built out of your own songs, because why not.
   of its own, and `Earth, Wind & Fire` is never three.
 - Recap cards you can save or share. Artist photos come from Wikimedia Commons
   and the credit is printed on the card.
+
+### ListenBrainz (experimental)
+
+- Optional, and off until you set it up. It is the one thing in the app that
+  needs an account: paste your ListenBrainz user token at the foot of
+  Settings, under Experimental. With no token nothing is ever sent.
+- ListenBrainz only takes listens for an account with a verified e-mail
+  address. If it refuses them, the card says what it said, and the token is
+  kept.
+- **Send what I listen to** is a separate switch, off even after a token is
+  entered. Once on, every listen the app records from then on is sent: the
+  app's own rule, anything past 30 seconds.
+- **Send past listens** uploads the history from before, when you ask. It
+  shows how many are left, can be stopped, and carries on from where it was.
+- Listens go under the title, artist and album the app shows, corrections
+  included. A track with no artist is left out, and the card says how many.
+- A listen recorded offline waits and is sent later. Sending happens while the
+  app is open; there is no background service for it.
+- The token stays on the phone. It is never written to a backup or read from
+  one, and Settings shows the account name instead of it.
+- After restoring a backup nothing counts as sent, so sending past listens
+  sends them all again. ListenBrainz recognises the ones it has and drops them.
+- **Disconnect** forgets the token and what was sent. Nothing on ListenBrainz
+  is removed.
+- What was sent can be looked at on your ListenBrainz page; the card links to
+  it.
 
 ### Discover
 
@@ -164,6 +238,25 @@ from the song itself.
   past is brought back to the foot of its column, an empty tap gets a mark
   under your finger. Reach the end of the song and confetti flies.
 
+### Language and looks
+
+- English or Turkish, chosen in Settings rather than taken from the phone. The
+  notification, the widget and Android Auto follow the same choice.
+- Seventeen themes, or follow the phone between light and dark. Six light
+  ones (Sweet pastel, Sepia, Ice, Mint, Lavender, Peach), six dark (Pure
+  black for OLED, Midnight blue, Forest, Sunset, Dark pastel, Plum) and a
+  high-contrast one.
+- **High contrast** is for seeing with, not for looking at: black, white and
+  yellow, every card, chip and field with a line round it, and nothing told
+  apart by a shade of grey.
+- **From the cover** takes its accent from the record that is playing, and
+  keeps the usual one for a cover with no colour in it.
+- **System colours** uses the palette Android 12 and newer make from your
+  wallpaper.
+- The game and the recap cards keep their own colours whatever the theme.
+- The splash screen follows the phone's light or dark mode. It is drawn before
+  the app has started, so it cannot know a theme chosen inside it.
+
 ### Around the phone
 
 - Home-screen widget and media notification, both with working controls.
@@ -190,7 +283,8 @@ from the song itself.
 - **Export everything** in Settings writes one zip: listening history, skips,
   lists, tags, track details, lyrics and translations, covers, settings and the
   sound setup.
-- Not in it: the music itself, the download history and the library folder.
+- Not in it: the music itself, the download history, the library folder and
+  anything about a ListenBrainz connection, its token least of all.
 - **Import** reads that zip on any phone. Songs are found again by file name,
   then by title, artist and length, because a song's id differs between phones.
 - Before anything is written you see what is in the backup and how many of its
@@ -199,21 +293,28 @@ from the song itself.
   is here and removes nothing, **Replace** swaps it in.
 - Merging the same backup twice adds nothing. A listen is counted once.
 - The write is all or nothing. A failed import leaves the phone as it was.
+- A file that is moved, or given a new id by Android, keeps its history, tags,
+  lyrics and places in lists. Where size and length agree it is followed
+  without a word; where it is less sure, **Same song?** appears in Settings
+  and asks.
 
 ## What touches the network
 
 Playback, the library, stats, lists and the game work fully offline. These are
-the only things that go out, and none of them needs an account or an API key.
+the only things that go out. None of them needs an account or an API key, except
+the last: sending your listens to ListenBrainz needs your token for it, and is
+the only one that sends anything about you.
 
 | When you | It talks to |
 | --- | --- |
 | Look up a track's details | MusicBrainz, iTunes Search |
 | Fetch lyrics | LRCLIB |
-| Translate lyrics | Mozilla (model download, once per language) |
+| Translate lyrics | Mozilla (model download, once per language); LRCLIB (the original writing of romanised lyrics) |
 | Open a recap | MusicBrainz, Wikimedia Commons (artist photos) |
 | Ask for recommendations | ListenBrainz, Cover Art Archive, YouTube (the songs) |
 | Use the Search tab | YouTube |
 | Browse in the car | iTunes (a cover not saved yet, fetched once) |
+| Connect ListenBrainz and switch sending on | ListenBrainz (your listens) |
 
 ## Requirements
 
@@ -226,13 +327,13 @@ the only things that go out, and none of them needs an account or an API key.
 
 ```bash
 npm install
-npm test                 # 630 tests, pure logic
+npm test                 # 1,106 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android
 
 cd android
-./gradlew :jukebox-audio:testDebugUnitTest   # 134 more, in Kotlin
+./gradlew :jukebox-audio:testDebugUnitTest   # 319 more, in Kotlin
 ./gradlew :app:assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
@@ -242,7 +343,11 @@ Good to know:
 - `android/` is generated and not in the repository. Run `prebuild` once in a
   fresh checkout, and again whenever `app.json` or a config plugin changes.
 - The first build compiles the translation engine from source: about 20 MB of
-  C++ to fetch and roughly a minute to build. After that it is cached.
+  C++ to fetch and roughly a minute to build. After that it is cached. TagLib
+  is fetched and built the same way and adds a few seconds.
+- `./gradlew :jukebox-audio:checkTagWriter` builds the tag writer for your
+  computer and runs it over files made up for the purpose. It needs a desktop
+  C++ compiler and zlib's headers, and no build depends on it.
 - Builds are `arm64-v8a` only. The translation engine does not compile for
   32-bit ARM or x86, so the config plugin pins the architecture for you.
 - Your own builds are signed with the debug keystore, which is fine for your
@@ -267,10 +372,14 @@ Good to know:
 | `POST_NOTIFICATIONS` | The playback notification |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Playing in the background |
 | `FOREGROUND_SERVICE_DATA_SYNC` | Downloads that outlive the screen |
-| `MODIFY_AUDIO_SETTINGS` | Attaching the equalizer |
+| `MODIFY_AUDIO_SETTINGS` | Attaching the bass boost, surround and loudness |
 | `WAKE_LOCK` | Keeping the phone awake while music plays |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Lookups, lyrics, downloads, and telling "offline" from "failed" |
 | `VIBRATE` | Haptics on swipes and in the game |
+
+There is no permission to write to storage. Deleting a track, and writing
+details into a file, each raise a system dialog that grants those files, that
+once.
 
 Two things are switched off on purpose: `SYSTEM_ALERT_WINDOW` is blocked (a
 music player has no reason to draw over other apps), and `allowBackup` is
@@ -284,11 +393,15 @@ src/
   app/          screens, file-routed with expo-router
   components/   shared views
   screens/      the larger screens the routes point at
+  screens/tiles/  the game's screen, in its parts
   lib/          everything that is not a view
+  lib/i18n/     every word the app says, a file per area and per language
+  lib/theme/    the colour tokens and the themes, one file each
   lib/tiles/    the game's rules: pure functions, fully tested
 modules/jukebox-audio/
   android/      Kotlin: playback, library, downloads, effects, chart analysis
-  android/src/main/cpp/   the in-app MP3 decoder (one C file)
+  android/src/main/res/   the native side's words, in each language
+  android/src/main/cpp/   the in-app MP3 decoder (one C file) and the tag writer on TagLib
   src/          the module's TypeScript surface
 assets/source/  the icon as drawn; every other size is generated
 scripts/        icons, genre vocabulary refresh, release signing, Android Auto helper
@@ -308,6 +421,22 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
   delete the write-ahead log under the app, and everything saved afterwards was
   lost at the next restart. The app now writes what the service needs into a
   small copy and hands it over by rename.
+- **A crossfade is two players, and the second is put in step where nobody
+  can hear it.** It is started three seconds before the overlap with its volume at
+  nought, its position is compared with the main player's once both can be
+  believed, and it is run a little fast or slow until they agree. At the
+  overlap its volume comes up and the main player moves on. Started at the
+  overlap instead, it took a quarter to half a second to make a sound, and
+  that was a hole in every crossfade.
+- **Loudness, the equalizer, the fade and the effects are stages of one audio
+  chain** in that order, each player with its own, so the two halves of a
+  crossfade keep their own levels.
+- **The game borrows the player.** For a run the speed and pitch go to normal
+  and the queue is set aside; both come back afterwards, and nothing played
+  under a run counts as a listen.
+- **Words and colours are tables.** A screen asks for a string by name and a
+  colour by role. A language is a set of files the compiler checks against
+  the English, and a theme is one file of colours, tested for contrast.
 - **The media session is closed to strangers.** Only the app itself, the system
   and known browsers (Android Auto, Wear, Assistant, system UI, Bluetooth) may
   connect.
@@ -329,8 +458,10 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
 - **A backup is a zip** with one JSON document and the cover files. Merging is
   a pure function over two sets of tables, tested against a real SQLite, and
   the result goes in under a single transaction.
-- **Third-party native code is built from source.** Bergamot and minimp3 are
-  fetched at pinned commits and rejected if their SHA-256 does not match.
+- **The translation engine, the MP3 decoder and the tag writer are built from
+  source.** Bergamot, minimp3 and TagLib are fetched at pinned commits and
+  rejected if their SHA-256 does not match. The downloader's FFmpeg and Python are the
+  exception: they come prebuilt with its wrapper, pinned by version.
 
 ## Licence
 
@@ -339,7 +470,8 @@ Copyright (C) 2026 Kayra5138. **GPL-3.0-or-later**, see [LICENSE](LICENSE).
 - Copyleft on purpose: if you get the app you get the source, and whatever is
   built on it stays open.
 - There is nothing proprietary in the build. Translation is Bergamot (MPL-2.0),
-  language detection is `franc` (MIT), the MP3 decoder is minimp3 (CC0).
+  language detection is `franc` (MIT), the MP3 decoder is minimp3 (CC0), and
+  tags are written into files by TagLib (LGPL-2.1).
 - Version 3 because Media3 and AndroidX are Apache-2.0, which is compatible
   with GPL-3.0 and not with GPL-2.0.
 - The icon drawings in `assets/source` are mine, under the same licence.

@@ -34,7 +34,13 @@ object MediaStoreLibrary {
     // writes down remembers it, and by the time a track is first played it is
     // far too late to start — so a library that can be ordered by what is new
     // has to carry it from here.
-    MediaStore.Audio.Media.DATE_ADDED
+    MediaStore.Audio.Media.DATE_ADDED,
+    // How many bytes the file is, which no field on screen is made from. It is
+    // here to recognise a file again after the media store has given it a new
+    // id: two files of exactly one length, to the byte and to the millisecond,
+    // are the same file in all but the rarest case, and nothing else the store
+    // will say about a file without opening it comes as close.
+    MediaStore.MediaColumns.SIZE
   )
 
   /**
@@ -74,7 +80,7 @@ object MediaStoreLibrary {
       arrayOf(underFolderArg(rootFolder)),
       sortOrder
     )?.use { cursor ->
-      val row = TrackRow(cursor)
+      val row = TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title))
       while (cursor.moveToNext()) {
         tracks.add(row.read())
       }
@@ -101,7 +107,7 @@ object MediaStoreLibrary {
       arrayOf(id.toString(), underFolderArg(rootFolder)),
       null
     )?.use { cursor ->
-      if (cursor.moveToFirst()) TrackRow(cursor).read() else null
+      if (cursor.moveToFirst()) TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title)).read() else null
     }
   }
 
@@ -274,7 +280,7 @@ object MediaStoreLibrary {
  * [MediaStoreLibrary.queryTracks] runs this over every track on the device, and
  * getColumnIndexOrThrow is a scan of the column names each time it is called.
  */
-private class TrackRow(private val cursor: Cursor) {
+private class TrackRow(private val cursor: Cursor, private val unknown: String) {
   private val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
   private val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
   private val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -284,6 +290,7 @@ private class TrackRow(private val cursor: Cursor) {
   private val nameColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
   private val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
   private val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+  private val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
 
   /**
    * The name of the folder a track sits in, which is what the media store
@@ -312,7 +319,7 @@ private class TrackRow(private val cursor: Cursor) {
     return mapOf(
       "id" to id.toString(),
       "uri" to ContentUris.withAppendedId(COLLECTION, id).toString(),
-      "title" to (cursor.getStringOrNull(titleColumn) ?: cursor.getStringOrNull(nameColumn) ?: "Unknown"),
+      "title" to (cursor.getStringOrNull(titleColumn) ?: cursor.getStringOrNull(nameColumn) ?: unknown),
       "artist" to tagged(cursor.getStringOrNull(artistColumn)),
       "album" to tagged(cursor.getStringOrNull(albumColumn)),
       // Deliberately never filled in. The media store's `albumart` provider was
@@ -332,7 +339,10 @@ private class TrackRow(private val cursor: Cursor) {
       // unit is known, instead of a number whose scale depends on where it came
       // from. Null rather than zero for a row the store will not date: a file it
       // cannot place in time is not a file from 1970.
-      "addedAt" to cursor.getLongOrNull(addedColumn)?.times(1000)
+      "addedAt" to cursor.getLongOrNull(addedColumn)?.times(1000),
+      // Null rather than zero for the same reason: a size the store does not
+      // know must not agree with another size it does not know.
+      "size" to cursor.getLongOrNull(sizeColumn)
     )
   }
 }

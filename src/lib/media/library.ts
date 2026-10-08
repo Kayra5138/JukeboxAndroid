@@ -1,5 +1,6 @@
 import JukeboxAudio, { type FolderEntry } from '../../../modules/jukebox-audio/index.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
+import { recogniseLater } from '../identity/index.ts';
 import type { Track } from '../types.ts';
 
 /**
@@ -71,9 +72,18 @@ export async function ensureNotificationPermission(): Promise<boolean> {
   }
 }
 
-/** Every track under the chosen root, already sorted by artist/album/track. */
+/**
+ * Every track under the chosen root, already sorted by artist/album/track.
+ *
+ * Each scan is also shown to whatever keeps a song's history with the song
+ * when its file is given a new id. Here rather than in the screens, so that no
+ * way of reading the library can leave it out; and after the tracks have been
+ * handed back, so that no screen waits on it.
+ */
 export async function scanLibrary(): Promise<Track[]> {
-  return JukeboxAudio.queryTracksAsync(libraryRoot());
+  const tracks = await JukeboxAudio.queryTracksAsync(libraryRoot());
+  recogniseLater(tracks);
+  return tracks;
 }
 
 /**

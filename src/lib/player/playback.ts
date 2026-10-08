@@ -1,3 +1,5 @@
+import { strings, type Strings } from '../i18n/languages.ts';
+
 /**
  * The arithmetic behind the speed and pitch controls.
  *
@@ -98,8 +100,11 @@ export function snap(value: number, range: Range): number {
  * flicking between `1.50×` and `1.55×` while `1×` sits at half the length is
  * harder to read at a glance than the shortest true form of each.
  */
-export function formatSpeed(value: number): string {
-  return `${value.toFixed(SPEED.decimals).replace(/\.?0+$/, '')}×`;
+export function formatSpeed(value: number, t: Strings = strings()): string {
+  // Written with the language's own decimal mark, so the zeros are taken off
+  // whichever mark they follow, and the mark with them when nothing is left.
+  const written = t.format.decimal(value, SPEED.decimals);
+  return `${written.replace(/([.,]\d*?)0+$/, '$1').replace(/[.,]$/, '')}×`;
 }
 
 /**
@@ -109,8 +114,8 @@ export function formatSpeed(value: number): string {
  * `Normal` is the answer to the question the reader is actually asking, which
  * is whether anything is being done to the sound.
  */
-export function formatSemitones(value: number): string {
-  if (value === 0) return 'Normal';
+export function formatSemitones(value: number, t: Strings = strings()): string {
+  if (value === 0) return t.player.settings.normal;
   return `${value > 0 ? '+' : ''}${value.toFixed(PITCH.decimals)}`;
 }
 

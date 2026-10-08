@@ -5,14 +5,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NextIcon, PauseIcon, PlayIcon, PreviousIcon } from './Icons';
 import { TrackStrip } from './TrackStrip';
+import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { useOpenPlayer } from '../lib/player/NowPlayingSheet';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
+import { makeStyles, outlineWidth, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
 /** One track's cover, looked up per card so the neighbours arrive with theirs. */
 function Cover({ track, column }: { track: Track; column: boolean }) {
   const artwork = useTrackArtwork(track);
+  const styles = useStyles();
   const shape = column ? styles.artWide : styles.art;
 
   return artwork ? (
@@ -40,6 +43,9 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
   const { toggle, next, previous, skipToIndex } = usePlayerActions();
   const openPlayer = useOpenPlayer();
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
 
   /*
     By position rather than through the transport, which does not mean the same
@@ -59,22 +65,28 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
   */
   const card = useCallback(
     (track: Track) => (
-      <Pressable style={column ? styles.columnCard : styles.card} onPress={openPlayer}>
+      <Pressable
+        style={column ? styles.columnCard : styles.card}
+        accessibilityRole="button"
+        accessibilityHint={t.player.bar.opensPlayer}
+        onPress={openPlayer}>
         <Cover track={track} column={column} />
         <View style={column ? styles.columnText : styles.text}>
           <Text style={styles.title} numberOfLines={column ? 2 : 1}>
             {track.title}
           </Text>
           <Text style={styles.artist} numberOfLines={column ? 2 : 1}>
-            {track.artist ?? 'Unknown artist'}
+            {track.artist ?? t.common.unknownArtist}
           </Text>
         </View>
       </Pressable>
     ),
-    [column, openPlayer]
+    [column, openPlayer, styles, t]
   );
 
   if (!current) return null;
+
+  const slop = column ? SLOP_COLUMN : SLOP;
 
   /*
     On its side it is a panel down the right instead of a bar along the
@@ -110,7 +122,10 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
         this way it is not — it is next to one, and anywhere the strip does not
         cover falls through to here.
       */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={openPlayer} />
+      {/* Not offered to a screen reader, which would find a button the size of
+          the bar with nothing to say for itself. The card says it, and does
+          the same thing. */}
+      <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={openPlayer} />
       {/*
         The controls are deliberately left out of the strip. They are the one
         thing here somebody might be aiming for, and a play button that slides
@@ -125,13 +140,32 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
         style={column ? undefined : styles.strip}
       />
       <View style={column ? styles.columnControls : styles.inline}>
-        <Pressable style={styles.control} onPress={() => void previous()}>
+        <Pressable
+          android_ripple={pressed}
+          style={styles.control}
+          hitSlop={slop}
+          accessibilityRole="button"
+          accessibilityLabel={t.common.previousTrack}
+          onPress={() => void previous()}>
           <PreviousIcon size={16} />
         </Pressable>
-        <Pressable style={styles.control} onPress={() => void toggle()}>
+        {/* Named for what a press will do, as the picture is. */}
+        <Pressable
+          android_ripple={pressed}
+          style={styles.control}
+          hitSlop={slop}
+          accessibilityRole="button"
+          accessibilityLabel={isPlaying ? t.common.pause : t.common.play}
+          onPress={() => void toggle()}>
           {isPlaying ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
         </Pressable>
-        <Pressable style={styles.control} onPress={() => void next()}>
+        <Pressable
+          android_ripple={pressed}
+          style={styles.control}
+          hitSlop={slop}
+          accessibilityRole="button"
+          accessibilityLabel={t.common.nextTrack}
+          onPress={() => void next()}>
           <NextIcon size={16} />
         </Pressable>
       </View>
@@ -139,17 +173,30 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
   );
 }
 
+/*
+  The controls are drawn about 32 across, which is a small thing to hit with a
+  thumb while walking. They are left looking as they do and made easier to
+  touch: this much further out on each side still counts as the button. Less
+  sideways than up and down, because sideways is where the next button is —
+  and less again down the side of the screen, where the three share a narrower
+  row.
+*/
+const SLOP = { top: 6, bottom: 6, left: 5, right: 5 };
+const SLOP_COLUMN = { top: 6, bottom: 6, left: 2, right: 2 };
+
 /** How wide the panel is when it runs down the side. */
 export const NOW_PLAYING_WIDTH = 132;
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#262626',
-    backgroundColor: '#1a1a1a',
+    // As the tab bar's: a hairline, or an outline's width where the bar is the
+    // colour of the page under it.
+    borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
+    borderTopColor: c.border,
+    backgroundColor: c.surface,
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
@@ -162,9 +209,9 @@ const styles = StyleSheet.create({
     */
     justifyContent: 'center',
     width: NOW_PLAYING_WIDTH,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: '#262626',
-    backgroundColor: '#1a1a1a',
+    borderLeftWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
+    borderLeftColor: c.border,
+    backgroundColor: c.surface,
     paddingHorizontal: 12,
     paddingTop: 14,
     gap: 10,
@@ -178,14 +225,14 @@ const styles = StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   art: { width: 40, height: 40, borderRadius: 6 },
   artWide: { width: '100%', aspectRatio: 1, borderRadius: 7 },
-  artEmpty: { backgroundColor: '#262626' },
+  artEmpty: { backgroundColor: c.surfaceRaised },
   text: { flex: 1, gap: 2 },
-  title: { color: '#ededed', fontSize: 14.5 },
-  artist: { color: '#7a7a7a', fontSize: 12 },
+  title: { color: c.text, fontSize: 14.5 },
+  artist: { color: c.textMuted, fontSize: 12 },
   control: {
     paddingHorizontal: 8,
     paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-});
+}));

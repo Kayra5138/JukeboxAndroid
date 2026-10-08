@@ -52,10 +52,12 @@ class BackupArchiveTest {
 
   @Test
   fun `a zip that is not a backup is refused, in words`() {
-    val trouble = assertThrows(IllegalStateException::class.java) {
+    // Which words, not the words themselves: those are the phone's to find,
+    // in whichever language the app is in.
+    val trouble = assertThrows(Told::class.java) {
       read(archive("holiday.jpg" to byteArrayOf(1)))
     }
-    assertEquals("That file is not a Jukebox backup.", trouble.message)
+    assertEquals(R.string.jukebox_backup_not_one, trouble.words.id)
   }
 
   @Test

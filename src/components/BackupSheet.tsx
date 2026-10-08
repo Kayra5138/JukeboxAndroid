@@ -3,6 +3,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Opened } from '../lib/backup/index';
 import { formatDateTime } from '../lib/format/date';
+import { useT } from '../lib/i18n/index';
+import { makeStyles, outlined, outlinedClip, useColours, usePressed } from '../lib/theme/index';
 
 /**
  * What stands between choosing a backup and anything happening to the phone.
@@ -45,12 +47,15 @@ export function BackupSheet({
   onRestart: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
   if (!opened) return null;
 
+  const said = t.backup;
   const { summary, backup, occupied } = opened;
   const missing = summary.songs - summary.found;
-  const count = (value: number, one: string, many: string) =>
-    `${value.toLocaleString('en-US')} ${value === 1 ? one : many}`;
 
   // Neither while it is being written nor once it has been can it be walked
   // away from, by the Back button or by touching outside.
@@ -73,27 +78,26 @@ export function BackupSheet({
         ]}>
         {finished ? (
           <>
-            <Text style={styles.heading}>Imported</Text>
-            <Text style={styles.text}>
-              Everything is in. Jukebox has to start again to show it: what is on screen now was
-              read before the import.
-            </Text>
-            <Pressable accessibilityRole="button" style={styles.primary} onPress={onRestart}>
-              <Text style={styles.primaryLabel}>Restart Jukebox</Text>
+            <Text style={styles.heading}>{said.imported}</Text>
+            <Text style={styles.text}>{said.importedBody}</Text>
+            <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onRestart}>
+              <Text style={styles.primaryLabel}>{said.restart}</Text>
             </Pressable>
           </>
         ) : (
           <>
-            <Text style={styles.heading}>Import this backup?</Text>
+            <Text style={styles.heading}>{said.question}</Text>
             <Text style={styles.text}>
-              {backup.exportedAt > 0 ? `Made ${formatDateTime(new Date(backup.exportedAt))}` : 'A backup'}
-              {backup.app ? ` by Jukebox ${backup.app}` : ''}.
+              {said.made(
+                backup.exportedAt > 0 ? formatDateTime(new Date(backup.exportedAt), t) : null,
+                backup.app || null
+              )}
             </Text>
             <View style={styles.facts}>
-              <Text style={styles.fact}>{count(summary.listens, 'listen', 'listens')}</Text>
-              <Text style={styles.fact}>{count(summary.lists, 'list', 'lists')}</Text>
-              <Text style={styles.fact}>{count(summary.tagged, 'tagged song', 'tagged songs')}</Text>
-              <Text style={styles.fact}>{count(summary.lyrics, 'song with lyrics', 'songs with lyrics')}</Text>
+              <Text style={styles.fact}>{said.listens(summary.listens)}</Text>
+              <Text style={styles.fact}>{t.common.lists(summary.lists)}</Text>
+              <Text style={styles.fact}>{said.tagged(summary.tagged)}</Text>
+              <Text style={styles.fact}>{said.withLyrics(summary.lyrics)}</Text>
             </View>
 
             {/*
@@ -103,16 +107,7 @@ export function BackupSheet({
               that out here rather than from an empty list afterwards.
             */}
             <Text style={missing > 0 ? styles.warning : styles.text}>
-              {summary.songs === 0
-                ? 'It does not mention any songs.'
-                : `${summary.found.toLocaleString('en-US')} of ${count(summary.songs, 'song', 'songs')} in it ${
-                    summary.found === 1 ? 'is' : 'are'
-                  } in your library.`}
-              {missing > 0
-                ? ` The other ${missing.toLocaleString('en-US')} ${
-                    missing === 1 ? 'is' : 'are'
-                  } not on this phone. Their listens are kept, but their tags, lyrics and places in lists have no song to go with and are left out.`
-                : ''}
+              {said.songs(summary.found, summary.songs)}
             </Text>
 
             {failure ? (
@@ -123,34 +118,30 @@ export function BackupSheet({
 
             {working ? (
               <View style={styles.working}>
-                <ActivityIndicator color="#bdbdbd" />
-                <Text style={styles.text}>Importing…</Text>
+                <ActivityIndicator color={c.textSecondary} />
+                <Text style={styles.text}>{said.importing}</Text>
               </View>
             ) : occupied ? (
               <>
-                <Pressable accessibilityRole="button" style={styles.primary} onPress={onMerge}>
-                  <Text style={styles.primaryLabel}>Merge</Text>
-                  <Text style={styles.primaryHint}>
-                    Add it to what is here. Nothing on this phone is removed.
-                  </Text>
+                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onMerge}>
+                  <Text style={styles.primaryLabel}>{said.merge}</Text>
+                  <Text style={styles.primaryHint}>{said.mergeHint}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" style={styles.danger} onPress={onReplace}>
-                  <Text style={styles.dangerLabel}>Replace</Text>
-                  <Text style={styles.dangerHint}>
-                    Delete what is here and use the backup instead. This cannot be undone.
-                  </Text>
+                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.danger} onPress={onReplace}>
+                  <Text style={styles.dangerLabel}>{said.replace}</Text>
+                  <Text style={styles.dangerHint}>{said.replaceHint}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" style={styles.plain} onPress={onCancel}>
-                  <Text style={styles.plainLabel}>Cancel</Text>
+                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.plain} onPress={onCancel}>
+                  <Text style={styles.plainLabel}>{t.common.cancel}</Text>
                 </Pressable>
               </>
             ) : (
               <>
-                <Pressable accessibilityRole="button" style={styles.primary} onPress={onReplace}>
-                  <Text style={styles.primaryLabel}>Import</Text>
+                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onReplace}>
+                  <Text style={styles.primaryLabel}>{t.common.import}</Text>
                 </Pressable>
-                <Pressable accessibilityRole="button" style={styles.plain} onPress={onCancel}>
-                  <Text style={styles.plainLabel}>Cancel</Text>
+                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.plain} onPress={onCancel}>
+                  <Text style={styles.plainLabel}>{t.common.cancel}</Text>
                 </Pressable>
               </>
             )}
@@ -161,40 +152,43 @@ export function BackupSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000cc' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: '88%',
+    ...outlined(c),
   },
   body: { paddingTop: 20, gap: 14 },
-  heading: { color: '#ededed', fontSize: 19, fontWeight: '600' },
-  text: { color: '#a8a8a8', fontSize: 14, lineHeight: 20 },
-  warning: { color: '#e0c078', fontSize: 14, lineHeight: 20 },
-  failure: { color: '#ff8a8a', fontSize: 14, lineHeight: 20 },
+  heading: { color: c.text, fontSize: 19, fontWeight: '600' },
+  text: { color: c.textSecondary, fontSize: 14, lineHeight: 20 },
+  warning: { color: c.warning, fontSize: 14, lineHeight: 20 },
+  failure: { color: c.danger, fontSize: 14, lineHeight: 20 },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   fact: {
-    color: '#dcdcdc',
+    color: c.text,
     fontSize: 13,
-    backgroundColor: '#262626',
+    backgroundColor: c.surfaceRaised,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 12,
     overflow: 'hidden',
+    ...outlinedClip(c),
   },
   working: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  primary: { backgroundColor: '#ededed', borderRadius: 12, padding: 14, gap: 3, marginTop: 4 },
-  primaryLabel: { color: '#141414', fontSize: 15.5, fontWeight: '600' },
-  primaryHint: { color: '#4a4a4a', fontSize: 12.5, lineHeight: 17 },
-  danger: { backgroundColor: '#2a1a1a', borderRadius: 12, padding: 14, gap: 3 },
-  dangerLabel: { color: '#ff9a9a', fontSize: 15.5, fontWeight: '600' },
-  dangerHint: { color: '#b08080', fontSize: 12.5, lineHeight: 17 },
+  primary: { backgroundColor: c.primary, borderRadius: 12, padding: 14, gap: 3, marginTop: 4 },
+  primaryLabel: { color: c.onPrimary, fontSize: 15.5, fontWeight: '600' },
+  // The label's own colour, held back: there is no token for a second voice on `primary`.
+  primaryHint: { color: c.onPrimary, opacity: 0.7, fontSize: 12.5, lineHeight: 17 },
+  danger: { backgroundColor: c.dangerSoft, borderRadius: 12, padding: 14, gap: 3, ...outlined(c, c.danger) },
+  dangerLabel: { color: c.danger, fontSize: 15.5, fontWeight: '600' },
+  dangerHint: { color: c.danger, opacity: 0.75, fontSize: 12.5, lineHeight: 17 },
   plain: { padding: 14, alignItems: 'center' },
-  plainLabel: { color: '#a8a8a8', fontSize: 15 },
-});
+  plainLabel: { color: c.textSecondary, fontSize: 15 },
+}));

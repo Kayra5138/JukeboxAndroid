@@ -1,12 +1,13 @@
 package expo.modules.jukeboxaudio
 
 import android.content.Context
+import expo.modules.jukeboxaudio.equalizer.ParametricSettings
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
 /**
- * The equalizer settings, written where the service can read them.
+ * The equalizer and tone settings, written where the service can read them.
  *
  * For the same reason the queue is: pressing play on the home screen widget
  * after the app has been killed starts [PlaybackService] with no JavaScript in
@@ -20,7 +21,10 @@ import java.io.File
 object EffectsStore {
   private const val FILE = "effects.json"
 
-  /** The layout Android has shipped since Eclair, used until a device says otherwise. */
+  /** Where the app's own equalizer is kept in the document. */
+  private const val PARAMETRIC = "parametric"
+
+  /** The layout Android has shipped since Eclair, used where a device never said otherwise. */
   private val DEFAULT_BANDS = Bands(
     count = 5,
     minMb = -1_500,
@@ -30,9 +34,11 @@ object EffectsStore {
   )
 
   /**
-   * What the device's equalizer can do. Cached rather than asked for, so the
-   * settings screen can be opened with nothing playing and still draw the right
-   * sliders.
+   * What the phone's own equalizer could do, as it was written down while
+   * this app still drove it.
+   *
+   * Nothing writes it any more. It is read once, by [parametric], to find
+   * out which frequencies the old band levels belonged to.
    */
   data class Bands(
     val count: Int,
@@ -43,15 +49,14 @@ object EffectsStore {
   )
 
   /**
-   * What the user chose. [preset] is an index into the device's own presets, or
-   * -1 for the band levels below — which is what moving any slider sets it to,
-   * since a preset that no longer describes the bands is a lie about them.
+   * The switch, and the three effects that are still the phone's.
+   *
+   * [enabled] is the one switch at the top of the screen, for all of it: the
+   * app's own equalizer answers to it as well, which is why it is not kept
+   * with the bands.
    */
   data class Settings(
     val enabled: Boolean = false,
-    val preset: Int = -1,
-    /** Gains in millibels, one per band, in band order. */
-    val bands: List<Int> = emptyList(),
     /** 0..1000, Android's own scale for both of these. */
     val bass: Int = 0,
     val virtualizer: Int = 0,
@@ -85,33 +90,73 @@ object EffectsStore {
     }
   }
 
+  @Synchronized
   fun read(context: Context): Settings {
     val body = document(context)
     return Settings(
       enabled = body.optBoolean("enabled", false),
-      preset = body.optInt("preset", -1),
-      bands = body.optJSONArray("bands").toIntList(),
       bass = body.optInt("bass", 0),
       virtualizer = body.optInt("virtualizer", 0),
       loudness = body.optInt("loudness", 0)
     )
   }
 
+  /*
+    Each write starts from a copy of the whole document and changes its own
+    keys, so the two halves -- these and the bands -- can be written
+    separately without either losing the other, and so that what an older
+    version left behind ("preset", "bands", "capabilities": the phone's
+    equalizer as it was last set) stays where it was.
+  */
+  @Synchronized
   fun write(context: Context, settings: Settings) {
     val body = document(context)
     save(
       context,
       JSONObject(body.toString())
         .put("enabled", settings.enabled)
-        .put("preset", settings.preset)
-        .put("bands", JSONArray(settings.bands))
         .put("bass", settings.bass)
         .put("virtualizer", settings.virtualizer)
         .put("loudness", settings.loudness)
     )
   }
 
-  fun readBands(context: Context): Bands {
+  /**
+   * The app's own equalizer, as it was left.
+   *
+   * The first time this is asked on a phone that had the old equalizer set
+   * up, there is nothing of the new one in the file and the old band levels
+   * are: they are carried over ([ParametricSettings.fromDevice]) and the
+   * result written down, so it happens once. Whichever asks first does it --
+   * the service coming up to play, or the screen being opened -- and it
+   * needs nothing but the file, so it is the same either way.
+   *
+   * The old levels are trusted as they stand. With one of the phone's own
+   * presets chosen they are what the phone said that preset came to, read
+   * back at the time; the phone is not asked again.
+   */
+  @Synchronized
+  fun parametric(context: Context): ParametricSettings {
+    val body = document(context)
+    body.optJSONObject(PARAMETRIC)?.let { return ParametricSettings.fromJson(it) }
+    val carried = ParametricSettings.fromDevice(
+      centresHz = readBands(context).centresHz,
+      levelsMb = body.optJSONArray("bands").toIntList(),
+      // Named once, as it is carried, in the language the app is in then. It
+      // is the user's preset from that moment and is not renamed after.
+      name = Localised.text(context, R.string.jukebox_equalizer_carried)
+    )
+    writeParametric(context, carried)
+    return carried
+  }
+
+  @Synchronized
+  fun writeParametric(context: Context, settings: ParametricSettings) {
+    val body = document(context)
+    save(context, JSONObject(body.toString()).put(PARAMETRIC, settings.toJson()))
+  }
+
+  private fun readBands(context: Context): Bands {
     val body = document(context).optJSONObject("capabilities") ?: return DEFAULT_BANDS
     val count = body.optInt("count", 0)
     if (count <= 0) return DEFAULT_BANDS
@@ -121,22 +166,6 @@ object EffectsStore {
       maxMb = body.optInt("maxMb", DEFAULT_BANDS.maxMb),
       centresHz = body.optJSONArray("centresHz").toIntList(),
       presets = body.optJSONArray("presets").toStringList()
-    )
-  }
-
-  fun saveBands(context: Context, bands: Bands) {
-    val body = document(context)
-    save(
-      context,
-      JSONObject(body.toString()).put(
-        "capabilities",
-        JSONObject()
-          .put("count", bands.count)
-          .put("minMb", bands.minMb)
-          .put("maxMb", bands.maxMb)
-          .put("centresHz", JSONArray(bands.centresHz))
-          .put("presets", JSONArray(bands.presets))
-      )
     )
   }
 

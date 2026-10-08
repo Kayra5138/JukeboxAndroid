@@ -51,6 +51,35 @@ class FadeGainProviderTest {
   }
 
   @Test
+  fun `holds a fade-out off until the place it was booked for`() {
+    // The second player of a crossfade is started ahead of the overlap and
+    // told how far ahead: full level until then, and down from that sample.
+    fader.fadeOut(2_000, equalPower = true, holdMs = 1_500)
+
+    assertEquals(1f, gainAt(0), 0f)
+    assertEquals(1f, gainAt(samples(1_499)), 0f)
+    assertEquals(1f, gainAt(samples(1_500)), 0.001f)
+    assertTrue(gainAt(samples(2_500)) < 0.8f)
+    assertEquals(0f, gainAt(samples(3_500)), 0.001f)
+    assertEquals(0f, gainAt(samples(60_000)), 0f)
+  }
+
+  @Test
+  fun `books the hold again from a seek`() {
+    // Moved to put it in step, the player's count of samples starts again at
+    // nought, and the fade is asked for again with what is now left to go.
+    fader.fadeOut(2_000, equalPower = true, holdMs = 1_500)
+    gainAt(samples(400))
+
+    fader.fadeOut(2_000, equalPower = true, holdMs = 1_000)
+    gainAt(samples(450))
+    assertEquals(1f, gainAt(0), 0f)
+    assertEquals(1f, gainAt(samples(999)), 0f)
+    assertTrue(gainAt(samples(2_000)) < 0.8f)
+    assertEquals(0f, gainAt(samples(3_000)), 0.001f)
+  }
+
+  @Test
   fun `does not hand a rebased stream full volume mid fade-out`() {
     // The same fall, the other way up: an outgoing track that jumped back to
     // full would be heard over the one replacing it.

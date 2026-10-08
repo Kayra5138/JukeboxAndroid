@@ -77,7 +77,7 @@ internal object BackupArchive {
           entry.isDirectory -> Unit
           name == DOCUMENT -> {
             val bytes = take(zip, MOST_DOCUMENT)
-              ?: throw IllegalStateException("That backup is too large to read.")
+              ?: throw Told(R.string.jukebox_backup_too_large)
             document = String(bytes, Charsets.UTF_8)
           }
           name.startsWith(PICTURES) -> {
@@ -94,7 +94,7 @@ internal object BackupArchive {
         zip.closeEntry()
       }
     }
-    return document ?: throw IllegalStateException("That file is not a Jukebox backup.")
+    return document ?: throw Told(R.string.jukebox_backup_not_one)
   }
 
   /**

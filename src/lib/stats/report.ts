@@ -1,4 +1,5 @@
 import type { ListeningSummary, TopEntry } from '../db/history.ts';
+import { strings, type Strings } from '../i18n/languages.ts';
 import {
   busiestHour,
   changeBetween,
@@ -56,6 +57,7 @@ export type ReportCard = { tint?: string | null } & (
       seconds: number;
       /** Per cent against the period before, where there was one. */
       change: number | null;
+      /** What that is against, as the whole phrase: `vs yesterday`. */
       comparison: string;
       /** Covers to tile behind the number, most played first. */
       wall: string[];
@@ -111,22 +113,6 @@ export type ReportInput = {
   days: number;
 };
 
-/** What the period is called in the second person, on the cards themselves. */
-function saidAs(period: PeriodId): string {
-  switch (period) {
-    case 'day':
-      return 'today';
-    case 'week':
-      return 'this week';
-    case 'month':
-      return 'this month';
-    case 'year':
-      return 'this year';
-    case 'all':
-      return 'so far';
-  }
-}
-
 function rank(entries: TopEntry[]): RankedEntry[] {
   const top = entries.slice(0, RANKED);
   const leader = top[0]?.playCount ?? 0;
@@ -166,20 +152,23 @@ export function worthReporting(summary: ListeningSummary): boolean {
  * Cards with nothing behind them are left out rather than shown empty: a genre
  * card reading "nothing yet" is worse than a report that does not mention
  * genres, and only tracks that have been looked up carry one at all.
+ *
+ * [t] is the language the cards are worded in; a screen passes its own.
  */
-export function buildReport(input: ReportInput): ReportCard[] {
+export function buildReport(input: ReportInput, t: Strings = strings()): ReportCard[] {
   const { summary, period, at } = input;
   const cards: ReportCard[] = [];
-  const when = saidAs(period);
+  const said = t.stats.report;
+  const figures = t.stats.figures;
 
   const tracks = rank(input.tracks);
 
   cards.push({
     kind: 'opening',
-    title: titleOf(period, at),
+    title: titleOf(period, at, t),
     seconds: summary.totalSeconds,
     change: input.before ? changeBetween(summary.totalSeconds, input.before.totalSeconds) : null,
-    comparison: comparisonOf(period),
+    comparison: comparisonOf(period, t),
     tint: input.tracks[0]?.sample ?? null,
     // Nine fills a three by three wall; fewer tiles are repeated to fill it.
     wall: input.tracks
@@ -191,8 +180,8 @@ export function buildReport(input: ReportInput): ReportCard[] {
     cards.push({
       kind: 'ranking',
       of: 'tracks',
-      heading: 'Your top tracks',
-      lead: `What you reached for ${when}`,
+      heading: said.tracksHeading,
+      lead: said.tracksLead(period),
       entries: tracks,
       tint: tracks[0].sample,
     });
@@ -203,8 +192,8 @@ export function buildReport(input: ReportInput): ReportCard[] {
     cards.push({
       kind: 'ranking',
       of: 'artists',
-      heading: 'Your top artists',
-      lead: `Who you spent ${when} with`,
+      heading: said.artistsHeading,
+      lead: said.artistsLead(period),
       entries: artists,
       tint: artists[0].sample,
     });
@@ -215,8 +204,8 @@ export function buildReport(input: ReportInput): ReportCard[] {
     cards.push({
       kind: 'ranking',
       of: 'genres',
-      heading: 'Your sound',
-      lead: `The shape of ${when}`,
+      heading: said.genresHeading,
+      lead: said.genresLead(period),
       entries: genres,
       tint: genres[0].sample,
     });
@@ -232,8 +221,8 @@ export function buildReport(input: ReportInput): ReportCard[] {
   if (hours.some((seconds) => seconds > 0) && peak != null) {
     cards.push({
       kind: 'clock',
-      heading: 'Your hours',
-      lead: `You listened most around ${formatHour(peak)}`,
+      heading: said.clockHeading,
+      lead: said.clockLead(formatHour(peak)),
       hours,
       peak,
       // The runner-up, so two cards in a row are not the same colour.
@@ -243,27 +232,27 @@ export function buildReport(input: ReportInput): ReportCard[] {
 
   const streak = longestStreak(input.listens);
   const items: { label: string; value: string }[] = [
-    { label: 'Plays', value: String(summary.playCount) },
-    { label: 'Tracks', value: String(summary.distinctTracks) },
-    { label: 'Artists', value: String(summary.distinctArtists) },
+    { label: figures.plays, value: String(summary.playCount) },
+    { label: figures.tracks, value: String(summary.distinctTracks) },
+    { label: figures.artists, value: String(summary.distinctArtists) },
   ];
   if (summary.playCount > 0) {
     items.push({
-      label: 'Finished',
-      value: `${Math.round((summary.completedCount / summary.playCount) * 100)}%`,
+      label: figures.finished,
+      value: t.stats.percent(Math.round((summary.completedCount / summary.playCount) * 100)),
     });
   }
   if (input.days > 0) {
-    items.push({ label: 'A day', value: formatDuration(summary.totalSeconds / input.days) });
+    items.push({ label: figures.aDay, value: formatDuration(summary.totalSeconds / input.days, t) });
   }
   // A streak is only a fact worth printing once it is longer than the one day
   // any listening at all produces.
   if (streak > 1) {
-    items.push({ label: 'Streak', value: `${streak} days` });
+    items.push({ label: figures.streak, value: said.streakDays(streak) });
   }
   cards.push({
     kind: 'numbers',
-    heading: 'By the numbers',
+    heading: said.numbersHeading,
     items,
     tint: input.tracks[2]?.sample ?? input.tracks[0]?.sample ?? null,
     // The same wall the opening card uses, for something to look at behind
@@ -276,7 +265,7 @@ export function buildReport(input: ReportInput): ReportCard[] {
 
   cards.push({
     kind: 'closing',
-    title: titleOf(period, at),
+    title: titleOf(period, at, t),
     seconds: summary.totalSeconds,
     track: tracks[0]?.label ?? null,
     artist: artists[0]?.label ?? null,

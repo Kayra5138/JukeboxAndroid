@@ -9,6 +9,8 @@ import {
   playlists,
   type Playlist,
 } from '../lib/db/playlists';
+import { useT } from '../lib/i18n/index';
+import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 
 /**
  * Puts a run of tracks into a list.
@@ -32,6 +34,9 @@ export function PlaylistPicker({
   onAdded: (message: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
   const [lists, setLists] = useState<Playlist[]>([]);
   const [naming, setNaming] = useState(false);
 
@@ -49,13 +54,9 @@ export function PlaylistPicker({
     (id: number, name: string) => {
       const added = addToPlaylist(id, trackIds, Date.now());
       onClose();
-      onAdded(
-        added === 0
-          ? `Already in ${name}`
-          : `${added} ${added === 1 ? 'track' : 'tracks'} added to ${name}`
-      );
+      onAdded(added === 0 ? t.lists.picker.already(name) : t.lists.picker.added(added, name));
     },
-    [trackIds, onClose, onAdded]
+    [trackIds, onClose, onAdded, t]
   );
 
   const create = useCallback(
@@ -72,37 +73,36 @@ export function PlaylistPicker({
     <View style={StyleSheet.absoluteFill}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
-        <Text style={styles.heading}>
-          Add {trackIds.length} {trackIds.length === 1 ? 'track' : 'tracks'} to
-        </Text>
+        <Text style={styles.heading}>{t.format.upper(t.lists.picker.heading(trackIds.length))}</Text>
 
         <ScrollView style={styles.scroll}>
           {lists.map((list) => (
             <Pressable
+              android_ripple={pressed}
               key={list.id}
               style={styles.row}
               onPress={() => put(list.id, list.name)}>
               <Text style={styles.name} numberOfLines={1}>
                 {list.name}
               </Text>
-              <Text style={styles.count}>{list.trackCount}</Text>
+              <Text style={styles.count}>{t.format.number(list.trackCount)}</Text>
             </Pressable>
           ))}
           {lists.length === 0 ? (
-            <Text style={styles.empty}>No lists yet.</Text>
+            <Text style={styles.empty}>{t.lists.picker.noLists}</Text>
           ) : null}
         </ScrollView>
 
-        <Pressable style={styles.create} onPress={() => setNaming(true)}>
-          <Text style={styles.createLabel}>New list…</Text>
+        <Pressable android_ripple={pressed} style={styles.create} onPress={() => setNaming(true)}>
+          <Text style={styles.createLabel}>{t.lists.picker.newList}</Text>
         </Pressable>
       </View>
 
       <TextPrompt
         visible={naming}
-        heading="Name the list"
-        placeholder="List name"
-        confirmLabel="Create"
+        heading={t.lists.naming.heading}
+        placeholder={t.lists.naming.placeholder}
+        confirmLabel={t.lists.naming.create}
         onSubmit={create}
         onClose={() => setNaming(false)}
       />
@@ -110,24 +110,24 @@ export function PlaylistPicker({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000cc' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     maxHeight: '70%',
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 18,
     paddingHorizontal: 20,
+    ...outlined(c),
   },
   heading: {
-    color: '#8a8a8a',
+    color: c.textMuted,
     fontSize: 12,
-    textTransform: 'uppercase',
     letterSpacing: 1,
     paddingBottom: 10,
   },
@@ -139,11 +139,11 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 13,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#242424',
+    borderBottomColor: c.border,
   },
-  name: { color: '#ededed', fontSize: 15, flex: 1, minWidth: 0 },
-  count: { color: '#5f5f5f', fontSize: 12.5 },
-  empty: { color: '#6a6a6a', fontSize: 13, paddingVertical: 12 },
+  name: { color: c.text, fontSize: 15, flex: 1, minWidth: 0 },
+  count: { color: c.textFaint, fontSize: 12.5 },
+  empty: { color: c.textFaint, fontSize: 13, paddingVertical: 12 },
   create: { paddingTop: 16, paddingBottom: 4 },
-  createLabel: { color: '#7ab8ff', fontSize: 15 },
-});
+  createLabel: { color: c.accent, fontSize: 15 },
+}));

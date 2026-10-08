@@ -246,6 +246,10 @@ def prepareYoutubeExtractor = tasks.register('prepareYoutubeExtractor') {
     def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
     if (hash != extractorSha256) throw new GradleException('YouTube extractor checksum mismatch')
     destination.bytes = bytes
+    // The one place the version is written. YouTubeEngine reads it from here to
+    // decide whether an installed copy is the bundled one; kept as a constant
+    // there as well, it could be bumped here alone and upgrades kept the old binary.
+    extractorAssets.get().file('jukebox-yt-dlp-version').asFile.text = extractorVersion
   }
 }
 android.sourceSets.main.assets.srcDir(extractorAssets)
@@ -327,3 +331,166 @@ def buildMp3Decoder = tasks.register('buildMp3Decoder', Exec) {
 }
 android.sourceSets.main.jniLibs.srcDir(mp3Libs)
 tasks.named('preBuild').configure { dependsOn(buildMp3Decoder) }
+
+/*
+  TagLib, for writing a track's details into the file itself.
+
+  Everything else the app knows about a song it keeps in its own database and
+  the file is never touched. "Write to file" is the one exception, asked for by
+  hand, and what it does to somebody's music has to be done by something that
+  has been doing it for twenty years: TagLib is what most of the desktop
+  players and taggers on Linux are built on. See src/main/cpp/tags.
+
+  Fetched and checked the way the engine and the decoder above are: GitHub's
+  archive of one commit -- the one the v2.3.2 tag pointed at when this was
+  written, named by its hash so that the tag cannot be moved under it -- and
+  refused unless it hashes to what is written here. TagLib needs utfcpp, which
+  it carries as a git submodule and which the archive of a commit therefore
+  does not contain, so that is fetched the same way, at the commit TagLib's own
+  tree pins (utfcpp's v4.2.0). It is headers and nothing else.
+
+  Built for 64-bit ARM alone, like everything native here, as a static library
+  with only MP3 and FLAC in it, and linked into one small library of the app's
+  own. zlib is left on because an ID3v2 frame may be compressed and TagLib
+  cannot carry what it cannot open; on Android that is the system's libz.so
+  and costs the APK nothing.
+
+  Licences: TagLib is offered under the LGPL 2.1 or the MPL 1.1, at the
+  recipient's choice, and utfcpp under the Boost licence. All of them go into
+  GPL-3.0. The LGPL asks that whoever receives the binary can rebuild it with
+  a changed TagLib, which here they can in the plainest way there is: the
+  whole app is source, and this is the recipe.
+
+  Tasks of its own, as the decoder's is, because the module's one CMake build
+  is the translation engine's. Unlike the decoder it is more than one file, so
+  CMake is still what builds it -- the same CMake and Ninja the Android SDK
+  installs for the engine -- only asked directly.
+*/
+def taglibVersion = '2.3.2'
+def taglibCommit = 'deadc2990767dfbda0701e0ab35fdeea653db08f'
+def taglibSha256 = '98956c96c1c52df4747f619a4c4a3760d162e53dd0335dd09e6d59bf82a5dfba'
+def utfcppVersion = '4.2.0'
+def utfcppCommit = '2d8e20b22dcb3e9b3c4f52103182ebda949c6089'
+def utfcppSha256 = '406eaa9369a9050027763a7a0e0683d8e5fa28105738ae4622f2e7387c2a2684'
+
+def tagSources = layout.buildDirectory.dir("taglib-${taglibCommit}")
+def taglibSource = tagSources.map { it.dir("taglib-${taglibCommit}") }
+def utfcppSource = tagSources.map { it.dir("utfcpp-${utfcppCommit}") }
+def tagWriterSource = file('src/main/cpp/tags')
+def tagWriterWork = layout.buildDirectory.dir('tagWriter/arm64-v8a')
+def tagWriterLibs = layout.buildDirectory.dir('generated/tagsJniLibs')
+
+def fetchTagLib = tasks.register('fetchTagLib') {
+  def archives = [
+    [name: 'TagLib', repo: 'taglib/taglib', commit: taglibCommit, sha256: taglibSha256],
+    [name: 'utfcpp', repo: 'nemtrif/utfcpp', commit: utfcppCommit, sha256: utfcppSha256],
+  ]
+  inputs.property('taglib', "${taglibVersion} ${taglibCommit} ${taglibSha256}")
+  inputs.property('utfcpp', "${utfcppVersion} ${utfcppCommit} ${utfcppSha256}")
+  outputs.dir(tagSources)
+  doLast {
+    def home = tagSources.get().asFile
+    project.delete(home)
+    home.mkdirs()
+    archives.each { wanted ->
+      def bytes = new URL("https://codeload.github.com/${wanted.repo}/tar.gz/${wanted.commit}").openConnection().with {
+        connectTimeout = 15000
+        readTimeout = 120000
+        inputStream.withCloseable { it.bytes }
+      }
+      def hash = java.security.MessageDigest.getInstance('SHA-256').digest(bytes).encodeHex().toString()
+      if (hash != wanted.sha256) throw new GradleException("${wanted.name} source checksum mismatch")
+      def archive = new File(home, "${wanted.commit}.tar.gz")
+      archive.bytes = bytes
+      project.copy {
+        from project.tarTree(project.resources.gzip(archive))
+        into home
+      }
+      archive.delete()
+    }
+  }
+}
+
+def sdkCMake = { String tool ->
+  def exe = org.gradle.internal.os.OperatingSystem.current().isWindows() ? '.exe' : ''
+  new File(android.sdkDirectory, "cmake/3.22.1/bin/${tool}${exe}").absolutePath
+}
+
+def configureTagWriter = tasks.register('configureTagWriter', Exec) {
+  dependsOn(fetchTagLib)
+  inputs.file(new File(tagWriterSource, 'CMakeLists.txt'))
+  inputs.property('sources', "${taglibCommit} ${utfcppCommit}")
+  inputs.property('ndk', android.ndkDirectory.absolutePath)
+  outputs.file(tagWriterWork.map { it.file('build.ninja') })
+
+  commandLine(
+    sdkCMake('cmake'),
+    '-S', tagWriterSource.absolutePath,
+    '-B', tagWriterWork.get().asFile.absolutePath,
+    '-G', 'Ninja',
+    "-DCMAKE_MAKE_PROGRAM=${sdkCMake('ninja')}",
+    "-DCMAKE_TOOLCHAIN_FILE=${new File(android.ndkDirectory, 'build/cmake/android.toolchain.cmake').absolutePath}",
+    // The one architecture this project builds for, at the oldest Android it runs on.
+    '-DANDROID_ABI=arm64-v8a',
+    '-DANDROID_PLATFORM=android-29',
+    // The shared C++ runtime the rest of the app already carries; a private
+    // copy linked in here would be most of the size of the library.
+    '-DANDROID_STL=c++_shared',
+    '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON',
+    // For size. Nothing in here is run often enough for speed to be noticed:
+    // a tag is a few kilobytes, read once and written once.
+    '-DCMAKE_BUILD_TYPE=MinSizeRel',
+    "-DJUKEBOX_TAGLIB=${taglibSource.get().asFile.absolutePath}",
+    "-DJUKEBOX_UTFCPP=${utfcppSource.get().asFile.absolutePath}",
+    "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${tagWriterLibs.get().dir('arm64-v8a').asFile.absolutePath}"
+  )
+}
+
+def buildTagWriter = tasks.register('buildTagWriter', Exec) {
+  dependsOn(configureTagWriter)
+  inputs.dir(tagWriterSource)
+  inputs.dir(tagSources)
+  outputs.dir(tagWriterLibs)
+  commandLine(sdkCMake('cmake'), '--build', tagWriterWork.get().asFile.absolutePath, '--target', 'jukeboxtags')
+}
+android.sourceSets.main.jniLibs.srcDir(tagWriterLibs)
+tasks.named('preBuild').configure { dependsOn(buildTagWriter) }
+
+/*
+  The same code built for the machine doing the building, and run over files
+  made up for the purpose: see src/main/cpp/tags/jukebox_tags_check.cpp. The
+  unit tests cannot load a library made for a phone, so this is the only place
+  the writing itself is exercised short of one.
+
+    ./gradlew :jukebox-audio:checkTagWriter
+
+  Asked for by name and never run by a build: it wants a desktop C++ compiler
+  and zlib's headers, which making a phone app should not.
+*/
+def tagCheckWork = layout.buildDirectory.dir('tagWriter/host')
+def configureTagCheck = tasks.register('configureTagCheck', Exec) {
+  dependsOn(fetchTagLib)
+  commandLine(
+    sdkCMake('cmake'),
+    '-S', tagWriterSource.absolutePath,
+    '-B', tagCheckWork.get().asFile.absolutePath,
+    '-G', 'Ninja',
+    "-DCMAKE_MAKE_PROGRAM=${sdkCMake('ninja')}",
+    '-DCMAKE_BUILD_TYPE=Release',
+    "-DJUKEBOX_TAGLIB=${taglibSource.get().asFile.absolutePath}",
+    "-DJUKEBOX_UTFCPP=${utfcppSource.get().asFile.absolutePath}"
+  )
+}
+def buildTagCheck = tasks.register('buildTagCheck', Exec) {
+  dependsOn(configureTagCheck)
+  commandLine(sdkCMake('cmake'), '--build', tagCheckWork.get().asFile.absolutePath, '--target', 'jukebox_tags_check')
+}
+tasks.register('checkTagWriter', Exec) {
+  dependsOn(buildTagCheck)
+  def scratch = layout.buildDirectory.dir('tagWriter/check-files')
+  doFirst {
+    project.delete(scratch)
+    scratch.get().asFile.mkdirs()
+  }
+  commandLine(tagCheckWork.get().file('jukebox_tags_check').asFile.absolutePath, scratch.get().asFile.absolutePath)
+}

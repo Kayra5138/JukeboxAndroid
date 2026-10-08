@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { stringsFor } from '../../i18n/languages.ts';
 import { formatOffset, MAX_OFFSET_MS, parseOffsetMs } from '../offset.ts';
 
 describe('parseOffsetMs', () => {
@@ -65,5 +66,13 @@ describe('formatOffset', () => {
   it('drops trailing zeroes', () => {
     assert.equal(formatOffset(2_000), '+2s');
     assert.equal(formatOffset(-1_000), '−1s');
+  });
+
+  it('is written the Turkish way when that is the language', () => {
+    const tr = stringsFor('tr');
+    assert.equal(formatOffset(1_500, tr), '+1,5 sn');
+    assert.equal(formatOffset(-250, tr), '−0,25 sn');
+    assert.equal(formatOffset(2_000, tr), '+2 sn');
+    assert.equal(formatOffset(0, tr), 'kaydırma yok');
   });
 });

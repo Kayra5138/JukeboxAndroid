@@ -2,7 +2,7 @@
   "expo": {
     "name": "Jukebox",
     "slug": "jukebox",
-    "version": "0.30.6",
+    "version": "0.31.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "jukebox",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "Kayra5138.Jukebox",
-      "versionCode": 103,
+      "versionCode": 104,
       "adaptiveIcon": {
         "backgroundColor": "#32334E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -29,9 +29,12 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#121212",
+          "backgroundColor": "#f4f4f6",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#121212"
+          }
         }
       ],
       "expo-background-task"

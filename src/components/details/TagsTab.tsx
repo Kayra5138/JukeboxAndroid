@@ -4,11 +4,13 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { FormScroll } from '../FormScroll';
 import { TagEditor } from '../TagEditor';
 import { saveGenre } from '../../lib/db/metadata';
+import { useT } from '../../lib/i18n/index';
 import { saveManualTags, tagCounts, tagsFor, type TagEdit } from '../../lib/db/tags';
 import { isAbortError } from '../../lib/metadata/http';
 import { lookUpTags, withLookupTags } from '../../lib/metadata/single';
+import { useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
-import { shared } from './styles';
+import { useShared } from './styles';
 
 const SOURCE_NAMES = { musicbrainz: 'MusicBrainz', itunes: 'Apple' } as const;
 
@@ -40,6 +42,10 @@ export function TagsTab({
   const [looking, setLooking] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const search = useRef<AbortController | null>(null);
+  const t = useT();
+  const c = useColours();
+  const shared = useShared();
+  const pressed = usePressed();
 
   useEffect(() => () => search.current?.abort(), []);
 
@@ -61,20 +67,20 @@ export function TagsTab({
       const found = await lookUpTags(track, controller.signal);
       if (controller.signal.aborted) return;
       if (!found) {
-        setNote({ text: 'No tags were found for this track.', bad: true });
+        setNote({ text: t.details.tags.noneFound, bad: true });
         return;
       }
       setTags((before) => withLookupTags(before, found));
       setNote({
-        text: `${found.tags.length} from ${SOURCE_NAMES[found.source]}. Arrange them, then save to keep them.`,
+        text: t.details.tags.found(found.tags.length, SOURCE_NAMES[found.source]),
       });
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
-      setNote({ text: 'The search did not get through.', bad: true });
+      setNote({ text: t.details.searchFailed, bad: true });
     } finally {
       if (!controller.signal.aborted) setLooking(false);
     }
-  }, [track]);
+  }, [track, t]);
 
   const save = useCallback(() => {
     saveManualTags(track.id, tags);
@@ -83,26 +89,24 @@ export function TagsTab({
     const kept = read(track.id);
     saveGenre(track.id, kept[0]?.tag ?? null);
     setTags(kept);
-    setNote({ text: 'Saved.' });
+    setNote({ text: t.common.saved });
     onChanged();
-  }, [track.id, tags, onChanged]);
+  }, [track.id, tags, onChanged, t]);
 
   return (
     <FormScroll contentContainerStyle={shared.content}>
       <Pressable
+        android_ripple={pressed}
         style={[shared.action, looking && shared.actionOff]}
         disabled={looking}
         onPress={() => void lookUp()}>
         {looking ? (
-          <ActivityIndicator color="#121212" />
+          <ActivityIndicator color={c.onPrimary} />
         ) : (
-          <Text style={shared.actionLabel}>Look up</Text>
+          <Text style={shared.actionLabel}>{t.details.lookUp}</Text>
         )}
       </Pressable>
-      <Text style={shared.hint}>
-        Searches for this track's tags. The ones you typed stay; the ones a lookup brought
-        before are replaced by what it finds now.
-      </Text>
+      <Text style={shared.hint}>{t.details.tags.lookUpHint}</Text>
 
       <TagEditor
         tags={tags}
@@ -115,14 +119,11 @@ export function TagsTab({
       {note ? <Text style={note.bad ? shared.noteBad : shared.note}>{note.text}</Text> : null}
 
       <View style={shared.actions}>
-        <Pressable style={[shared.action, shared.actionWide]} onPress={save}>
-          <Text style={shared.actionLabel}>Save</Text>
+        <Pressable android_ripple={pressed} style={[shared.action, shared.actionWide]} onPress={save}>
+          <Text style={shared.actionLabel}>{t.common.save}</Text>
         </Pressable>
       </View>
-      <Text style={shared.hint}>
-        The first tag is the one counted as the genre. A tag you typed is kept as yours:
-        no later lookup will remove it.
-      </Text>
+      <Text style={shared.hint}>{t.details.tags.saveHint}</Text>
     </FormScroll>
   );
 }

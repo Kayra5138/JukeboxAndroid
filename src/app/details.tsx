@@ -12,20 +12,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GeneralTab } from '../components/details/GeneralTab';
 import { LyricsTab } from '../components/details/LyricsTab';
 import { TagsTab } from '../components/details/TagsTab';
+import { useT } from '../lib/i18n/index';
 import { findTrack } from '../lib/media/library';
 import { withMetadata, type EnrichedTrack } from '../lib/media/merge';
+import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
-const TABS = [
-  { key: 'general', label: 'General' },
-  { key: 'tags', label: 'Tags' },
-  { key: 'lyrics', label: 'Lyrics' },
-] as const;
+const TABS = ['general', 'tags', 'lyrics'] as const;
 
-type Tab = (typeof TABS)[number]['key'];
-
-const MISSING =
-  'That track is no longer in the library. It may have been deleted, moved, or left outside the folder Jukebox is reading.';
+type Tab = (typeof TABS)[number];
 
 /**
  * Everything known about one track, to read and to put right.
@@ -41,11 +36,16 @@ export default function DetailsScreen() {
   const router = useRouter();
   const { trackId, tab: wanted } = useLocalSearchParams<{ trackId: string; tab?: string }>();
   const [tab, setTab] = useState<Tab>(
-    TABS.some((entry) => entry.key === wanted) ? (wanted as Tab) : 'general'
+    TABS.some((key) => key === wanted) ? (wanted as Tab) : 'general'
   );
   /** As the library reads the file, and the same with what is stored laid over it. */
   const [found, setFound] = useState<{ file: Track; shown: EnrichedTrack } | null>(null);
-  const [gone, setGone] = useState<string | null>(null);
+  /** True for a track that is not there to be found; otherwise what went wrong, as it was said. */
+  const [gone, setGone] = useState<true | string | null>(null);
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
   // Sideways the cutout sits beside the screen, and a routed screen gets no
   // horizontal inset from the navigator.
   const insets = useSafeAreaInsets();
@@ -54,7 +54,7 @@ export default function DetailsScreen() {
     try {
       const file = await findTrack(trackId);
       if (!file) {
-        setGone(MISSING);
+        setGone(true);
         return;
       }
       setGone(null);
@@ -77,9 +77,9 @@ export default function DetailsScreen() {
   if (gone) {
     return (
       <View style={[styles.screen, styles.centered]}>
-        <Text style={styles.gone}>{gone}</Text>
-        <Pressable style={styles.button} onPress={() => router.back()}>
-          <Text style={styles.buttonLabel}>Go back</Text>
+        <Text style={styles.gone}>{gone === true ? t.details.screen.missing : gone}</Text>
+        <Pressable android_ripple={pressed} style={styles.button} onPress={() => router.back()}>
+          <Text style={styles.buttonLabel}>{t.details.screen.goBack}</Text>
         </Pressable>
       </View>
     );
@@ -88,7 +88,7 @@ export default function DetailsScreen() {
   if (!found) {
     return (
       <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color="#ededed" />
+        <ActivityIndicator color={c.text} />
       </View>
     );
   }
@@ -102,20 +102,21 @@ export default function DetailsScreen() {
           {shown.title}
         </Text>
         <Text style={styles.artist} numberOfLines={1}>
-          {shown.artist ?? 'Unknown artist'}
+          {shown.artist ?? t.common.unknownArtist}
         </Text>
       </View>
 
       <View style={styles.tabs} accessibilityRole="tablist">
-        {TABS.map((entry) => (
+        {TABS.map((key) => (
           <Pressable
-            key={entry.key}
-            style={[styles.tab, tab === entry.key && styles.tabOn]}
+            android_ripple={pressed}
+            key={key}
+            style={[styles.tab, tab === key && styles.tabOn]}
             accessibilityRole="tab"
-            accessibilityState={{ selected: tab === entry.key }}
-            onPress={() => setTab(entry.key)}>
-            <Text style={tab === entry.key ? styles.tabLabelOn : styles.tabLabel}>
-              {entry.label}
+            accessibilityState={{ selected: tab === key }}
+            onPress={() => setTab(key)}>
+            <Text style={tab === key ? styles.tabLabelOn : styles.tabLabel}>
+              {t.details.screen.tabs[key]}
             </Text>
           </Pressable>
         ))}
@@ -128,7 +129,7 @@ export default function DetailsScreen() {
         them would come back to nothing.
       */}
       <View style={tab === 'general' ? styles.pane : styles.hidden}>
-        <GeneralTab track={file} onChanged={() => void load()} />
+        <GeneralTab track={file} shown={shown} onChanged={() => void load()} />
       </View>
       <View style={tab === 'tags' ? styles.pane : styles.hidden}>
         <TagsTab track={shown} onChanged={() => void load()} />
@@ -140,27 +141,28 @@ export default function DetailsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  gone: { color: '#ededed', fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  button: { backgroundColor: '#252525', borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12 },
-  buttonLabel: { color: '#ededed', fontSize: 15 },
+  gone: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  button: { backgroundColor: c.surfaceRaised, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, ...outlined(c) },
+  buttonLabel: { color: c.text, fontSize: 15 },
   heading: { paddingHorizontal: 20, paddingTop: 14, gap: 3 },
-  title: { color: '#ededed', fontSize: 17, fontWeight: '600' },
-  artist: { color: '#7a7a7a', fontSize: 13 },
+  title: { color: c.text, fontSize: 17, fontWeight: '600' },
+  artist: { color: c.textMuted, fontSize: 13 },
   tabs: {
     flexDirection: 'row',
     marginHorizontal: 20,
     marginTop: 14,
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderRadius: 10,
     padding: 3,
+    ...outlined(c),
   },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 8 },
-  tabOn: { backgroundColor: '#ededed' },
-  tabLabel: { color: '#9a9a9a', fontSize: 14 },
-  tabLabelOn: { color: '#121212', fontSize: 14, fontWeight: '600' },
+  tabOn: { backgroundColor: c.primary },
+  tabLabel: { color: c.textSecondary, fontSize: 14 },
+  tabLabelOn: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
   pane: { flex: 1 },
   hidden: { display: 'none' },
-});
+}));

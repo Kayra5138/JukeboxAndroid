@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.MediaStoreLibrary
 import expo.modules.jukeboxaudio.QueueStore
 import expo.modules.jukeboxaudio.R
@@ -82,6 +83,25 @@ internal object BrowseTree {
   private const val PLAYABLE = "t|"
 
   /**
+   * The track an id stands for, without where it was found.
+   *
+   * The surroundings are for the car, which hands them back when a row is
+   * chosen. Nothing else has any use for them, and everything else reads an
+   * item's id as the track's: the widget looking for a cover, the app working
+   * out which of its rows is playing, the history. So they come off as an item
+   * goes into the queue, which is the last moment they mean anything. An id
+   * that never had any is given back as it was.
+   */
+  fun trackId(mediaId: String): String =
+    if (mediaId.startsWith(PLAYABLE)) mediaId.substringAfterLast('|') else mediaId
+
+  /** An item as the queue should hold it: see [trackId]. */
+  fun queued(item: MediaItem): MediaItem {
+    val plain = trackId(item.mediaId)
+    return if (plain == item.mediaId) item else item.buildUpon().setMediaId(plain).build()
+  }
+
+  /**
    * How many songs may be handed over in one answer.
    *
    * A browse result crosses to the car in a single transaction, and Media3
@@ -104,9 +124,22 @@ internal object BrowseTree {
 
   fun rootItem(context: Context): MediaItem = browsable(context, ROOT, "Jukebox")
 
+  /**
+   * The nodes whose own words are this side's, and so change with the
+   * language: the tabs, and behind each shelf the tile that sorts it.
+   *
+   * A car keeps what it was told about a node until it is told the node has
+   * changed, so these are what it has to be sent back to when the language
+   * does. The root is first because the tabs' names are its children.
+   */
+  val SPOKEN: List<String> = listOf(ROOT, HOME, TRACKS, ALBUMS, LISTS) +
+    listOf(TRACKS, ALBUMS, LISTS).map { "$it$SORT" }
+
   /** The children of [parentId], or an empty list for an id with none. */
   fun children(context: Context, parentId: String): List<MediaItem> {
     val root = LibraryDatabase.libraryRoot(context)
+    // The app's language and not the phone's: see [Localised].
+    val words = Localised.context(context)
 
     /*
       One part of a longer list. The parts are cut from the same list in the
@@ -136,8 +169,8 @@ internal object BrowseTree {
         val now = Sort.read(context, shelf)
         return Sort.FOR.getValue(shelf).map {
           icon(
-            context, "$shelf$BY${it.key}", it.label, R.drawable.jukebox_auto_sort,
-            subtitle = if (it == now) "In this order now" else null, browsable = true
+            context, "$shelf$BY${it.key}", words.getString(it.label), R.drawable.jukebox_auto_sort,
+            subtitle = if (it == now) words.getString(R.string.jukebox_auto_sort_now) else null, browsable = true
           )
         }
       }
@@ -154,10 +187,10 @@ internal object BrowseTree {
       // Four, because four is all that is shown. A fifth would not be a
       // crowded row, it would be a tab nobody can reach.
       parentId == ROOT -> listOf(
-        icon(context, HOME, "Home", R.drawable.jukebox_auto_home, browsable = true, single = false),
-        icon(context, TRACKS, "Tracks", R.drawable.jukebox_auto_tracks, browsable = true, single = false),
-        icon(context, ALBUMS, "Albums", R.drawable.jukebox_auto_albums, browsable = true, single = false),
-        icon(context, LISTS, "Lists", R.drawable.jukebox_auto_lists, browsable = true, single = false)
+        icon(context, HOME, words.getString(R.string.jukebox_auto_home), R.drawable.jukebox_auto_home, browsable = true, single = false),
+        icon(context, TRACKS, words.getString(R.string.jukebox_auto_tracks), R.drawable.jukebox_auto_tracks, browsable = true, single = false),
+        icon(context, ALBUMS, words.getString(R.string.jukebox_auto_albums), R.drawable.jukebox_auto_albums, browsable = true, single = false),
+        icon(context, LISTS, words.getString(R.string.jukebox_auto_lists), R.drawable.jukebox_auto_lists, browsable = true, single = false)
       )
 
       /*
@@ -183,7 +216,7 @@ internal object BrowseTree {
           ?.let { it.items.getOrNull(it.index) }
         val lastId = last?.mediaId?.substringAfterLast('|')?.takeIf { id -> everything.any { it.id == id } }
         add(action(
-          context, CONTINUE, "Continue",
+          context, CONTINUE, words.getString(R.string.jukebox_auto_continue),
           // What it would carry on with, so the tile says more than its name.
           subtitle = last?.mediaMetadata?.title?.toString(),
           cover = lastId ?: recent.firstOrNull()?.id ?: everything.firstOrNull()?.id
@@ -192,7 +225,7 @@ internal object BrowseTree {
           // Not the newest of them where there is another: that one is as
           // likely as not the cover the tile beside it is already wearing.
           add(action(
-            context, SHUFFLE_RECENT, "Shuffle recent", "${recent.size} songs",
+            context, SHUFFLE_RECENT, words.getString(R.string.jukebox_auto_shuffle_recent), songCount(context, recent.size),
             cover = (recent.firstOrNull { it.id != lastId } ?: recent.first()).id
           ))
         }
@@ -202,7 +235,7 @@ internal object BrowseTree {
           // changes under a finger.
           val today = (System.currentTimeMillis() / 86_400_000L).toInt()
           add(action(
-            context, SHUFFLE, "Shuffle all", "${everything.size} songs",
+            context, SHUFFLE, words.getString(R.string.jukebox_auto_shuffle_all), songCount(context, everything.size),
             cover = everything[Math.floorMod(today * 31, everything.size)].id
           ))
         }
@@ -249,7 +282,7 @@ internal object BrowseTree {
       }.map { (name, entries) ->
         browsable(
           context, "$ALBUM$name", name,
-          subtitle = entries.mapNotNull { it.artist }.distinct().singleOrNull() ?: "${entries.size} tracks",
+          subtitle = entries.mapNotNull { it.artist }.distinct().singleOrNull() ?: trackCount(context, entries.size),
           cover = entries.firstOrNull()?.id
         )
       }
@@ -263,7 +296,7 @@ internal object BrowseTree {
         else -> lists
       }.map {
         browsable(
-          context, "$LIST${it.id}", it.name, "${it.trackCount} tracks",
+          context, "$LIST${it.id}", it.name, trackCount(context, it.trackCount),
           // A list is known by what is in it, and its first song stands for it.
           cover = LibraryDatabase.playlistTrackIds(context, it.id).firstOrNull()
         )
@@ -274,9 +307,16 @@ internal object BrowseTree {
   /** The tile at the head of a shelf that says what order it is in and opens the others. */
   private fun sortTile(context: Context, shelf: String): MediaItem =
     icon(
-      context, "$shelf$SORT", "Sort", R.drawable.jukebox_auto_sort,
-      subtitle = Sort.read(context, shelf).label, browsable = true
+      context, "$shelf$SORT", Localised.text(context, R.string.jukebox_auto_sort), R.drawable.jukebox_auto_sort,
+      subtitle = Localised.text(context, Sort.read(context, shelf).label), browsable = true
     )
+
+  /** "12 tracks", for under a record or a list, and "12 songs" for under a tile that plays them. */
+  private fun trackCount(context: Context, count: Int): String =
+    Localised.count(context, R.plurals.jukebox_count_tracks, count)
+
+  private fun songCount(context: Context, count: Int): String =
+    Localised.count(context, R.plurals.jukebox_count_songs, count)
 
   /** [entries] in [sort]. Ties, and songs the order says nothing about, go by name. */
   private fun sorted(context: Context, entries: List<Entry>, sort: Sort): List<Entry> {
@@ -361,7 +401,7 @@ internal object BrowseTree {
         // Named by what is in it rather than "Part 2 of 7", so that somebody
         // looking for a song knows which one to open without opening any.
         "${shorten(part.first().title)} – ${shorten(part.last().title)}",
-        subtitle = "${part.size} tracks",
+        subtitle = trackCount(context, part.size),
         cover = part.firstOrNull()?.id
       )
     }
@@ -459,7 +499,7 @@ internal object BrowseTree {
       val known = kept[id]
       // Named the way the phone names it, corrections and lookups included.
       val names = named(
-        row["title"] as? String ?: "Unknown", row["artist"] as? String, row["album"] as? String, known
+        row["title"] as? String ?: Localised.text(context, R.string.jukebox_unknown_title), row["artist"] as? String, row["album"] as? String, known
       )
       Entry(
         id = id,

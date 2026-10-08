@@ -8,7 +8,10 @@ The short version:
 
 - Everything here is free software and compatible with GPL-3.0.
 - Nothing proprietary is in the build.
-- Native code is built from source at pinned commits, checked by SHA-256.
+- The translation engine, the MP3 decoder and the tag writer are built from
+  source at pinned commits, checked by SHA-256.
+- The YouTube engine is the exception: FFmpeg, Python and QuickJS arrive
+  prebuilt inside the wrapper's Maven artifacts, pinned by version only.
 
 ## YouTube engine
 
@@ -18,7 +21,13 @@ Already GPL-3.0, so there is nothing to reconcile.
 | --- | --- | --- |
 | youtubedl-android (deniscerri fork), library and FFmpeg artifacts | 0.19.0 | [GPL-3.0](https://github.com/deniscerri/youtubedl-android/blob/master/LICENSE) |
 | yt-dlp, official executable | 2026.08.19 | [Unlicense, with bundled components](https://github.com/yt-dlp/yt-dlp#license) |
-| FFmpeg, as bundled by the Android artifact | as packaged in 0.19.0 | [FFmpeg licence terms](https://ffmpeg.org/legal.html) |
+| FFmpeg, prebuilt in the `ffmpeg` artifact (`--enable-gpl --enable-version3`) | as packaged in 0.19.0 | [GPL-3.0-or-later as configured](https://ffmpeg.org/legal.html) |
+| Libraries packed with that FFmpeg, built by Termux: x264, x265, Xvid, libvidstab, Rubber Band, FFTW | as packaged | GPL-2.0-or-later |
+| GnuTLS, Nettle, GMP, LAME, mpg123, libopenmpt, libass, libbluray, SoXR, libsamplerate, glib, libiconv, libunistring, libidn2, opencore-amr, vo-amrwbenc, zimg, libssh, ZeroMQ, v4l-utils and others in the same archive | as packaged | LGPL, BSD, MIT, MPL-2.0 or Apache-2.0, each under its own terms |
+| AV1, VP8/9, Opus, Vorbis, Theora, Ogg, WebP, libpng, FreeType, HarfBuzz, Fontconfig, libxml2, zlib, bzip2, xz, Brotli, libsodium, SRT | as packaged | BSD, MIT and similar permissive terms |
+| CPython and its standard library, prebuilt in the `library` artifact | as packaged in 0.19.0 | [PSF-2.0](https://docs.python.org/3/license.html) |
+| [QuickJS](https://bellard.org/quickjs/), prebuilt in the `library` artifact | as packaged in 0.19.0 | MIT |
+| Jackson (databind, annotations, core) and Apache Commons IO, which the wrapper depends on | as resolved | Apache-2.0 |
 
 Source and build instructions:
 
@@ -29,7 +38,16 @@ Source and build instructions:
 
 Notes:
 
-- The wrapper bundles its own Python and QuickJS runtime.
+- **These arrive as binaries.** The wrapper's two artifacts carry about 35 MB
+  of FFmpeg and its libraries and about 14 MB of Python per architecture, plus
+  QuickJS, all compiled upstream. The build here takes them from Maven Central
+  at version 0.19.0 and does not check them against a hash of its own. Their
+  source is the upstream repositories and build instructions linked above, and
+  the Termux packages those instructions build from.
+- FFmpeg is built with `--enable-gpl --enable-version3`, without `libfdk-aac`
+  or anything else marked non-free. Saving as MP3 goes through LAME.
+- The wrapper also carries an older yt-dlp of its own. It is not run: the
+  official executable named above is written over it on first use.
 - The yt-dlp executable includes EJS and other third-party code, described in
   its upstream notices.
 - yt-dlp is fetched by the build at that version and rejected if its SHA-256
@@ -47,6 +65,7 @@ Notes:
 | AndroidX and the Android Gradle toolchain | as resolved | Apache-2.0 |
 | [React Native](https://github.com/facebook/react-native) | 0.86.2 | MIT |
 | [Expo](https://github.com/expo/expo) | SDK 57 | MIT |
+| [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) | 1.8.1 | Apache-2.0 |
 | [minimp3](https://github.com/lieff/minimp3), the MP3 decoder used by the game's chart maker | commit `ea99364f` | [CC0-1.0](https://github.com/lieff/minimp3/blob/master/LICENSE) |
 
 Notes:
@@ -58,6 +77,35 @@ Notes:
 - minimp3 does not arrive as a binary. The build fetches its two headers at
   that commit, rejects them if their SHA-256 does not match, and compiles the
   single C file in `modules/jukebox-audio/android/src/main/cpp` against them.
+
+## Writing tags into files
+
+| Project | Version | Licence |
+| --- | --- | --- |
+| [TagLib](https://github.com/taglib/taglib), which reads and writes the ID3v2 tags of an MP3 and the comments and pictures of a FLAC | 2.3.2, commit `deadc299` | [LGPL-2.1](https://github.com/taglib/taglib/blob/master/COPYING.LGPL) or [MPL-1.1](https://github.com/taglib/taglib/blob/master/COPYING.MPL), taken here under the LGPL |
+| [utfcpp](https://github.com/nemtrif/utfcpp), which TagLib converts text with | 4.2.0, commit `2d8e20b2` | [BSL-1.0](https://github.com/nemtrif/utfcpp/blob/master/LICENSE) |
+
+Notes:
+
+- Used for one thing: **Write to file**, which puts a track's details into the
+  file itself when asked to. Nothing else in the app alters a music file.
+- Neither arrives as a binary. The build fetches the source archive of each at
+  that commit, rejects it if its SHA-256 is not the pinned one, and compiles
+  TagLib with the NDK as a static library holding only its MP3 and FLAC parts.
+  That is linked into `libjukeboxtags.so` together with the app's own code in
+  `modules/jukebox-audio/android/src/main/cpp/tags`.
+- utfcpp is headers only. TagLib keeps it as a git submodule, which a source
+  archive does not include, so it is fetched separately at the commit TagLib's
+  tree pins.
+- TagLib is dual-licensed. MPL-1.1 on its own does not go into a GPL work, so
+  it is taken under LGPL-2.1, whose section 3 allows a copy to be used under
+  the GPL, version 2 or any later.
+- The LGPL asks that whoever receives the binary can rebuild it against a
+  changed TagLib. The whole app is source and the build file is the recipe:
+  change the commit and the hash and build.
+- zlib is used through Android's own `libz.so`, for ID3v2 frames stored
+  compressed. It is part of the system and not in the APK.
+- The C++ runtime is the shared `c++_shared` listed under Lyrics translation.
 
 ## Lyrics translation
 
@@ -101,7 +149,8 @@ Notes:
 - Every component in this file is free software under terms that go into
   GPL-3.0.
 - The source for all of it is either in this repository or fetched by the
-  build from a commit named by its hash.
+  build from a commit named by its hash, except the prebuilt parts of the
+  YouTube engine, whose source is upstream as described in that section.
 - Google's ML Kit used to do the translating and was the one exception. It has
   been removed: `com.google.mlkit` appears in no Gradle file here. Bergamot
   translates and `franc` identifies the language.
@@ -114,7 +163,7 @@ Notes:
 | --- | --- | --- |
 | [MusicBrainz](https://musicbrainz.org) genre vocabulary | 2,188 genre names, bundled in `src/lib/metadata/data/`, regenerated by `scripts/update-genres.mjs` | [CC0](https://musicbrainz.org/doc/About/Data_License) |
 | [MusicBrainz](https://musicbrainz.org) web service | Looking a track up, and finding an artist to photograph | CC0 for the data used here |
-| [ListenBrainz](https://listenbrainz.org) | Which artists are played alongside which | [CC0](https://listenbrainz.org/data/) |
+| [ListenBrainz](https://listenbrainz.org) | Which artists are played alongside which. Listens are submitted to it only when the user connects their account and switches sending on | [CC0](https://listenbrainz.org/data/) |
 | [Cover Art Archive](https://coverartarchive.org) | Covers next to a recommendation | Per image, served by the Internet Archive |
 | [LRCLIB](https://lrclib.net) | Lyrics, timed where available | Public domain |
 | [Apple iTunes Search](https://performance-partners.apple.com/search-api) | Tags and covers MusicBrainz did not have | Apple's API terms |
@@ -125,7 +174,9 @@ Notes:
 - The genre vocabulary is the only one of these that ships inside the APK, and
   it is CC0.
 - Everything else is requested over the network and cached on the device.
-- None of these services needs an account or an API key.
+- None of these services needs an account or an API key to read from.
+  Submitting listens to ListenBrainz is optional and uses the user's own
+  token, which is kept on the device and out of backups.
 - A recap card that shows a Commons photograph prints the photographer and the
   licence in its corner. Those licences require attribution, and the credit is
   what makes saving and sharing the card allowed.

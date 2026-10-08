@@ -4,6 +4,7 @@ import { knownArtistId, rememberArtistId } from '../db/discover.ts';
 import { musicBrainzGet } from '../metadata/musicbrainz.ts';
 import { isGenre } from '../metadata/genres.ts';
 import { isAbortError } from '../metadata/http.ts';
+import { strings, type Strings } from '../i18n/languages.ts';
 import { ownedArtists, rankSuggestions, type Suggested } from './rank.ts';
 import { foldForMatch } from '../metadata/text.ts';
 import { DAY, tagFit, tagMix, tasteProfile, type Listen, type Skip } from './policy.ts';
@@ -25,7 +26,8 @@ async function resolve(name: string, now: number, signal?: AbortSignal): Promise
   return id;
 }
 
-export async function buildPool(library: Track[], now: number, onProgress: (text: string) => void, signal?: AbortSignal): Promise<Entry[]> {
+export async function buildPool(library: Track[], now: number, onProgress: (text: string) => void, signal?: AbortSignal, t: Strings = strings()): Promise<Entry[]> {
+  const said = t.discover.engine;
   const tags = new Map([...allTags()].map(([id, values]) => [id, values.map(t => t.tag).filter(isGenre)]));
   const plays = db().getAllSync<Listen>('SELECT track_id,artist,started_at,seconds_played,completed FROM plays WHERE started_at >= ? AND started_at <= ?', now - 30 * DAY, now);
   const skips = db().getAllSync<Skip>('SELECT artist,started_at,seconds_played,duration_sec FROM skips WHERE started_at >= ? AND started_at <= ?', now - 30 * DAY, now);
@@ -34,13 +36,13 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
     for (const name of new Set(library.map(t => t.artist).filter((n): n is string => !!n))) profile.artists.push({ name, score: 1 });
     Object.assign(profile, tagMix(library.map(track => [tags.get(track.id) ?? [], 1])));
   }
-  if (!profile.artists.length) throw new Error('Add some music or listen to a few songs to build your Discover taste profile.');
+  if (!profile.artists.length) throw new Error(said.needsTaste);
   const familiar = ownedArtists([...library, ...plays]);
   const suggested: Suggested[] = [];
   const seeds: { id: string; name: string; weight: number }[] = [];
   const top = profile.artists[0].score;
   for (const seed of profile.artists.slice(0,10)) {
-    onProgress(`Learning from ${seed.name}…`);
+    onProgress(said.learning(seed.name));
     try {
       const id = await resolve(seed.name, now, signal);
       if (!id) continue;
@@ -62,7 +64,7 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
   const searches = profile.pairs.map(pair => ({ label: pair.join(' + '), tags: pair as string[] }));
   for (const tag of profile.tags) if (searches.length < 3) searches.push({ label: tag, tags: [tag] });
   for (const search of searches.slice(0,3)) {
-    onProgress(`Exploring ${search.label}…`);
+    onProgress(said.exploring(search.label));
     try {
       const query = search.tags.map(tag => `tag:${quoted(tag)}`).join(' AND ');
       const response = await musicBrainzGet<{ artists?: Artist[] }>(`/artist/?query=${encodeURIComponent(query)}&fmt=json&limit=15`, signal);
@@ -78,7 +80,7 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
   }
   const pool: Entry[] = [];
   for (const artist of ranked) {
-    onProgress(`Finding songs by ${artist.name}…`);
+    onProgress(said.findingSongs(artist.name));
     try {
       const songs = await topRecordings(artist.mbid, 30, signal);
       songs.forEach((song, index) => pool.push({ recordingMbid: song.mbid, title: song.title,
@@ -88,6 +90,6 @@ export async function buildPool(library: Track[], now: number, onProgress: (text
         score: artist.score * (1 + tagFit(song.tags, profile.weights) * .3) / (1 + index * .12) }));
     } catch (e) { if (isAbortError(e)) throw e; }
   }
-  if (!pool.length) throw new Error('No recommendations could be fetched. Your current Discover list is kept; please retry later.');
+  if (!pool.length) throw new Error(said.nothingFetched);
   return pool;
 }

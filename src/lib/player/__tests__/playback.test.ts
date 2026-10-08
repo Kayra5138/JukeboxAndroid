@@ -10,6 +10,7 @@ import {
   semitonesOf,
   snap,
 } from '../playback.ts';
+import { stringsFor } from '../../i18n/languages.ts';
 
 describe('snap', () => {
   it('lands on the grid between the ends', () => {
@@ -79,6 +80,13 @@ describe('formatSpeed', () => {
     assert.equal(formatSpeed(0.95), '0.95×');
     assert.equal(formatSpeed(1.05), '1.05×');
   });
+
+  it('writes it with a comma in Turkish', () => {
+    const tr = stringsFor('tr');
+    assert.equal(formatSpeed(1, tr), '1×');
+    assert.equal(formatSpeed(1.5, tr), '1,5×');
+    assert.equal(formatSpeed(0.95, tr), '0,95×');
+  });
 });
 
 describe('formatSemitones', () => {
@@ -90,6 +98,11 @@ describe('formatSemitones', () => {
     assert.equal(formatSemitones(2), '+2');
     assert.equal(formatSemitones(-2), '-2');
     assert.equal(formatSemitones(PITCH.max), '+7');
+  });
+
+  it('names the resting value in Turkish', () => {
+    assert.equal(formatSemitones(0, stringsFor('tr')), 'Normal');
+    assert.equal(formatSemitones(-2, stringsFor('tr')), '-2');
   });
 });
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import JukeboxAudio, { type AudioEffects } from '../../../modules/jukebox-audio';
+import { useT } from '../i18n/index';
 
 /**
  * The effects, their ready-made combinations, and the one way of talking to the
@@ -30,35 +31,35 @@ export const BLANK: AudioEffects = {
  *
  * `mix` is how much of each was actually heard when it was chosen, which is
  * what picking one sets. Only the robot wanted any of the record left under it.
+ *
+ * What each is called, and the line that says what it does, are in the string
+ * tables under its id: `t.sound.effects.voices[id]`.
  */
-export const VOICES: { id: AudioEffects['voice']; name: string; hint: string; mix: number }[] = [
-  { id: 'off', name: 'Off', hint: 'The record as it is', mix: 1 },
-  { id: 'robot', name: 'Robot', hint: 'Rung against a low tone — metallic, bell-like', mix: 0.85 },
-  { id: 'vintage', name: 'Vintage', hint: 'Fewer bits, a coarser clock, and the top taken off', mix: 1 },
-  { id: 'swirl', name: 'Swirl', hint: 'A slow sweep, like a jet passing over', mix: 0.9 },
-  { id: 'chipmunk', name: 'Chipmunk', hint: 'Up a fifth, and nothing moved in time', mix: 1 },
-  { id: 'squeak', name: 'More chipmunk', hint: 'A whole octave, past being a voice', mix: 1 },
+export const VOICES: { id: AudioEffects['voice']; mix: number }[] = [
+  { id: 'off', mix: 1 },
+  { id: 'robot', mix: 0.85 },
+  { id: 'vintage', mix: 1 },
+  { id: 'swirl', mix: 0.9 },
+  { id: 'chipmunk', mix: 1 },
+  { id: 'squeak', mix: 1 },
 ];
 
 /**
  * Ready-made settings, because most of what people want from these is one of
  * four or five combinations and nobody wants to find them with sliders.
+ *
+ * Named and described in the string tables, under the id:
+ * `t.sound.effects.presets[id]`.
  */
-export const PRESETS: { name: string; hint: string; of: Partial<AudioEffects> }[] = [
-  { name: 'Off', hint: 'The recording as it is', of: BLANK },
-  { name: 'Mono', hint: 'Both ears the same — for one earbud', of: { width: 0 } },
-  { name: 'Wide', hint: 'The sides pushed out', of: { width: 1.5 } },
-  {
-    name: 'Headphones',
-    hint: 'Takes hard-panned mixes out of your skull',
-    of: { crossfeed: 0.6 },
-  },
-  {
-    name: '8D',
-    hint: 'The sound turns slowly around you',
-    of: { rotate: 0.9, rotateSeconds: 12, crossfeed: 0.4 },
-  },
-  { name: 'Karaoke-ish', hint: 'Pushes the middle away', of: { width: 2, preampDb: -3 } },
+export type EffectPresetId = 'off' | 'mono' | 'wide' | 'headphones' | '8d' | 'karaoke';
+
+export const PRESETS: { id: EffectPresetId; of: Partial<AudioEffects> }[] = [
+  { id: 'off', of: BLANK },
+  { id: 'mono', of: { width: 0 } },
+  { id: 'wide', of: { width: 1.5 } },
+  { id: 'headphones', of: { crossfeed: 0.6 } },
+  { id: '8d', of: { rotate: 0.9, rotateSeconds: 12, crossfeed: 0.4 } },
+  { id: 'karaoke', of: { width: 2, preampDb: -3 } },
 ];
 
 /**
@@ -88,7 +89,7 @@ export function shapeOf(of: Partial<AudioEffects>): Partial<AudioEffects> {
 }
 
 /** Which preset the stereo half is sitting on, ignoring the voice entirely. */
-export function shapePresetFor(settings: AudioEffects | null): string | null {
+export function shapePresetFor(settings: AudioEffects | null): EffectPresetId | null {
   if (!settings) return null;
   const found = PRESETS.find((preset) => {
     const want = shapeOf(preset.of);
@@ -101,7 +102,7 @@ export function shapePresetFor(settings: AudioEffects | null): string | null {
       return here === there;
     });
   });
-  return found?.name ?? null;
+  return found?.id ?? null;
 }
 
 /** Nothing on at all, which is the one chip that speaks for both halves. */
@@ -155,7 +156,12 @@ const SEND_EVERY_MS = 120;
  */
 export function useAudioEffects(enabled = true) {
   const [settings, setSettings] = useState<AudioEffects | null>(null);
-  const [failure, setFailure] = useState<string | null>(null);
+  /*
+    Which thing went wrong rather than the words for it, so that the line is
+    said in whatever language the app is in when it is read.
+  */
+  const [failed, setFailed] = useState<'unsupported' | 'unreadable' | 'unsent' | null>(null);
+  const t = useT();
 
   const sending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wanted = useRef<AudioEffects>(BLANK);
@@ -165,7 +171,7 @@ export function useAudioEffects(enabled = true) {
     if (!enabled || sending.current) return;
 
     if (!JukeboxAudio.getAudioEffectsAsync) {
-      setFailure('Install the updated Android build to use effects.');
+      setFailed('unsupported');
       setSettings(BLANK);
       return;
     }
@@ -176,7 +182,7 @@ export function useAudioEffects(enabled = true) {
       })
       .catch(() => {
         setSettings(BLANK);
-        setFailure('Could not read the effects. They are off until this is retried.');
+        setFailed('unreadable');
       });
   }, [enabled]);
 
@@ -184,8 +190,9 @@ export function useAudioEffects(enabled = true) {
     sending.current = null;
     sentAt.current = Date.now();
     if (!JukeboxAudio.setAudioEffectsAsync) return;
-    void JukeboxAudio.setAudioEffectsAsync(wanted.current).catch(() => {
-      setFailure('That setting did not reach the player.');
+    void JukeboxAudio.setAudioEffectsAsync(wanted.current).catch((failure: unknown) => {
+      console.warn('The effects could not be set', failure);
+      setFailed('unsent');
     });
   }, []);
 
@@ -195,7 +202,7 @@ export function useAudioEffects(enabled = true) {
       const next = { ...wanted.current, ...part };
       wanted.current = next;
       setSettings(next);
-      setFailure(null);
+      setFailed(null);
       if (sending.current) return;
       const since = Date.now() - sentAt.current;
       if (since >= SEND_EVERY_MS) push();
@@ -211,5 +218,6 @@ export function useAudioEffects(enabled = true) {
     []
   );
 
+  const failure = failed ? t.sound.effects.failures[failed] : null;
   return { settings, failure, change };
 }

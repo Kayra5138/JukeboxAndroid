@@ -7,6 +7,10 @@
 #   -> turn on "Unknown sources" (without it a sideloaded app is never offered)
 #   and tap "Start head unit server".
 #
+# If the window stays black, or says it is waiting for the phone: stop the
+# head unit server from its notification and start it again. A connection that
+# was dropped part way can leave it listening and answering nobody.
+#
 # Usage: [AUTO_SCREEN=small|720p|1080p|wide] scripts/android-auto.sh [adb-serial]
 
 set -euo pipefail
@@ -50,5 +54,19 @@ case "${AUTO_SCREEN:-720p}" in
   *)     CONFIG=config/default_720p.ini ;;
 esac
 
+# The head unit carries an SDL from 2022 that knows X11 and nothing else. A
+# session that has SDL_VIDEODRIVER=wayland set for its games hands that to the
+# head unit too, which then stops with "wayland not available". Under Wayland
+# it runs through XWayland, so X11 is asked for by name.
+export SDL_VIDEODRIVER=x11
+
+# It also reads commands from its standard input and leaves as soon as that
+# ends. Started from somewhere with no terminal behind it -- a launcher, a
+# script, `< /dev/null` -- it connects, prints its version and is gone without
+# a word. Given an input that never ends, it stays.
 cd "$DHU"
-exec ./desktop-head-unit -c "$CONFIG"
+if [ -t 0 ]; then
+  exec ./desktop-head-unit -c "$CONFIG"
+else
+  tail -f /dev/null | ./desktop-head-unit -c "$CONFIG"
+fi

@@ -111,15 +111,16 @@ object LibraryImport {
     }
 
     val uri = resolver.insert(COLLECTION, values)
-      ?: throw IllegalStateException("The music library would not accept a new file.")
+      ?: throw Told(R.string.jukebox_import_refused)
 
     try {
       onReserved?.invoke(ContentUris.parseId(uri).toString())
       resolver.openOutputStream(uri)?.use(write)
-        ?: throw IllegalStateException("Could not write into the music library.")
-      check(resolver.update(uri, ContentValues().apply {
+        ?: throw Told(R.string.jukebox_import_not_written)
+      val published = resolver.update(uri, ContentValues().apply {
         put(MediaStore.Audio.Media.IS_PENDING, 0)
-      }, null, null) == 1) { "Could not publish the audio file." }
+      }, null, null) == 1
+      if (!published) throw Told(R.string.jukebox_import_not_published)
     } catch (error: Throwable) {
       runCatching { resolver.delete(uri, null, null) }
       throw error
@@ -144,12 +145,12 @@ object LibraryImport {
       val read = input.read(buffer)
       if (read < 0) break
       total += read
-      if (total > MAX_BYTES) throw IllegalStateException("That file is too large to be a song.")
+      if (total > MAX_BYTES) throw Told(R.string.jukebox_import_too_large)
       output.write(buffer, 0, read)
     }
-    if (total == 0L) throw IllegalStateException("The file was empty.")
+    if (total == 0L) throw Told(R.string.jukebox_import_empty)
     if (expected >= 0 && total != expected) {
-      throw IllegalStateException("That download did not arrive in one piece.")
+      throw Told(R.string.jukebox_import_cut_short)
     }
   }
 

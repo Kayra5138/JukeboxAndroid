@@ -68,6 +68,89 @@ export function sameMoment(before: PlayerStatus, after: PlayerStatus): boolean {
   );
 }
 
+/** Where a reported change of track falls in the app's own copy of the queue. */
+export type Landing = {
+  index: number;
+  track: Track | null;
+  /**
+   * False when the copy cannot be what the player is holding, and so has
+   * nothing to say about what started. The answer then is to read the player
+   * again, not to show whatever happens to sit at that position.
+   */
+  trusted: boolean;
+};
+
+/**
+ * Which of the app's rows a track change is about.
+ *
+ * The player reports a position and an id, and the position is looked up in a
+ * copy of the queue kept on this side. That copy is right for as long as this
+ * app is the only thing setting queues, and it is not: a car sets them, and so
+ * does a press of play on the widget after the app was put away. The position
+ * is then a position in a list this side has never seen, and believing it
+ * names the wrong track everywhere — on screen, in the history, and as the row
+ * every queue edit is measured from.
+ *
+ * So the position is believed only where the id agrees with it. It still
+ * outranks the id where both fit, because a track queued twice cannot be told
+ * apart by id alone. A player old enough not to send a position is answered by
+ * id, as it always was.
+ */
+export function landingOf(queue: Track[], index: number, trackId: string | null): Landing {
+  // Nothing is playing: the queue was emptied. Not a disagreement.
+  if (trackId === null) return { index: -1, track: null, trusted: true };
+
+  const at = index >= 0 ? queue[index] : undefined;
+  if (at && at.id === trackId) return { index, track: at, trusted: true };
+
+  if (index < 0) {
+    const found = queue.findIndex((candidate) => candidate.id === trackId);
+    if (found >= 0) return { index: found, track: queue[found]!, trusted: true };
+  }
+  return { index: -1, track: null, trusted: false };
+}
+
+/** What to do with the app's copy of the queue, given what the player holds. */
+export type Reconciliation =
+  /** They agree, or the player has nothing to say. */
+  | { kind: 'keep' }
+  /** The same queue, with a different row playing than the app thought. */
+  | { kind: 'move'; index: number }
+  /** A different queue. The player's replaces the copy. */
+  | { kind: 'adopt' };
+
+/**
+ * Compares the app's copy of the queue with the player's own.
+ *
+ * Adopting is the last resort and not the default, because it costs something:
+ * a queue read back out of the player is only what was handed to it, and the
+ * rows it makes are poorer than the library tracks the app is holding. Where
+ * the two lists are the same tracks in the same order the copy is kept, and at
+ * most the playing row is corrected.
+ *
+ * An empty player is left alone as well. It is what a stopped service answers
+ * with, and clearing a queue off the screen because the thing that plays it
+ * has gone away for the moment would be taking it from the one place it is
+ * still held.
+ */
+export function reconcile(
+  queue: Track[],
+  currentIndex: number,
+  theirs: Hydration | null
+): Reconciliation {
+  if (!theirs) return { kind: 'keep' };
+
+  const same =
+    queue.length === theirs.queue.length &&
+    queue.every((track, position) => track.id === theirs.queue[position]!.id);
+  if (!same) return { kind: 'adopt' };
+
+  // A player that cannot say which row it is on has nothing to correct with.
+  return theirs.currentIndex < 0 || theirs.currentIndex === currentIndex
+    ? { kind: 'keep' }
+    : { kind: 'move', index: theirs.currentIndex };
+}
+
 /** The two reads of the player this needs, so it can be exercised without one. */
 export type PlayerReads = {
   status: () => Promise<PlayerStatus>;

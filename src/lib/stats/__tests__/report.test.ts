@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { buildReport, hoursOf, RANKED, worthReporting, type ReportInput } from '../report.ts';
 import type { ListeningSummary, TopEntry } from '../../db/history.ts';
+import { stringsFor } from '../../i18n/languages.ts';
 import type { Listen } from '../period.ts';
 
 const AT = Date.UTC(2026, 5, 15, 12, 0, 0);
@@ -147,5 +148,61 @@ describe('buildReport', () => {
     assert.ok(last && last.kind === 'closing');
     assert.equal(last.track, null);
     assert.equal(last.artist, null);
+  });
+
+  it('words the cards in English unless told otherwise', () => {
+    const cards = buildReport(input());
+    const opening = cards[0];
+    assert.ok(opening.kind === 'opening');
+    assert.equal(opening.title, '2026');
+    assert.equal(opening.comparison, 'vs last year');
+    const headed = cards.flatMap((card) =>
+      card.kind === 'ranking' || card.kind === 'clock' ? [[card.heading, card.lead]] : []
+    );
+    assert.deepEqual(headed, [
+      ['Your top tracks', 'What you reached for this year'],
+      ['Your top artists', 'Who you spent this year with'],
+      ['Your sound', 'The shape of this year'],
+      ['Your hours', 'You listened most around 21:00'],
+    ]);
+    const numbers = cards.find((card) => card.kind === 'numbers');
+    assert.ok(numbers && numbers.kind === 'numbers');
+    assert.deepEqual(numbers.items, [
+      { label: 'Plays', value: '40' },
+      { label: 'Tracks', value: '22' },
+      { label: 'Artists', value: '9' },
+      { label: 'Finished', value: '75%' },
+      { label: 'A day', value: '9m' },
+      { label: 'Streak', value: '14 days' },
+    ]);
+  });
+
+  it('words them in Turkish, the same cards in the same order', () => {
+    const tr = stringsFor('tr');
+    const cards = buildReport(input({ period: 'week' }), tr);
+    assert.deepEqual(kinds(cards), kinds(buildReport(input({ period: 'week' }))));
+    const opening = cards[0];
+    assert.ok(opening.kind === 'opening');
+    assert.equal(opening.title, 'Bu hafta');
+    assert.equal(opening.comparison, 'geçen haftaya göre');
+    const headed = cards.flatMap((card) =>
+      card.kind === 'ranking' || card.kind === 'clock' ? [[card.heading, card.lead]] : []
+    );
+    assert.deepEqual(headed, [
+      ['En çok dinlediğin parçalar', 'Bu hafta en çok dinlediklerin'],
+      ['En çok dinlediğin sanatçılar', 'Bu hafta sana eşlik edenler'],
+      ['Tarzın', 'Bu haftanın havası'],
+      ['Saatlerin', 'En çok 21:00 sularında dinledin'],
+    ]);
+    const numbers = cards.find((card) => card.kind === 'numbers');
+    assert.ok(numbers && numbers.kind === 'numbers');
+    assert.deepEqual(numbers.items, [
+      { label: 'Dinlenme', value: '40' },
+      { label: 'Parça', value: '22' },
+      { label: 'Sanatçı', value: '9' },
+      { label: 'Tamamlanan', value: '%75' },
+      { label: 'Günlük', value: '9dk' },
+      { label: 'Seri', value: '14 gün' },
+    ]);
   });
 });

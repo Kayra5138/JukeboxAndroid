@@ -75,9 +75,12 @@ data class TransitionSettings(
      *
      * It has to be opened, prepared and seeked before it can produce a sample,
      * and doing that at the moment of the crossfade would leave a hole exactly
-     * where the crossfade was supposed to be.
+     * where the crossfade was supposed to be. It is then run in silence beside
+     * the main player and put in step with it: a start, a wait until its
+     * position can be believed, a correction, and the same wait again to see
+     * that the correction took. Three seconds is room for all of it.
      */
-    const val PREPARE_MS = 1_200L
+    const val PREPARE_MS = 3_000L
   }
 }
 
@@ -96,10 +99,28 @@ fun crossfadeStartMs(
   durationMs: Long,
   hasNext: Boolean,
   albumOfCurrent: String?,
-  albumOfNext: String?
+  albumOfNext: String?,
+  repeatOne: Boolean = false,
+  stopsHere: Boolean = false
 ): Long? {
   if (!settings.enabled || settings.autoMs <= 0) return null
   if (!hasNext) return null
+  /*
+    The sleep timer has said the music stops when this track does. A handover
+    is the next track starting early, so one booked here would bring in the
+    opening seconds of a song nobody is meant to hear tonight, and move the
+    player onto it before it could be paused at the end of this one.
+  */
+  if (stopsHere) return null
+  /*
+    Repeating one track means the thing that follows it is itself, and the
+    player already joins a track to its own beginning without a gap. Asking
+    the player whether there is a next item does not settle this: it answers
+    for the button, which under repeat-one still moves down the queue, so a
+    handover booked on that answer would walk off the track that was meant to
+    loop. Nothing is handed over; the track comes round the ordinary way.
+  */
+  if (repeatOne) return null
   // A stream, or a file whose length is not known yet. There is no "near the
   // end" of something with no end.
   if (durationMs <= 0) return null
@@ -111,6 +132,27 @@ fun crossfadeStartMs(
 
   return durationMs - fade
 }
+
+/**
+ * How long a stretch of track takes to be heard at a given speed.
+ *
+ * Two clocks run through a crossfade and they only agree at a speed of one.
+ * Where the overlap starts is a position in the track, and so is the length of
+ * a fade, which is counted in the track's own samples before the speed is
+ * applied to them. How long to wait before letting the second player go is
+ * time on the wall. This and [trackMs] are the way from one to the other.
+ *
+ * A speed that is not a speed -- nought, negative, not a number -- is taken as
+ * one rather than divided by.
+ */
+fun clockMs(trackMs: Long, speed: Float): Long =
+  if (usable(speed)) Math.round(trackMs / speed.toDouble()) else trackMs
+
+/** How much of a track goes by in a given time on the clock; see [clockMs]. */
+fun trackMs(clockMs: Long, speed: Float): Long =
+  if (usable(speed)) Math.round(clockMs * speed.toDouble()) else clockMs
+
+private fun usable(speed: Float): Boolean = speed > 0f && !speed.isNaN() && !speed.isInfinite()
 
 /**
  * Two tracks belong to the same album when both say so and say the same thing.

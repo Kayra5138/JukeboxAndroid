@@ -12,27 +12,18 @@ import { rangeOf } from '../stats/period.ts';
  */
 export type AutoListId = 'mostPlayed' | 'recentlyFound' | 'forgotten' | 'skipped';
 
-export const AUTO_LISTS: { id: AutoListId; name: string; hint: string }[] = [
-  {
-    id: 'mostPlayed',
-    name: 'Most played',
-    hint: 'What you keep coming back to',
-  },
-  {
-    id: 'recentlyFound',
-    name: 'New this month',
-    hint: 'First heard since the start of the month',
-  },
-  {
-    id: 'forgotten',
-    name: 'Forgotten',
-    hint: 'Played a lot once, and not for half a year',
-  },
-  {
-    id: 'skipped',
-    name: 'Skipped most',
-    hint: 'What you keep pressing next on',
-  },
+/**
+ * In the order they are shown.
+ *
+ * What each is called, and the line under its name, are `lists.auto` in the
+ * string tables under these same ids: Most played, New this month, Forgotten,
+ * Skipped most.
+ */
+export const AUTO_LISTS: readonly AutoListId[] = [
+  'mostPlayed',
+  'recentlyFound',
+  'forgotten',
+  'skipped',
 ];
 
 /** Long enough that not hearing something is a lapse rather than a gap. */

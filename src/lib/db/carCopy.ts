@@ -105,10 +105,15 @@ export async function publishCarCopy(): Promise<void> {
       database.execSync('DETACH DATABASE car');
     }
 
-    await JukeboxAudio.publishCarCopyAsync();
     // Writing the copy changes rows too, in the copy, and they are counted.
-    // Read again after, or every copy would look like a reason to make another.
-    copiedAt = changes();
+    // So the count is taken after the writing, or every copy would look like a
+    // reason to make another. But before the handing over, which is waited
+    // for: a song saved while it waits is not in this copy, and counted after
+    // it would pass for copied and stay out of the car until something else
+    // was saved.
+    const written = changes();
+    await JukeboxAudio.publishCarCopyAsync();
+    copiedAt = written;
   } catch (error) {
     console.warn('The copy for the car could not be written.', error);
   } finally {

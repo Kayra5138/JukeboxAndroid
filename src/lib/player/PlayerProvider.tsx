@@ -8,9 +8,17 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { AppState } from 'react-native';
 
 import JukeboxAudio, { type RepeatMode } from '../../../modules/jukebox-audio/index.ts';
-import { readPlayerState, toggleCommand, type Hydration, type PlayerReading } from './hydrate.ts';
+import {
+  landingOf,
+  readPlayerState,
+  reconcile,
+  toggleCommand,
+  type Hydration,
+  type PlayerReading,
+} from './hydrate.ts';
 import {
   indexAfterInsert,
   indexAfterMove,
@@ -27,6 +35,7 @@ import {
 import { artistKey, spreadShuffle } from '../media/shuffle.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { recordPlay, recordSkip } from '../db/history.ts';
+import { listenRecorded } from '../scrobble/index.ts';
 import type { Track } from '../types.ts';
 
 /** A track the player refused to start, or stopped part way through. */
@@ -51,6 +60,15 @@ type PlayerActions = {
   cycleRepeat: () => Promise<void>;
   setSpeed: (speed: number) => Promise<void>;
   setPitch: (pitch: number) => Promise<void>;
+  /**
+   * Hands the player to the game for one record, and takes it back.
+   *
+   * Between the two the record plays as mastered whatever speed and pitch the
+   * listener had set, nothing heard is written to the listening history, and
+   * the queue that was there is kept to be put back.
+   */
+  lend: (track: Track) => Promise<void>;
+  giveBack: () => Promise<void>;
 };
 
 type PlayerState = {
@@ -209,7 +227,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     sessionRef.current = null;
     const play = finishSession(session, completed, Date.now());
     try {
-      recordPlay(play);
+      const row = recordPlay(play);
+      // Told last and only of a listen that was written down. It decides for
+      // itself whether there is anybody to send it to, and cannot throw.
+      if (row != null) listenRecorded(row, play.startedAt);
     } catch (failure) {
       console.warn('Could not record a play', failure);
     }
@@ -223,7 +244,18 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * True while the player is on loan to the game; see `lend`.
+   *
+   * A run is not a listen. It starts the record from the top every time, and
+   * a run lost twenty seconds in and tried again ten times was ten skips of a
+   * favourite song, which is how it came to head the list of songs skipped
+   * most.
+   */
+  const offRecord = useRef(false);
+
   const startSession = useCallback((track: Track, playing: boolean) => {
+    if (offRecord.current) return;
     sessionRef.current = beginSession(track, playing, Date.now());
   }, []);
 
@@ -294,6 +326,108 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   );
 
   /**
+   * Counts the track changes heard, so a reading of the player can tell whether
+   * one arrived while it was being taken — in which case the event is the later
+   * word and the reading is thrown away rather than applied over it.
+   */
+  const changesHeard = useRef(0);
+  const resyncing = useRef(false);
+  const resyncWanted = useRef(false);
+  const gone = useRef(false);
+  useEffect(() => {
+    gone.current = false;
+    return () => {
+      gone.current = true;
+    };
+  }, []);
+
+  /**
+   * Check the app's copy of the queue against the player's, and give way where
+   * they differ.
+   *
+   * The copy is kept in step by editing the two together, which holds only
+   * while this app is the one editing. A car sets queues of its own, and so
+   * does a press of play on the widget once the service has been put away —
+   * and nothing here was told. Every position the player reported afterwards
+   * was looked up in a list it was no longer playing.
+   *
+   * One at a time, and a request made during a read is honoured by reading
+   * again afterwards rather than alongside. A reading is dropped where the
+   * copy was replaced while it was out — whatever was just chosen here
+   * outranks what the player held a moment before — or where a track change
+   * was heard in the meantime.
+   */
+  const resync = useCallback(async () => {
+    resyncWanted.current = true;
+    if (resyncing.current) return;
+    resyncing.current = true;
+    try {
+      while (resyncWanted.current && !gone.current) {
+        resyncWanted.current = false;
+        const mine = queueRef.current;
+        const heard = changesHeard.current;
+        const reading = await readPlayer(CONNECT_TIMEOUT_MS, () => gone.current);
+        if (gone.current || !reading.seen || queueRef.current !== mine) continue;
+        if (changesHeard.current !== heard) {
+          resyncWanted.current = true;
+          continue;
+        }
+
+        const verdict = reconcile(mine, currentIndexRef.current, reading.state);
+        if (verdict.kind === 'adopt' && reading.state) {
+          adopt(reading.state);
+          // A queue from elsewhere arrives in whatever order it was built in.
+          setShuffled(false);
+          setError(null);
+        } else if (verdict.kind === 'move') {
+          const track = mine[verdict.index] ?? null;
+          flushSession(false);
+          placeCurrent(verdict.index, track);
+          if (track) startSession(track, isPlayingRef.current);
+        }
+      }
+    } catch (failure) {
+      console.warn('Could not read the player back', failure);
+    } finally {
+      resyncing.current = false;
+    }
+  }, [adopt, flushSession, placeCurrent, readPlayer, startSession]);
+
+  /**
+   * The player was asked for something and refused.
+   *
+   * Every action here is fired and not waited on — a button's press has
+   * nothing to do with the answer — so a refusal that was passed back to the
+   * caller went nowhere at all: an unhandled rejection, and nothing said. It
+   * is taken here instead, and the actions themselves never reject.
+   *
+   * Most of them have also changed the app's copy before asking, so the screen
+   * does not wait on a round trip. That is only right while the player then
+   * does as it was told. Where it did not, the copy is describing something
+   * that never happened, and the player is read back so the two agree again.
+   */
+  const refused = useCallback(
+    (what: string, failure: unknown) => {
+      console.warn(`The player would not ${what}`, failure);
+      void resync();
+    },
+    [resync]
+  );
+
+  /*
+    On the way back to the front as well. Whatever happened to the queue while
+    the app was out of sight happened without it — the event above is only
+    heard by an app that is running, and an older native module never sends it
+    at all. Cheap enough to ask every time, and asking is the only way to know.
+  */
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void resync();
+    });
+    return () => subscription.remove();
+  }, [resync]);
+
+  /**
    * Adopt whatever the player is already doing, or fall back to the stored
    * preferences when it is doing nothing.
    *
@@ -328,9 +462,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // The player's own shuffle is held off for good: the queue is shuffled by
       // rearranging it, and the two together would be a random walk over an
       // order that is already random.
-      void JukeboxAudio.setShuffleAsync(false);
-      void JukeboxAudio.setRepeatModeAsync(savedRepeat);
-    })();
+      void JukeboxAudio.setShuffleAsync(false).catch(() => {});
+      void JukeboxAudio.setRepeatModeAsync(savedRepeat).catch(() => {});
+    })().catch((failure) => console.warn('Could not read the player on starting', failure));
 
     return () => {
       cancelled = true;
@@ -342,15 +476,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Media3 tells us whether the outgoing track ended or was skipped, so the
       // history entry is exact rather than inferred.
       flushSession(event.completedPrevious, !event.completedPrevious);
-      // The index is authoritative: with a repeated track the id alone cannot
-      // say which entry started.
-      const index =
-        event.index >= 0
-          ? event.index
-          : queueRef.current.findIndex((candidate) => candidate.id === event.trackId);
-      const track = queueRef.current[index] ?? null;
-      placeCurrent(index, track);
+      changesHeard.current += 1;
       setError(null);
+      // The index is authoritative — with a repeated track the id alone cannot
+      // say which entry started — but only over a queue the player is actually
+      // holding. Where the id at that index is some other track, the copy here
+      // is not that queue, and what is on screen is left as it is for the
+      // moment it takes to read the real one rather than changed to a guess.
+      const { index, track, trusted } = landingOf(queueRef.current, event.index, event.trackId);
+      if (!trusted) {
+        void resync();
+        return;
+      }
+      placeCurrent(index, track);
       // Media3 reports a track change when the queue is *set*, not only when one
       // begins, so a queue built by "add to queue" from nothing lands here with
       // the player paused. Opening the session as playing regardless billed wall
@@ -370,6 +508,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (session) sessionRef.current = setSessionPlaying(session, playing, Date.now());
     });
 
+    /*
+      The player has a queue this app did not give it. The listen in progress
+      ends here and not at the track change that follows, which would file it
+      as skipped: being replaced by a car is not an opinion about the track.
+    */
+    const queueReplaced = JukeboxAudio.addListener('onQueueReplaced', () => {
+      flushSession(false);
+      void resync();
+    });
+
     const queueEnded = JukeboxAudio.addListener('onQueueEnded', () => {
       flushSession(true);
       markPlaying(false);
@@ -385,16 +533,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const failed = JukeboxAudio.addListener('onPlaybackError', (event) => {
       flushSession(false);
       markPlaying(false);
-      setError({ trackId: event.trackId, message: event.message });
+      // `text` is the failure as a sentence in the app's language; `message`
+      // is the player's own English and all an older build sends.
+      setError({ trackId: event.trackId, message: event.text || event.message });
     });
 
     return () => {
       trackChange.remove();
+      queueReplaced.remove();
       stateChange.remove();
       queueEnded.remove();
       failed.remove();
     };
-  }, [flushSession, markPlaying, placeCurrent, startSession]);
+  }, [flushSession, markPlaying, placeCurrent, resync, startSession]);
 
   // A play in progress when the app closes is lost, which is preferable to
   // recording one that never happened.
@@ -411,9 +562,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setShuffled(false);
       setError(null);
       if (track) startSession(track, autoPlay);
-      await JukeboxAudio.setQueueAsync(tracks.map(toQueueItem), startIndex, autoPlay);
+      try {
+        await JukeboxAudio.setQueueAsync(tracks.map(toQueueItem), startIndex, autoPlay);
+      } catch (failure) {
+        // Nothing of this track was heard, so there is no listen to keep.
+        sessionRef.current = null;
+        /*
+          Said on screen as well as read back. Reading back puts things right
+          where the player still holds what it had before; a player holding
+          nothing has nothing to correct with, and the title would be left
+          naming a track that was never loaded with no word as to why.
+        */
+        setError({
+          trackId: track?.id ?? null,
+          message: failure instanceof Error ? failure.message : String(failure),
+        });
+        refused('take the queue', failure);
+      }
     },
-    [flushSession, placeCurrent, startSession]
+    [flushSession, placeCurrent, refused, startSession]
   );
 
   const playQueue = useCallback(
@@ -422,20 +589,40 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   );
 
   const toggle = useCallback(async () => {
-    const status = await JukeboxAudio.getStatusAsync();
-    if (toggleCommand(status) === 'pause') await JukeboxAudio.pauseAsync();
-    else await JukeboxAudio.playAsync();
-  }, []);
-
-  const next = useCallback(() => JukeboxAudio.nextAsync(), []);
-  const previous = useCallback(() => JukeboxAudio.previousAsync(), []);
-  const seekTo = useCallback((seconds: number) => JukeboxAudio.seekToAsync(seconds), []);
-
-  const skipToIndex = useCallback(async (index: number) => {
-    if (index >= 0 && index < queueRef.current.length) {
-      await JukeboxAudio.skipToIndexAsync(index);
+    try {
+      const status = await JukeboxAudio.getStatusAsync();
+      if (toggleCommand(status) === 'pause') await JukeboxAudio.pauseAsync();
+      else await JukeboxAudio.playAsync();
+    } catch (failure) {
+      refused('play or pause', failure);
     }
-  }, []);
+  }, [refused]);
+
+  const next = useCallback(
+    () => JukeboxAudio.nextAsync().catch((failure) => refused('skip on', failure)),
+    [refused]
+  );
+  const previous = useCallback(
+    () => JukeboxAudio.previousAsync().catch((failure) => refused('skip back', failure)),
+    [refused]
+  );
+  const seekTo = useCallback(
+    (seconds: number) =>
+      JukeboxAudio.seekToAsync(seconds).catch((failure) => refused('seek', failure)),
+    [refused]
+  );
+
+  const skipToIndex = useCallback(
+    async (index: number) => {
+      if (index < 0 || index >= queueRef.current.length) return;
+      try {
+        await JukeboxAudio.skipToIndexAsync(index);
+      } catch (failure) {
+        refused('skip to a row', failure);
+      }
+    },
+    [refused]
+  );
 
   /**
    * The player owns the queue, so these change it in place rather than
@@ -489,14 +676,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const inserting = useRef<Promise<unknown>>(Promise.resolve());
   const insert = useCallback(
     (track: Track, where: 'next' | 'end') => {
-      const done = inserting.current.then(
-        () => insertOne(track, where),
-        () => insertOne(track, where)
-      );
-      inserting.current = done.catch(() => undefined);
+      // Caught around the whole of it: asking an empty player what it holds
+      // comes before the insertion and can fail on its own account.
+      const one = () =>
+        insertOne(track, where).catch((failure) => refused('add to the queue', failure));
+      const done = inserting.current.then(one, one);
+      inserting.current = done;
       return done;
     },
-    [insertOne]
+    [insertOne, refused]
   );
 
   const playNext = useCallback((track: Track) => insert(track, 'next'), [insert]);
@@ -511,9 +699,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       queueRef.current = next;
       setQueue(next);
       shiftCurrent((position) => indexAfterMove(position, from, to));
-      await JukeboxAudio.moveInQueueAsync(from, to);
+      try {
+        await JukeboxAudio.moveInQueueAsync(from, to);
+      } catch (failure) {
+        refused('move a row', failure);
+      }
     },
-    [shiftCurrent]
+    [refused, shiftCurrent]
   );
 
   const removeFromQueue = useCallback(
@@ -535,9 +727,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         const moved = indexAfterRemove(currentIndexRef.current, index);
         placeCurrent(moved, next[moved] ?? null);
       }
-      await JukeboxAudio.removeFromQueueAsync(index);
+      try {
+        await JukeboxAudio.removeFromQueueAsync(index);
+      } catch (failure) {
+        refused('remove a row', failure);
+      }
     },
-    [flushSession, placeCurrent]
+    [flushSession, placeCurrent, refused]
   );
 
   /*
@@ -569,7 +765,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
     told.current = { speed, pitch };
     sentAt.current = Date.now();
-    void JukeboxAudio.setPlaybackParamsAsync(speed, pitch);
+    void JukeboxAudio.setPlaybackParamsAsync(speed, pitch).catch((failure) => {
+      console.warn('The player would not change speed or pitch', failure);
+      // It was not told after all. Left standing, the record would dismiss the
+      // next asking for this same pair as a repeat of something it never got.
+      if (told.current.speed === speed && told.current.pitch === pitch) {
+        told.current = { speed: Number.NaN, pitch: Number.NaN };
+      }
+    });
   }, []);
 
   /**
@@ -619,6 +822,91 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [askPlayerFor]
   );
 
+  /*
+    The game borrows the player rather than taking it.
+
+    A chart is laid against the record as mastered, and the board's clock runs
+    at the rate the frames arrive: with the listener's speed left at 1.25 the
+    record ran ahead of the board and the board jumped to catch it every couple
+    of seconds. Asking for a record other than the one playing also replaced
+    the queue with that one track, and leaving the game left it replaced.
+
+    So what was there is written down on the way in and put back on the way
+    out: the speed and pitch, and the queue with the place in it.
+  */
+  const lent = useRef<{
+    /** Null when the game is played on the record already on, queue untouched. */
+    queue: Track[] | null;
+    index: number;
+    positionSec: number;
+    shuffled: boolean;
+    speed: number;
+    pitch: number;
+  } | null>(null);
+
+  const lend = useCallback(
+    async (track: Track) => {
+      if (!lent.current) {
+        const status = await JukeboxAudio.getStatusAsync().catch(() => null);
+        lent.current = {
+          queue: null,
+          index: currentIndexRef.current,
+          positionSec: status?.positionSec ?? 0,
+          shuffled,
+          ...params.current,
+        };
+        // What was heard up to here was a listen, and is written down as one
+        // before the record stops being kept.
+        flushSession(false);
+        offRecord.current = true;
+      }
+
+      // Told directly rather than through the sliders' path: what the listener
+      // chose stays on the sliders, and is what they get back.
+      if (told.current.speed !== 1 || told.current.pitch !== 1) {
+        if (sending.current) clearTimeout(sending.current);
+        sending.current = null;
+        told.current = { speed: 1, pitch: 1 };
+        sentAt.current = Date.now();
+        await JukeboxAudio.setPlaybackParamsAsync(1, 1).catch(() => {});
+      }
+
+      if (queueRef.current[currentIndexRef.current]?.id === track.id) return;
+      // Only the first queue set aside is the listener's. A second record
+      // asked for in the same visit replaces the game's own.
+      if (lent.current.queue == null) lent.current.queue = queueRef.current;
+      await replaceQueue([track], 0, true);
+    },
+    [flushSession, replaceQueue, shuffled]
+  );
+
+  const giveBack = useCallback(async () => {
+    const was = lent.current;
+    if (!was) return;
+    lent.current = null;
+    offRecord.current = false;
+
+    setSpeedState(was.speed);
+    setPitchState(was.pitch);
+    askPlayerFor({ speed: was.speed, pitch: was.pitch });
+
+    if (was.queue && was.queue.length > 0 && was.index >= 0) {
+      // Put back as it was left and not started: leaving a game is not asking
+      // for music.
+      await replaceQueue(was.queue, was.index, false);
+      setShuffled(was.shuffled);
+      // A place that could not be found again is the start of the track,
+      // which is not worth failing the handing back over.
+      if (was.positionSec > 0) await JukeboxAudio.seekToAsync(was.positionSec).catch(() => {});
+      return;
+    }
+
+    // The record under the run stays on. It is being listened to from here,
+    // so it is kept from here.
+    const track = queueRef.current[currentIndexRef.current];
+    if (track) startSession(track, isPlayingRef.current);
+  }, [askPlayerFor, replaceQueue, startSession]);
+
   /**
    * Rearranges the queue, and does it again on every press.
    *
@@ -640,9 +928,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       artistKey,
       playing ? artistKey(playing) : undefined
     );
-    const { items: entries, index } = await JukeboxAudio.shuffleQueueAsync(
-      order.map((track) => track.id)
+    // Nothing here has been changed yet, so a refusal leaves nothing to undo.
+    const answer = await JukeboxAudio.shuffleQueueAsync(order.map((track) => track.id)).catch(
+      (failure) => {
+        refused('shuffle the queue', failure);
+        return null;
+      }
     );
+    if (!answer) return;
+    const { items: entries, index } = answer;
     const byId = new Map(queueRef.current.map((track) => [track.id, track]));
     /*
       Matched back to the library tracks so the rows keep everything the queue
@@ -669,13 +963,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     placeCurrent(landed, reordered[landed] ?? null);
     // Only a queue that actually moved is a shuffled one.
     setShuffled(reordered.length >= 3);
-  }, [placeCurrent]);
+  }, [placeCurrent, refused]);
 
   const cycleRepeat = useCallback(async () => {
     const mode = REPEAT_CYCLE[(REPEAT_CYCLE.indexOf(repeat) + 1) % REPEAT_CYCLE.length]!;
     setRepeat(mode);
     writeSetting(SETTINGS.repeat, mode);
-    await JukeboxAudio.setRepeatModeAsync(mode);
+    try {
+      await JukeboxAudio.setRepeatModeAsync(mode);
+    } catch (failure) {
+      // Put back by hand: reading the player only replaces what is here when
+      // the queues differ, and they do not.
+      console.warn('The player would not change the repeat mode', failure);
+      setRepeat(repeat);
+      writeSetting(SETTINGS.repeat, repeat);
+    }
   }, [repeat]);
 
   const actions = useMemo<PlayerActions>(
@@ -694,6 +996,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       cycleRepeat,
       setSpeed,
       setPitch,
+      lend,
+      giveBack,
     }),
     [
       playQueue,
@@ -710,6 +1014,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       cycleRepeat,
       setSpeed,
       setPitch,
+      lend,
+      giveBack,
     ]
   );
 
@@ -764,8 +1070,14 @@ export function usePlayerPosition(active = true): { positionSec: number; duratio
     if (!active) return;
     let cancelled = false;
     const read = async () => {
-      const status = await JukeboxAudio.getStatusAsync();
-      if (cancelled || !status.connected) return;
+      /*
+        A reading that fails is skipped, and nothing is said. The last position
+        stays on screen, which is the best guess there is, and this is asked
+        four times a second: a player that has gone away would otherwise be
+        four unhandled rejections a second for as long as the sheet is open.
+      */
+      const status = await JukeboxAudio.getStatusAsync().catch(() => null);
+      if (cancelled || !status?.connected) return;
       setPosition({
         positionSec: status.positionSec ?? 0,
         durationSec: status.durationSec ?? 0,

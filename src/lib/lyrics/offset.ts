@@ -6,6 +6,8 @@
  * are what the timings are kept in.
  */
 
+import { strings, type Strings } from '../i18n/languages.ts';
+
 /** Past this the file is not shifted, it is the wrong file. */
 export const MAX_OFFSET_MS = 60_000;
 
@@ -35,11 +37,16 @@ export function parseOffsetMs(text: string): number | null {
   return Math.max(-MAX_OFFSET_MS, Math.min(MAX_OFFSET_MS, milliseconds));
 }
 
-/** `+1.5s`, `−0.25s`, `no shift`. */
-export function formatOffset(milliseconds: number): string {
-  if (milliseconds === 0) return 'no shift';
+/** `+1.5s`, `−0.25s`, `no shift`; in Turkish `+1,5 sn`. */
+export function formatOffset(milliseconds: number, t: Strings = strings()): string {
+  const said = t.details.lyrics;
+  if (milliseconds === 0) return said.noShift;
   const seconds = Math.abs(milliseconds) / 1000;
   // Trailing zeroes dropped, so a whole second is `1s` rather than `1.00s`.
+  // The language is told how many places are left so that it writes the
+  // same figure with its own decimal mark, and adds none back.
   const digits = Number(seconds.toFixed(2));
-  return `${milliseconds > 0 ? '+' : '−'}${digits}s`;
+  const places = (String(digits).split('.')[1] ?? '').length;
+  const written = t.format.decimal(digits, places);
+  return milliseconds > 0 ? said.shiftedLater(written) : said.shiftedEarlier(written);
 }

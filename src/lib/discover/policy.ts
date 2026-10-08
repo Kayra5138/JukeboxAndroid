@@ -114,6 +114,21 @@ export function isNoMatch(error: string | undefined | null): boolean {
   return !!error && (error === NO_MATCH || error.startsWith(NO_MATCH_BEFORE));
 }
 
+/**
+ * A download that stopped only because it may not use mobile data.
+ *
+ * Unlike every other failure this one is not the song's fault and is not a
+ * reason to give its place away: it is tried again when there is Wi-Fi. It is
+ * known by its code. The words are only read for an entry stored before the
+ * code was kept with it, or made by a build that sends none — and they are
+ * English there, since such a build says nothing in any other language.
+ */
+export const WAITING_WIFI = 'ERR_DOWNLOAD_WAITING_WIFI';
+export function isWaitingWifi(entry: { error?: string | null; errorCode?: string | null }): boolean {
+  if (!entry.error) return false;
+  return entry.errorCode ? entry.errorCode === WAITING_WIFI : entry.error.includes('Waiting for Wi-Fi');
+}
+
 export type RankedSong = { recordingMbid: string; title: string; artist: string; artistMbid: string; familiar: boolean; score: number };
 /** Strict half-and-half quotas; unfilled places remain visible rather than silently changing the mix. */
 export function selectSongs<T extends RankedSong>(pool: T[], retained: T[], count: number, excluded: Set<string>): T[] {

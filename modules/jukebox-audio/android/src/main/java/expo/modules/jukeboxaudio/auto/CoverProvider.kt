@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import expo.modules.jukeboxaudio.AlbumArtwork
+import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.MediaStoreLibrary
 import expo.modules.jukeboxaudio.downloads.DownloadStore
 import java.io.File
@@ -34,7 +35,15 @@ import java.io.File
  * on the thread answering the browse.
  */
 class CoverProvider : ContentProvider() {
-  override fun onCreate(): Boolean = true
+  /**
+   * A provider is made before anything else in a process, the application
+   * included, which makes this the one place that is certain to have run by
+   * the time any sentence is wanted: see [Localised.hold].
+   */
+  override fun onCreate(): Boolean {
+    context?.let(Localised::hold)
+    return true
+  }
 
   override fun getType(uri: Uri): String = "image/jpeg"
 

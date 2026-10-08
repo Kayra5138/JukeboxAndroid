@@ -43,3 +43,20 @@ export function search(tracks: EnrichedTrack[], query: string): SearchResult {
     ),
   };
 }
+
+/**
+ * The same box, asked of things that have one name each.
+ *
+ * Artists and folders are looked for by what they are called and nothing else.
+ * The track search above would do it differently — keep every artist with a
+ * track whose title matched — and that answers a question nobody browsing by
+ * artist is asking: they typed a name because they are looking for the name.
+ *
+ * A path is folded like any other name, which turns its slashes into spaces on
+ * both sides of the comparison, so `nirvana/never` finds `Nirvana/Nevermind`.
+ */
+export function searchNamed<T>(entries: T[], query: string, nameOf: (entry: T) => string): T[] {
+  const needle = foldForMatch(query);
+  if (!needle) return entries;
+  return entries.filter((entry) => foldForMatch(nameOf(entry)).includes(needle));
+}

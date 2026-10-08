@@ -1,3 +1,5 @@
+import { strings, type Strings } from '../i18n/languages.ts';
+
 export type YouTubeVideo = {
   kind?: 'video';
   album?: string;
@@ -25,9 +27,19 @@ export type DownloadJob = {
   status: DownloadStatus;
   progress: number;
   trackId: string | null;
+  /** What went wrong, in the native side's English whatever the app is speaking. Not for showing. */
   error: string | null;
+  /** Which failure it was, by `Failure.kt`'s name for it. Missing from an older build, and null for the extractor's own words. */
+  errorCode?: string | null;
+  /** `error` in the app's language as it was when the jobs were read. Missing from an older build. */
+  errorText?: string | null;
   described: boolean;
 };
+
+/** What a failed job is to be shown as saying: in the app's language where the build can say it so. */
+export function jobError(job: DownloadJob): string | null {
+  return job.errorText ?? job.error;
+}
 
 export function isActive(job: DownloadJob): boolean {
   return ['queued', 'preparing', 'downloading', 'converting', 'saving', 'cancelling'].includes(job.status);
@@ -49,17 +61,7 @@ export function durationLabel(seconds: number | null): string {
     : `${minutes}:${rest}`;
 }
 
-export function statusLabel(job: DownloadJob): string {
-  switch (job.status) {
-    case 'queued': return 'Queued';
-    case 'preparing': return 'Preparing…';
-    case 'downloading': return `Downloading · ${job.progress}%`;
-    case 'converting': return 'Converting audio…';
-    case 'saving': return 'Adding to library…';
-    case 'cancelling': return 'Cancelling…';
-    case 'cancelled': return 'Cancelled';
-    case 'failed': return 'Download failed';
-    case 'done': return 'In library';
-    case 'missing': return 'File removed';
-  }
+export function statusLabel(job: DownloadJob, t: Strings = strings()): string {
+  const said = t.search.status;
+  return job.status === 'downloading' ? said.downloading(job.progress) : said[job.status];
 }

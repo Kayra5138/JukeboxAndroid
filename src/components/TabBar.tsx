@@ -1,10 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { makeStyles, outlineWidth, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
-
-const ACTIVE = '#f2f2f2';
-const INACTIVE = '#777777';
 
 /** Wide enough for an icon and a short word under it, and no wider. */
 const RAIL_WIDTH = 92;
@@ -53,6 +51,9 @@ type TabBarProps = {
 export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const landscape = useLandscape();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
 
   return (
     <View
@@ -65,10 +66,13 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
         const focused = state.index === index;
-        const colour = focused ? ACTIVE : INACTIVE;
+        // On the mark of the open tab, which a theme may have made a fill to be
+        // written on in something other than the colour of words.
+        const colour = focused ? c.onSelected : c.textMuted;
 
         return (
           <Pressable
+            android_ripple={pressed}
             key={route.key}
             accessibilityRole="button"
             accessibilityState={{ selected: focused }}
@@ -127,17 +131,19 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    backgroundColor: '#171717',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#292929',
+    backgroundColor: c.bar,
+    // A hairline, or the width of an outline in a theme that draws those: the
+    // bar is then the colour of the page, and this is all that parts them.
+    borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
+    borderTopColor: c.border,
   },
   rail: {
-    backgroundColor: '#171717',
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: '#292929',
+    backgroundColor: c.bar,
+    borderRightWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
+    borderRightColor: c.border,
   },
   item: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 5 },
   /*
@@ -157,7 +163,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     opacity: 0,
   },
-  marked: { backgroundColor: '#242424', opacity: 1 },
+  marked: { backgroundColor: c.selected, opacity: 1 },
   icon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   railItem: {
     alignItems: 'center',
@@ -167,6 +173,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     borderRadius: 12,
   },
-  focused: { backgroundColor: '#242424' },
+  focused: { backgroundColor: c.selected },
   label: { fontSize: 11, lineHeight: 16, includeFontPadding: false, textAlign: 'center' },
-});
+}));

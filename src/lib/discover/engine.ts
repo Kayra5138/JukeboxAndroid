@@ -1,11 +1,12 @@
 import { db } from '../db/index';
+import { strings, type Strings } from '../i18n/index';
 import { saveLookupTags } from '../db/tags';
-import { youtubeError } from '../youtube/errors';
+import { failureCode, youtubeError } from '../youtube/errors';
 import { downloads } from '../youtube/native';
 import { withMetadata } from '../media/merge';
 import { scanLibrary, libraryRoot } from '../media/library';
-import { isActive, type DownloadJob } from '../youtube/types';
-import { DAY, DEFAULT_SETTINGS, NO_MATCH, batchReady, isNoMatch, retirementIds, selectSongs, songKey, type DiscoverSettings } from './policy';
+import { isActive, jobError, type DownloadJob } from '../youtube/types';
+import { DAY, DEFAULT_SETTINGS, NO_MATCH, batchReady, isNoMatch, isWaitingWifi, retirementIds, selectSongs, songKey, type DiscoverSettings } from './policy';
 import { buildPool } from './catalogue';
 import { chooseVideo } from './video';
 import { readSnapshot, saveSnapshot, readDiscoverSettings, saveDiscoverSettings, exclude, exclusions, unblock, type Entry, type Snapshot } from './store';
@@ -41,12 +42,30 @@ function exclusive<T>(action: () => Promise<T>): Promise<T> {
 export const subscribeDiscover = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 export const discoverView = () => view;
 export function protectDiscoverQueue(queue: Track[]) { protectedIds = queue.map(t => t.id); }
-export const discoverError = (e: unknown) => {
+/*
+  Everything said here is said in the language in use at the moment it is
+  made, and some of it is then kept: an entry's error is stored with the list.
+  One line is not made that way. A song with no recording to be found is
+  recognised afterwards by what it was told, so `NO_MATCH` is thrown and stored
+  as it is, and is only put into words by `discoverSaid` at the place it is shown.
+*/
+export const discoverError = (e: unknown, t: Strings = strings()) => {
   const message = e instanceof Error ? e.message : '';
   return /Call to function|Caused by:|java\./i.test(message)
-    ? youtubeError(e, 'This download could not finish. Please retry later.')
-    : message || 'Discover could not finish. Please retry.';
+    ? youtubeError(e, t.discover.engine.downloadFailed, t)
+    : message || t.discover.engine.failed;
 };
+/*
+  An entry's error and the code that names it are set and cleared together, so
+  that a code never outlives the failure it was for. A failed download's words
+  are read from its job again at every `sync`, in the language of that moment;
+  what this module says for itself stays as it was said.
+*/
+function fail(entry: Entry, error: string, code?: string | null) { entry.error = error; entry.errorCode = code ?? undefined; }
+function clear(entry: Entry) { entry.error = undefined; entry.errorCode = undefined; }
+/** An error or a notice as it is to be read: itself, unless it is the one kept as a mark. */
+export const discoverSaid = (text: string, t: Strings = strings()) =>
+  isNoMatch(text) ? t.discover.engine.noMatch : text;
 
 async function sync() {
   if (!downloads) return;
@@ -71,9 +90,13 @@ async function sync() {
       const wasReady = !!entry.track;
       entry.track = await downloads.discoverTrackAsync(job.id) ?? undefined;
       if (!wasReady && entry.track && entry.tags?.length) saveLookupTags(entry.track.id, entry.tags, 'musicbrainz');
-      entry.error = entry.track ? undefined : 'File missing. Tap to download again.';
+      if (entry.track) clear(entry); else fail(entry, strings().discover.engine.fileMissing);
     }
-    else { entry.track = undefined; entry.error = job.status === 'failed' || job.status === 'missing' || job.status === 'cancelled' ? job.error ?? 'Download stopped. Tap to retry.' : undefined; }
+    else {
+      entry.track = undefined;
+      if (job.status === 'failed' || job.status === 'missing' || job.status === 'cancelled') fail(entry, jobError(job) ?? strings().discover.engine.downloadStopped, job.errorCode);
+      else clear(entry);
+    }
   }
   const live = [...snapshot!.entries, ...(snapshot!.pending ?? [])].map(e => e.jobId);
   const retired = new Set(retirementIds(snapshot!.retired, jobs, live));
@@ -98,7 +121,7 @@ async function fill(refresh: boolean) {
     entries = selectSongs(pool, retained, settings!.count, excluded);
     // Keep the old batch if a refresh could not deliver anything usable.
     if (refresh && entries.length < Math.min(settings!.count, snapshot!.entries.length || 1)) {
-      throw new Error('Not enough new songs are available yet. Your current list has been kept.');
+      throw new Error(strings().discover.engine.notEnough);
     }
     snapshot!.pool = pool.filter(e => !excluded.has(e.recordingMbid) && !excluded.has(songKey(e)));
   }
@@ -118,12 +141,12 @@ async function fill(refresh: boolean) {
   });
 }
 async function queue(entry: Entry, background = false, automatic = false) {
-  if (!downloads) throw new Error('Install the updated APK to download Discover songs.');
+  if (!downloads) throw new Error(strings().discover.engine.needsBuild);
   if (entry.track) return;
   const jobs = await downloads.getJobsAsync(false);
   const active = jobs.find(j => j.id === entry.jobId && isActive(j));
   if (active) { if (!automatic) await downloads.prioritizeDiscoverAsync(active.id); return; }
-  emit({ message: `Finding audio: ${entry.title}…` });
+  emit({ message: strings().discover.engine.findingAudio(entry.title) });
   const videos = await downloads.searchAsync(`${entry.artist} ${entry.title} official audio`, `discover-${entry.recordingMbid}`);
   const video = chooseVideo(entry, videos);
   if (!video) throw new Error(NO_MATCH);
@@ -131,16 +154,16 @@ async function queue(entry: Entry, background = false, automatic = false) {
   if (entry.jobId) snapshot!.retired.push(entry.jobId);
   entry.jobId = background ? await downloads.queueDiscoverBackgroundAsync(source, entry.recordingMbid)
     : await downloads.enqueueDiscoverAsync(source, entry.recordingMbid);
-  entry.error = undefined; commit();
+  clear(entry); commit();
 }
 async function autoDownload(background: boolean) {
   if (!settings!.autoDownload || !downloads) { emit({ waiting: '' }); return; }
   const network = await downloads.discoverNetworkAsync();
-  if (!network.connected || (settings!.wifiOnly && !network.wifi)) { emit({ waiting: settings!.wifiOnly ? 'Waiting for unmetered Wi-Fi' : 'Waiting for a connection' }); return; }
+  if (!network.connected || (settings!.wifiOnly && !network.wifi)) { emit({ waiting: settings!.wifiOnly ? strings().discover.engine.waitingWifi : strings().discover.engine.waitingConnection }); return; }
   emit({ waiting: '' });
   let processed = 0;
   for (const entry of snapshot!.pending ?? snapshot!.entries) {
-    if (entry.track || (entry.error && !entry.error.includes('Waiting for Wi-Fi'))) continue;
+    if (entry.track || (entry.error && !isWaitingWifi(entry))) continue;
     try {
       const alreadyQueued = view.jobs.some(j => j.id === entry.jobId && isActive(j));
       await queue(entry, background, true);
@@ -151,7 +174,7 @@ async function autoDownload(background: boolean) {
         // Keep each OS work window bounded. Subsequent windows continue the batch.
         if (++processed >= 2) break;
       }
-    } catch (e) { entry.error = discoverError(e); commit(); }
+    } catch (e) { fail(entry, discoverError(e), failureCode(e)); commit(); }
   }
 }
 /**
@@ -183,7 +206,7 @@ function finishPending() {
   const pending = snapshot!.pending;
   if (!pending) return;
   // A bad source gets another candidate, without destroying the old playable batch.
-  const failed = pending.filter(e => e.error && !e.error.includes('Waiting for Wi-Fi'));
+  const failed = pending.filter(e => e.error && !isWaitingWifi(e));
   if (failed.length) {
     snapshot!.pendingRejected = [...(snapshot!.pendingRejected ?? []), ...failed.map(e => e.recordingMbid)];
     failed.forEach(e => { if (isNoMatch(e.error)) exclude(e, 'unmatched'); if (e.jobId) snapshot!.retired.push(e.jobId); });
@@ -203,13 +226,13 @@ function finishPending() {
 export function maintainDiscover(force = false, background = false): Promise<void> {
   if (maintenance) return maintenance;
   maintenance = exclusive(async () => {
-    emit({ busy: true, error: '', message: 'Checking Discover…' });
+    emit({ busy: true, error: '', message: strings().discover.engine.checking });
     try {
       await sync();
       const due = settings!.refreshDays > 0 && Date.now() - snapshot!.refreshedAt >= settings!.refreshDays * DAY;
       const missing = snapshot!.entries.length < settings!.count;
       if (force && snapshot!.pending) {
-        snapshot!.pending.forEach(e => { e.error = undefined; });
+        snapshot!.pending.forEach(clear);
         if (snapshot!.pending.length < settings!.count) discardPending();
       }
       if (!snapshot!.pending && (force || ((due || missing) && Date.now() - lastAttempt > 15 * 60_000))) {
@@ -237,10 +260,10 @@ export function configureDiscover(value: DiscoverSettings) {
           await downloads.cancelAsync(job.id);
           snapshot!.retired.push(job.id);
           const entry = snapshot!.entries.find(e => e.jobId === job.id);
-          if (entry) { entry.jobId = undefined; entry.error = undefined; }
+          if (entry) { entry.jobId = undefined; clear(entry); }
         }
       }
-      for (const entry of snapshot!.entries) if (!entry.track) entry.error = undefined;
+      for (const entry of snapshot!.entries) if (!entry.track) clear(entry);
     }
     if (snapshot!.entries.length > value.count) {
       const dropped = snapshot!.entries.splice(value.count);
@@ -274,7 +297,7 @@ export function undoDiscover(id: string, restore = false) {
         const [replaced] = snapshot!.entries.splice(index, 1);
         if (replaced.jobId) snapshot!.retired.push(replaced.jobId);
       }
-      snapshot!.entries.push({ ...entry, track: undefined, error: undefined });
+      snapshot!.entries.push({ ...entry, track: undefined, error: undefined, errorCode: undefined });
       snapshot!.retired = snapshot!.retired.filter(id => id !== entry.jobId);
       undoEntries.delete(id);
     }
@@ -283,13 +306,13 @@ export function undoDiscover(id: string, restore = false) {
 }
 export async function prepareDiscover(id: string, abandoned: () => boolean = () => false): Promise<Track> {
   await exclusive(async () => {
-    if (abandoned()) throw new Error("Playback request cancelled.");
+    if (abandoned()) throw new Error(strings().discover.engine.cancelled);
     await sync();
     const entry = snapshot!.entries.find(e => e.recordingMbid === id);
-    if (!entry) throw new Error('This recommendation has changed. Choose another song.');
-    entry.error = undefined;
+    if (!entry) throw new Error(strings().discover.engine.changed);
+    clear(entry);
     try { await queue(entry); }
-    catch (e) { entry.error = discoverError(e); commit(); throw e; }
+    catch (e) { fail(entry, discoverError(e), failureCode(e)); commit(); throw e; }
     commit();
   }).catch(e => {
     // Tapped and not to be found: the next pass takes it out and fills the place.
@@ -299,21 +322,21 @@ export async function prepareDiscover(id: string, abandoned: () => boolean = () 
   // No lock while waiting; minus, settings and other downloads stay usable.
   const deadline = Date.now() + 35 * 60_000;
   while (Date.now() < deadline) {
-    if (abandoned()) throw new Error("Playback request cancelled.");
+    if (abandoned()) throw new Error(strings().discover.engine.cancelled);
     await refreshDiscoverReceipts();
     const entry = snapshot!.entries.find(e => e.recordingMbid === id);
-    if (!entry) throw new Error('This song is no longer in Discover.');
+    if (!entry) throw new Error(strings().discover.engine.gone);
     if (entry.track) return entry.track;
     if (entry.error) throw new Error(entry.error);
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
-  throw new Error('The download is taking too long. Please retry.');
+  throw new Error(strings().discover.engine.tooLong);
 }
 export async function keepDiscover(id: string): Promise<void> {
   await prepareDiscover(id);
   await exclusive(async () => {
     const entry = snapshot!.entries.find(e => e.recordingMbid === id);
-    if (!entry?.jobId || !downloads) throw new Error('The song is no longer available.');
+    if (!entry?.jobId || !downloads) throw new Error(strings().discover.engine.unavailable);
     discardPending();
     const trackId = await downloads.keepDiscoverAsync(entry.jobId, libraryRoot());
     if (entry.tags?.length) saveLookupTags(trackId, entry.tags, 'musicbrainz');

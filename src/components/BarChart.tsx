@@ -8,7 +8,9 @@ import {
   View,
 } from 'react-native';
 
+import { useT, type Strings } from '../lib/i18n/index';
 import { columnHolding, type Bucket } from '../lib/stats/period';
+import { makeStyles, withAlpha } from '../lib/theme/index';
 
 /** How tall the bars are, before the labels underneath. */
 const PLOT_HEIGHT = 132;
@@ -51,13 +53,15 @@ export function BarChart({
   buckets: Bucket[];
   /** One per bucket, in the same order. */
   values: number[];
-  /** `#rrggbb`; the unlit columns are the same colour carrying an alpha. */
+  /** The unlit columns are the same colour seen through. */
   accent: string;
   /** How a column's value is said in the readout above the chart. */
   format: (value: number) => string;
   /** The moment being lived through, so its column can be marked. */
   now: number;
 }) {
+  const t = useT();
+  const styles = useStyles();
   /**
    * The moment the column under the finger covers, not the column's position.
    *
@@ -193,7 +197,7 @@ export function BarChart({
       <View style={styles.readout}>
         <Text style={styles.readoutValue}>{format(values[shown] ?? 0)}</Text>
         <Text style={styles.readoutLabel} numberOfLines={1}>
-          {readout ? longLabel(readout) : ''}
+          {readout ? longLabel(readout, t) : ''}
         </Text>
       </View>
 
@@ -222,7 +226,7 @@ export function BarChart({
               style={[
                 styles.bar,
                 {
-                  backgroundColor: index === shown ? accent : accent + UNLIT_ALPHA,
+                  backgroundColor: index === shown ? accent : withAlpha(accent, UNLIT_ALPHA),
                   /*
                     A bar scales about its middle, which would sink its base as
                     it shrank. Sliding it back down by half of what the scaling
@@ -275,10 +279,10 @@ function share(value: number, max: number): number {
 }
 
 /** The columns not being read, at a little over a third of full strength. */
-const UNLIT_ALPHA = '5c';
+const UNLIT_ALPHA = 0.36;
 
 /** `Thursday 24 September`, `September 2026` — the column said in full. */
-function longLabel(bucket: Bucket): string {
+function longLabel(bucket: Bucket, t: Strings): string {
   const start = new Date(bucket.start);
   const span = bucket.end - bucket.start;
 
@@ -289,24 +293,18 @@ function longLabel(bucket: Bucket): string {
     return `${String(start.getHours()).padStart(2, '0')}:00`;
   }
   if (span <= 25 * 60 * 60 * 1000) {
-    return `${DAYS[(start.getDay() + 6) % 7]} ${start.getDate()} ${MONTHS[start.getMonth()]}`;
+    return t.stats.chart.day(start);
   }
   if (span <= 32 * 24 * 60 * 60 * 1000) {
-    return `${MONTHS[start.getMonth()]} ${start.getFullYear()}`;
+    return t.stats.chart.month(start);
   }
   return String(start.getFullYear());
 }
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   readout: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingBottom: 10 },
-  readoutValue: { color: '#ededed', fontSize: 19, fontWeight: '600' },
-  readoutLabel: { color: '#7a7a7a', fontSize: 13, flex: 1 },
+  readoutValue: { color: c.text, fontSize: 19, fontWeight: '600' },
+  readoutLabel: { color: c.textMuted, fontSize: 13, flex: 1 },
   plot: {
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -321,8 +319,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 7,
     width: LABEL_WIDTH,
-    color: '#5f5f5f',
+    color: c.textFaint,
     fontSize: 10,
     textAlign: 'center',
   },
-});
+}));

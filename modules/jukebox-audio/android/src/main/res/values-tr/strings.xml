@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values/strings.xml ve values/jukebox_widget_strings.xml dosyalarının
+     Türkçesi, ad ad. Sayıdan sonra ad değişmez: "1 parça", "3 parça". Özel
+     adlar olduğu gibi kalır: Jukebox, YouTube, Android, Wi-Fi, MP3, FLAC, ID3.
+     Uygulamanın kendi ekranlarındaki terimlerle aynı: Kütüphane, Listeler,
+     Ara, parça, şarkı, kapak. -->
+<resources>
+  <!-- Ana ekran araç takımı. Adı (Jukebox) çevrilmez. -->
+  <string name="jukebox_widget_description">Uygulamayı açmadan çal, duraklat ve parça değiştir.</string>
+  <string name="jukebox_widget_art">Albüm kapağı</string>
+  <string name="jukebox_widget_previous">Önceki parça</string>
+  <string name="jukebox_widget_toggle">Çal ya da duraklat</string>
+  <string name="jukebox_widget_next">Sonraki parça</string>
+  <string name="jukebox_widget_idle">Çalan bir şey yok</string>
+  <string name="jukebox_widget_progress">Şarkının ilerleyişi</string>
+
+  <string name="jukebox_playback_channel">Şimdi çalıyor</string>
+
+  <string name="jukebox_playback_missing">Bu dosya bulunamadı.</string>
+  <string name="jukebox_playback_denied">Android bu dosyanın okunmasına izin vermedi.</string>
+  <string name="jukebox_playback_unreadable">Bu dosya okunamadı.</string>
+  <string name="jukebox_playback_unsupported">Bu tür dosyalar bu cihazda çalınamıyor.</string>
+  <string name="jukebox_playback_failed">Bu parça çalınamadı.</string>
+
+  <string name="jukebox_downloads_channel">Müzik indirmeleri</string>
+  <string name="jukebox_downloads_title">Jukebox · İndirmeler</string>
+  <string name="jukebox_downloads_preparing">İndirme hazırlanıyor…</string>
+  <string name="jukebox_downloads_downloading">İndiriliyor: %1$s</string>
+  <string name="jukebox_downloads_converting">Dönüştürülüyor: %1$s</string>
+
+  <string name="jukebox_auto_home">Ana sayfa</string>
+  <string name="jukebox_auto_tracks">Parçalar</string>
+  <string name="jukebox_auto_albums">Albümler</string>
+  <string name="jukebox_auto_lists">Listeler</string>
+  <string name="jukebox_auto_continue">Devam et</string>
+  <string name="jukebox_auto_shuffle_recent">Son dinlenenleri karıştır</string>
+  <string name="jukebox_auto_shuffle_all">Tümünü karıştır</string>
+  <string name="jukebox_auto_sort">Sırala</string>
+  <string name="jukebox_auto_sort_now">Şu an bu sırada</string>
+  <string name="jukebox_auto_sort_name">Ad</string>
+  <string name="jukebox_auto_sort_artist">Sanatçı</string>
+  <string name="jukebox_auto_sort_added">Son eklenenler</string>
+  <string name="jukebox_auto_sort_most">En çok dinlenenler</string>
+  <string name="jukebox_auto_sort_recent">Son dinlenenler</string>
+  <string name="jukebox_auto_sort_changed">Son değiştirilenler</string>
+  <string name="jukebox_auto_sort_size">En uzunlar</string>
+  <plurals name="jukebox_count_tracks">
+    <item quantity="one">%d parça</item>
+    <item quantity="other">%d parça</item>
+  </plurals>
+  <plurals name="jukebox_count_songs">
+    <item quantity="one">%d şarkı</item>
+    <item quantity="other">%d şarkı</item>
+  </plurals>
+
+  <string name="jukebox_unknown_title">Bilinmeyen</string>
+  <string name="jukebox_equalizer_carried">Telefonun ekolayzeri</string>
+
+  <string name="jukebox_youtube_verification">YouTube bu video için doğrulama istiyor. Başka bir kaydı dene.</string>
+  <string name="jukebox_youtube_unavailable">Bu video kullanılamıyor ya da özel.</string>
+  <string name="jukebox_youtube_outdated">YouTube değişti ve Jukebox’ın bu sürümü onu henüz okuyamıyor. Jukebox’ı güncelle.</string>
+  <string name="jukebox_youtube_network">YouTube’a ulaşılamadı. Bağlantını kontrol edip yeniden dene.</string>
+  <string name="jukebox_youtube_refused">YouTube bu indirmeyi reddetti. Daha sonra yeniden dene ya da Jukebox’ı güncelle.</string>
+  <string name="jukebox_youtube_timed_out">YouTube’un yanıt vermesi çok uzun sürdü. Yeniden dene.</string>
+  <string name="jukebox_youtube_live">Canlı yayınlar ve henüz yayınlanmamış videolar indirilemez.</string>
+  <string name="jukebox_youtube_too_long">İki saatten kısa bir kayıt seç.</string>
+  <string name="jukebox_youtube_no_audio">YouTube bir ses dosyası vermedi.</string>
+  <string name="jukebox_youtube_engine">YouTube motoru hazırlanamadı.</string>
+  <string name="jukebox_youtube_invalid_video">Geçersiz YouTube videosu.</string>
+  <string name="jukebox_youtube_query">Bir şarkı, sanatçı ya da YouTube bağlantısı gir (en fazla 500 karakter).</string>
+  <string name="jukebox_youtube_video_link">Bir YouTube video bağlantısı kullan ya da şarkı adıyla ara.</string>
+  <string name="jukebox_youtube_not_a_video">Bir video bağlantısı kullan; oynatma listesi bağlantıları için Oynatma listeleri sekmesini aç.</string>
+  <string name="jukebox_youtube_playlist_query">Bir oynatma listesi adı gir ya da bir YouTube oynatma listesi bağlantısı yapıştır.</string>
+  <string name="jukebox_youtube_playlist_link">Bir YouTube oynatma listesi bağlantısı yapıştır.</string>
+  <string name="jukebox_youtube_no_playlist">Bu bağlantıda oynatma listesi yok.</string>
+  <string name="jukebox_download_folder">Music içinde bir klasör seç.</string>
+  <string name="jukebox_download_queue_full">İndirme kuyruğu dolu. Bir indirmenin bitmesini bekle.</string>
+  <string name="jukebox_download_batch">Bir seferde en fazla 500 parça seç.</string>
+  <string name="jukebox_download_waiting_wifi">Wi-Fi bekleniyor. Otomatik indirme daha sonra sürecek.</string>
+  <string name="jukebox_download_paused">İndirme duraklatıldı. Yeniden denemek için Keşfet’i aç.</string>
+  <string name="jukebox_download_interrupted">İndirme yarıda kesildi. Yeniden dene’ye dokun.</string>
+  <string name="jukebox_download_stopped">Android arka plandaki indirmeyi durdurdu. Ara’yı açıp yeniden dene.</string>
+  <string name="jukebox_download_service">İndirme hizmeti başlatılamadı.</string>
+  <string name="jukebox_download_open_search">Ara’yı açıp indirmeyi yeniden dene.</string>
+  <string name="jukebox_download_open_discover">İndirmeleri sürdürmek için Keşfet’i aç.</string>
+  <string name="jukebox_download_retry_discover">Bu indirmeyi yeniden denemek için Keşfet’i aç.</string>
+  <string name="jukebox_download_not_here">Bu şarkıyı kaydetmeden önce indir.</string>
+  <string name="jukebox_download_failed">İndirme başarısız oldu. Lütfen yeniden dene.</string>
+
+  <string name="jukebox_import_refused">Müzik kütüphanesi yeni dosyayı kabul etmedi.</string>
+  <string name="jukebox_import_not_written">Müzik kütüphanesine yazılamadı.</string>
+  <string name="jukebox_import_not_published">Ses dosyası yayımlanamadı.</string>
+  <string name="jukebox_import_too_large">Bu dosya bir şarkı olamayacak kadar büyük.</string>
+  <string name="jukebox_import_empty">Dosya boştu.</string>
+  <string name="jukebox_import_cut_short">Bu indirme eksik geldi.</string>
+
+  <string name="jukebox_picture_not_opened">Bu resim açılamadı.</string>
+  <string name="jukebox_picture_not_one">Bu dosya bir resim değil.</string>
+  <string name="jukebox_picture_not_read">Bu resim okunamadı.</string>
+  <string name="jukebox_picture_not_saved">Bu resim kaydedilemedi.</string>
+  <string name="jukebox_picture_none">Kaydedilecek resim yok.</string>
+  <string name="jukebox_picture_gallery">Galeri resmi kabul etmedi.</string>
+  <string name="jukebox_cover_source">Yalnızca katalog, YouTube ya da Wikimedia görselleri indirilebilir.</string>
+  <string name="jukebox_cover_redirect">Kapağın yönlendirmesi eksik.</string>
+  <string name="jukebox_cover_unavailable">Albüm kapağı kullanılamıyor.</string>
+  <string name="jukebox_cover_too_large">Albüm kapağı çok büyük.</string>
+  <string name="jukebox_cover_invalid">Geçersiz albüm kapağı.</string>
+  <string name="jukebox_cover_not_saved">Albüm kapağı kaydedilemedi.</string>
+  <string name="jukebox_cover_redirects">Albüm kapağı için çok fazla yönlendirme var.</string>
+
+  <string name="jukebox_file_not_opened">Bu dosya açılamadı.</string>
+  <string name="jukebox_file_not_writable">Buraya yazılamadı.</string>
+  <string name="jukebox_file_too_big_for_equalizer">Bu dosya bir ekolayzer ayarı olamayacak kadar büyük.</string>
+  <string name="jukebox_backup_too_large">Bu yedek okunamayacak kadar büyük.</string>
+  <string name="jukebox_backup_not_one">Bu dosya bir Jukebox yedeği değil.</string>
+  <string name="jukebox_delete_needs_11">Silmek için Android 11 ya da daha yenisi gerekir.</string>
+
+  <string name="jukebox_tags_needs_11">Dosyalara yazmak için Android 11 ya da daha yenisi gerekir.</string>
+  <string name="jukebox_tags_no_build">Bu sürüm dosyalara yazamıyor.</string>
+  <string name="jukebox_tags_unreadable">Dosya okunamadı.</string>
+  <string name="jukebox_tags_not_written">Yeni bilgiler çalışma kopyasına yazılamadı.</string>
+  <string name="jukebox_tags_not_mp3">MP3 olarak okunamadı.</string>
+  <string name="jukebox_tags_not_flac">FLAC olarak okunamadı.</string>
+  <string name="jukebox_tags_copy_not_writable">Çalışma kopyası yazmak için açılamadı.</string>
+  <string name="jukebox_tags_neither">Ne MP3 ne de FLAC.</string>
+  <string name="jukebox_tags_kind_changed">Kopya artık aynı türde bir dosya değil.</string>
+  <string name="jukebox_tags_length_changed">Kopya artık aslı kadar uzun sürmüyor; içindeki ses bozulmuş olabilir.</string>
+  <string name="jukebox_tags_field_wrong">Kopyadaki %1$s olması gerektiği gibi okunmadı.</string>
+  <string name="jukebox_tags_field_title">başlık</string>
+  <string name="jukebox_tags_field_artist">sanatçı</string>
+  <string name="jukebox_tags_field_album">albüm</string>
+  <string name="jukebox_tags_field_genre">tür</string>
+  <string name="jukebox_tags_field_year">yıl</string>
+  <string name="jukebox_tags_field_track">parça numarası</string>
+  <string name="jukebox_tags_field_disc">disk numarası</string>
+  <string name="jukebox_tags_cover_unasked">Kimsenin istemediği bir kapak yazıldı.</string>
+  <string name="jukebox_tags_pictures_wrong">Kopyadaki resimler orada olması gerekenler değil.</string>
+  <string name="jukebox_tags_details_added">Kopyada aslında olmayan bilgiler var.</string>
+  <string name="jukebox_tags_details_lost">Yazmak, bu uygulamanın yönetmediği bilgileri (%1$s) silecek ya da değiştirecekti.</string>
+  <string name="jukebox_tags_old_tag_changed">Dosyanın sonundaki eski tip etiket eklendi ya da kaldırıldı.</string>
+  <string name="jukebox_tags_version_wrong">Etiket ID3v2.%2$d olması gerekirken ID3v2.%1$d olarak yazıldı.</string>
+  <string name="jukebox_tags_sound_original_unknown">Asıl dosyada sesin nerede başlayıp bittiği bulunamadı.</string>
+  <string name="jukebox_tags_sound_copy_unknown">Kopyada sesin nerede başlayıp bittiği bulunamadı.</string>
+  <string name="jukebox_tags_sound_described">Kopyanın kendi sesini tarif edişi aslınınkiyle aynı değil.</string>
+  <string name="jukebox_tags_sound_length">Kopyadaki ses, asıl dosyadaki sesle aynı uzunlukta değil.</string>
+  <string name="jukebox_tags_sound_differs">Kopyadaki ses, asıl dosyadaki ses değil.</string>
+  <string name="jukebox_tags_cover_missing">Kapak bulunamadı.</string>
+  <string name="jukebox_tags_cover_too_large">Kapak bir dosyaya konamayacak kadar büyük.</string>
+  <string name="jukebox_tags_cover_unreadable">Kapak okunabilir bir resim değil.</string>
+  <string name="jukebox_tags_not_in_library">Bu parça kütüphanede değil.</string>
+  <string name="jukebox_tags_cache">Uygulamanın önbelleği kullanılamadı. Dosyaya dokunulmadı.</string>
+  <string name="jukebox_tags_gone">Bu parça artık cihazda değil.</string>
+  <string name="jukebox_tags_no_room_for_copy">Önce dosyanın bir kopyası üzerinde çalışmak için yeterli boş alan yok.</string>
+  <string name="jukebox_tags_copy_incomplete">Dosyanın tamamı kopyalanamadı.</string>
+  <string name="jukebox_tags_not_opened">Dosya açılamadı.</string>
+  <string name="jukebox_tags_not_opened_for_writing">Dosya yazmak için açılamadı.</string>
+  <string name="jukebox_tags_denied">Android bu dosyanın değiştirilmesine izin vermedi.</string>
+  <string name="jukebox_tags_no_room_for_file">Dosyanın bulunduğu yerde yeterli boş alan yok.</string>
+  <string name="jukebox_tags_copy_not_read_back">Çalışma kopyası geri okunamadı.</string>
+  <string name="jukebox_tags_not_as_written">yazıldığı gibi geri okunmuyor</string>
+  <string name="jukebox_tags_cut_short">yazma yarıda kesildi</string>
+  <string name="jukebox_tags_partly_kept">Dosyanın yalnızca bir kısmı yeniden yazıldı ve çalmayabilir (%1$s). Yeni bilgileri taşıyan eksiksiz bir kopya şuraya kondu: %2$s. Bir bilgisayardan ya da bir dosya yöneticisinden onu asıl dosyanın üzerine kopyala.</string>
+  <string name="jukebox_tags_partly_lost">Dosyanın yalnızca bir kısmı yeniden yazıldı ve çalmayabilir (%1$s). Bitmiş kopya da saklanamadı.</string>
+  <string name="jukebox_tags_maybe_partly">Dosya kısmen yeniden yazılmış kalmış olabilir (%1$s). Kontrol etmek için çal.</string>
+  <string name="jukebox_tags_untouched">%1$s Dosyaya dokunulmadı.</string>
+  <string name="jukebox_tags_untouched_after">%1$s. Dosyaya dokunulmadı.</string>
+</resources>

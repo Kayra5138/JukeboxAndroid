@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
+import { makeStyles } from '../lib/theme/index';
 
 /**
  * How far the finger must travel sideways before this is a swipe at all.
@@ -80,6 +81,7 @@ export function SwipeRow({
   enabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
+  const styles = useStyles();
   const shift = useRef(new Animated.Value(0)).current;
   /** Whether the last move was far enough to act, so the click fires once. */
   const armed = useRef(false);
@@ -192,11 +194,11 @@ export function SwipeRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   frame: { overflow: 'hidden' },
   // Opaque, or the panel it uncovers shows through the row that is meant to be
   // covering it.
-  moving: { backgroundColor: '#121212' },
+  moving: { backgroundColor: c.bg },
   panel: {
     position: 'absolute',
     top: 0,
@@ -209,4 +211,4 @@ const styles = StyleSheet.create({
   panelLeft: { alignItems: 'flex-start' },
   panelRight: { alignItems: 'flex-end' },
   label: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
-});
+}));

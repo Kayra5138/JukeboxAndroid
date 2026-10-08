@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <string name="jukebox_widget_label">Jukebox</string>
+  <string name="jukebox_widget_label" translatable="false">Jukebox</string>
   <string name="jukebox_widget_description">Play, pause and skip without opening the app.</string>
   <string name="jukebox_widget_art">Album art</string>
   <string name="jukebox_widget_previous">Previous track</string>

@@ -16,7 +16,15 @@ import androidx.media3.common.audio.GainProcessor
  * together, they are louder, and a linear pair sags in the middle where a
  * square-root pair holds steady.
  */
-class FadeGainProvider : GainProcessor.GainProvider {
+class FadeGainProvider(
+  /**
+   * The sleep timer's ramp, which everything below is multiplied by.
+   *
+   * Not one of the plans, because a plan is replaced by the next one and this
+   * has to outlast them; see [WindDown]. Null for a fader nothing winds down.
+   */
+  val windDown: WindDown? = null
+) : GainProcessor.GainProvider {
   enum class Shape { UNITY, IN, OUT }
 
   /**
@@ -33,7 +41,9 @@ class FadeGainProvider : GainProcessor.GainProvider {
     val shape: Shape,
     val durationMs: Long,
     val leadInMs: Long,
-    val equalPower: Boolean
+    val equalPower: Boolean,
+    /** How long an outgoing fade stays at full level before it starts down. */
+    val holdMs: Long = 0
   )
 
   @Volatile private var plan = Plan(0, Shape.UNITY, 0, 0, true)
@@ -54,10 +64,24 @@ class FadeGainProvider : GainProcessor.GainProvider {
     plan = Plan(nextGeneration++, Shape.IN, durationMs.coerceAtLeast(1), 0, equalPower)
   }
 
-  /** Ramp down to silence over [durationMs], and stay silent afterwards. */
+  /**
+   * Ramp down to silence over [durationMs], and stay silent afterwards.
+   *
+   * [holdMs] puts the ramp off by that much of the stream, at full level
+   * meanwhile. It is how a fade is booked for a place in the track rather than
+   * for a moment on the clock: the gain is applied to samples a good part of a
+   * second before they are heard, so a fade asked for "now" is heard late by
+   * however much the sink was holding, and nobody upstream knows how much
+   * that was. A player started a known distance before the place has no such
+   * trouble. It counts that distance in its own samples and starts down on
+   * the sample it was told to.
+   */
   @Synchronized
-  fun fadeOut(durationMs: Long, equalPower: Boolean, leadInMs: Long = 0) {
-    plan = Plan(nextGeneration++, Shape.OUT, durationMs.coerceAtLeast(1), leadInMs, equalPower)
+  fun fadeOut(durationMs: Long, equalPower: Boolean, leadInMs: Long = 0, holdMs: Long = 0) {
+    plan = Plan(
+      nextGeneration++, Shape.OUT, durationMs.coerceAtLeast(1), leadInMs, equalPower,
+      holdMs.coerceAtLeast(0)
+    )
   }
 
   /** Stop interfering. */
@@ -88,6 +112,12 @@ class FadeGainProvider : GainProcessor.GainProvider {
    * for, only counted from a position that still exists.
    */
   override fun getGainFactorAtSamplePosition(samplePosition: Long, sampleRate: Int): Float {
+    val planned = plannedGain(samplePosition, sampleRate)
+    val ceiling = windDown ?: return planned
+    return planned * ceiling.gain()
+  }
+
+  private fun plannedGain(samplePosition: Long, sampleRate: Int): Float {
     val current = plan
     if (current.generation != appliedGeneration || samplePosition < anchor) {
       appliedGeneration = current.generation
@@ -104,14 +134,20 @@ class FadeGainProvider : GainProcessor.GainProvider {
       return fade(true, current.equalPower).getGainFactorAt(index, length)
     }
 
+    // Not yet. Counted in samples only when there is something to count, for
+    // the same reason as the lead-in below.
+    val hold = if (current.holdMs > 0) samples(current.holdMs, sampleRate) else 0
+    if (index < hold) return 1f
+    val started = index - hold
+
     // Asked for explicitly or not at all: rounding a lead-in of none up to a
     // single sample, as the duration below has to be, would open every
     // unadorned fade-out with one sample of silence.
     val lead = if (current.leadInMs > 0) samples(current.leadInMs, sampleRate) else 0
-    if (index < lead) return fade(true, current.equalPower).getGainFactorAt(index, lead)
+    if (started < lead) return fade(true, current.equalPower).getGainFactorAt(started, lead)
 
     val length = samples(current.durationMs, sampleRate)
-    val offset = index - lead
+    val offset = started - lead
     if (offset >= length) return 0f
     return fade(false, current.equalPower).getGainFactorAt(offset, length)
   }
@@ -136,10 +172,15 @@ class FadeGainProvider : GainProcessor.GainProvider {
    * — tens of thousands a second — for as long as the track plays. That is
    * affordable until something expensive joins the chain, and changing the
    * speed or the pitch does exactly that.
+   *
+   * A wind-down that has begun is never idle, whatever the plan says. One
+   * that is only booked is, which is what lets a ninety minute timer sit on
+   * the fader for eighty-nine and a half of them at the price of a glance at
+   * the clock per buffer.
    */
   override fun isUnityUntil(samplePosition: Long, sampleRate: Int): Long {
     val current = plan
-    val settled = when (current.shape) {
+    val settled = windDown?.begun() != true && when (current.shape) {
       Shape.UNITY -> true
       Shape.IN -> samplePosition - anchor >= samples(current.durationMs, sampleRate)
       Shape.OUT -> false

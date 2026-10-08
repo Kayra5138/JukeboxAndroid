@@ -2,6 +2,7 @@ import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
 import { useTrackArtwork } from '../lib/media/artwork';
+import { makeStyles } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
 /**
@@ -29,6 +30,7 @@ export function PlaylistCover({
   picture?: string | null;
   size: number;
 }) {
+  const styles = useStyles();
   /*
     Four hooks, always, whatever the list holds. A hook cannot be called in a
     loop over a list whose length changes, so the slots are fixed and the empty
@@ -68,6 +70,7 @@ function Tile({
   size: number;
   radius: number;
 }) {
+  const styles = useStyles();
   if (!uri) {
     return <View style={[styles.empty, { width: size, height: size, borderRadius: radius }]} />;
   }
@@ -80,7 +83,7 @@ function Tile({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', overflow: 'hidden' },
-  empty: { backgroundColor: '#242424' },
-});
+  empty: { backgroundColor: c.surfaceRaised },
+}));

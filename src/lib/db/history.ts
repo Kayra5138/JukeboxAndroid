@@ -10,12 +10,16 @@ export type { Play };
  * Store a finished listen. What counts as one is decided in `player/session.ts`
  * — it is arithmetic over wall clock, and putting it there is what let it be
  * tested without SQLite underneath.
+ *
+ * Answers with the row it was written to, or null when it was too short to be
+ * written at all. The row is how anything else that keeps a note about a
+ * listen — whether ListenBrainz has been told of it — says which one it means.
  */
-export function recordPlay(play: Play): void {
-  if (!countsAsPlay(play)) return;
+export function recordPlay(play: Play): number | null {
+  if (!countsAsPlay(play)) return null;
   const { track, startedAt, secondsPlayed, completed } = play;
 
-  db().runSync(
+  const written = db().runSync(
     `INSERT INTO plays (track_id, title, artist, filename, started_at, seconds_played, completed)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     track.id,
@@ -26,6 +30,7 @@ export function recordPlay(play: Play): void {
     secondsPlayed,
     completed ? 1 : 0
   );
+  return written.lastInsertRowId;
 }
 
 /**

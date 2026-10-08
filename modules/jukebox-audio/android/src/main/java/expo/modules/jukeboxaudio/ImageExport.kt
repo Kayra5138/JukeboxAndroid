@@ -28,7 +28,7 @@ object ImageExport {
    * it, which on a modern Android may be never.
    */
   fun save(context: Context, source: File): Uri {
-    require(source.isFile && source.length() > 0) { "There is no picture to save." }
+    if (!source.isFile || source.length() == 0L) throw Told(R.string.jukebox_picture_none)
 
     val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
       MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -48,12 +48,12 @@ object ImageExport {
     }
 
     val resolver = context.contentResolver
-    val target = resolver.insert(collection, details) ?: error("The gallery would not take the picture.")
+    val target = resolver.insert(collection, details) ?: throw Told(R.string.jukebox_picture_gallery)
 
     runCatching {
       resolver.openOutputStream(target).use { out ->
-        checkNotNull(out) { "The gallery would not take the picture." }
-        source.inputStream().use { it.copyTo(out) }
+        val gallery = out ?: throw Told(R.string.jukebox_picture_gallery)
+        source.inputStream().use { it.copyTo(gallery) }
       }
     }.onFailure {
       // A half-written entry is worse than none: it shows in the gallery as a

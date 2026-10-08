@@ -38,9 +38,10 @@ object DownloadStore {
     // still running, and never start network work until the user retries it.
     jobs.filter { it.optString("status") in activeStates }.forEach {
       if (it.optString("status") == "saving" && recoverPublication(context, it)) {
-        it.put("status", "done").put("progress", 100).put("error", JSONObject.NULL)
+        it.put("status", "done").put("progress", 100)
+        fail(it, null)
       } else {
-        it.put("status", "failed").put("error", "Download interrupted. Tap Retry.")
+        fail(it.put("status", "failed"), Failed(Failure.INTERRUPTED))
       }
     }
     persist()
@@ -58,8 +59,33 @@ object DownloadStore {
     } catch (error: Exception) { storage.failWrite(stream); throw error }
   }
 
+  /**
+   * The jobs, newest first, each with `errorText` beside its `error`.
+   *
+   * `error` is what was written down when the job failed, in English, and
+   * `errorCode` says which failure it was. `errorText` is that failure in the
+   * app's language as it is now, worked out here each time rather than
+   * stored, so a job that failed yesterday in English is read in Turkish
+   * today. Where the failure has no sentence of its own — the extractor's
+   * last line — it is the same as `error`, since there is nothing else to say.
+   */
   @Synchronized
-  fun list(): List<Map<String, Any?>> = jobs.asReversed().map(YouTubeData::map)
+  fun list(): List<Map<String, Any?>> = jobs.asReversed().map { job ->
+    YouTubeData.map(job) + ("errorText" to errorText(job))
+  }
+
+  private fun errorText(job: JSONObject): String? {
+    if (job.isNull("error")) return null
+    val error = job.optString("error")
+    // A job from before there were codes is known by its sentence instead.
+    val failure = Failure.of(job.optString("errorCode")) ?: Failure.saying(error) ?: return error
+    return if (error == failure.english) failure.said else error
+  }
+
+  private fun fail(job: JSONObject, failed: Failed?) {
+    job.put("error", failed?.english ?: JSONObject.NULL)
+      .put("errorCode", failed?.failure?.code ?: JSONObject.NULL)
+  }
 
   @Synchronized
   fun enqueue(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String? = null): String {
@@ -76,7 +102,7 @@ object DownloadStore {
       if (existing.optString("status") != "done" || exists(context, existing)) return existing.getString("id")
       existing.put("status", "missing").put("trackId", JSONObject.NULL)
     }
-    require(jobs.count { it.optString("status") in activeStates } < 500) { "The queue is full. Wait for a download to finish." }
+    if (jobs.count { it.optString("status") in activeStates } >= 500) throw YouTubeTrouble(Failure.QUEUE_FULL)
     val jobId = UUID.randomUUID().toString()
     jobs.add(JSONObject().put("id", jobId).put("video", video).put("format", format)
       .put("discoverKey", discoverKey ?: JSONObject.NULL).put("folder", destination).put("status", "queued").put("progress", 0)
@@ -87,7 +113,7 @@ object DownloadStore {
 
   @Synchronized
   fun enqueueBatch(context: Context, videos: List<JSONObject>, format: String, folder: String): List<String> {
-    require(videos.size in 1..500) { "Choose up to 500 tracks at a time." }
+    if (videos.size !in 1..500) throw YouTubeTrouble(Failure.BATCH)
     val snapshot = jobs.map { JSONObject(it.toString()) }
     batching = true
     try {
@@ -159,7 +185,7 @@ object DownloadStore {
   @Synchronized
   fun complete(id: String, trackId: String) {
     jobs.first { it.getString("id") == id }.put("trackId", trackId)
-      .put("status", "done").put("progress", 100).put("error", JSONObject.NULL)
+      .put("status", "done").put("progress", 100).also { fail(it, null) }
     // Publication already succeeded. The saved reservation recovers this if
     // the disk fills while recording the final receipt.
     runCatching { persist() }
@@ -199,11 +225,12 @@ object DownloadStore {
   }
 
   @Synchronized
-  fun change(id: String, status: String, progress: Int = 0, error: String? = null, trackId: String? = null) {
+  fun change(id: String, status: String, progress: Int = 0, error: Failed? = null, trackId: String? = null) {
     val job = jobs.firstOrNull { it.optString("id") == id } ?: return
     if (job.optString("status") == "cancelling" && status in setOf("downloading", "converting", "preparing")) return
     val old = job.optString("status")
-    job.put("status", status).put("progress", progress).put("error", error ?: JSONObject.NULL)
+    job.put("status", status).put("progress", progress)
+    fail(job, error)
     if (trackId != null) job.put("trackId", trackId)
     // Progress is transient. State transitions and receipts are durable.
     if (old != status || trackId != null) persist()
@@ -236,9 +263,9 @@ object DownloadStore {
   }
 
   @Synchronized
-  fun failPending(message: String) {
+  fun failPending(failure: Failure) {
     jobs.filter { it.optString("status") in activeStates }.forEach {
-      it.put("status", "failed").put("error", message)
+      fail(it.put("status", "failed"), Failed(failure))
     }
     persist()
   }

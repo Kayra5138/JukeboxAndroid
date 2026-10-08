@@ -24,7 +24,7 @@ class YouTubeDataTest {
     listOf("https://youtube.com.evil.test/watch?v=$id", "https://evil.test/", "file:///etc/passwd",
       "https://user@youtube.com/watch?v=$id", "https://youtube.com:443/watch?v=$id",
       "https://youtube.com/playlist?list=PL123", "https://youtube.com/watch?v=bad").forEach {
-      assertThrows(IllegalArgumentException::class.java) { YouTubeData.input(it) }
+      assertThrows(YouTubeTrouble::class.java) { YouTubeData.input(it) }
     }
   }
 
@@ -49,7 +49,7 @@ class YouTubeDataTest {
     assertEquals("https://www.youtube.com/playlist?list=PL123", YouTubeData.playlistInput("youtube.com/playlist?list=PL123"))
     listOf("https://youtube.com.evil.test/playlist?list=PL123", "https://user@youtube.com/playlist?list=PL123",
       "file:///playlist?list=PL123", "https://youtube.com/watch?v=$id", "https://youtube.com/playlist?list=PL%26bad").forEach {
-      assertThrows(IllegalArgumentException::class.java) { YouTubeData.playlistInput(it) }
+      assertThrows(YouTubeTrouble::class.java) { YouTubeData.playlistInput(it) }
     }
   }
 
@@ -66,7 +66,7 @@ class YouTubeDataTest {
   @Test fun playlistNamesBecomeFilteredSearchesAndLinksStayLinks() {
     assertEquals("https://www.youtube.com/results?search_query=rock+%26+jazz&sp=EgIQAw%3D%3D", YouTubeData.playlistQuery(" rock & jazz "))
     assertEquals("https://www.youtube.com/playlist?list=PL123", YouTubeData.playlistQuery("youtube.com/playlist?list=PL123"))
-    assertThrows(IllegalArgumentException::class.java) { YouTubeData.playlistQuery("https://evil.test/playlist?list=PL123") }
+    assertThrows(YouTubeTrouble::class.java) { YouTubeData.playlistQuery("https://evil.test/playlist?list=PL123") }
   }
 
   @Test fun playlistSearchOnlyReturnsCanonicalPlaylistCards() {
@@ -82,7 +82,7 @@ class YouTubeDataTest {
   @Test fun destinationCannotEscapeMusic() {
     assertEquals("Music/Albums", YouTubeData.folder("/Music/Albums/"))
     listOf("Downloads", "Music/../Documents", "Music//Album", "Music/./Album", "Music/Album\\bad").forEach {
-      assertThrows(IllegalArgumentException::class.java) { YouTubeData.folder(it) }
+      assertThrows(YouTubeTrouble::class.java) { YouTubeData.folder(it) }
     }
   }
 }

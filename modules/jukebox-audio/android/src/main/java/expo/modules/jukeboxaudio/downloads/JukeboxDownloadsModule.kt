@@ -25,7 +25,7 @@ class JukeboxDownloadsModule : Module() {
       val id = DownloadStore.enqueue(context, JSONObject(video), "mp3", "Music", key)
       try { context.startForegroundService(Intent(context, DownloadService::class.java)) }
       catch (error: Exception) {
-        DownloadStore.failPending("Open Discover to resume downloads.")
+        DownloadStore.failPending(Failure.OPEN_DISCOVER)
         throw error
       }
       id
@@ -43,7 +43,7 @@ class JukeboxDownloadsModule : Module() {
       DownloadStore.prioritizeDiscovery(id)
       try { context.startForegroundService(Intent(context, DownloadService::class.java)) }
       catch (error: Exception) {
-        DownloadStore.change(id, "failed", error = "Open Discover to retry this download.")
+        DownloadStore.change(id, "failed", error = Failed(Failure.RETRY_DISCOVER))
         throw error
       }
     }.runOnQueue(io)
@@ -62,12 +62,12 @@ class JukeboxDownloadsModule : Module() {
 
     AsyncFunction("searchAsync") { query: String, searchId: String ->
       try { YouTubeEngine.search(context, query, searchId).map(YouTubeData::map) }
-      catch (error: Exception) { throw IllegalStateException(friendlyError(error), error) }
+      catch (error: Exception) { throw trouble(error) }
     }.runOnQueue(io)
 
     AsyncFunction("playlistAsync") { query: String, searchId: String ->
       try { YouTubeEngine.search(context, query, searchId, true).map(YouTubeData::map) }
-      catch (error: Exception) { throw IllegalStateException(friendlyError(error), error) }
+      catch (error: Exception) { throw trouble(error) }
     }.runOnQueue(io)
 
     AsyncFunction("enqueueBatchAsync") { videos: List<Map<String, Any?>>, format: String, folder: String ->
@@ -75,7 +75,7 @@ class JukeboxDownloadsModule : Module() {
       val ids = DownloadStore.enqueueBatch(context, videos.map { JSONObject(it) }, format, folder)
       try { context.startForegroundService(Intent(context, DownloadService::class.java)) }
       catch (error: Exception) {
-        DownloadStore.failPending("Open Search and retry the download.")
+        DownloadStore.failPending(Failure.OPEN_SEARCH)
         throw error
       }
       ids
@@ -94,7 +94,7 @@ class JukeboxDownloadsModule : Module() {
       val id = DownloadStore.enqueue(context, JSONObject(video), format, folder)
       try { context.startForegroundService(Intent(context, DownloadService::class.java)) }
       catch (error: Exception) {
-        DownloadStore.failPending("Open Search and retry the download.")
+        DownloadStore.failPending(Failure.OPEN_SEARCH)
         throw error
       }
       id

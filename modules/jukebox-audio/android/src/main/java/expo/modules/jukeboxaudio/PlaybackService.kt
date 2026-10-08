@@ -1,12 +1,17 @@
 package expo.modules.jukeboxaudio
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.view.KeyEvent
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -15,6 +20,7 @@ import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.LibraryResult
@@ -22,15 +28,21 @@ import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.jukeboxaudio.auto.BrowseTree
+import expo.modules.jukeboxaudio.loudness.Loudness
+import expo.modules.jukeboxaudio.loudness.Normaliser
+import expo.modules.jukeboxaudio.sleep.SleepTimer
+import expo.modules.jukeboxaudio.sleep.SleepTimers
 import expo.modules.jukeboxaudio.transitions.Crossfader
 import expo.modules.jukeboxaudio.transitions.Crossfades
 import expo.modules.jukeboxaudio.transitions.FadeGainProvider
 import expo.modules.jukeboxaudio.transitions.FadingPlayer
 import expo.modules.jukeboxaudio.transitions.FadingRenderersFactory
 import expo.modules.jukeboxaudio.transitions.TransitionStore
+import expo.modules.jukeboxaudio.transitions.WindDown
 import expo.modules.jukeboxaudio.widget.JukeboxWidget
 import expo.modules.jukeboxaudio.widget.NowPlaying
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * How many times one item may be prepared again after a fault before it is
@@ -38,6 +50,23 @@ import java.util.concurrent.Executors
  * first retry and a file that cannot be decoded will not clear on any.
  */
 private const val MAX_RECOVERY_TRIES = 2
+
+/**
+ * How long a media button is given to bring the service into the foreground by
+ * playing before the service does it for itself; see `foregroundOwed`. Well
+ * inside the ten seconds Android allows, and long enough that a press which
+ * does start the music has always done so first.
+ */
+private const val FOREGROUND_OWED_AFTER_MS = 2_000L
+
+/** Not Media3's own notification id, so removing this one leaves that one be. */
+private const val FOREGROUND_OWED_ID = 1002
+
+/**
+ * How often the place in a track is noted while it plays; see `placeTick`.
+ * What a kill mid-track can cost, set against a small write that often.
+ */
+private const val PLACE_EVERY_MS = 10_000L
 
 /**
  * The mark Media3 puts on the stop key it sends when its notification is
@@ -75,6 +104,40 @@ private val BROWSERS = setOf(
 )
 
 /**
+ * A note that the queue was just set by something other than the app.
+ *
+ * The app keeps its own copy of the queue and edits the two together, which
+ * works for as long as it is the only one editing. A car choosing a record, or
+ * a press of play putting the saved queue back, sets one here that the app was
+ * never shown -- and its screens then go on reading the player's positions off
+ * a list the player no longer holds. A changed queue looks the same from the
+ * controller's side whoever changed it, so the ones that were not the app's
+ * doing are marked on the way in, and the controller passes the news on.
+ *
+ * The same arrangement as [Crossfades], for the same reason: the service and
+ * the module share a process, and this is the gap between them.
+ */
+object QueueReplaced {
+  /** Beyond this the mark belongs to an earlier change, not the one being reported. */
+  private const val WINDOW_MS = 3_000L
+
+  @Volatile private var at = 0L
+
+  fun mark() {
+    at = android.os.SystemClock.elapsedRealtime()
+  }
+
+  /** True once per replacement, and false for every change the app made itself. */
+  @Synchronized
+  fun justHappened(): Boolean {
+    val marked = at
+    if (marked == 0L || android.os.SystemClock.elapsedRealtime() - marked > WINDOW_MS) return false
+    at = 0L
+    return true
+  }
+}
+
+/**
  * Owns the ExoPlayer instance and publishes it as a media session.
  *
  * Media3 runs this as a foreground service for as long as something is playing,
@@ -86,6 +149,8 @@ private val BROWSERS = setOf(
 class PlaybackService : MediaLibraryService() {
   private var mediaSession: MediaLibrarySession? = null
   private var crossfader: Crossfader? = null
+  private var sleepTimer: SleepTimer? = null
+  private var normaliser: Normaliser? = null
 
   private val widgetHandler = Handler(Looper.getMainLooper())
   private val widgetTick = object : Runnable {
@@ -131,9 +196,63 @@ class PlaybackService : MediaLibraryService() {
     artworkReader.execute { QueueStore.save(this, snapshot) }
   }
 
+  /**
+   * Writes down where in the queue playback is, which is a different matter
+   * from what is in it.
+   *
+   * The reasoning above was right about the list and wrong about the place:
+   * the two were one file, so not writing on a pause or a change of track
+   * meant the place was never written at all after the queue was set. A
+   * service reclaimed while paused then came back, at a press of play, on
+   * whatever track the queue had been started with. The place is a few dozen
+   * bytes in a file of its own, so it can be written whenever it moves without
+   * bringing the two thousand entries along.
+   *
+   * Only the newest is kept waiting. Dragging a seek bar is a seek per frame,
+   * and the reader of covers shares this thread; there is no use in writing
+   * forty places it has already left.
+   */
+  private val pendingPlace = AtomicReference<String?>(null)
+
+  private fun savePlace() {
+    val player = mediaSession?.player ?: return
+    val place = QueueStore.place(player)
+    if (place.isEmpty()) return
+    if (pendingPlace.getAndSet(place) != null) return
+    runCatching {
+      artworkReader.execute { pendingPlace.getAndSet(null)?.let { QueueStore.savePlace(this, it) } }
+    }
+  }
+
+  /**
+   * Notes the place every so often while something is playing.
+   *
+   * Nothing happens during a track for the events to report, and a process
+   * that is killed is not asked first. Without this a kill half an hour into a
+   * mix would come back at the start of it; with it, at most this far back.
+   */
+  private val placeTick = object : Runnable {
+    override fun run() {
+      val player = mediaSession?.player ?: return
+      if (!player.isPlaying) return
+      savePlace()
+      widgetHandler.postDelayed(this, PLACE_EVERY_MS)
+    }
+  }
+
   private val widgetWatcher = object : Player.Listener {
     override fun onEvents(player: Player, events: Player.Events) {
       if (events.contains(Player.EVENT_TIMELINE_CHANGED)) saveQueue()
+      // Everything that moves the place by more than playing does: a new
+      // track, a seek, a pause, the end of the queue. A changed list is here
+      // too, because the place that was noted belonged to the old one.
+      if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
+          Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_TIMELINE_CHANGED,
+          Player.EVENT_PLAYBACK_STATE_CHANGED)) savePlace()
+      if (events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
+        widgetHandler.removeCallbacks(placeTick)
+        if (player.isPlaying) widgetHandler.postDelayed(placeTick, PLACE_EVERY_MS)
+      }
       if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
           Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_TIMELINE_CHANGED,
           Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_MEDIA_METADATA_CHANGED)) publish()
@@ -274,9 +393,12 @@ class PlaybackService : MediaLibraryService() {
       listening. Released at once, it can be swiped the moment it is paused.
 
       What the ten minutes were buying is a process the system will not reclaim
-      while paused. That is given up, and it is safe to: the queue and the
-      position are written down as they change, and a press of play that finds
-      the service gone starts it again and puts them back (see onStartCommand).
+      while paused. That is given up, and it is safe to, though only because of
+      what is written down and when: the queue whenever it changes, and the
+      place in it on every pause, seek and change of track and every few
+      seconds in between (see savePlace). A pause is therefore on disk before
+      the foreground is let go, and a press of play that finds the service gone
+      starts it again and puts both back (see onStartCommand).
     */
     setForegroundServiceTimeoutMs(0)
 
@@ -302,8 +424,15 @@ class PlaybackService : MediaLibraryService() {
     // Read before the sink is built, so a service started by a widget press
     // comes up sounding the way it was left rather than flat.
     expo.modules.jukeboxaudio.effects.Effects.load(this)
+    // The same for the equalizer, which is a stage of that pipeline now. The
+    // first time after an update this is also where what was set on the
+    // phone's own equalizer is carried over; see [EffectsStore.parametric].
+    AudioEffects.load(this)
 
-    val fade = FadeGainProvider()
+    // The sleep timer's ramp is in the same fader, for the same reason: see
+    // [WindDown].
+    val windDown = WindDown()
+    val fade = FadeGainProvider(windDown)
 
     val player = ExoPlayer.Builder(this, FadingRenderersFactory(this, fade))
       .setAudioAttributes(
@@ -331,6 +460,28 @@ class PlaybackService : MediaLibraryService() {
     Crossfades.register(transitions)
 
     /*
+      The sleep timer, on the player itself and not on the session. Nothing
+      that reaches the session has any business with it -- the car, the widget
+      and the notification are given no timer to set -- and what it does when
+      it fires is a plain pause that all of them see like any other.
+    */
+    sleepTimer = SleepTimer(player, transitions, windDown).also {
+      player.addListener(it)
+      SleepTimers.register(it)
+    }
+
+    /*
+      Evening the tracks out, on the player itself for the same reason: it
+      has to work for a queue the app never saw, so it watches the one thing
+      every queue goes through. It reads its own setting off the disk.
+    */
+    normaliser = Normaliser(this, player).also {
+      player.addListener(it)
+      Loudness.register(it)
+      it.refresh()
+    }
+
+    /*
       The session is given the wrapper rather than the player. Every transport
       command in the app arrives through the session — from the notification,
       the widget, a headset, the car — so this is the one place that catches
@@ -342,8 +493,68 @@ class PlaybackService : MediaLibraryService() {
 
     player.addListener(widgetWatcher)
     player.addListener(faultRecovery)
+    speak()
+    Localised.watch(languageChanged)
     publish()
-    saveQueue()
+    /*
+      Nothing is saved here, and something used to be. The player is empty at
+      this point by construction, so what was written was an empty queue over
+      the one being kept for exactly this moment -- on the writer's thread, in
+      a race with the read in onStartCommand that the read usually won, and
+      with the car's "Continue", which comes seconds later, never.
+    */
+  }
+
+  /**
+   * Puts the notification into the app's language.
+   *
+   * Media3 draws the notification, and reads its words — the name of its
+   * channel, what each button is called — from whatever context its provider
+   * was built with. Left to make its own it uses the application's, which
+   * answers in the phone's language. So it is handed one built on a context
+   * that answers in the app's, and handed another whenever that changes.
+   *
+   * The channel is named here as well as there because the provider only
+   * names a channel it has to create; one that exists keeps the name it was
+   * given, and creating it again under a new name is how Android renames it.
+   */
+  @OptIn(UnstableApi::class)
+  private fun speak() {
+    val words = Localised.context(this)
+    runCatching {
+      getSystemService(NotificationManager::class.java).createNotificationChannel(
+        NotificationChannel(
+          DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID,
+          words.getString(R.string.jukebox_playback_channel),
+          NotificationManager.IMPORTANCE_LOW
+        )
+      )
+      setMediaNotificationProvider(
+        DefaultMediaNotificationProvider.Builder(words)
+          .setChannelName(R.string.jukebox_playback_channel)
+          .build()
+      )
+    }.onFailure { android.util.Log.w("JukeboxPlayback", "could not name the notification", it) }
+  }
+
+  /**
+   * The language was changed while this was running.
+   *
+   * The notification is drawn again, and a car is told that every node whose
+   * words are this side's has changed, which is what makes it ask for them
+   * again: it otherwise keeps the tabs as it was first told them for as long
+   * as it stays connected. Song titles and the names of records are not
+   * words of ours and do not change.
+   */
+  @OptIn(UnstableApi::class)
+  private val languageChanged: () -> Unit = {
+    speak()
+    mediaSession?.let { session ->
+      runCatching { onUpdateNotification(session, false) }
+      BrowseTree.SPOKEN.forEach { node ->
+        runCatching { session.notifyChildrenChanged(node, Int.MAX_VALUE, null) }
+      }
+    }
   }
 
   /**
@@ -547,6 +758,7 @@ class PlaybackService : MediaLibraryService() {
           )
         }
         QueueStore.load(this@PlaybackService)?.let { saved ->
+          QueueReplaced.mark()
           return Futures.immediateFuture(
             MediaSession.MediaItemsWithStartPosition(saved.items, saved.index, saved.positionMs)
           )
@@ -566,7 +778,10 @@ class PlaybackService : MediaLibraryService() {
           else BrowseTree.search(this@PlaybackService, spoken)
         }.getOrElse { emptyList() }
         if (found.isNotEmpty()) {
-          return Futures.immediateFuture(MediaSession.MediaItemsWithStartPosition(found, 0, 0))
+          QueueReplaced.mark()
+          return Futures.immediateFuture(
+            MediaSession.MediaItemsWithStartPosition(found.map(BrowseTree::queued), 0, 0)
+          )
         }
       }
 
@@ -585,8 +800,16 @@ class PlaybackService : MediaLibraryService() {
       }.getOrElse { emptyList<MediaItem>() to 0 }
 
       if (items.isEmpty()) return passThrough
+      /*
+        Into the queue under the tracks' own ids, not the ones the tree gave
+        the car. Those carry the shelf a row was found on, which was needed to
+        get this far and is in the way from here on: the widget asked for the
+        cover of a track called `t|albums|42` and was told there was none, and
+        the app was told that was what had started playing.
+      */
+      QueueReplaced.mark()
       return Futures.immediateFuture(
-        MediaSession.MediaItemsWithStartPosition(items, index, 0)
+        MediaSession.MediaItemsWithStartPosition(items.map(BrowseTree::queued), index, 0)
       )
     }
   }
@@ -613,8 +836,17 @@ class PlaybackService : MediaLibraryService() {
    * has been closed, is asking to hear the next thing rather than to silently
    * move a bookmark.
    *
+   * Not for a pause, though. The widget draws its button from what was last
+   * written down, and a process killed mid-song leaves "playing" written: the
+   * press that follows is a pause sent to a service with nothing running, and
+   * starting the music in order to stop it again is nobody's idea of pausing.
+   *
    * A queue that was already there is untouched, so none of this applies to
    * the ordinary case of a press while the music is running.
+   *
+   * Playing is not the only way a press can end, and the obligation above
+   * does not care how it ends: see [foregroundOwed] for the ones that end
+   * with nothing playing.
    */
   @OptIn(UnstableApi::class)
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -642,10 +874,73 @@ class PlaybackService : MediaLibraryService() {
       return result
     }
 
-    if (intent?.action == Intent.ACTION_MEDIA_BUTTON && restoreQueueIfEmpty()) {
-      mediaSession?.player?.playWhenReady = true
+    if (intent?.action == Intent.ACTION_MEDIA_BUTTON) {
+      @Suppress("DEPRECATION")
+      val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
+      if (restoreQueueIfEmpty() && key != KeyEvent.KEYCODE_MEDIA_PAUSE) {
+        mediaSession?.player?.playWhenReady = true
+      }
+      // Not pushed back by a second press: the clock Android is running
+      // started at the first.
+      if (!widgetHandler.hasCallbacks(foregroundOwed)) {
+        widgetHandler.postDelayed(foregroundOwed, FOREGROUND_OWED_AFTER_MS)
+      }
     }
     return super.onStartCommand(intent, flags, startId)
+  }
+
+  /**
+   * Keeps the promise a foreground start makes, where playing has not kept it.
+   *
+   * A media button reaches this service through `startForegroundService` --
+   * from the widget always, and from a headset when nothing is running -- and
+   * Android then expects `startForeground` within ten seconds or kills the
+   * whole process, music and app and all. Media3 only goes into the foreground
+   * for a player that is playing, and with the timeout above set to nothing it
+   * leaves again the moment one is paused. So every press that does not end in
+   * music was a crash on a ten second fuse: next or previous while paused, any
+   * key with no queue to put back, a pause sent to a service that had gone.
+   *
+   * Checked a moment after the press rather than at it, and that is on
+   * purpose. A press that does start the music is left exactly as it was,
+   * which is the path that has always worked; this only acts where nothing
+   * else is going to. What it does there is the least that counts: into the
+   * foreground behind a notification of its own and straight back out, taking
+   * that notification with it. Android holds a plain notification back for
+   * some seconds before drawing it, so this one is gone before it is seen.
+   * Media3's own, which may be sitting in the shade for the paused player, has
+   * a different id and is not touched.
+   *
+   * Guarded because the allowance is the system's to give. A press that came
+   * by an ordinary start owes nothing and may not be permitted this either;
+   * refused, it has lost nothing.
+   */
+  @OptIn(UnstableApi::class)
+  private val foregroundOwed = Runnable {
+    // In the foreground already, which is to say playing. Nothing is owed.
+    if (mediaSession == null || isPlaybackOngoing) return@Runnable
+    runCatching {
+      // Media3's channel, made here in case this arrives before it has had a
+      // notification of its own to make it for. A second one would be a second
+      // row in the app's settings for something nobody is meant to see.
+      val channel = DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID
+      getSystemService(NotificationManager::class.java).createNotificationChannel(
+        NotificationChannel(
+          channel,
+          Localised.text(this, R.string.jukebox_playback_channel),
+          NotificationManager.IMPORTANCE_LOW
+        )
+      )
+      startForeground(
+        FOREGROUND_OWED_ID,
+        Notification.Builder(this, channel)
+          .setSmallIcon(androidx.media3.session.R.drawable.media3_notification_small_icon)
+          .setContentTitle(applicationInfo.loadLabel(packageManager))
+          .build(),
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+      )
+      stopForeground(STOP_FOREGROUND_REMOVE)
+    }.onFailure { android.util.Log.w("JukeboxPlayback", "could not answer a foreground start", it) }
   }
 
   /** True when there was nothing loaded and the last queue was put back. */
@@ -654,6 +949,7 @@ class PlaybackService : MediaLibraryService() {
     if (player.mediaItemCount > 0) return false
 
     val saved = QueueStore.load(this) ?: return false
+    QueueReplaced.mark()
     player.setMediaItems(saved.items, saved.index, saved.positionMs)
     player.prepare()
     return true
@@ -697,19 +993,30 @@ class PlaybackService : MediaLibraryService() {
     // Written before the player goes, so the widget stops offering controls for
     // a service that is about to stop existing.
     widgetHandler.removeCallbacksAndMessages(null)
+    // The last word on where playback was. The writer is shut down below, and
+    // shutting it down lets what it has already been given finish.
+    savePlace()
     mediaSession?.player?.let { player ->
       NowPlaying.write(this, NowPlaying.read(this).copy(positionMs = player.currentPosition.coerceAtLeast(0),
         durationMs = player.duration.coerceAtLeast(0)))
     }
     NowPlaying.markStopped(this)
     JukeboxWidget.refresh(this)
+    Localised.unwatch(languageChanged)
 
     // Both let go before the player: the effects hold a native handle on that
     // player's session, and the crossfader may be holding a second player of
     // its own that nothing else knows about.
+    // The timer first of the three, because it speaks to the other two.
+    SleepTimers.register(null)
+    sleepTimer?.release()
+    sleepTimer = null
     Crossfades.register(null)
     crossfader?.release()
     crossfader = null
+    Loudness.register(null)
+    normaliser?.release()
+    normaliser = null
     AudioEffects.release()
 
     artworkReader.shutdown()

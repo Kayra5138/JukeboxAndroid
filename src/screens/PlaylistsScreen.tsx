@@ -10,17 +10,17 @@ import { TextPrompt } from '../components/TextPrompt';
 import { AUTO_LISTS } from '../lib/db/autoLists';
 import {
   addToPlaylist,
-  coverTrackIds,
   createPlaylist,
+  playlistMembers,
   playlists,
   type Playlist,
 } from '../lib/db/playlists';
 import { tagCounts, trackIdsWithTag, type TagCount } from '../lib/db/tags';
+import { useT } from '../lib/i18n/index';
 import { scanLibrary } from '../lib/media/library';
+import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
 import type { Track } from '../lib/types';
-
-const ACCENT = '#7ab8ff';
 
 /** Enough tags to pick from without the sheet becoming the tag screen. */
 const TAG_CHOICES = 40;
@@ -35,6 +35,9 @@ export default function PlaylistsScreen() {
   const downloadRevision = useDownloadLibraryRevision();
   const insets = useSafeAreaInsets();
   const landscape = useLandscape();
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
 
   const [lists, setLists] = useState<Playlist[] | null>(null);
   const [tags, setTags] = useState<TagCount[]>([]);
@@ -46,6 +49,8 @@ export default function PlaylistsScreen() {
   const [live, setLive] = useState(true);
   /** The first few tracks of each list, for the covers. */
   const [covers, setCovers] = useState<Map<number, Track[]>>(new Map());
+  /** How many of each list's members the library holds, once it has been read. */
+  const [counts, setCounts] = useState<Map<number, number>>(new Map());
 
   const load = useCallback(() => {
     setLists(playlists());
@@ -64,11 +69,18 @@ export default function PlaylistsScreen() {
       if (cancelled) return;
       const byId = new Map(library.map((entry) => [entry.id, entry]));
       const resolved = new Map<number, Track[]>();
-      for (const [id, trackIds] of coverTrackIds(COVER_TRACKS)) {
-        resolved.set(
-          id,
-          trackIds.map((trackId) => byId.get(trackId)).filter((entry): entry is Track => entry != null)
-        );
+      /*
+        Counted against the library as well as drawn from it. A list keeps a
+        member whose file is outside the library today, and the row should say
+        how many tracks opening it will show, not how many are written down.
+      */
+      const present = new Map<number, number>();
+      for (const [id, trackIds] of playlistMembers()) {
+        const here = trackIds
+          .map((trackId) => byId.get(trackId))
+          .filter((entry): entry is Track => entry != null);
+        present.set(id, here.length);
+        resolved.set(id, here.slice(0, COVER_TRACKS));
       }
       /*
         A list that follows a tag keeps no membership to read the first four
@@ -78,20 +90,31 @@ export default function PlaylistsScreen() {
       */
       for (const list of lists ?? []) {
         if (!list.tag) continue;
-        resolved.set(
-          list.id,
-          trackIdsWithTag(list.tag)
-            .map((trackId) => byId.get(trackId))
-            .filter((entry): entry is Track => entry != null)
-            .slice(0, COVER_TRACKS)
-        );
+        const here = trackIdsWithTag(list.tag)
+          .map((trackId) => byId.get(trackId))
+          .filter((entry): entry is Track => entry != null);
+        present.set(list.id, here.length);
+        resolved.set(list.id, here.slice(0, COVER_TRACKS));
       }
       setCovers(resolved);
-    })();
+      setCounts(present);
+    })().catch((failure) => {
+      /*
+        The rows are already drawn from what the lists say of themselves, and
+        that is what they keep: the squares stay empty and the counts are the
+        stored ones. Not worth a screen of its own — nothing here is lost, and
+        the library is asked again the next time the lists are read, which is
+        every return to this tab.
+      */
+      console.warn('Could not read the library for the list covers', failure);
+    });
     return () => {
       cancelled = true;
     };
   }, [lists]);
+
+  /** What the row says a list holds: the stored number until the library is in. */
+  const held = (list: Playlist) => counts.get(list.id) ?? list.trackCount;
 
   // Reloaded on focus, so a list edited or emptied on the detail screen is
   // described correctly on the way back.
@@ -157,23 +180,21 @@ export default function PlaylistsScreen() {
           },
         ]}>
         <View style={styles.newRow}>
-          <Pressable style={styles.new} onPress={() => setNaming(true)}>
-            <Text style={styles.newLabel}>New list</Text>
+          <Pressable android_ripple={pressed} style={styles.new} onPress={() => setNaming(true)}>
+            <Text style={styles.newLabel}>{t.lists.screen.newList}</Text>
           </Pressable>
-          <Pressable style={styles.secondary} onPress={() => setFromTags(true)}>
-            <Text style={styles.secondaryLabel}>From a tag</Text>
+          <Pressable android_ripple={pressed} style={styles.secondary} onPress={() => setFromTags(true)}>
+            <Text style={styles.secondaryLabel}>{t.lists.screen.fromTag}</Text>
           </Pressable>
         </View>
 
         {lists.length === 0 ? (
-          <Text style={styles.empty}>
-            Nothing yet. A list is an order you chose — which is the one thing
-            tags cannot hold.
-          </Text>
+          <Text style={styles.empty}>{t.lists.screen.empty}</Text>
         ) : (
           <View style={landscape ? styles.grid : undefined}>
             {lists.map((list) => (
               <Pressable
+                android_ripple={pressed}
                 key={list.id}
                 style={[styles.row, styles.withCover, landscape && styles.cell]}
                 onPress={() =>
@@ -194,10 +215,11 @@ export default function PlaylistsScreen() {
                     {list.name}
                   </Text>
                   <Text style={styles.rowDetail}>
-                    {list.trackCount} {list.trackCount === 1 ? 'track' : 'tracks'}
                     {/* Worth saying on the row: the two look alike here and
                         behave differently once opened. */}
-                    {list.tag ? ` · follows ${list.tag}` : ''}
+                    {list.tag
+                      ? t.lists.screen.followingTag(held(list), list.tag)
+                      : t.common.tracks(held(list))}
                   </Text>
                 </View>
               </Pressable>
@@ -205,19 +227,20 @@ export default function PlaylistsScreen() {
           </View>
         )}
 
-        <Text style={styles.section}>From your listening</Text>
+        <Text style={styles.section}>{t.format.upper(t.lists.screen.fromListening)}</Text>
         <View style={landscape ? styles.grid : undefined}>
           {AUTO_LISTS.map((list) => (
             <Pressable
-              key={list.id}
+              android_ripple={pressed}
+              key={list}
               style={[styles.row, landscape && styles.cell]}
               onPress={() =>
-                router.push({ pathname: '/playlist', params: { auto: list.id } })
+                router.push({ pathname: '/playlist', params: { auto: list } })
               }>
               <Text style={styles.rowName} numberOfLines={1}>
-                {list.name}
+                {t.lists.auto[list].name}
               </Text>
-              <Text style={styles.rowDetail}>{list.hint}</Text>
+              <Text style={styles.rowDetail}>{t.lists.auto[list].hint}</Text>
             </Pressable>
           ))}
           {/*
@@ -227,12 +250,13 @@ export default function PlaylistsScreen() {
             a list, since nothing in it can be played.
           */}
           <Pressable
+            android_ripple={pressed}
             style={[styles.row, landscape && styles.cell]}
             onPress={() => router.push('/(tabs)/search?mode=discover')}>
             <Text style={styles.rowName} numberOfLines={1}>
-              Discover
+              {t.lists.screen.discover}
             </Text>
-            <Text style={styles.rowDetail}>Music you do not have, from what you play</Text>
+            <Text style={styles.rowDetail}>{t.lists.screen.discoverHint}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -244,9 +268,9 @@ export default function PlaylistsScreen() {
 
       <TextPrompt
         visible={naming}
-        heading="Name the list"
-        placeholder="List name"
-        confirmLabel="Create"
+        heading={t.lists.naming.heading}
+        placeholder={t.lists.naming.placeholder}
+        confirmLabel={t.lists.naming.create}
         onSubmit={create}
         onClose={() => setNaming(false)}
       />
@@ -255,37 +279,37 @@ export default function PlaylistsScreen() {
         <View style={StyleSheet.absoluteFill}>
           <Pressable style={styles.backdrop} onPress={() => setFromTags(false)} />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
-            <Text style={styles.sheetHeading}>Make a list from a tag</Text>
+            <Text style={styles.sheetHeading}>{t.lists.screen.tagSheet.heading}</Text>
             <View style={styles.kinds}>
               {([true, false] as const).map((wantsLive) => (
                 <Pressable
+                  android_ripple={pressed}
                   key={String(wantsLive)}
                   style={[styles.kind, wantsLive === live && styles.kindOn]}
                   onPress={() => setLive(wantsLive)}>
                   <Text style={[styles.kindLabel, wantsLive === live && styles.kindLabelOn]}>
-                    {wantsLive ? 'Follows the tag' : 'A copy'}
+                    {wantsLive ? t.lists.screen.tagSheet.follows : t.lists.screen.tagSheet.copy}
                   </Text>
                 </Pressable>
               ))}
             </View>
             <Text style={styles.sheetHint}>
-              {live
-                ? 'Always whatever carries the tag. Tag something later and it appears here; nothing in it can be reordered or removed.'
-                : 'Takes whatever carries the tag right now. The two go their own ways afterwards, so the list is yours to arrange.'}
+              {live ? t.lists.screen.tagSheet.followsHint : t.lists.screen.tagSheet.copyHint}
             </Text>
             <ScrollView style={styles.tagScroll}>
               {tags.length === 0 ? (
-                <Text style={styles.empty}>No tags yet. Look some tracks up first.</Text>
+                <Text style={styles.empty}>{t.lists.screen.tagSheet.noTags}</Text>
               ) : (
                 tags.map((entry) => (
                   <Pressable
+                    android_ripple={pressed}
                     key={entry.tag}
                     style={styles.tagRow}
                     onPress={() => createFromTag(entry.tag, live)}>
                     <Text style={styles.tagName} numberOfLines={1}>
                       {entry.tag}
                     </Text>
-                    <Text style={styles.rowDetail}>{entry.trackCount}</Text>
+                    <Text style={styles.rowDetail}>{t.format.number(entry.trackCount)}</Text>
                   </Pressable>
                 ))
               )}
@@ -297,8 +321,8 @@ export default function PlaylistsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#121212' },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: c.bg },
   upright: { flex: 1 },
   sideways: { flex: 1, flexDirection: 'row' },
   /* Takes what the rail and the player leave, rather than only what it needs. */
@@ -309,68 +333,69 @@ const styles = StyleSheet.create({
   new: {
     flex: 1,
     alignItems: 'center',
-    backgroundColor: '#ededed',
+    backgroundColor: c.primary,
     borderRadius: 11,
     paddingVertical: 13,
   },
-  newLabel: { color: '#121212', fontSize: 15, fontWeight: '600' },
+  newLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
   secondary: {
     flex: 1,
     alignItems: 'center',
     borderRadius: 11,
     paddingVertical: 13,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#3a3a3a',
+    borderColor: c.borderStrong,
   },
-  secondaryLabel: { color: '#ededed', fontSize: 15 },
+  secondaryLabel: { color: c.text, fontSize: 15 },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   cell: { flexGrow: 1, flexBasis: '31%', minWidth: 200 },
 
   row: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: c.surface,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 4,
     marginBottom: 8,
+    ...outlined(c),
   },
   withCover: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 11 },
   rowText: { flex: 1, minWidth: 0, gap: 3 },
-  rowName: { color: '#ededed', fontSize: 15.5 },
-  rowDetail: { color: '#6a6a6a', fontSize: 12.5 },
+  rowName: { color: c.text, fontSize: 15.5 },
+  rowDetail: { color: c.textFaint, fontSize: 12.5 },
 
   section: {
-    color: '#5f5f5f',
+    color: c.textFaint,
     fontSize: 11,
-    textTransform: 'uppercase',
     letterSpacing: 1,
     paddingTop: 26,
     paddingBottom: 12,
   },
-  empty: { color: '#6a6a6a', fontSize: 13, lineHeight: 20, paddingVertical: 10 },
+  empty: { color: c.textFaint, fontSize: 13, lineHeight: 20, paddingVertical: 10 },
 
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#000000cc' },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
     maxHeight: '75%',
-    backgroundColor: '#1c1c1c',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingTop: 18,
     paddingHorizontal: 20,
     gap: 6,
+    ...outlined(c),
   },
-  sheetHeading: { color: '#ededed', fontSize: 15, fontWeight: '600' },
-  sheetHint: { color: '#5f5f5f', fontSize: 12, lineHeight: 18, paddingBottom: 8 },
-  kinds: { flexDirection: 'row', backgroundColor: '#141414', borderRadius: 9, padding: 2, marginTop: 10 },
+  sheetHeading: { color: c.text, fontSize: 15, fontWeight: '600' },
+  sheetHint: { color: c.textFaint, fontSize: 12, lineHeight: 18, paddingBottom: 8 },
+  kinds: { flexDirection: 'row', backgroundColor: c.bg, borderRadius: 9, padding: 2, marginTop: 10, ...outlined(c) },
   kind: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 7 },
-  kindOn: { backgroundColor: '#2e2e2e' },
-  kindLabel: { color: '#7a7a7a', fontSize: 13 },
-  kindLabelOn: { color: '#ededed', fontWeight: '600' },
+  kindOn: { backgroundColor: c.selected },
+  kindLabel: { color: c.textMuted, fontSize: 13 },
+  kindLabelOn: { color: c.onSelected, fontWeight: '600' },
   tagScroll: { flexGrow: 0 },
   tagRow: {
     flexDirection: 'row',
@@ -379,7 +404,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#242424',
+    borderBottomColor: c.border,
   },
-  tagName: { color: '#ededed', fontSize: 14.5, flex: 1, minWidth: 0 },
-});
+  tagName: { color: c.text, fontSize: 14.5, flex: 1, minWidth: 0 },
+}));

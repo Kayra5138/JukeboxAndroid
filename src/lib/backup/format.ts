@@ -1,3 +1,5 @@
+import { strings, type Strings } from '../i18n/languages.ts';
+
 /**
  * What a backup is, and how one is read back in.
  *
@@ -111,12 +113,34 @@ const DEFAULTS: Partial<Record<TableName, Row>> = {
  * Settings that describe this phone rather than the person using it, and so
  * stay behind.
  *
- * The library folder is a path on this phone's storage. The other is the record
- * of which downloaded playlists feed which lists, which is download history by
- * another name and points at list ids that will not survive the journey.
+ * The library folder is a path on this phone's storage. The second is the
+ * record of which downloaded playlists feed which lists, which is download
+ * history by another name and points at list ids that will not survive the
+ * journey.
+ *
+ * The third is the connection to ListenBrainz, and the reason is a different
+ * one: among those keys is the user's token, which is a password in all but
+ * name, and a backup is a file that gets left in a downloads folder and sent
+ * to people. The whole group stays rather than the token alone, because the
+ * rest of it -- sending switched on, since when -- means nothing without a
+ * token and would arrive on another phone as a switch that is on and does
+ * nothing. It is ignored on the way in for the same reason it is left out on
+ * the way out: a file is not what decides where somebody's listens are sent.
  */
 export function carried(key: string): boolean {
-  return key !== 'library:root' && !key.startsWith('youtube:');
+  return key !== 'library:root' && !key.startsWith('youtube:') && !key.startsWith('listenbrainz:');
+}
+
+/**
+ * Settings a backup that replaces everything still leaves alone.
+ *
+ * Replacing clears what the backup did not carry, on the grounds that it was
+ * this phone's version of something being replaced. These two are not that.
+ * Where the music is kept is a fact about this phone, and so is the account it
+ * was connected to: bringing in a history is not asking to be signed out.
+ */
+export function staysThroughReplace(key: string): boolean {
+  return key === 'library:root' || key.startsWith('listenbrainz:');
 }
 
 /** Enough about a song to find it again somewhere its id means nothing. */
@@ -137,7 +161,7 @@ export type Backup = {
   tracks: BackupTrack[];
   settings: Record<string, string>;
   /** The player's own settings, kept as the player gave them. */
-  sound: { effects?: unknown; transitions?: unknown; equalizer?: unknown };
+  sound: { effects?: unknown; transitions?: unknown; equalizer?: unknown; loudness?: unknown };
   tables: Tables;
 };
 
@@ -189,23 +213,23 @@ function cleanRow(table: TableName, raw: unknown): Row | null {
  * guessed at. Unknown tables and columns are ignored, which is what lets a
  * later version add some without breaking this one.
  */
-export function parseBackup(json: string): Backup {
+export function parseBackup(json: string, t: Strings = strings()): Backup {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
   } catch {
-    throw new BackupError('That file is not a Jukebox backup.');
+    throw new BackupError(t.backup.notABackup);
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new BackupError('That file is not a Jukebox backup.');
+    throw new BackupError(t.backup.notABackup);
   }
   const source = raw as Record<string, unknown>;
   const format = number(source.format);
   if (format == null || !source.tables || typeof source.tables !== 'object') {
-    throw new BackupError('That file is not a Jukebox backup.');
+    throw new BackupError(t.backup.notABackup);
   }
   if (format > BACKUP_FORMAT) {
-    throw new BackupError('That backup was made by a newer Jukebox. Update the app to read it.');
+    throw new BackupError(t.backup.newer);
   }
 
   const given = source.tables as Record<string, unknown>;
