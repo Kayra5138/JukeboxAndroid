@@ -176,19 +176,23 @@ export const details = {
 
   /** The screen that looks the whole library up, a run of tracks at a time. */
   library: {
-    coversSaved: (count: number) => `${format.number(count)} album covers saved for offline use.`,
+    coversSaved: (count: number) => `${format.number(count)} album covers added.`,
     stoppedOffline: (matched: number) =>
       `Nothing answered, so the run stopped after ${format.number(matched)} matched. Nothing was written for the rest — they are still waiting to be tried.`,
+    /** One of the two services was down and the other was not. */
+    serviceUnreachable: (service: string) =>
+      `${service} could not be reached, so the run went on without it. What needed it was left as it was and will be tried next time.`,
     stoppedUnexpectedly: 'The lookup stopped unexpectedly.',
 
     nothingAnswered: 'Nothing answered. Stopping.',
-    rateLimited: 'Rate limited, waiting a minute…',
+    /** Shown under the count, which keeps moving: only the one service is being left alone. */
+    rateLimited: 'One of the services asked for a pause. It will be asked again in a minute.',
     lookingUp: 'Looking up…',
-    lookingUpProgress: (at: number, total: number) =>
-      `Looking up ${format.number(at)} of ${format.number(total)}…`,
-    coversProgress: (at: number, total: number) =>
-      `Album covers ${format.number(at)} of ${format.number(total)}…`,
-    matchedSoFar: (count: number) => `${format.number(count)} matched so far`,
+    /** A track is done when its details and its cover are both settled. */
+    lookingUpProgress: (done: number, total: number) =>
+      `Looking up… ${format.number(done)} of ${format.number(total)} tracks done`,
+    soFar: (matched: number, covers: number) =>
+      `${format.number(matched)} matched, ${format.number(covers)} covers so far`,
     stop: 'Stop',
 
     selected: (count: number) => `${format.number(count)} selected`,

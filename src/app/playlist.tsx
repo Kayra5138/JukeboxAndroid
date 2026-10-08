@@ -3,12 +3,12 @@ import { useCallback, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { LIST_COVER_SIZE, ListHeading } from '../components/ListHeading';
@@ -42,7 +42,8 @@ import { libraryRoot, scanLibrary } from '../lib/media/library';
 import { withMetadata, type EnrichedTrack } from '../lib/media/merge';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { suggestForPlaylist, type Candidate, type Suggestion } from '../lib/playlists/suggest';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
 
 /** How many suggestions are worth showing before the section becomes a list. */
@@ -341,8 +342,13 @@ export default function PlaylistScreen() {
   return (
     <View style={styles.screen}>
       {/* Sideways the player runs down the right, so the record keeps the
-          width and the height goes to its tracks. */}
-      <View style={landscape ? styles.sideways : styles.upright}>
+          width and the height goes to its tracks.
+
+          And everything the sheets below are laid over, which is the whole
+          of the screen but them. */}
+      <Behind
+        veiled={choosingCover || adding || confirmingDelete || menu.veiled}
+        style={landscape ? styles.sideways : styles.upright}>
       {/*
         The queue's list, reused whole. It was written to be a reorderable
         list of tracks with a remove on each row, which is exactly what this
@@ -438,6 +444,12 @@ export default function PlaylistScreen() {
                       {t.common.addToQueue}
                     </Text>
                   </Pressable>
+                  {album ? (
+                    <Pressable
+                      onPress={() => router.push({ pathname: '/album-rest', params: { album } })}>
+                      <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
+                    </Pressable>
+                  ) : null}
                   {stored ? (
                     <>
                       {editable ? (
@@ -565,7 +577,7 @@ export default function PlaylistScreen() {
       </View>
 
       <NowPlayingBar column={landscape} />
-      </View>
+      </Behind>
 
       {choosingCover ? (
         <View style={styles.layer}>
@@ -721,7 +733,7 @@ function suggestions(
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   upright: { flex: 1 },
   sideways: { flex: 1, flexDirection: 'row' },
   centred: { alignItems: 'center', justifyContent: 'center' },
@@ -775,7 +787,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   suggestionWhy: { color: c.textFaint, fontSize: 12 },
   add: { color: c.accent, fontSize: 13.5 },
 
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
   confirm: {
     position: 'absolute',
     left: 24,

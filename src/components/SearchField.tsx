@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
-import { hintKey, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { hintKey, laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 
 /**
  * A search box with a way out of it.
@@ -144,8 +145,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   clearMark: {
     // Cut out of the circle rather than written on it: the colour of what the
-    // field itself lies on.
-    color: c.surface,
+    // field itself lies on. As one flat colour, since a field of glass is a
+    // wash and a mark written in a wash is hardly there.
+    color: laid(c.surface, c.bg),
     fontSize: 15,
     fontWeight: '700',
     // The glyph sits high in its line box; this drops it onto the centre.

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Pressable } from '../Pressable';
 
 import { useT } from '../../lib/i18n/index';
 import { isSynced, parseLrc } from '../../lib/lyrics/lrc';
@@ -455,6 +455,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 12,
     minHeight: 44,
+    ...outlined(c, c.primary),
   },
   actionOff: { opacity: 0.35 },
   actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },

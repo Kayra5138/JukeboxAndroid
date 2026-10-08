@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiscoverPanel } from '../../components/DiscoverPanel';
+import { QueueLink } from '../../components/downloads/QueueLink';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Image } from 'expo-image';
+import { Image } from '../../components/Picture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActivityIndicator, FlatList, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable } from '../../components/Pressable';
 import { useT } from '../../lib/i18n/index';
-import { hintKey, makeStyles, outlined, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
+import { hintKey, makeStyles, outlined, scene, useColours, usePressed } from '../../lib/theme/index';
 import { useListColumns } from '../../lib/ui/layout';
 import { youtubeError } from '../../lib/youtube/errors';
 import { downloads } from '../../lib/youtube/native';
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
-import { durationLabel, isActive, jobError, jobForVideo, statusLabel, type AudioFormat, type DownloadJob, type YouTubeVideo, type YouTubeResult } from '../../lib/youtube/types';
+import { durationLabel, isActive, jobForVideo, statusLabel, type AudioFormat, type YouTubeVideo, type YouTubeResult } from '../../lib/youtube/types';
 
 const cache = new Map<string, { at: number; videos: YouTubeResult[] }>();
 
+/** A playlist's entries or a search's results, whichever the tab is on. Only asked for where there is a build to ask. */
+const lookUp = (playlist: boolean, text: string, id: string) =>
+  playlist ? downloads!.playlistAsync(text, id) : downloads!.searchAsync(text, id);
+
 export default function YouTubeScreen() {
-  const { jobs, error, refresh, enqueue, enqueueBatch, cancel } = useDownloads();
+  const { jobs, error, refresh, enqueue, enqueueBatch } = useDownloads();
   const insets = useSafeAreaInsets();
   const columns = useListColumns();
   const t = useT();
@@ -23,12 +29,15 @@ export default function YouTubeScreen() {
   const styles = useStyles();
   const pressed = usePressed();
   const said = t.search;
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; q?: string }>();
   const [mode, setMode] = useState<'discover' | 'videos' | 'playlist'>('discover');
   useEffect(() => { if (params.mode === 'discover') setMode('discover'); }, [params.mode]);
   const [query, setQuery] = useState('');
+  // A song another screen could not find a recording of, handed over to be
+  // looked for by hand. Written into the box and left there: which of the
+  // results is the right one is the part that needed a person.
+  useEffect(() => { if (params.q) { setMode('videos'); setQuery(params.q); } }, [params.q]);
   const [results, setResults] = useState<YouTubeResult[]>([]);
-  const [showQueue, setShowQueue] = useState(false);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
   const [format, setFormat] = useState<AudioFormat>('mp3');
@@ -67,10 +76,12 @@ export default function YouTubeScreen() {
     const id = `search-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     searchId.current = id;
     setSearching(true);
+    // Chosen out here: the React Compiler cannot yet read a choice made
+    // inside a `try`, and leaves the whole screen alone for one.
+    const playlist = mode === 'playlist';
     try {
-      const videos = await (mode === 'playlist'
-        ? downloads.playlistAsync(text, id)
-        : downloads.searchAsync(text, id));
+      const videos = await lookUp(playlist, text, id);
+      // Superseded or stopped, and whoever did that has already tidied up.
       if (searchId.current !== id) return;
       if (cache.size >= 10) cache.delete(cache.keys().next().value!);
       cache.set(cacheKey, { at: Date.now(), videos });
@@ -78,9 +89,11 @@ export default function YouTubeScreen() {
       setSearched(true);
     } catch (failure) {
       if (searchId.current === id) setMessage(youtubeError(failure, said.failed.search, t));
-    } finally {
-      if (searchId.current === id) { searchId.current = null; setSearching(false); }
     }
+    // After the catch and not in a `finally`, which the React Compiler will
+    // not compile a component for having. Nothing above is thrown onwards, so
+    // it says the same thing; the one way out early does its own tidying.
+    if (searchId.current === id) { searchId.current = null; setSearching(false); }
   };
 
   const add = async (video: YouTubeVideo, choice: AudioFormat = format) => {
@@ -92,7 +105,8 @@ export default function YouTubeScreen() {
       await enqueue(video, choice);
     }
     catch (failure) { setMessage(youtubeError(failure, said.failed.queue, t)); }
-    finally { addingRef.current = false; setAdding(null); }
+    addingRef.current = false;
+    setAdding(null);
   };
 
   const addPlaylist = async () => {
@@ -102,45 +116,14 @@ export default function YouTubeScreen() {
     addingRef.current = true;
     setAdding('playlist');
     setMessage(null);
+    const name = selected[0].sourcePlaylist?.name ?? said.unnamedPlaylist;
     try {
       await enqueueBatch(selected, format);
-      setMessage(said.listCreated(selected[0].sourcePlaylist?.name ?? said.unnamedPlaylist));
+      setMessage(said.listCreated(name));
     } catch (failure) { setMessage(youtubeError(failure, said.failed.queuePlaylist, t)); }
-    finally { addingRef.current = false; setAdding(null); }
+    addingRef.current = false;
+    setAdding(null);
   };
-
-  const cancelJob = async (id: string) => {
-    try { await cancel(id); }
-    catch (failure) { setMessage(youtubeError(failure, said.failed.cancel, t)); }
-  };
-
-  const active = jobs.filter(isActive).reverse();
-  const recent = jobs.filter((job) => !isActive(job)).slice(0, 5);
-
-  const renderJob = (job: DownloadJob, index: number) => (
-    <View key={job.id} style={[styles.job, index === 0 && styles.firstJob]}>
-      <View style={styles.flex}>
-        <Text numberOfLines={1} style={styles.title}>{job.video.title}</Text>
-        <Text style={job.status === 'failed' ? styles.bad : styles.muted}>
-          {said.jobLine(statusLabel(job, t), job.format === 'mp3')}
-        </Text>
-        {jobError(job) ? <Text style={styles.bad}>{jobError(job)}</Text> : null}
-        {isActive(job) ? <View style={styles.progressTrack}>
-          <View style={[styles.progress, { width: `${job.progress}%` }]} />
-        </View> : null}
-      </View>
-      {isActive(job) ? (
-        <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.cancelLabel(job.video.title)}
-          disabled={job.status === 'saving' || job.status === 'cancelling'}
-          onPress={() => void cancelJob(job.id)} style={styles.smallButton}>
-          <Text style={styles.muted}>{job.status === 'saving' || job.status === 'cancelling' ? '…' : t.common.cancel}</Text>
-        </Pressable>
-      ) : job.status !== 'done' ? (
-        <Pressable android_ripple={pressed} accessibilityRole="button" disabled={adding !== null} style={styles.smallButton}
-          onPress={() => void add(job.video, job.format)}><Text style={styles.link}>{t.common.retry}</Text></Pressable>
-      ) : null}
-    </View>
-  );
 
   if (!downloads) return (
     <View style={styles.unavailable}>
@@ -220,18 +203,8 @@ export default function YouTubeScreen() {
             <Text style={styles.hint}>{said.listedHint}</Text>
           </> : null}
         </>}
-        ListFooterComponent={<>
-          {active.length || recent.length ? <View style={styles.queue}>
-            <Text style={styles.section}>{t.format.upper(said.downloads(active.length))}</Text>
-            {/* One list, so the rule between rows knows which one is first. */}
-            <View style={styles.card}>
-              {[...(showQueue ? active : active.slice(0, 5)), ...recent].map(renderJob)}
-            </View>
-            {active.length > 5 ? <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.smallButton} onPress={() => setShowQueue((value) => !value)}>
-              <Text style={styles.link}>{showQueue ? said.showFewer : said.showAll(active.length)}</Text>
-            </Pressable> : null}
-          </View> : null}
-        </>}
+        // The queue has a screen of its own; this is the way to it.
+        ListFooterComponent={<QueueLink />}
         ListEmptyComponent={!searching ? <View style={styles.empty}>
           <Text style={styles.emptyText}>{searched ? said.empty.none : mode === 'playlist' ? said.empty.playlist : said.empty.videos}</Text>
         </View> : null}
@@ -262,7 +235,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   discoverTab: { paddingHorizontal: 16, minHeight: 48, justifyContent: 'center', borderRadius: 12, ...outlined(c) },
   downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: 5 },
   downloadHeading: { color: c.textFaint, fontSize: 10, textAlign: 'center', letterSpacing: 1 },
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   resultColumns: { gap: 8 },
   // Without this a row keeps its full width and the pair overflows the screen.
   resultShared: { flex: 1, minWidth: 0 },
@@ -276,11 +249,11 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   bad: { color: c.danger, fontSize: 12, lineHeight: 18, marginVertical: 8 },
   searchRow: { flexDirection: 'row', gap: 8 },
   input: { flex: 1, minWidth: 0, backgroundColor: c.surface, borderRadius: 12, color: c.text, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14.5, minHeight: 48, ...outlined(c) },
-  searchButton: { backgroundColor: c.primary, paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', minHeight: 48 },
+  searchButton: { backgroundColor: c.primary, paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', minHeight: 48, ...outlined(c, c.primary) },
   // Dimmed rather than faded: a translucent white slab is still the brightest
   // thing on the screen, which is the wrong thing for a button that cannot
   // be pressed yet.
-  searchButtonOff: { backgroundColor: c.surfaceRaised },
+  searchButtonOff: { backgroundColor: c.surfaceRaised, ...outlined(c) },
   darkTextOff: { color: c.textDisabled, fontWeight: '600' },
   darkText: { color: c.onPrimary, fontWeight: '600' },
   disabled: { opacity: 0.45 },
@@ -301,13 +274,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   searching: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16 },
   smallButton: { padding: 12, minHeight: 44, justifyContent: 'center' },
   link: { color: c.text, fontSize: 13, fontWeight: '500' },
-  queue: { marginBottom: 24, marginTop: 10 },
   section: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginTop: 16, marginBottom: 10, marginLeft: 4 },
-  card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
-  firstJob: { borderTopWidth: 0 },
-  job: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
-  progressTrack: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, marginTop: 5, overflow: 'hidden' },
-  progress: { height: 3, backgroundColor: c.text },
   result: { flexDirection: 'row', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
   // No colour of the theme's on the picture itself; see TrackRow's `art`.
   thumbnail: { width: 112, height: 76, borderRadius: 8 },
@@ -315,5 +282,5 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   downloadButton: { alignSelf: 'flex-start', paddingVertical: 12, minHeight: 44 },
   empty: { paddingTop: 22, paddingBottom: 4, alignItems: 'center' },
   emptyText: { color: c.textFaint, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-  unavailable: { flex: 1, backgroundColor: c.bg, padding: 24, justifyContent: 'center', gap: 10 },
+  unavailable: { flex: 1, ...scene(c), padding: 24, justifyContent: 'center', gap: 10 },
 }));

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import JukeboxAudio, {
@@ -16,7 +16,7 @@ import JukeboxAudio, {
 } from '../../modules/jukebox-audio';
 import { Slider } from '../components/Fader';
 import { useT, type Strings } from '../lib/i18n/index';
-import { makeStyles, outlined, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
 
 /**
  * A change the player would not take, said in the log.
@@ -265,7 +265,7 @@ function seconds(milliseconds: number, t: Strings): string {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   centred: { alignItems: 'center', justifyContent: 'center', padding: 32 },
   content: { paddingTop: 14 },
 

@@ -7,20 +7,21 @@ import {
   Easing,
   FlatList,
   Keyboard,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
   type LayoutChangeEvent,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 
 import { PlayIcon } from '../components/Icons';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
 import { SearchField } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
@@ -30,6 +31,7 @@ import { NowPlayingBar } from '../components/NowPlayingBar';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { BROWSE_ROW_HEIGHT, BrowseRow } from '../components/BrowseRow';
 import { AlbumListing } from '../components/AlbumListing';
+import { AlbumMenu, WITHOUT_SELECT, type AlbumAction } from '../components/AlbumMenu';
 import { CoverFlow, type Rack, type Sleeve } from '../components/CoverFlow';
 import { albumsOf, type Album } from '../lib/media/albums';
 import {
@@ -468,14 +470,64 @@ export default function LibraryScreen() {
     [router, selecting, view]
   );
 
-  const onHeadingHeld = useCallback((id: string) => {
+  const chooseUnder = useCallback((id: string) => {
     const under = headingsRef.current.find((heading) => heading.id === id)?.tracks;
     if (!under) return;
-    // The box may be mid-word; what was typed has done its narrowing.
-    Keyboard.dismiss();
     setSelecting(true);
     setSelected((held) => withGroupToggled(held, under));
   }, []);
+
+  /*
+    An album held down opens its menu, and choosing is the first thing on it.
+    An artist or a folder still goes straight to choosing, having nothing else
+    to offer — and so does an album once choosing has begun, when holding is
+    only a slower tap.
+  */
+  const [albumMenu, setAlbumMenu] = useState<{
+    key: string;
+    name: string;
+    detail: string;
+    /** Held in the rack, where there is nothing to choose with. */
+    racked: boolean;
+  } | null>(null);
+  const closeAlbumMenu = useCallback(() => setAlbumMenu(null), []);
+
+  const onHeadingHeld = useCallback(
+    (id: string) => {
+      // The box may be mid-word; what was typed has done its narrowing.
+      Keyboard.dismiss();
+      if (view !== 'albums' || selecting) return chooseUnder(id);
+      const heading = headingsRef.current.find((entry) => entry.id === id);
+      if (heading) {
+        setAlbumMenu({ key: id, name: heading.title, detail: heading.detail, racked: false });
+      }
+    },
+    [chooseUnder, selecting, view]
+  );
+
+  const onSleeveHeld = useCallback(
+    (album: Album) =>
+      setAlbumMenu({
+        key: album.key,
+        name: album.name,
+        detail: [album.artist, t.common.tracks(album.tracks.length)].filter(Boolean).join(' · '),
+        racked: true,
+      }),
+    [t]
+  );
+
+  const findRest = useCallback(
+    (album: string) => router.push({ pathname: '/album-rest', params: { album } }),
+    [router]
+  );
+
+  const runAlbumAction = (action: AlbumAction) => {
+    const key = albumMenu?.key;
+    setAlbumMenu(null);
+    if (key == null) return;
+    if (action === 'select') chooseUnder(key);
+    else findRest(key);
+  };
 
   /*
     Each row is told its own answer — none, some, all — and not handed the
@@ -494,11 +546,12 @@ export default function LibraryScreen() {
         cover={item.cover}
         shared={columns > 1}
         mark={selecting ? markOf(item.tracks, selected) : undefined}
+        held={view === 'albums' ? t.library.albumMenu : undefined}
         onPress={onHeadingPress}
         onLongPress={onHeadingHeld}
       />
     ),
-    [columns, onHeadingHeld, onHeadingPress, selected, selecting]
+    [columns, onHeadingHeld, onHeadingPress, selected, selecting, t, view]
   );
 
   /** Each matched tag with the tracks carrying it, gathered once per search. */
@@ -655,7 +708,7 @@ export default function LibraryScreen() {
     shows tracks has the same one of. The picker is borrowed for a whole
     selection as well, so what it did is said and the selection ended here.
   */
-  const { open: openMenu, addToList, erase, element: menuElement } = useTrackMenu({
+  const { open: openMenu, addToList, erase, element: menuElement, veiled: menuVeiled } = useTrackMenu({
     onChanged: () => void load(),
     onAdded: (message) => {
       setNote(message);
@@ -980,7 +1033,8 @@ export default function LibraryScreen() {
         keeping clear of the clock is the header, and that asks for itself.
       */
       edges={landscape ? ['right'] : ['top', 'left', 'right']}>
-      <View style={landscape ? styles.sideways : styles.upright}>
+      {/* All of the screen the list picker is laid over, when it is. */}
+      <Behind veiled={menuVeiled} style={landscape ? styles.sideways : styles.upright}>
         <View
           ref={middle}
           // Asked where it is when a record opens, so it has to be a view of
@@ -1149,7 +1203,7 @@ export default function LibraryScreen() {
       </View>
 
       {racked ? (
-        <CoverFlow ref={shelf} albums={albums} onOpen={openAlbum} />
+        <CoverFlow ref={shelf} albums={albums} onOpen={openAlbum} onHold={onSleeveHeld} />
       ) : grouped ? (
         <FlatList
           data={shownHeadings}
@@ -1316,6 +1370,7 @@ export default function LibraryScreen() {
             onPlay={playFrom}
             // Its own record is the one place "go to album" has nowhere to go.
             onLongPress={openFromAlbum}
+            onFindRest={findRest}
             onClosed={closeAlbum}
           />
         ) : null}
@@ -1323,7 +1378,7 @@ export default function LibraryScreen() {
         {/* The bar becomes a panel down the right, so the middle keeps its
             width and the height goes to the list. */}
         <NowPlayingBar column={landscape} />
-      </View>
+      </Behind>
 
       <TagPrompt
         visible={tagging}
@@ -1349,12 +1404,18 @@ export default function LibraryScreen() {
       />
 
       {menuElement}
+      <AlbumMenu
+        album={albumMenu}
+        hidden={albumMenu?.racked ? WITHOUT_SELECT : undefined}
+        onSelect={runAlbumAction}
+        onClose={closeAlbumMenu}
+      />
     </SafeAreaView>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   upright: { flex: 1 },
   sideways: { flex: 1, flexDirection: 'row' },
   middle: { flex: 1, minWidth: 0 },

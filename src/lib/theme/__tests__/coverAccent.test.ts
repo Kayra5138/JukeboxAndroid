@@ -148,7 +148,7 @@ describe('the stops of a cover that was read', () => {
 
 describe('the theme from the cover', () => {
   const themed = (read: Parameters<typeof colouredStops>[0]) =>
-    cover.dynamic!.resolve({ scheme: 'dark', cover: colouredStops(read), system: null }).colours;
+    cover.dynamic!.resolve({ scheme: 'dark', cover: colouredStops(read), system: null, custom: null }).colours;
 
   it('keeps the default accent for a grey cover', () => {
     assert.equal(themed(READ.grey).accent, neutrals.accent);

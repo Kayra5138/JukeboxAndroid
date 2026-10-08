@@ -1,18 +1,20 @@
 import { useCallback, useRef, useState } from 'react';
-import { Image } from 'expo-image';
+import { Image } from './Picture';
 import { useFocusEffect } from 'expo-router';
-import { Animated, BackHandler, Easing, StyleSheet, View } from 'react-native';
+import { Animated, BackHandler, Easing, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Sleeve } from './CoverFlow';
 import { LIST_COVER_SIZE, ListHeading } from './ListHeading';
 import { PlaylistCover } from './PlaylistCover';
+import { Pressable } from './Pressable';
 import { QueueList } from './QueueList';
+import { useT } from '../lib/i18n/index';
 import type { Album } from '../lib/media/albums';
 import { useTrackArtwork } from '../lib/media/artwork';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { shuffled } from '../lib/media/shuffle';
-import { makeStyles } from '../lib/theme/index';
+import { makeStyles, page } from '../lib/theme/index';
 import { motionReduced } from '../lib/ui/motion';
 
 /** How long a sleeve takes to become its record, and to go back. */
@@ -59,6 +61,7 @@ export function AlbumListing({
   top,
   onPlay,
   onLongPress,
+  onFindRest,
   onClosed,
 }: {
   album: Album;
@@ -79,10 +82,16 @@ export function AlbumListing({
    * leaves the record open under it.
    */
   onLongPress?: (track: EnrichedTrack) => void;
+  /**
+   * Asked for the tracks of this record that are not here. Goes to a screen of
+   * its own, with the record left open under it to come back to.
+   */
+  onFindRest?: (album: string) => void;
   /** Told once it has gone, which is when it can be taken down. */
   onClosed: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const t = useT();
   const styles = useStyles();
   const artwork = useTrackArtwork(album.tracks[0] ?? null);
 
@@ -312,8 +321,17 @@ export function AlbumListing({
                 onPlay={() => onPlay(album.tracks, 0)}
                 // Shuffled here rather than by the player's shuffle, so the
                 // queue itself is in the new order.
-                onShuffle={() => onPlay(shuffled(album.tracks), 0)}
-              />
+                onShuffle={() => onPlay(shuffled(album.tracks), 0)}>
+                {onFindRest ? (
+                  // Quiet, under the two buttons: where the record's own page
+                  // keeps the things that are not playing it.
+                  <View style={styles.links}>
+                    <Pressable onPress={() => onFindRest(album.key)}>
+                      <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </ListHeading>
             </View>
           }
           footer={<View style={{ paddingBottom: insets.bottom + 32 }} />}
@@ -340,7 +358,11 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   // Clipped, so a sleeve leaving from a cover scrolled off the top is not
   // drawn over whatever is above the library.
   frame: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
-  page: { flex: 1, backgroundColor: c.bg },
+  /*
+    A page of its own and not the tabs' seen through: it is laid over the
+    library's heading and the rack, and has to hide them.
+  */
+  page: { flex: 1, ...page(c) },
   // The rack's own sleeve, to the corner and the colour behind the picture.
   sleeve: {
     position: 'absolute',
@@ -351,4 +373,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     backgroundColor: c.surfaceRaised,
   },
   art: { width: '100%', height: '100%' },
+  // As the record's own page draws them.
+  links: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, paddingTop: 16 },
+  link: { color: c.accent, fontSize: 13.5 },
 }));

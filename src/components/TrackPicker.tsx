@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Image } from 'expo-image';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from './Picture';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SearchField } from './SearchField';
@@ -9,6 +10,7 @@ import { useTrackArtwork } from '../lib/media/artwork';
 import { search } from '../lib/media/search';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { scrimOf } from '../lib/theme/Veil';
 
 /**
  * Picking tracks out of the library to put somewhere.
@@ -162,7 +164,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
   },
   sheet: {
     position: 'absolute',
@@ -209,6 +211,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     backgroundColor: c.primary,
     borderRadius: 11,
     paddingVertical: 12,
+    ...outlined(c, c.primary),
   },
   actionOff: { opacity: 0.35 },
   actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },

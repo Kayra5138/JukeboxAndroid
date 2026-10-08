@@ -1,6 +1,7 @@
 import { memo } from 'react';
-import { Image } from 'expo-image';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from './Picture';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';

@@ -1,3 +1,4 @@
+import { finishOf } from './effects.ts';
 import type { Palette } from './tokens.ts';
 
 /**
@@ -24,7 +25,12 @@ export function outlineWidth(c: Palette): number {
   return /^#[0-9a-f]{6}00$/i.test(c.outline) ? 0 : OUTLINE_WIDTH;
 }
 
-type Edge = { borderWidth?: number; borderColor?: string };
+type Edge = {
+  borderWidth?: number;
+  borderColor?: string;
+  experimental_backgroundImage?: string;
+  boxShadow?: string;
+};
 
 /** Nothing, and always the same nothing, so that a style spread from it is as it was. */
 const NO_EDGE: Edge = Object.freeze({});
@@ -47,7 +53,30 @@ const NO_EDGE: Edge = Object.freeze({});
  */
 export function outlined(c: Palette, colour: string = c.outline): Edge {
   const width = outlineWidth(c);
-  return width > 0 ? { borderWidth: width, borderColor: colour } : NO_EDGE;
+  if (width === 0) return NO_EDGE;
+  return finished(c, { borderWidth: width, borderColor: colour });
+}
+
+/**
+ * An edge with the rest of what a theme of glass gives a surface: the light
+ * across its top and what it casts.
+ *
+ * Here, and not asked for beside it, because everything that is a surface
+ * already comes this way to be given its edge, and a finish is the same
+ * question — how is this thing told from what it lies on — answered by a
+ * theme that has more to answer with. Such a theme always draws an edge: the
+ * rim is the first thing glass has. So a theme with no edge has no finish,
+ * and is still handed the empty object it always was.
+ */
+function finished(c: Palette, edge: Edge): Edge {
+  /*
+    An edge in no colour is room kept for one, round something that is not
+    there yet: a button that will be ringed when it is on. Nothing is told
+    from anything, and there is no surface to put a light across.
+  */
+  if (edge.borderColor === 'transparent') return edge;
+  const finish = finishOf(c);
+  return finish ? { ...edge, ...finish } : edge;
 }
 
 /** A border that is there and takes no room, as opposed to no border at all. */
@@ -73,5 +102,6 @@ const NO_ROOM: Edge = Object.freeze({ borderWidth: 0, borderColor: 'transparent'
  */
 export function outlinedClip(c: Palette, colour: string = c.outline): Edge {
   const width = outlineWidth(c);
-  return width > 0 ? { borderWidth: width, borderColor: colour } : NO_ROOM;
+  if (width === 0) return NO_ROOM;
+  return finished(c, { borderWidth: width, borderColor: colour });
 }

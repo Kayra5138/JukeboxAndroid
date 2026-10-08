@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image } from 'expo-image';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { Image } from './Picture';
 import { useRouter } from 'expo-router';
 import {
   Animated,
   BackHandler,
   PanResponder,
-  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,6 +31,7 @@ import { useT } from '../lib/i18n/index';
 import { useCoveredByRoute } from '../lib/player/overlayRoutes';
 import { LyricsView } from './LyricsView';
 import { QueueList } from './QueueList';
+import { CoverPage } from './CoverPage';
 import { useTrackMenu } from './useTrackMenu';
 import { creditReader } from '../lib/db/credits';
 import { albumKey } from '../lib/media/albums';
@@ -41,10 +42,12 @@ import { readSetting, SETTINGS } from '../lib/db/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import {
   usePlayerActions,
+  playerPositionNow,
   usePlayerPosition,
   usePlayerState,
 } from '../lib/player/PlayerProvider';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, page, useColours, usePressed } from '../lib/theme/index';
+import { Behind } from '../lib/theme/Veil';
 
 /*
   How far outside its picture a transport button can still be pressed, which
@@ -225,6 +228,34 @@ function Scrubber({
   );
 }
 
+/*
+  The two things on the sheet that show where the track has got to, each
+  following the position for itself.
+
+  The sheet used to follow it and hand it down, and so was drawn again from
+  the top four times a second for as long as it was open -- under a pushed
+  route as well, where none of it could be seen. `live` is false there, and
+  nothing is asked of the player at all.
+*/
+function LiveScrubber({
+  live,
+  fileDurationSec,
+  onSeek,
+}: {
+  live: boolean;
+  /** The file's own length, until the player reports one: it cannot before the track is prepared. */
+  fileDurationSec: number;
+  onSeek: (seconds: number) => void;
+}) {
+  const { positionSec, durationSec } = usePlayerPosition(live);
+  return <Scrubber positionSec={positionSec} durationSec={durationSec || fileDurationSec} onSeek={onSeek} />;
+}
+
+function LiveLyrics({ live, ...rest }: { live: boolean } & Omit<ComponentProps<typeof LyricsView>, 'positionSec'>) {
+  const { positionSec } = usePlayerPosition(live);
+  return <LyricsView {...rest} positionSec={positionSec} />;
+}
+
 /**
  * The now-playing screen, drawn over the library rather than routed to.
  *
@@ -257,7 +288,6 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     moveInQueue,
     removeFromQueue,
   } = usePlayerActions();
-  const { positionSec, durationSec } = usePlayerPosition();
   const artwork = useTrackArtwork(current);
   const { width, height } = useWindowDimensions();
   /*
@@ -429,9 +459,12 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const [step] = useState(() => stepFrom(readSetting(SETTINGS.jumpSeconds)));
   const jump = useCallback(
     (by: number) => {
+      // Asked for at the press, since nothing here follows the position:
+      // the bar below does, and what it last read is what this starts from.
+      const { positionSec, durationSec } = playerPositionNow();
       void seekTo(jumpTo(positionSec, by, durationSec || current?.durationSec || 0));
     },
-    [current?.durationSec, durationSec, positionSec, seekTo]
+    [current?.durationSec, seekTo]
   );
 
   const album = current?.album?.trim() || null;
@@ -529,6 +562,10 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
       onClose={() => setPlaybackOpen(false)} />
   );
 
+  // The two sheets drawn in here and not in windows of their own: while either
+  // is up, the player under it is what goes out of focus.
+  const veiled = playbackOpen || menu.veiled;
+
   const playerColumn = (
       <View
         style={[
@@ -581,9 +618,9 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           */}
           <View style={landscape ? styles.artLayer : undefined}>
           {showLyrics && !landscape ? (
-            <LyricsView
+            <LiveLyrics
+              live={!covered}
               state={lyrics}
-              positionSec={positionSec}
               height={artSize}
               onSeek={onSeek}
               trackId={current.id}
@@ -668,13 +705,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
         {error ? <Text style={styles.error}>{error.message}</Text> : null}
 
-        <Scrubber
-          positionSec={positionSec}
-          // The file's own length until the player reports one of its own,
-          // which it cannot do before the track is prepared.
-          durationSec={durationSec || current.durationSec}
-          onSeek={onSeek}
-        />
+        <LiveScrubber live={!covered} fileDurationSec={current.durationSec} onSeek={onSeek} />
 
         <View style={[styles.transport, landscape && styles.transportWide]}>
           <Pressable
@@ -802,7 +833,9 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         */
         key="wide"
         style={[styles.screen, { transform: [{ translateY: slide }] }]}>
-        <View
+        <CoverPage uri={artwork} />
+        <Behind
+          veiled={veiled}
           style={[
             styles.columns,
             /*
@@ -842,9 +875,9 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
                 setSideBox((box) => (box === measured ? box : measured));
               }}>
               {showLyrics ? (
-                <LyricsView
+                <LiveLyrics
+                  live={!covered}
                   state={lyrics}
-                  positionSec={positionSec}
                   height={sideBox}
                   onSeek={onSeek}
                   trackId={current.id}
@@ -855,7 +888,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               )}
             </View>
           </View>
-        </View>
+        </Behind>
         {settings}
         {menu.element}
       </Animated.View>
@@ -864,6 +897,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Animated.View key="tall" style={[styles.screen, { transform: [{ translateY: slide }] }]}>
+      <CoverPage uri={artwork} />
+      <Behind veiled={veiled} style={styles.behind}>
       {playerColumn}
 
       {/* Holds the queue at the bottom of the screen until it is pulled up. */}
@@ -902,6 +937,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
         <Animated.View style={{ height: queueHeight }}>{queueList}</Animated.View>
       </View>
+      </Behind>
       {settings}
       {menu.element}
     </Animated.View>
@@ -909,7 +945,10 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...page(c) },
+  // Upright, everything but the sheets laid over the player: the column the
+  // screen itself was, one step further in.
+  behind: { flex: 1, minHeight: 0 },
   centered: { alignItems: 'center', justifyContent: 'center' },
 
   player: { paddingHorizontal: 20, paddingBottom: 12, gap: 16 },

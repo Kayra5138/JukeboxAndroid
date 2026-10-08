@@ -1,7 +1,8 @@
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NowPlayingBar } from '../components/NowPlayingBar';
@@ -18,7 +19,8 @@ import {
 import { tagCounts, trackIdsWithTag, type TagCount } from '../lib/db/tags';
 import { useT } from '../lib/i18n/index';
 import { scanLibrary } from '../lib/media/library';
-import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, usePressed } from '../lib/theme/index';
+import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
 import type { Track } from '../lib/types';
 
@@ -159,7 +161,8 @@ export default function PlaylistsScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={landscape ? styles.sideways : styles.upright}>
+      {/* What the sheet of tags is laid over: all of the screen but it. */}
+      <Behind veiled={fromTags} style={landscape ? styles.sideways : styles.upright}>
       <ScrollView
         style={styles.middle}
         contentContainerStyle={[
@@ -264,7 +267,7 @@ export default function PlaylistsScreen() {
       {/* Starting a track and being left looking at the list reads as the tap
           having gone nowhere. */}
       <NowPlayingBar column={landscape} />
-      </View>
+      </Behind>
 
       <TextPrompt
         visible={naming}
@@ -322,7 +325,7 @@ export default function PlaylistsScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   upright: { flex: 1 },
   sideways: { flex: 1, flexDirection: 'row' },
   /* Takes what the rail and the player leave, rather than only what it needs. */
@@ -336,6 +339,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     backgroundColor: c.primary,
     borderRadius: 11,
     paddingVertical: 13,
+    ...outlined(c, c.primary),
   },
   newLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
   secondary: {
@@ -374,7 +378,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   empty: { color: c.textFaint, fontSize: 13, lineHeight: 20, paddingVertical: 10 },
 
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
   sheet: {
     position: 'absolute',
     left: 0,

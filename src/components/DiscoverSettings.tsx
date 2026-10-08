@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useDiscover } from '../lib/discover/DiscoverProvider';
 import { configureDiscover, undoDiscover } from '../lib/discover/engine';
 import { scheduleDiscover } from '../lib/discover/background';

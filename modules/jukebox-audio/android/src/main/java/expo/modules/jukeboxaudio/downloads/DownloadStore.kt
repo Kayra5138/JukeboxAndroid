@@ -4,27 +4,34 @@ import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
 import android.util.AtomicFile
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/** A durable queue independent of the React screen and React context. */
+/**
+ * A durable queue independent of the React screen and React context.
+ *
+ * The rules of it — whose turn it is, what may be moved where — are
+ * [DownloadQueue]'s, which knows nothing of the phone. This is the phone's
+ * half: the files the queue is kept in, the library a finished job is looked
+ * for in, and one lock around all of it.
+ */
 object DownloadStore {
-  val activeStates = setOf("queued", "preparing", "downloading", "converting", "saving", "cancelling")
+  val activeStates = DownloadQueue.activeStates
   private var loaded = false
-  private var batching = false
-  private val jobs = mutableListOf<JSONObject>()
+  private val queue = DownloadQueue()
+  private val jobs get() = queue.jobs
   private lateinit var storage: AtomicFile
+  /** Whether the queue is paused and when it last worked. Beside the jobs and not among them, so the jobs' file stays a list. */
+  private lateinit var state: AtomicFile
 
   @Synchronized
   fun init(context: Context) {
     if (loaded) return
     storage = AtomicFile(File(context.noBackupFilesDir, "youtube-downloads.json"))
-    if (storage.baseFile.exists()) {
-      val array = JSONArray(storage.openRead().bufferedReader().use { it.readText() })
-      for (index in 0 until array.length()) jobs.add(array.getJSONObject(index))
-    }
+    state = AtomicFile(File(context.noBackupFilesDir, "youtube-queue.json"))
+    if (storage.baseFile.exists()) queue.read(storage.openRead().bufferedReader().use { it.readText() })
+    runCatching { queue.readState(state.openRead().bufferedReader().use { it.readText() }) }
     /*
       Jobs left behind by the FLAC source, which there is no longer an engine
       for. Dropped rather than kept, because their ids are not YouTube ids:
@@ -35,15 +42,10 @@ object DownloadStore {
     */
     jobs.removeAll { it.optJSONObject("video")?.optString("source") == "flac" }
     // Android may have killed the worker. Never pretend an interrupted job is
-    // still running, and never start network work until the user retries it.
-    jobs.filter { it.optString("status") in activeStates }.forEach {
-      if (it.optString("status") == "saving" && recoverPublication(context, it)) {
-        it.put("status", "done").put("progress", 100)
-        fail(it, null)
-      } else {
-        fail(it.put("status", "failed"), Failed(Failure.INTERRUPTED))
-      }
-    }
+    // still running. What was only waiting still is, and nothing is started
+    // from here: that is for whoever opens the app, or asks for something.
+    queue.recover { recoverPublication(context, it) }
+    queue.changed = false
     persist()
     loaded = true
     // No worker can exist before this process-local store has been initialized.
@@ -51,13 +53,52 @@ object DownloadStore {
   }
 
   private fun persist() {
-    if (batching) return
     val stream = storage.startWrite()
     try {
-      stream.write(JSONArray(jobs).toString().toByteArray(Charsets.UTF_8))
+      stream.write(queue.written().toByteArray(Charsets.UTF_8))
       storage.finishWrite(stream)
     } catch (error: Exception) { storage.failWrite(stream); throw error }
   }
+
+  private fun persistState() {
+    val stream = state.startWrite()
+    try {
+      stream.write(queue.stateWritten().toByteArray(Charsets.UTF_8))
+      state.finishWrite(stream)
+    } catch (error: Exception) { state.failWrite(stream); throw error }
+  }
+
+  /**
+   * Writes down whatever [change] changed, and only if it changed anything:
+   * a download's percentage is asked about many times a second and is not
+   * worth a write.
+   */
+  private inline fun <T> kept(change: () -> T): T {
+    try { return change() }
+    finally {
+      val jobsChanged = queue.changed
+      val stateChanged = queue.stateChanged
+      queue.changed = false
+      queue.stateChanged = false
+      // Whoever stands in [awaitFind] is waiting for exactly this.
+      if (jobsChanged || stateChanged) monitor.notifyAll()
+      if (jobsChanged) persist()
+      // When the queue last worked only spaces out Discover's own. Losing it costs one early start.
+      if (stateChanged) runCatching { persistState() }
+    }
+  }
+
+  /** This, as the thing its own lock is: what [awaitFind] waits on, letting go of the lock while it does. */
+  private val monitor get() = this as Object
+  /** How many callers stand in [awaitFind] now. */
+  private var finders = 0
+
+  private fun outside(context: Context) = Outside(
+    handBusy = YouTubeEngine.gate.handBusy,
+    finderWaiting = finders > 0,
+    searching = YouTubeEngine::searching,
+    wifi = { DiscoverFiles.networkAllowed(context)["wifi"] == true }
+  )
 
   /**
    * The jobs, newest first, each with `errorText` beside its `error`.
@@ -68,74 +109,97 @@ object DownloadStore {
    * stored, so a job that failed yesterday in English is read in Turkish
    * today. Where the failure has no sentence of its own — the extractor's
    * last line — it is the same as `error`, since there is nothing else to say.
+   *
+   * Newest first is last first: the list is kept in the order it is worked
+   * through, so among the jobs still waiting the next to be fetched is the
+   * last of them here.
    */
   @Synchronized
-  fun list(): List<Map<String, Any?>> = jobs.asReversed().map { job ->
-    YouTubeData.map(job) + ("errorText" to errorText(job))
-  }
+  fun list(): List<Map<String, Any?>> = jobs.asReversed().map(::said)
+
+  private fun said(job: JSONObject): Map<String, Any?> = YouTubeData.map(job) + ("errorText" to errorText(job))
 
   private fun errorText(job: JSONObject): String? {
     if (job.isNull("error")) return null
     val error = job.optString("error")
     // A job from before there were codes is known by its sentence instead.
-    val failure = Failure.of(job.optString("errorCode")) ?: Failure.saying(error) ?: return error
+    val failure = Failure.of(job.text("errorCode")) ?: Failure.saying(error) ?: return error
     return if (error == failure.english) failure.said else error
   }
 
-  private fun fail(job: JSONObject, failed: Failed?) {
-    job.put("error", failed?.english ?: JSONObject.NULL)
-      .put("errorCode", failed?.failure?.code ?: JSONObject.NULL)
-  }
+  @Synchronized
+  fun enqueue(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String? = null): String =
+    kept { queue.enqueue(video, format, folder, discoverKey) { exists(context, it) } }
 
   @Synchronized
-  fun enqueue(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String? = null): String {
-    val id = video.getString("id")
-    YouTubeData.url(id)
-    require(format in setOf("mp3", "original"))
-    val destination = YouTubeData.folder(folder)
-    if (discoverKey != null) require(discoverKey.matches(Regex("[a-fA-F0-9-]{36}")))
-    val existing = jobs.lastOrNull { it.getJSONObject("video").getString("id") == id &&
-      it.optString("discoverKey", "") == (discoverKey ?: "") &&
-      (it.optString("status") in activeStates || it.optString("status") == "done") &&
-      (discoverKey == null || it.optString("status") != "cancelling") }
-    if (existing != null) {
-      if (existing.optString("status") != "done" || exists(context, existing)) return existing.getString("id")
-      existing.put("status", "missing").put("trackId", JSONObject.NULL)
-    }
-    if (jobs.count { it.optString("status") in activeStates } >= 500) throw YouTubeTrouble(Failure.QUEUE_FULL)
-    val jobId = UUID.randomUUID().toString()
-    jobs.add(JSONObject().put("id", jobId).put("video", video).put("format", format)
-      .put("discoverKey", discoverKey ?: JSONObject.NULL).put("folder", destination).put("status", "queued").put("progress", 0)
-      .put("trackId", JSONObject.NULL).put("error", JSONObject.NULL).put("described", false))
-    persist()
-    return jobId
-  }
+  fun enqueueBatch(context: Context, videos: List<JSONObject>, format: String, folder: String): List<String> =
+    kept { queue.enqueueBatch(videos, format, folder) { exists(context, it) } }
 
   @Synchronized
-  fun enqueueBatch(context: Context, videos: List<JSONObject>, format: String, folder: String): List<String> {
-    if (videos.size !in 1..500) throw YouTubeTrouble(Failure.BATCH)
-    val snapshot = jobs.map { JSONObject(it.toString()) }
-    batching = true
+  fun enqueueFind(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String?): String =
+    kept { queue.enqueueFind(video, format, folder, discoverKey) { exists(context, it) } }
+
+  /** How long [awaitFind] stands before answering that there is nothing yet. */
+  const val FIND_WAIT_MS = 25_000L
+
+  /**
+   * The job whose video may be looked for, waited for.
+   *
+   * JavaScript finds the videos, and JavaScript behind the screen has no
+   * timers to ask again by; what it does have is a call that has not come
+   * back. So this one stands here, off its thread, until a name's turn comes
+   * and is answered with that job. It is answered with null instead when
+   * there is no more to stand for — no name is waiting, or the queue is
+   * paused, or [alive] says whoever asked has gone — and after [FIND_WAIT_MS]
+   * whatever is the case, so that a caller that has gone without saying so
+   * holds a thread no longer than that. A caller that is still there asks
+   * again.
+   *
+   * It looks again four times a second as well as when it is woken: whose
+   * turn it is also turns on the clock and on a search made by hand, and
+   * neither of those wakes anybody.
+   *
+   * Standing here is what tells the worker there is somebody to do the
+   * finding: rule 6 of WHO GOES FIRST.
+   */
+  @Synchronized
+  fun awaitFind(context: Context, alive: () -> Boolean = { true }, patience: Long = FIND_WAIT_MS): Map<String, Any?>? {
+    val deadline = android.os.SystemClock.elapsedRealtime() + patience
+    finders++
     try {
-      val ids = videos.distinctBy { it.getString("id") }.map { enqueue(context, it, format, folder) }
-      batching = false
-      persist()
-      return ids
-    } catch (error: Exception) {
-      jobs.clear(); jobs.addAll(snapshot)
-      throw error
-    } finally { batching = false }
+      while (true) {
+        kept { queue.claimFind(outside(context)) }?.let { return said(it) }
+        val left = deadline - android.os.SystemClock.elapsedRealtime()
+        if (left <= 0 || queue.paused || !queue.namesWaiting() || !alive()) return null
+        monitor.wait(left.coerceAtMost(DownloadQueue.POLL_MS))
+      }
+    } finally { finders-- }
   }
+
+  @Synchronized fun isFinding(id: String): Boolean = queue.isFinding(id)
+  @Synchronized fun findingTitle(): String? = queue.findingTitle()
+  @Synchronized fun searched(id: String) = queue.searched(id)
+  @Synchronized fun requeueFind(id: String) = kept { queue.requeueFind(id) }
+  @Synchronized fun failFind(id: String, failed: Failed) = kept { queue.failFind(id, failed) }
+
+  @Synchronized
+  fun resolveFind(context: Context, id: String, video: JSONObject?) =
+    kept { queue.resolveFind(id, video) { exists(context, it) } }
+
+  /** A search somebody typed has ended. See [DownloadQueue.touch]. */
+  @Synchronized fun touched() { if (loaded) queue.touch() }
 
   @Synchronized
   fun recordPromotion(context: Context, id: String, trackId: String, folder: String, artworkUri: String?) {
     init(context)
-    if (jobs.any { it.optString("trackId") == trackId && it.isNull("discoverKey") }) return
+    if (jobs.any { it.text("trackId") == trackId && it.isNull("discoverKey") }) return
     val source = jobs.firstOrNull { it.getString("id") == id } ?: return
+    val now = System.currentTimeMillis()
     val receipt = JSONObject(source.toString())
     receipt.put("id", UUID.randomUUID().toString()).put("discoverKey", JSONObject.NULL)
       .put("trackId", trackId).put("folder", folder).put("status", "done").put("progress", 100)
       .put("described", false).put("artworkUri", artworkUri ?: JSONObject.NULL)
+      .put("createdAt", now).put("finishedAt", now).put("automatic", false).put("cleared", false)
     jobs.add(receipt); persist()
   }
 
@@ -184,11 +248,9 @@ object DownloadStore {
 
   @Synchronized
   fun complete(id: String, trackId: String) {
-    jobs.first { it.getString("id") == id }.put("trackId", trackId)
-      .put("status", "done").put("progress", 100).also { fail(it, null) }
     // Publication already succeeded. The saved reservation recovers this if
     // the disk fills while recording the final receipt.
-    runCatching { persist() }
+    runCatching { kept { queue.complete(id, trackId) } }
   }
 
   @Synchronized
@@ -200,54 +262,57 @@ object DownloadStore {
     if (changed) persist()
   }
 
+  /**
+   * What the worker is to do now: see WHO GOES FIRST in [DownloadQueue].
+   *
+   * A job that is handed over is fetched whether or not marking it could be
+   * written down. It is marked here, in this process, and a process that
+   * dies before the write finds it waiting, which is no worse.
+   */
   @Synchronized
-  fun takeNext(): JSONObject? {
-    val job = jobs.firstOrNull { it.optString("status") == "queued" } ?: return null
-    job.put("status", "preparing")
-    persist()
-    return JSONObject(job.toString())
+  fun next(context: Context): Next {
+    val next = queue.next(outside(context))
+    runCatching { kept {} }
+    return next
   }
 
+  /** Whether there is anything a worker could do or wait for now. */
   @Synchronized
-  fun prioritizeDiscovery(id: String) {
-    val job = jobs.firstOrNull { it.optString("id") == id && !it.isNull("discoverKey") } ?: return
-    // An explicit play request is allowed to use the current connection.
-    job.getJSONObject("video").put("discoverWifiOnly", false).put("discoverAutomatic", false)
-    if (job.optString("status") == "queued") { jobs.remove(job); jobs.add(0, job) }
-    persist()
-  }
+  fun wants(context: Context): Boolean = kept { queue.wants(outside(context)) }
 
   @Synchronized
-  fun takeById(id: String): JSONObject? {
-    val job = jobs.firstOrNull { it.optString("id") == id && it.optString("status") == "queued" } ?: return null
-    job.put("status", "preparing"); persist()
-    return JSONObject(job.toString())
-  }
+  fun prioritizeDiscovery(id: String) = kept { queue.prioritizeDiscovery(id) }
 
   @Synchronized
-  fun change(id: String, status: String, progress: Int = 0, error: Failed? = null, trackId: String? = null) {
-    val job = jobs.firstOrNull { it.optString("id") == id } ?: return
-    if (job.optString("status") == "cancelling" && status in setOf("downloading", "converting", "preparing")) return
-    val old = job.optString("status")
-    job.put("status", status).put("progress", progress)
-    fail(job, error)
-    if (trackId != null) job.put("trackId", trackId)
-    // Progress is transient. State transitions and receipts are durable.
-    if (old != status || trackId != null) persist()
-  }
+  fun takeById(context: Context, id: String): JSONObject? = kept { queue.takeById(id, outside(context)) }
 
   @Synchronized
-  fun cancel(id: String): Boolean {
-    val job = jobs.firstOrNull { it.optString("id") == id } ?: return false
-    return when (job.optString("status")) {
-      "queued" -> { change(id, "cancelled"); false }
-      "preparing", "downloading", "converting" -> { change(id, "cancelling"); true }
-      else -> false // Publication is a short, non-cancellable commit.
-    }
-  }
+  fun move(id: String, beforeId: String?): Boolean = kept { queue.move(id, beforeId) }
 
   @Synchronized
-  fun isCancelling(id: String): Boolean = jobs.any { it.optString("id") == id && it.optString("status") == "cancelling" }
+  fun retry(id: String): Boolean = kept { queue.retry(id) }
+
+  @Synchronized
+  fun setPaused(paused: Boolean) = kept { queue.setPaused(paused) }
+
+  @Synchronized
+  fun queueState(): Map<String, Any?> = mapOf("paused" to queue.paused)
+
+  @Synchronized
+  fun clearFinished() = kept { queue.clearFinished() }
+
+  @Synchronized
+  fun change(id: String, status: String, progress: Int = 0, error: Failed? = null, trackId: String? = null) =
+    kept { queue.change(id, status, progress, error, trackId) }
+
+  @Synchronized
+  fun cancel(id: String): Stop = kept { queue.cancel(id) }
+
+  @Synchronized
+  fun cancelAll(): List<Pair<String, Stop>> = kept { queue.cancelAll() }
+
+  @Synchronized
+  fun isCancelling(id: String): Boolean = queue.isCancelling(id)
 
   @Synchronized
   fun beginSaving(id: String): Boolean {
@@ -262,11 +327,11 @@ object DownloadStore {
     persist()
   }
 
+  /** Fails those of [ids] still waiting or under way: jobs just asked for, that the service could not be started for. */
   @Synchronized
-  fun failPending(failure: Failure) {
-    jobs.filter { it.optString("status") in activeStates }.forEach {
-      fail(it.put("status", "failed"), Failed(failure))
-    }
-    persist()
-  }
+  fun failPending(failure: Failure, ids: Collection<String>) = kept { queue.failActive(ids, failure) }
+
+  /** The service was stopped under its work: see [DownloadQueue.interrupt]. Everything that was only waiting still is. */
+  @Synchronized
+  fun interrupted(failure: Failure) = kept { queue.interrupt(failure) }
 }

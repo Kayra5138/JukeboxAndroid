@@ -7,14 +7,14 @@ import {
   useState,
   type Ref,
 } from 'react';
-import { Image } from 'expo-image';
+import { Image } from './Picture';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import type { Album } from '../lib/media/albums';
-import { makeStyles } from '../lib/theme/index';
+import { laid, makeStyles } from '../lib/theme/index';
 
 /**
  * A rack of records you flick through, with the one in front turned to face
@@ -169,6 +169,7 @@ export type Rack = {
 export function CoverFlow({
   albums,
   onOpen,
+  onHold,
   ref,
 }: {
   albums: Album[];
@@ -177,6 +178,8 @@ export function CoverFlow({
    * opens can start out as that sleeve.
    */
   onOpen: (album: Album, sleeve: Sleeve) => void;
+  /** The record in front, held down: the same menu a held row of the list opens. */
+  onHold?: (album: Album) => void;
   ref?: Ref<Rack>;
 }) {
   const t = useT();
@@ -518,6 +521,16 @@ export function CoverFlow({
                 onPress={() => {
                   if (index === front) open();
                 }}
+                // Only where it stands square. Mid-flick the one under the
+                // finger is not yet the one the caption names.
+                onHold={
+                  onHold && index === front
+                    ? () => {
+                        const album = albums[index];
+                        if (album && squared()) onHold(album);
+                      }
+                    : undefined
+                }
               />
             </View>
           ))}
@@ -544,6 +557,7 @@ function Card({
   size,
   inFront,
   onPress,
+  onHold,
 }: {
   album: Album;
   /** Where this card sits relative to the front one, in cards. */
@@ -554,6 +568,7 @@ function Card({
   /** The one square on, which is the only one a tap opens. */
   inFront: boolean;
   onPress: () => void;
+  onHold?: () => void;
 }) {
   const t = useT();
   const styles = useStyles();
@@ -619,7 +634,18 @@ function Card({
           // is brought forward by the slot it stands in, not opened.
           accessibilityLabel={inFront ? t.library.rack.open(album.name) : album.name}
           accessibilityHint={inFront ? t.library.rack.openHint : undefined}
-          onPress={onPress}>
+          // Named, as a row's is: nobody finds a held sleeve by trying.
+          accessibilityActions={
+            onHold ? [{ name: 'longpress', label: t.library.albumMenu }] : undefined
+          }
+          onAccessibilityAction={
+            onHold &&
+            ((event) => {
+              if (event.nativeEvent.actionName === 'longpress') onHold();
+            })
+          }
+          onPress={onPress}
+          onLongPress={onHold}>
           {artwork ? (
             <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
           ) : (
@@ -698,10 +724,12 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   emptyText: { color: c.textFaint, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 
   card: { position: 'absolute', alignItems: 'center' },
+  // Flat, as the stage is: the sleeves stand in front of one another, and
+  // one of glass would show the next through it until its picture came.
   face: {
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: c.surface,
+    backgroundColor: laid(c.surface, c.bg),
   },
   art: { width: '100%', height: '100%' },
   artEmpty: { backgroundColor: c.surfaceRaised },

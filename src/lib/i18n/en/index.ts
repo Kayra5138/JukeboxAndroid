@@ -2,6 +2,7 @@ import { backup } from './backup.ts';
 import { common } from './common.ts';
 import { details } from './details.ts';
 import { discover } from './discover.ts';
+import { downloads } from './downloads.ts';
 import { format } from './format.ts';
 import { languages } from './languages.ts';
 import { library } from './library.ts';
@@ -43,6 +44,7 @@ export const en = {
   library,
   lists,
   search,
+  downloads,
   stats,
   details,
   sound,

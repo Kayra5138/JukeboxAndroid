@@ -52,6 +52,12 @@ export function useTrackMenu({
    */
   erase: (trackIds: string[]) => Promise<boolean>;
   element: ReactNode;
+  /**
+   * True while the list picker is up. It is drawn in the screen and not in a
+   * window of its own, so it is the screen that knows what it was laid over
+   * and has to put that out of focus; the menu itself says so for the window.
+   */
+  veiled: boolean;
 } {
   const router = useRouter();
   const { playNext, addToQueue, removeFromQueue } = usePlayerActions();
@@ -177,5 +183,5 @@ export function useTrackMenu({
     </>
   );
 
-  return { open, addToList, erase, element };
+  return { open, addToList, erase, element, veiled: addingTo != null };
 }

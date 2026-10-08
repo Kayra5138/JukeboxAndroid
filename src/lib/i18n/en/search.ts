@@ -63,16 +63,11 @@ export const search = {
   listCreated: (name: string) => `List created: ${name}. Downloaded tracks will appear in Lists.`,
   unnamedPlaylist: 'YouTube playlist',
 
-  /** The downloads under the results. */
-  downloads: (active: number) =>
-    active > 0 ? `Downloads · ${format.number(active)} active` : 'Downloads',
   /** A download's state and what it is being saved as. */
   jobLine: (status: string, mp3: boolean) => `${status} · ${mp3 ? 'MP3' : 'Original'}`,
-  cancelLabel: (title: string) => `Cancel ${title}`,
-  showFewer: 'Show fewer downloads',
-  showAll: (count: number) => `Show all ${format.number(count)} downloads`,
 
   status: {
+    finding: 'Finding it on YouTube',
     queued: 'Queued',
     preparing: 'Preparing…',
     downloading: (percent: number) => `Downloading · ${percent}%`,

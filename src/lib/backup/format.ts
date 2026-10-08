@@ -69,6 +69,9 @@ export const TABLES = {
     fetched_at: 'I!',
     track_number: 'I',
     disc_number: 'I',
+    // Absent from a backup made before it existed, which reads as never
+    // searched: the cover is looked for once more and that is all.
+    cover_searched_at: 'I',
   },
   track_tags: { track_id: 'T!', tag: 'T!', position: 'I!', source: 'T!' },
   track_lyrics: {

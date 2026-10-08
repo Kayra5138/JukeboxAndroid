@@ -73,3 +73,62 @@ export async function withoutWaiting<T>(body: () => Promise<T>): Promise<T> {
 export function queryOf(url: string): string {
   return decodeURIComponent(url.slice(url.indexOf('?') + 1));
 }
+
+/**
+ * A clock that only moves when it is told to, for the code that paces itself.
+ *
+ * `sleep` does not wait: it notes when it is due. `run` then lets the work go
+ * as far as it can, and whenever everything is asleep it jumps to the earliest
+ * waking and carries on from there. Time passes exactly as the code asked for
+ * it to, in no time at all, so a gap between two requests can be measured to
+ * the millisecond rather than guessed at around a real timer.
+ */
+export function fakeClock() {
+  let now = 0;
+  let oversleep = 0;
+  const sleepers: { at: number; wake: () => void }[] = [];
+
+  return {
+    now: () => now,
+    /**
+     * The next sleeper to be woken is woken this much late, once: a timer
+     * that fired after the phone had been doing something else.
+     */
+    wakeLate(ms: number) {
+      oversleep = ms;
+    },
+    sleep: (ms: number, signal?: AbortSignal): Promise<void> =>
+      new Promise((resolve, reject) => {
+        const sleeper = { at: now + ms, wake: resolve };
+        sleepers.push(sleeper);
+        signal?.addEventListener(
+          'abort',
+          () => {
+            const index = sleepers.indexOf(sleeper);
+            if (index >= 0) sleepers.splice(index, 1);
+            reject(Object.assign(new Error('aborted'), { name: 'AbortError' }));
+          },
+          { once: true }
+        );
+      }),
+    async run<T>(work: Promise<T>): Promise<T> {
+      let over = false;
+      const settled = () => {
+        over = true;
+      };
+      work.then(settled, settled);
+      while (!over) {
+        // A turn of the event loop, which is as far as anything not asleep gets.
+        await new Promise((resolve) => setImmediate(resolve));
+        if (over) break;
+        sleepers.sort((left, right) => left.at - right.at);
+        const next = sleepers.shift();
+        if (!next) continue;
+        now = Math.max(now, next.at + oversleep);
+        oversleep = 0;
+        next.wake();
+      }
+      return work;
+    },
+  };
+}

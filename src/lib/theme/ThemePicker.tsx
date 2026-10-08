@@ -1,6 +1,16 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from '../../components/Pressable';
 
-import { chooseTheme, makeStyles, usePressed, useThemeOffers, type Palette, type ThemeGroup } from './index';
+import { finishOf, page } from './effects';
+import {
+  chooseTheme,
+  makeStyles,
+  usePressed,
+  useThemeOffers,
+  type Palette,
+  type ThemeChoice,
+  type ThemeGroup,
+} from './index';
 import { useT, type Strings } from '../i18n/index';
 
 /** The heading over each group. The first has none: it is the app as it comes. */
@@ -8,6 +18,7 @@ const HEADINGS: Record<ThemeGroup, keyof Strings['themes'] | null> = {
   basic: null,
   light: 'lightGroup',
   dark: 'darkGroup',
+  effects: 'effectsGroup',
   special: 'specialGroup',
 };
 
@@ -26,12 +37,26 @@ const HEADINGS: Record<ThemeGroup, keyof Strings['themes'] | null> = {
  * place outside a `ThemeScope` that colours not belonging to the theme in
  * use are drawn; everything around them — the names, the ring round the one
  * chosen — is the theme in use, as it is everywhere.
+ *
+ * Left alone it is for choosing the theme: the one in use is ringed, and a
+ * tap changes it. Given [marked] and [onPick] it is the same pictures for
+ * ticking any number of — the themes a draw is made from — and then
+ * following the phone is left out, being a choice and not a theme.
  */
-export function ThemePicker() {
+export function ThemePicker({
+  marked,
+  onPick,
+}: {
+  /** The themes to ring, in place of the one in use. */
+  marked?: readonly ThemeChoice[];
+  /** What a tap does, in place of choosing the theme. */
+  onPick?: (theme: ThemeChoice) => void;
+} = {}) {
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
   const { chosen, groups } = useThemeOffers();
+  const many = marked !== undefined;
 
   return (
     <View style={styles.picker}>
@@ -42,16 +67,17 @@ export function ThemePicker() {
             {heading ? <Text style={styles.heading}>{t.themes[heading]}</Text> : null}
             <View style={styles.tiles}>
               {offers.map((offer) => {
-                const on = offer.id === chosen;
+                if (many && offer.id === 'system') return null;
+                const on = many ? marked.includes(offer.id) : offer.id === chosen;
                 return (
                   <Pressable
                     android_ripple={pressed}
                     key={offer.id}
-                    accessibilityRole="button"
+                    accessibilityRole={many ? 'checkbox' : 'button'}
                     accessibilityLabel={t.themes[offer.nameKey]}
-                    accessibilityState={{ selected: on }}
+                    accessibilityState={many ? { checked: on } : { selected: on }}
                     style={styles.tile}
-                    onPress={() => chooseTheme(offer.id)}>
+                    onPress={() => (onPick ?? chooseTheme)(offer.id)}>
                     <View style={[styles.ring, on && styles.ringOn]}>
                       <View style={styles.swatch}>
                         {offer.samples.map((sample) => (
@@ -79,11 +105,15 @@ export function ThemePicker() {
  *
  * Takes whatever width it is given, so that following the phone can be two
  * of these side by side, the light and the dark it goes between.
+ *
+ * A theme that is more than its colours is shown with what else it has, as
+ * far as a thumbnail can: its page is its backdrop, and its card has its
+ * sheen.
  */
 function Sample({ colours }: { colours: Palette }) {
   return (
-    <View style={[sample.page, { backgroundColor: colours.bg }]}>
-      <View style={[sample.card, { backgroundColor: colours.surface, borderColor: colours.border }]}>
+    <View style={[sample.page, page(colours)]}>
+      <View style={[sample.card, { backgroundColor: colours.surface, borderColor: colours.border }, finishOf(colours)]}>
         <View style={sample.lines}>
           <View style={[sample.line, { backgroundColor: colours.text }]} />
           <View style={[sample.lineShort, { backgroundColor: colours.textMuted }]} />

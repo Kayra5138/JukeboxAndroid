@@ -1,4 +1,5 @@
 import { db } from './index.ts';
+import { fillCoversIn, markCoverSearchedIn, saveMetadataTo } from './metadataRows.ts';
 import { ALL_TIME, type Range } from '../stats/period.ts';
 
 /**
@@ -23,6 +24,14 @@ export type TrackMetadata = {
   /** Where it sits on its record, when the catalogue said. */
   trackNumber: number | null;
   discNumber: number | null;
+  /**
+   * When a cover was searched for and none was found, or null.
+   *
+   * Only ever read from here. {@link markCoverSearched} writes it, and saving
+   * the row again clears it: a row said afresh may name the track differently,
+   * and a search that failed under the old names is no answer about the new.
+   */
+  coverSearchedAt?: number | null;
 };
 
 type Row = {
@@ -37,6 +46,7 @@ type Row = {
   artwork_url: string | null;
   track_number: number | null;
   disc_number: number | null;
+  cover_searched_at: number | null;
 };
 
 function toMetadata(row: Row): TrackMetadata {
@@ -52,34 +62,12 @@ function toMetadata(row: Row): TrackMetadata {
     artworkUrl: row.artwork_url,
     trackNumber: row.track_number,
     discNumber: row.disc_number,
+    coverSearchedAt: row.cover_searched_at,
   };
 }
 
 export function saveMetadata(entry: TrackMetadata): void {
-  db().runSync(
-    `INSERT INTO track_metadata
-       (track_id, status, source, title, artist, album, genre, year, artwork_url,
-        track_number, disc_number, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(track_id) DO UPDATE SET
-       status = excluded.status, source = excluded.source, title = excluded.title,
-       artist = excluded.artist, album = excluded.album, genre = excluded.genre,
-       year = excluded.year, artwork_url = excluded.artwork_url,
-       track_number = excluded.track_number, disc_number = excluded.disc_number,
-       fetched_at = excluded.fetched_at`,
-    entry.trackId,
-    entry.status,
-    entry.source,
-    entry.title,
-    entry.artist,
-    entry.album,
-    entry.genre,
-    entry.year,
-    entry.artworkUrl,
-    entry.trackNumber,
-    entry.discNumber,
-    Date.now()
-  );
+  saveMetadataTo(db(), entry, Date.now());
 }
 
 /** One track's row, for a screen that needs to keep fields it does not show. */
@@ -99,11 +87,30 @@ export function readArtwork(trackId: string): string | null {
   )?.artwork_url ?? null;
 }
 
-/** Covers may be filled without replacing genres or hand-written credits. */
-export function saveArtwork(trackId: string, uri: string, album: string | null): void {
-  db().runSync(`UPDATE track_metadata SET artwork_url = ?,
-    album = CASE WHEN status = 'manual' THEN album ELSE COALESCE(album, ?) END
-    WHERE track_id = ?`, uri, album, trackId);
+/** One cover going onto a run of tracks, with the record it came from. */
+export type CoverFill = { trackIds: string[]; uri: string; album: string | null };
+
+/**
+ * Puts covers on tracks that have none, and answers which tracks took one.
+ *
+ * Only ever fills. A row that already holds a picture of the app's own is left
+ * exactly as it is, and that is decided here rather than by whoever calls: a
+ * run over the library takes minutes, and a cover chosen by hand in the middle
+ * of one must not be written over by an answer that was already on its way.
+ *
+ * The genres and a hand-written record name are left alone too. An album is
+ * only given to a row that names none, and never to one somebody typed.
+ *
+ * One transaction for all of them, because the usual call is one cover going
+ * onto every track of a record at once.
+ */
+export function fillCovers(fills: CoverFill[]): string[] {
+  return fillCoversIn(db(), fills);
+}
+
+/** Write down that a cover was searched for these tracks and there was none. */
+export function markCoverSearched(trackIds: string[]): void {
+  markCoverSearchedIn(db(), trackIds, Date.now());
 }
 
 /**

@@ -27,7 +27,7 @@ export function DiscoverProvider({ children }: { children: ReactNode }) {
       if (!view.busy && Date.now() >= nextAutomatic && view.settings.autoDownload && (view.snapshot?.pending ?? view.snapshot?.entries)?.some(e => !e.track && !e.jobId && !e.error)) {
         nextAutomatic = Date.now() + 10_000;
         void maintainDiscover();
-      } else if (!view.busy && view.jobs.some(j => ['queued','preparing','downloading','converting','saving','cancelling'].includes(j.status))) void refreshDiscoverReceipts().catch(console.warn);
+      } else if (!view.busy && view.jobs.some(j => ['queued','finding','preparing','downloading','converting','saving','cancelling'].includes(j.status))) void refreshDiscoverReceipts().catch(console.warn);
     }, 1500);
     const check = setInterval(foreground, 60_000);
     return () => { subscription.remove(); clearInterval(timer); clearInterval(check); token.current++; };

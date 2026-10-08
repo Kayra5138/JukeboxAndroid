@@ -1,5 +1,6 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import type { Mark } from '../lib/media/selection';
@@ -37,6 +38,7 @@ export const BrowseRow = memo(function BrowseRow({
   cover,
   shared,
   mark,
+  held,
   onPress,
   onLongPress,
 }: {
@@ -54,6 +56,11 @@ export const BrowseRow = memo(function BrowseRow({
    * absent when nothing is being chosen, which is when the row has no box.
    */
   mark?: Mark;
+  /**
+   * What holding the row does, for a screen reader to call it by, where that
+   * is not the choosing it is for an artist or a folder.
+   */
+  held?: string;
   onPress: (id: string) => void;
   onLongPress?: (id: string) => void;
 }) {
@@ -77,7 +84,9 @@ export const BrowseRow = memo(function BrowseRow({
       // reader finds a held row by trying. Left out once choosing has begun,
       // when holding does nothing a tap does not.
       accessibilityActions={
-        onLongPress && !choosing ? [{ name: 'longpress', label: t.library.row.select }] : undefined
+        onLongPress && !choosing
+          ? [{ name: 'longpress', label: held ?? t.library.row.select }]
+          : undefined
       }
       onAccessibilityAction={
         onLongPress &&

@@ -1,4 +1,4 @@
-import { asThrottle, request, sleep, statusOf } from './http.ts';
+import { asThrottle, pacer, request, statusOf } from './http.ts';
 import { identify } from './identify.ts';
 import { foldForMatch, matchScore, tokens } from './text.ts';
 import type { Track } from '../types.ts';
@@ -63,12 +63,10 @@ type ItunesResult = {
  * can cost several requests once storefront fallbacks kick in. Pacing here
  * rather than in the caller keeps the budget correct however many are made.
  */
-let nextRequestAt = 0;
+const turn = pacer(REQUEST_INTERVAL_MS);
 
 async function paced<T>(request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
-  const wait = nextRequestAt - Date.now();
-  if (wait > 0) await sleep(wait, signal);
-  nextRequestAt = Date.now() + REQUEST_INTERVAL_MS;
+  await turn(signal);
   return request();
 }
 
@@ -113,6 +111,7 @@ async function searchStorefront(
   wantedArtist: string[],
   storefront: string,
   fallbackTitle: string,
+  wantedAlbum: string | null,
   signal?: AbortSignal
 ): Promise<ItunesMatch | null> {
   const url =
@@ -131,6 +130,7 @@ async function searchStorefront(
   });
 
   let best: ItunesMatch | null = null;
+  let bestOnAlbum = false;
   for (const result of body.results ?? []) {
     if (!result.trackName) continue;
     // When the artist is known, it is the strongest signal available and a
@@ -141,7 +141,23 @@ async function searchStorefront(
       artist: result.artistName,
       album: result.collectionName,
     });
-    if (score < MIN_SCORE || (best && score <= best.score)) continue;
+    if (score < MIN_SCORE) continue;
+    /*
+      The record the track says it is on outranks a better score off it.
+
+      A song that did well is sold several times over -- the album, the single,
+      a compilation -- and each comes with its own cover. The score cannot tell
+      them apart, since it is the same song each time, so where the file names
+      its album the entry on that album is the one wanted: it is the cover of
+      the record the library shows the track under, and the one its neighbours
+      on that record will be given too.
+    */
+    const onAlbum =
+      wantedAlbum != null &&
+      result.collectionName != null &&
+      foldForMatch(result.collectionName) === wantedAlbum;
+    if (best && (onAlbum === bestOnAlbum ? score <= best.score : !onAlbum)) continue;
+    bestOnAlbum = onAlbum;
     best = {
       title: result.trackName ?? fallbackTitle,
       artist: result.artistName ?? '',
@@ -172,9 +188,10 @@ export async function lookupTrack(
   // The credit as written as well as the names in it: a duo the rules took
   // apart wrongly is still itself to a catalogue that lists it whole.
   const wanted = artist ? [artist, ...artists] : [];
+  const album = track.album?.trim() ? foldForMatch(track.album) : null;
 
   for (const storefront of STOREFRONTS) {
-    const match = await searchStorefront(query, wanted, storefront, track.title, signal);
+    const match = await searchStorefront(query, wanted, storefront, track.title, album, signal);
     if (match) return match;
   }
   return null;

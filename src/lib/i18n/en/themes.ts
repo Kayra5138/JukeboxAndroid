@@ -28,8 +28,15 @@ export const themes = {
   contrast: 'High contrast',
   cover: 'From the cover',
   material: 'System colours',
+  custom: 'Custom',
+
+  glass: 'Night glass',
+  frost: 'Frosted glass',
+  aero: 'Aero',
+  aurora: 'Cover glass',
 
   lightGroup: 'Light',
   darkGroup: 'Dark',
+  effectsGroup: 'Glass and gloss',
   specialGroup: 'Special',
 };

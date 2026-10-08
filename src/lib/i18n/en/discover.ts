@@ -69,6 +69,7 @@ export const discover = {
     failed: 'Discover could not finish. Please retry.',
     fileMissing: 'File missing. Tap to download again.',
     downloadStopped: 'Download stopped. Tap to retry.',
+    paused: 'Downloads are paused. Resume them to fetch this song.',
     notEnough: 'Not enough new songs are available yet. Your current list has been kept.',
     needsBuild: 'Install the updated APK to download Discover songs.',
     needsTaste: 'Add some music or listen to a few songs to build your Discover taste profile.',

@@ -1,7 +1,9 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 import type { Track } from '../lib/types';
 
 export type TrackAction =
@@ -50,6 +52,7 @@ export function TrackMenu({
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
+  useWindowVeil(track !== null);
   return (
     <Modal
       visible={track !== null}
@@ -98,7 +101,7 @@ export function TrackMenu({
 const useStyles = makeStyles((c) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
     justifyContent: 'flex-end',
   },
   sheet: {

@@ -68,6 +68,7 @@ export const discover: Strings['discover'] = {
     failed: 'Keşfet tamamlanamadı. Lütfen yeniden dene.',
     fileMissing: 'Dosya yok. Yeniden indirmek için dokun.',
     downloadStopped: 'İndirme durdu. Yeniden denemek için dokun.',
+    paused: 'İndirmeler duraklatıldı. Bu şarkıyı indirmek için indirmeleri sürdür.',
     notEnough: 'Henüz yeterince yeni şarkı yok. Şimdiki listen korundu.',
     needsBuild: 'Keşfet şarkılarını indirmek için güncel sürümü yükle.',
     needsTaste:

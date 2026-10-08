@@ -27,6 +27,8 @@
   <string name="jukebox_downloads_preparing">İndirme hazırlanıyor…</string>
   <string name="jukebox_downloads_downloading">İndiriliyor: %1$s</string>
   <string name="jukebox_downloads_converting">Dönüştürülüyor: %1$s</string>
+  <string name="jukebox_downloads_finding">Aranıyor: %1$s</string>
+  <string name="jukebox_downloads_resting">Sıradakinden önce biraz bekleniyor…</string>
 
   <string name="jukebox_auto_home">Ana sayfa</string>
   <string name="jukebox_auto_tracks">Parçalar</string>
@@ -85,6 +87,7 @@
   <string name="jukebox_download_open_discover">İndirmeleri sürdürmek için Keşfet’i aç.</string>
   <string name="jukebox_download_retry_discover">Bu indirmeyi yeniden denemek için Keşfet’i aç.</string>
   <string name="jukebox_download_not_here">Bu şarkıyı kaydetmeden önce indir.</string>
+  <string name="jukebox_download_no_match">YouTube’da uyan bir kayıt bulunamadı.</string>
   <string name="jukebox_download_failed">İndirme başarısız oldu. Lütfen yeniden dene.</string>
 
   <string name="jukebox_import_refused">Müzik kütüphanesi yeni dosyayı kabul etmedi.</string>

@@ -14,4 +14,8 @@ export const nav: Strings['nav'] = {
   crossfade: 'Çapraz geçiş',
   effects: 'Efektler',
   details: 'Ayrıntıları gör ve düzenle',
+  themes: 'Tema',
+  albumRest: 'Albümün geri kalanı',
+  customTheme: 'Özel tema',
+  downloads: 'İndirmeler',
 };

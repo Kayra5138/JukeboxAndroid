@@ -40,10 +40,25 @@ export function namedTargets(
   names: Readonly<Record<string, string>>,
   locale: string
 ): { tag: string; name: string }[] {
-  return TARGETS.map((tag) => ({ tag, name: names[tag] ?? tag })).sort((a, b) =>
-    a.name.localeCompare(b.name, locale)
+  const known = sorted.get(names);
+  if (known && known.locale === locale) return known.targets;
+  /*
+    One collator for the whole sort, and the sort kept. `localeCompare` with
+    a locale makes a collator of its own for every pair it is asked about,
+    and on the phone that was most of a fifth of a second for a list this
+    long -- spent by Settings each time it was drawn, to fill a sheet that
+    is nearly always shut.
+  */
+  const collator = new Intl.Collator(locale);
+  const targets = TARGETS.map((tag) => ({ tag, name: names[tag] ?? tag })).sort((a, b) =>
+    collator.compare(a.name, b.name)
   );
+  sorted.set(names, { locale, targets });
+  return targets;
 }
+
+/** The last sort for each table of names, which is one per language the app has been in. */
+const sorted = new WeakMap<object, { locale: string; targets: { tag: string; name: string }[] }>();
 
 /** What is chosen. Set through `chooseLyricsTarget`; read by `useLyricsTarget`. */
 export const currentTarget = createStore<string>(DEFAULT_TARGET);

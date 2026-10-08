@@ -37,6 +37,7 @@ export const useShared = makeStyles((c) => StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 18,
     minHeight: 44,
+    ...outlined(c, c.primary),
   },
   actionWide: { flex: 1 },
   actionOff: { opacity: 0.35 },

@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Image } from './Picture';
 import { StyleSheet, View } from 'react-native';
 
 import { useTrackArtwork } from '../lib/media/artwork';

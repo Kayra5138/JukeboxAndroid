@@ -13,4 +13,9 @@ export const nav = {
   crossfade: 'Crossfade',
   effects: 'Effects',
   details: 'View & edit details',
+  themes: 'Theme',
+  /** Over the rest of an album until the album's own name is known. */
+  albumRest: 'Rest of the album',
+  customTheme: 'Custom theme',
+  downloads: 'Downloads',
 };

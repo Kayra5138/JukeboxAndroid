@@ -1,4 +1,5 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { makeStyles, outlineWidth, useColours, usePressed } from '../lib/theme/index';
@@ -6,6 +7,14 @@ import { useLandscape } from '../lib/ui/layout';
 
 /** Wide enough for an icon and a short word under it, and no wider. */
 const RAIL_WIDTH = 92;
+
+/**
+ * How tall the bar is along the bottom, above the phone's own inset: the
+ * cell's padding, the patch's, the icon, the gap and the label, whose line
+ * grows with the size of writing the phone is set to. For what is drawn
+ * over the app and has to keep clear of it; see `DownloadsButton`.
+ */
+export const tabBarHeight = (fontScale: number) => 46 + Math.ceil(16 * Math.max(1, fontScale));
 
 /**
  * What a tab bar is handed.
@@ -145,7 +154,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderRightWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderRightColor: c.border,
   },
-  item: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 5 },
+  // Rounded as the mark inside it is, for the sake of the wash under a finger:
+  // the cell is what is pressed, and the wash keeps to the shape it is given.
+  item: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 5, borderRadius: 16 },
   /*
     One width for all five, declared rather than taken from the writing. Sized
     to the label it holds, the mark was a different shape under every tab —

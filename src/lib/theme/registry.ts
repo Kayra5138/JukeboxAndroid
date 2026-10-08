@@ -1,9 +1,14 @@
+import { aero } from './themes/aero.ts';
+import { aurora } from './themes/aurora.ts';
 import { black } from './themes/black.ts';
 import { contrast } from './themes/contrast.ts';
 import { cover } from './themes/cover.ts';
+import { custom } from './themes/custom.ts';
 import { dark } from './themes/dark.ts';
 import { dusk } from './themes/dusk.ts';
 import { forest } from './themes/forest.ts';
+import { frost } from './themes/frost.ts';
+import { glass } from './themes/glass.ts';
 import { ice } from './themes/ice.ts';
 import { lavender } from './themes/lavender.ts';
 import { light } from './themes/light.ts';
@@ -27,9 +32,10 @@ import { createStore } from '../ui/store.ts';
  * tokens.
  *
  * A theme that is worked out as the app runs — from the cover of what is
- * playing, from the phone's wallpaper — is the same line here. What makes it
- * different is in its own file, as a `dynamic` that says what it needs and
- * what to make of it; `resolveTheme` below is the only thing that looks.
+ * playing, from the phone's wallpaper, from colours somebody chose — is the
+ * same line here. What makes it different is in its own file, as a `dynamic`
+ * that says what it needs and what to make of it; `resolveTheme` below is the
+ * only thing that looks.
  */
 export const THEMES = [
   light,
@@ -49,6 +55,11 @@ export const THEMES = [
   contrast,
   cover,
   material,
+  custom,
+  glass,
+  frost,
+  aero,
+  aurora,
 ] as const satisfies readonly Theme[];
 
 export type ThemeId = (typeof THEMES)[number]['id'];
@@ -63,7 +74,7 @@ export const SYSTEM_DARK: ThemeId = 'dark';
 export const DEFAULT_THEME_CHOICE: ThemeChoice = 'system';
 
 /** The groups the picker lays the themes out in, in its order. */
-export const THEME_GROUPS = ['basic', 'light', 'dark', 'special'] as const satisfies readonly ThemeGroup[];
+export const THEME_GROUPS = ['basic', 'light', 'dark', 'effects', 'special'] as const satisfies readonly ThemeGroup[];
 
 export function themeOf(id: ThemeId): Theme {
   return THEMES.find((theme) => theme.id === id) ?? dark;
@@ -74,8 +85,8 @@ export function themeChoiceFrom(stored: string | null): ThemeChoice {
   return THEMES.find((theme) => theme.id === stored)?.id ?? DEFAULT_THEME_CHOICE;
 }
 
-/** What is known when nothing has been found out: a dark phone, silent, from before Android 12. */
-export const NOTHING_AROUND: Surroundings = { scheme: 'dark', cover: null, system: null };
+/** What is known when nothing has been found out: a dark phone, silent, from before Android 12, with no colours chosen. */
+export const NOTHING_AROUND: Surroundings = { scheme: 'dark', cover: null, system: null, custom: null };
 
 /**
  * The last thing each worked-out theme was worked out to, and from what.
@@ -96,7 +107,8 @@ function inSurroundings(theme: Theme, around: Surroundings): Theme {
     last &&
     last.around.scheme === around.scheme &&
     last.around.cover === around.cover &&
-    last.around.system === around.system
+    last.around.system === around.system &&
+    last.around.custom === around.custom
   ) {
     return last.theme;
   }
@@ -134,6 +146,7 @@ export function resolveTheme(
     scheme,
     cover: theme.dynamic.needs.includes('cover') ? around.cover : null,
     system: theme.dynamic.needs.includes('system') ? around.system : null,
+    custom: theme.dynamic.needs.includes('custom') ? around.custom : null,
   });
 }
 
@@ -151,7 +164,8 @@ export function needsOf(choice: ThemeChoice): readonly Need[] {
 export const currentThemeChoice = createStore<ThemeChoice>(DEFAULT_THEME_CHOICE);
 
 /**
- * The cover's colours and the phone's palette, as last found out.
+ * The cover's colours, the phone's palette and the colours of the theme
+ * somebody made, as last found out.
  *
  * Held like the choice, outside React, and for the same reason: the theme is
  * read by everything, including the layout that sits above the player, and

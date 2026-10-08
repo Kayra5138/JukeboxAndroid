@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
+import { Pressable } from '../Pressable';
 
 import { FormScroll } from '../FormScroll';
 import { TagEditor } from '../TagEditor';

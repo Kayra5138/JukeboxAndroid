@@ -247,3 +247,48 @@ export function bareTitle(title: string, artist: string | null): string {
 
   return title;
 }
+
+/**
+ * What an uploader writes after a song's name to say what kind of upload it
+ * is. None of it is the song's name, and none of it says the recording is a
+ * different one — which is why `live` and `remix` are not here, and are kept.
+ */
+const UPLOAD_WORDS = new Set([
+  'official', 'audio', 'video', 'music', 'lyric', 'lyrics', 'with', 'visualizer',
+  'visualiser', 'hd', 'hq', '4k', 'mv', 'remaster', 'remastered', 'version',
+  'album', 'full', 'explicit', 'clean',
+]);
+
+/** Whether [text] is nothing but such words, and years: `Official Audio`, `2011 Remaster`. */
+function isUploadNote(text: string): boolean {
+  const words = foldForMatch(text).split(' ').filter(Boolean);
+  return (
+    words.some((word) => UPLOAD_WORDS.has(word)) &&
+    words.every((word) => UPLOAD_WORDS.has(word) || /^\d+$/.test(word))
+  );
+}
+
+/**
+ * A video's title without the notes about the upload: `Numb (Official Video)`,
+ * `Numb [HD]`, `Numb (Remastered 2011)` and `Numb - Official Audio` are all
+ * `Numb`.
+ *
+ * A bracket goes only when every word in it is such a note. `Numb (Live)` is
+ * another recording, `Numb (Part II)` is another song and `Numb (feat. Jay-Z)`
+ * is the song's own name, and each of them keeps its bracket; so does
+ * `(Remastered Live)`, for the one word in it that matters.
+ */
+export function withoutUploadNotes(title: string): string {
+  let bare = title.replace(/\s*[([]([^)\]]*)[)\]]/g, (whole: string, inside: string) =>
+    isUploadNote(inside) ? '' : whole
+  );
+  // The same said after a dash or a bar, as often as it is said.
+  for (;;) {
+    const tail = /^(.*\S)\s+[-|–—]\s+([^-|–—]+)$/.exec(bare);
+    if (!tail || !isUploadNote(tail[2]!)) break;
+    bare = tail[1]!;
+  }
+  bare = bare.replace(/\s{2,}/g, ' ').trim();
+  // A title that was nothing but a note is still a title.
+  return bare || title;
+}

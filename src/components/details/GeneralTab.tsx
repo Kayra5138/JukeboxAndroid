@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Image } from 'expo-image';
+import { Image } from '../Picture';
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Pressable } from '../Pressable';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import { FormScroll, TextField } from '../FormScroll';
@@ -24,6 +24,7 @@ import { formatDateTime } from '../../lib/format/date';
 import { useT, type Strings } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
 import { artworkChanged } from '../../lib/media/artworkEvents';
+import { recordCover } from '../../lib/media/siblingCover';
 import type { EnrichedTrack } from '../../lib/media/enriched';
 import { isAbortError } from '../../lib/metadata/http';
 import { usePlayerState } from '../../lib/player/PlayerProvider';
@@ -226,6 +227,11 @@ export function GeneralTab({
     }
   }, [said]);
 
+  // A cover of the app's own on this track, saved or about to be.
+  const hasCover =
+    cover.kind === 'chosen' ||
+    (cover.kind === 'kept' && Boolean(stored?.artworkUrl?.startsWith('file://')));
+
   const lookUp = useCallback(async () => {
     search.current?.abort();
     const controller = new AbortController();
@@ -262,8 +268,26 @@ export function GeneralTab({
         discNumber: found.discNumber != null ? String(found.discNumber) : before.discNumber,
       }));
 
+      /*
+        The cover the rest of the record has, before the one that came with
+        this answer. A catalogue sells one song on several releases and each
+        has its own picture, so the one it happened to answer with can be the
+        single's while every other track of the album wears the album's.
+        Asked about the album as it now stands in the field, which is the one
+        just found where there was one and what was typed where there was not.
+
+        Only ever to fill a gap. A track that has a cover saved, or one just
+        picked and not saved yet, is not offered its neighbours' in place of
+        it: somebody put that cover there.
+      */
       let withCover = false;
-      if (found.artworkUrl && JukeboxAudio.downloadArtworkAsync) {
+      const album = found.album ?? (fields.album.trim() || null);
+      const shared = hasCover ? null : await recordCover(album, track.id).catch(() => null);
+      if (controller.signal.aborted) return;
+      if (shared) {
+        setCover({ kind: 'chosen', uri: shared });
+        withCover = true;
+      } else if (found.artworkUrl && JukeboxAudio.downloadArtworkAsync) {
         const uri = await JukeboxAudio.downloadArtworkAsync(found.artworkUrl).catch(() => null);
         if (controller.signal.aborted) return;
         if (uri) {
@@ -281,7 +305,7 @@ export function GeneralTab({
     } finally {
       if (!controller.signal.aborted) setLooking(false);
     }
-  }, [track, fields.title, fields.artist, fields.album, t, said]);
+  }, [track, fields.title, fields.artist, fields.album, hasCover, t, said]);
 
   const save = useCallback(() => {
     if (!valid) return;

@@ -536,6 +536,10 @@ describe('one spelling per tag', () => {
     const fold = MIGRATIONS.findIndex((sql) => sql.includes('UPDATE OR IGNORE track_tags'));
     assert.notEqual(fold, -1, 'the tag fold is no longer in the history');
     database.exec(`PRAGMA user_version = ${fold}`);
+    // Everything after the fold runs a second time over this database, and a
+    // column cannot be added twice. The one added since is taken off again,
+    // which is how a database from before it would have looked.
+    database.exec('ALTER TABLE track_metadata DROP COLUMN cover_searched_at');
     return database;
   }
 

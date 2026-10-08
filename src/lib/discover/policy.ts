@@ -110,6 +110,8 @@ export function tasteProfile(plays: Listen[], skips: Skip[], tags: Map<string, s
  */
 export const NO_MATCH = 'No matching studio recording was found. Another song is taking its place.';
 const NO_MATCH_BEFORE = 'A matching studio recording could not be found.';
+/** `Failure.kt`'s name for the same thing, which is how the queue says a job came to it. */
+export const NO_MATCH_CODE = 'ERR_DOWNLOAD_NO_MATCH';
 export function isNoMatch(error: string | undefined | null): boolean {
   return !!error && (error === NO_MATCH || error.startsWith(NO_MATCH_BEFORE));
 }

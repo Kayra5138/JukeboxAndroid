@@ -23,6 +23,8 @@
   <string name="jukebox_downloads_preparing">Preparing download…</string>
   <string name="jukebox_downloads_downloading">Downloading: %1$s</string>
   <string name="jukebox_downloads_converting">Converting: %1$s</string>
+  <string name="jukebox_downloads_finding">Finding: %1$s</string>
+  <string name="jukebox_downloads_resting">Waiting a moment before the next…</string>
 
   <!-- Android Auto: the four tabs, the three tiles on the first of them, and the orders a shelf can be in. -->
   <string name="jukebox_auto_home">Home</string>
@@ -85,6 +87,7 @@
   <string name="jukebox_download_open_discover">Open Discover to resume downloads.</string>
   <string name="jukebox_download_retry_discover">Open Discover to retry this download.</string>
   <string name="jukebox_download_not_here">Download this song before saving it.</string>
+  <string name="jukebox_download_no_match">No recording that matches was found on YouTube.</string>
   <string name="jukebox_download_failed">Download failed. Please retry.</string>
 
   <!-- Bringing a file into the library. -->

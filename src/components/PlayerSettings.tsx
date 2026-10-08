@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Slider } from './Fader';
@@ -38,6 +39,7 @@ import {
   useAudioEffects,
 } from '../lib/player/effects';
 import { makeStyles, outlined, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { scrimOf } from '../lib/theme/Veil';
 
 /**
  * Settings that shape playback but are rarely touched, kept behind the gear so
@@ -469,7 +471,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
   },
   sheet: {
     position: 'absolute',

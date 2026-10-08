@@ -1,9 +1,11 @@
 import { DiscoverProvider } from '../lib/discover/DiscoverProvider';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 
+import { DownloadsButton } from '../components/DownloadsButton';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { keepCarCopy } from '../lib/db/carCopy';
 import { loadLanguage, useT } from '../lib/i18n/index';
@@ -11,7 +13,8 @@ import { loadLyricsTarget } from '../lib/lyrics/useTarget';
 import { NowPlayingHost } from '../lib/player/NowPlayingSheet';
 import { PlayerProvider } from '../lib/player/PlayerProvider';
 import { keepScrobbling } from '../lib/scrobble/index';
-import { loadTheme, useTheme } from '../lib/theme/index';
+import { loadTheme, makeStyles, page, useTheme } from '../lib/theme/index';
+import { WindowBehind } from '../lib/theme/Veil';
 import { ThemeSurroundings } from '../lib/theme/Surroundings';
 import { DownloadsProvider } from '../lib/youtube/DownloadsProvider';
 
@@ -93,10 +96,24 @@ export default function RootLayout() {
           The now-playing screen is a layer over the navigator rather than a route
           within it, so whatever is underneath stays on screen while it is open.
         */}
+        {/*
+          Round everything that is drawn in this window, so that a sheet
+          opened in a window of its own has all of it behind it to veil.
+        */}
+        <WindowBehind>
         <NowPlayingHost>
           {/* Named for the clock, not the page: light writing over a dark theme. */}
           <StatusBar style={theme.base === 'dark' ? 'light' : 'dark'} />
           <Stack
+            /*
+              The page every screen is drawn on, put under each of them here
+              and nowhere else. A screen draws nothing behind itself; it could
+              not always if it wanted to, since a page that is more than one
+              colour is only drawn by a plain view and half the screens are
+              lists. Under the tabs it is one page for all of them and for
+              the bar they are chosen from.
+            */
+            screenLayout={paged}
             screenOptions={{
               headerStyle: { backgroundColor: c.bg },
               headerTintColor: c.text,
@@ -115,8 +132,21 @@ export default function RootLayout() {
             {/* Titled by the list itself, which the screen draws. */}
             <Stack.Screen name="playlist" options={{ headerShown: false }} />
             <Stack.Screen name="details" options={{ title: t.nav.details }} />
+            {/* Until the screen knows the album's name and says that instead. */}
+            <Stack.Screen name="album-rest" options={{ title: t.nav.albumRest }} />
+            <Stack.Screen name="themes" options={{ title: t.nav.themes }} />
+            <Stack.Screen name="theme" options={{ title: t.nav.customTheme }} />
+            <Stack.Screen name="downloads" options={{ title: t.nav.downloads }} />
           </Stack>
+          {/*
+            Over the navigator, so that it stays put while one screen slides
+            over another, and inside the host, whose player is drawn after
+            its children: the player covers it, as does anything in a window
+            of its own.
+          */}
+          <DownloadsButton />
         </NowPlayingHost>
+        </WindowBehind>
       </DiscoverProvider>
       </DownloadsProvider>
     </PlayerProvider>
@@ -124,3 +154,13 @@ export default function RootLayout() {
     </ErrorBoundary>
   );
 }
+
+/** A screen, on the page of the theme in use. */
+function Paged({ children }: { children: ReactNode }) {
+  return <View style={usePage().page}>{children}</View>;
+}
+
+/** Made once, so that the navigator is handed the same thing each time it asks. */
+const paged = ({ children }: { children: ReactNode }) => <Paged>{children}</Paged>;
+
+const usePage = makeStyles((c) => StyleSheet.create({ page: { flex: 1, ...page(c) } }));

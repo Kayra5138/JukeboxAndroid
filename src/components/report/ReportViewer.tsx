@@ -20,7 +20,7 @@ import { artistPhotoFor } from '../../lib/media/artistPhotos';
 import { artworkFor } from '../../lib/media/artwork';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import type { ReportCard } from '../../lib/stats/report';
-import { makeStyles, useColours } from '../../lib/theme/index';
+import { makeStyles, outlined, page, useColours } from '../../lib/theme/index';
 
 /**
  * How much bigger the written-out card is than the one on screen.
@@ -317,7 +317,7 @@ function Action({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...page(c) },
   bar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 44 },
   close: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   closeMark: { color: c.text, fontSize: 28, lineHeight: 30 },
@@ -338,8 +338,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.surfaceRaised,
+    ...outlined(c),
   },
-  actionPrimary: { backgroundColor: c.primary },
+  actionPrimary: { backgroundColor: c.primary, ...outlined(c, c.primary) },
   actionOff: { opacity: 0.5 },
   actionLabel: { color: c.text, fontSize: 14.5, fontWeight: '600' },
   actionLabelPrimary: { color: c.onPrimary },

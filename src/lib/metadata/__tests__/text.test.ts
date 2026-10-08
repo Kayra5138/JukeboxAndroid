@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { canonicalLabel, foldForMatch, matchScore, tokens } from '../text.ts';
+import { canonicalLabel, foldForMatch, matchScore, tokens, withoutUploadNotes } from '../text.ts';
 
 /** Mirrors MIN_SCORE in itunes.ts. */
 const MIN_SCORE = 0.5;
@@ -151,5 +151,25 @@ describe('canonicalLabel', () => {
 
   it('gives nothing back for nothing', () => {
     assert.equal(canonicalLabel('   '), '');
+  });
+});
+
+describe('withoutUploadNotes', () => {
+  it('drops what says what kind of upload it is', () => {
+    assert.equal(withoutUploadNotes('Numb (Official Audio)'), 'Numb');
+    assert.equal(withoutUploadNotes('Numb [Official Video] (HD)'), 'Numb');
+    assert.equal(withoutUploadNotes('Numb (Remastered 2011)'), 'Numb');
+    assert.equal(withoutUploadNotes('Numb - 2011 Remaster'), 'Numb');
+    assert.equal(withoutUploadNotes('Numb (Lyrics) | Official Audio'), 'Numb');
+  });
+
+  it('keeps everything else, a bare year and the title that is nothing but a note among it', () => {
+    assert.equal(withoutUploadNotes('Numb (Live)'), 'Numb (Live)');
+    assert.equal(withoutUploadNotes('Numb (Live Video)'), 'Numb (Live Video)');
+    assert.equal(withoutUploadNotes('Numb (feat. Jay-Z)'), 'Numb (feat. Jay-Z)');
+    assert.equal(withoutUploadNotes('Song (1999)'), 'Song (1999)');
+    assert.equal(withoutUploadNotes('Hikaru Nara - TV Size'), 'Hikaru Nara - TV Size');
+    assert.equal(withoutUploadNotes('Official Audio'), 'Official Audio');
+    assert.equal(withoutUploadNotes('[HD]'), '[HD]');
   });
 });

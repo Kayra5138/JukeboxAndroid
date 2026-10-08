@@ -22,8 +22,15 @@ export const themes: Strings['themes'] = {
   contrast: 'Yüksek kontrast',
   cover: 'Kapaktan',
   material: 'Sistem renkleri',
+  custom: 'Özel',
+
+  glass: 'Gece camı',
+  frost: 'Buzlu cam',
+  aero: 'Aero',
+  aurora: 'Kapak camı',
 
   lightGroup: 'Açık',
   darkGroup: 'Koyu',
+  effectsGroup: 'Cam ve parlaklık',
   specialGroup: 'Özel',
 };

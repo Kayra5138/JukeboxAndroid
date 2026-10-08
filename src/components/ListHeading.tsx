@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { formatDuration } from '../lib/stats/period';
-import { makeStyles, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
 /** The cover a list is headed by. Whoever hands one in draws it this size. */
@@ -118,6 +119,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     backgroundColor: c.primary,
     borderRadius: 11,
     paddingVertical: 12,
+    ...outlined(c, c.primary),
   },
   actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
   secondary: {

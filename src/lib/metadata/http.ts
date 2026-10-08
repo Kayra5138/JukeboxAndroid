@@ -157,6 +157,71 @@ export function pause(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/** What a pacer tells the time by. Passed in so a test need not wait. */
+export type Clock = {
+  now: () => number;
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
+};
+
+// Read through the globals each time rather than held: the clock a phone
+// tells the time by is the one that is there when it is asked.
+const REAL_CLOCK: Clock = { now: () => Date.now(), sleep };
+
+/**
+ * Turns, handed out no closer together than a service allows.
+ *
+ * Callers stand in a line and are let go one at a time. Reading the clock and
+ * then sleeping, which is what each client used to do for itself, is only a
+ * limit while one thing is asking: two callers arriving together both read the
+ * same wait, both slept it out, and both went at once.
+ *
+ * The gap is measured from the moment the one before was really let go, not
+ * from the moment it was due. A timer on a phone is a promise to wake no
+ * earlier than asked and says nothing about how much later: Android stops them
+ * altogether while the app is in the background, and a run that had three
+ * callers lined up at fixed moments came back to find all three moments
+ * already past and let them go together.
+ *
+ * A caller who is stopped while waiting leaves the line and costs the one
+ * behind nothing — no turn was taken, so there is no gap to keep after it.
+ * It is told at once, too, rather than when its place comes round.
+ *
+ * Counted from when a request is let go, not from when its answer arrives, so
+ * a slow answer does not stretch the interval further.
+ */
+export function pacer(intervalMs: number, clock: Clock = REAL_CLOCK) {
+  let lastAt = -Infinity;
+  let line: Promise<void> = Promise.resolve();
+
+  return function turn(signal?: AbortSignal): Promise<void> {
+    const mine = line.then(async () => {
+      if (signal?.aborted) throw abortError();
+      const wait = lastAt + intervalMs - clock.now();
+      if (wait > 0) await clock.sleep(wait, signal);
+      lastAt = clock.now();
+    });
+    // Whoever is next waits for this one to be over, however it ended.
+    line = mine.catch(() => {});
+
+    if (!signal) return mine;
+    return new Promise<void>((resolve, reject) => {
+      const onAbort = () => reject(abortError());
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+      mine.then(
+        () => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        (error: unknown) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(error);
+        }
+      );
+    });
+  };
+}
+
 /**
  * A request that cannot outlive its usefulness.
  *

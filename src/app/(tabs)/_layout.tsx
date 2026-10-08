@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { SettingsIcon, LibraryIcon, ListsIcon, SearchIcon } from '../../components/Icons';
 import { TabBar } from '../../components/TabBar';
 import { useT } from '../../lib/i18n/index';
-import { useColours } from '../../lib/theme/index';
+import { scene, useColours } from '../../lib/theme/index';
 import { useLandscape } from '../../lib/ui/layout';
 
 export default function MainTabs() {
@@ -29,7 +29,7 @@ export default function MainTabs() {
       tabBarPosition: landscape ? 'left' : 'bottom',
       headerStyle: { backgroundColor: c.bg },
       headerTintColor: c.text,
-      sceneStyle: { backgroundColor: c.bg },
+      sceneStyle: scene(c),
       tabBarHideOnKeyboard: true,
     }}>
       <Tabs.Screen name="index" options={{

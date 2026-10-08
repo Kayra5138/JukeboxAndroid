@@ -19,6 +19,12 @@ object YouTubeEngine {
   private val searchLock = Any()
   private val earlyCancellations = linkedSetOf<String>()
 
+  /** Every request made of YouTube from here waits its turn at this. */
+  val gate = YouTubeGate()
+
+  /** Whether the search known as [id] has been asked for and has not ended. */
+  fun searching(id: String): Boolean = searches.containsKey(id)
+
   @Synchronized
   private fun init(context: Context) {
     if (initialized) return
@@ -68,7 +74,15 @@ object YouTubeEngine {
     } finally { watch.cancel(false) }
   }
 
-  fun search(context: Context, query: String, searchId: String, playlist: Boolean = false): List<JSONObject> {
+  /**
+   * A search, or the reading of a playlist.
+   *
+   * [forQueue] is a search for a job that was asked for by name, which waits
+   * for whatever is being fetched and gives way to a search made by hand:
+   * see [YouTubeGate]. It is known by its job's id, and is over with
+   * [YouTubeGate.GaveWay] when it gave way.
+   */
+  fun search(context: Context, query: String, searchId: String, playlist: Boolean = false, forQueue: Boolean = false): List<JSONObject> {
     require(Regex("[A-Za-z0-9-]{1,80}").matches(searchId))
     val cancelled = AtomicBoolean(false)
     synchronized(searchLock) {
@@ -86,7 +100,9 @@ object YouTubeEngine {
         if (playlist) { addOption("--playlist-end", if (playlistSearch) "20" else "500"); addOption("--ignore-errors") }
         if (playlist || input.startsWith("ytsearch")) addOption("--flat-playlist")
       }
-      val response = JSONObject(execute(request, cancelled, if (playlist) 120 else 60))
+      val response = gate.hold(if (forQueue) YouTubeGate.For.FIND else YouTubeGate.For.HAND, cancelled) {
+        JSONObject(execute(request, cancelled, if (playlist) 120 else 60))
+      }
       if (playlistSearch) return YouTubeData.playlists(response)
       val videos = YouTubeData.results(response, if (playlist) 500 else 20)
       if (playlist) {
@@ -95,14 +111,24 @@ object YouTubeEngine {
         videos.forEach { it.put("sourcePlaylist", source) }
       }
       return videos
-    } finally { searches.remove(searchId) }
+    } finally {
+      searches.remove(searchId)
+      // Whoever typed it is done with YouTube for now, which Discover's own wait to hear.
+      if (!forQueue) DownloadStore.touched()
+    }
   }
 
-  fun cancelSearch(id: String) {
+  /**
+   * Stops a search. One that has not begun is remembered, to be stopped as
+   * it does — unless [remember] is false, which is for the queue's: its
+   * search goes by its job's id, and a job that is tried again must not be
+   * stopped by a cancellation meant for the last try.
+   */
+  fun cancelSearch(id: String, remember: Boolean = true) {
     synchronized(searchLock) {
       val token = searches[id]
       if (token != null) token.set(true)
-      else {
+      else if (remember) {
         // Expo's cancel call may run before the search reaches the IO queue.
         if (earlyCancellations.size >= 32) earlyCancellations.remove(earlyCancellations.first())
         earlyCancellations.add(id)
@@ -115,6 +141,11 @@ object YouTubeEngine {
     init(context)
     val url = YouTubeData.url(id)
     progress("preparing", 0)
+    return gate.hold(YouTubeGate.For.DOWNLOAD, cancelled) { fetch(context, url, format, directory, cancelled, discovery, progress) }
+  }
+
+  private fun fetch(context: Context, url: String, format: String, directory: File, cancelled: AtomicBoolean, discovery: JSONObject?,
+    progress: (String, Int) -> Unit): Pair<File, JSONObject> {
     val info = JSONObject(execute(request(url).apply {
       addOption("--skip-download"); addOption("--dump-single-json")
     }, cancelled, 60))

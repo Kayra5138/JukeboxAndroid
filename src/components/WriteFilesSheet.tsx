@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import {
   forecast,
@@ -11,6 +12,7 @@ import {
 import { useT } from '../lib/i18n/index';
 import type { EnrichedTrack } from '../lib/media/enriched';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
 type Stage =
   | { at: 'asking'; note?: string }
@@ -55,6 +57,7 @@ export function WriteFilesSheet({
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
+  useWindowVeil(visible);
   const said = t.details.write;
 
   // Reset as it opens rather than as it closes, so the first frame is the
@@ -222,7 +225,7 @@ export function WriteFilesSheet({
 const useStyles = makeStyles((c) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 28,

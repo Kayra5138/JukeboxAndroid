@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   View,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import JukeboxAudio, {
@@ -41,7 +41,7 @@ import {
 import { forBridge } from '../lib/equalizer/bridge';
 import { BUILT_IN, labelOf, matching, removed, renamed, saved } from '../lib/equalizer/presets';
 import { useT, type Strings } from '../lib/i18n/index';
-import { makeStyles, outlined, outlineWidth, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, outlineWidth, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
 
 /** A change the player would not take, said in the log; see `settle`. */
@@ -720,7 +720,7 @@ function decibels(millibels: number): string {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   centred: { alignItems: 'center', justifyContent: 'center', padding: 32 },
   content: { paddingTop: 14 },
 

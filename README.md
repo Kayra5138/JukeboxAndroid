@@ -100,6 +100,15 @@ it comes with a rhythm game built out of your own songs, because why not.
   `Eminem feat. Rihanna` and a guest left in the title are searched name by
   name, and `(Official Video)` is not part of the title.
 - Everything is editable, and a later lookup never overwrites what you typed.
+- **A cover is looked for once an album.** A track that needs one takes the
+  cover another track of its album already has, without asking anybody; only
+  to fill a gap, never over a cover you chose or the picture inside the file.
+  In a bulk lookup one search serves the whole record, and "not found" is
+  remembered, so the next run does not ask again.
+- **Look up missing** on the Tags screen asks MusicBrainz and Apple side by
+  side, each at its own polite pace, and fills the rows in as answers arrive.
+  A track with nothing missing costs nothing. If one service cannot be reached
+  the other finishes and the screen says which was given up on.
 - **View & edit details** is one page with three tabs: General, Tags, Lyrics.
 - General edits title, artist, album, year, track and disc number, and the
   cover, which you can pick from your gallery.
@@ -135,6 +144,15 @@ it comes with a rhythm game built out of your own songs, because why not.
 - Albums are assembled from your tags. In landscape you can flick through them
   as a rack of sleeves instead of a list; the one in front opens into the
   record's full list and closes back to where the rack was.
+- **Find the rest of this album.** Hold an album, or open it, and the app
+  lists the whole record: what you have, and what is missing, ticked. One
+  button fetches the missing tracks, and each lands in the album in its
+  place, with the album's cover. The track list comes from MusicBrainz, which
+  picks the pressing that best covers what you already have, so a record of
+  twelve is not said to be missing the nine extras of a box set. Where
+  MusicBrainz has no answer the album is looked for on YouTube, and taken
+  only when it can be shown to be the same record. Either source can be
+  switched to by hand.
 
 ### Stats and recap
 
@@ -197,6 +215,17 @@ it comes with a rhythm game built out of your own songs, because why not.
   without duplicates.
 - Downloads keep going when you leave the app, and unfinished ones are picked
   up again when you come back.
+- **One queue.** Everything fetched from YouTube waits in one line and is
+  fetched one thing at a time: what you search for, a playlist, the rest of
+  an album, what Discover wants. A search you type goes at once and the queue
+  waits for it. What Discover fetches by itself always goes last, and only
+  when nothing you asked for is waiting.
+- **Downloads**, in Settings, shows the line: what is being fetched, what is
+  next, and what has been. Drag to reorder, send one to the front, cancel,
+  try a failed one again, pause the whole queue, or clear what is finished,
+  which removes nothing from the phone.
+- **A floating button**, off unless you switch it on, appears while something
+  is being fetched and says what, and how much is left.
 
 ### Piano Tiles
 
@@ -242,10 +271,23 @@ from the song itself.
 
 - English or Turkish, chosen in Settings rather than taken from the phone. The
   notification, the widget and Android Auto follow the same choice.
-- Seventeen themes, or follow the phone between light and dark. Six light
+- **A different theme each time**, if you like: tick the themes you want and
+  the app opens in one of them at random, never the one it was last in.
+- Twenty-two themes, or follow the phone between light and dark. Six light
   ones (Sweet pastel, Sepia, Ice, Mint, Lavender, Peach), six dark (Pure
-  black for OLED, Midnight blue, Forest, Sunset, Dark pastel, Plum) and a
-  high-contrast one.
+  black for OLED, Midnight blue, Forest, Sunset, Dark pastel, Plum), four of
+  glass and a high-contrast one.
+- **Glass and gloss.** Night glass and Frosted glass are panes over a slow
+  sky, by night and by day; Aero is the polished look of an old desktop, sky
+  over grass with a band of gloss on everything; Cover glass is the night
+  glass over a sky made from the record that is playing. Cards let the page
+  through, what is behind a sheet or a dialog goes out of focus while it is
+  open (Android 12 and newer; a thicker dim before that), and the player
+  wears its cover, blurred, as its page.
+- **Custom** is a theme of your own from two or three colours: the page, the
+  accent, and the cards if you want to choose them. Everything else is
+  worked out, the text always so that it can be read; a colour that could
+  not be read where it is used is nudged, and the editor says so.
 - **High contrast** is for seeing with, not for looking at: black, white and
   yellow, every card, chip and field with a line round it, and nothing told
   apart by a shade of grey.
@@ -308,6 +350,7 @@ the only one that sends anything about you.
 | When you | It talks to |
 | --- | --- |
 | Look up a track's details | MusicBrainz, iTunes Search |
+| Find the rest of an album | MusicBrainz, YouTube (the track list, where MusicBrainz has none, and the songs) |
 | Fetch lyrics | LRCLIB |
 | Translate lyrics | Mozilla (model download, once per language); LRCLIB (the original writing of romanised lyrics) |
 | Open a recap | MusicBrainz, Wikimedia Commons (artist photos) |
@@ -436,7 +479,9 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
   under a run counts as a listen.
 - **Words and colours are tables.** A screen asks for a string by name and a
   colour by role. A language is a set of files the compiler checks against
-  the English, and a theme is one file of colours, tested for contrast.
+  the English, and a theme is one file of colours, tested for contrast. A
+  theme of glass is still that: its page, its sheen and its blur are said
+  once beside its colours, and no screen asks whether it has them.
 - **The media session is closed to strangers.** Only the app itself, the system
   and known browsers (Android Auto, Wear, Assistant, system UI, Bluetooth) may
   connect.
@@ -452,6 +497,11 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
 - **The board runs in grid time.** The chart says where each step really falls
   in the recording, and the board reads the player's position through that, so
   rows stay equal while the clock bends with the band.
+- **One gate to YouTube.** Every call to the extractor passes through one
+  gate on the phone, and jobs wait in one persisted list. A song can be
+  queued by name: the phone keeps its place and its turn, and the choice of
+  video stays with the one matcher there is, in JavaScript, asked through a
+  long poll so that it works with the app behind another, where timers stop.
 - **Tests cover logic, not UI:** calendar arithmetic for stats, tag weighting,
   the shuffle spread, lyric parsing, crossfade rules, backup merging, the game's
   rules. The Kotlin tests render audio buffers and measure what came out.

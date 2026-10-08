@@ -1,3 +1,4 @@
+import { carried } from '../youtube/carried';
 import { db } from '../db/index';
 import { strings, type Strings } from '../i18n/index';
 import { saveLookupTags } from '../db/tags';
@@ -6,9 +7,10 @@ import { downloads } from '../youtube/native';
 import { withMetadata } from '../media/merge';
 import { scanLibrary, libraryRoot } from '../media/library';
 import { isActive, jobError, type DownloadJob } from '../youtube/types';
-import { DAY, DEFAULT_SETTINGS, NO_MATCH, batchReady, isNoMatch, isWaitingWifi, retirementIds, selectSongs, songKey, type DiscoverSettings } from './policy';
+import { DAY, DEFAULT_SETTINGS, NO_MATCH, NO_MATCH_CODE, batchReady, isNoMatch, isWaitingWifi, retirementIds, selectSongs, songKey, type DiscoverSettings } from './policy';
 import { buildPool } from './catalogue';
-import { chooseVideo } from './video';
+import { findQuery } from './video';
+import { findUntil, queueChanged } from '../youtube/finder';
 import { readSnapshot, saveSnapshot, readDiscoverSettings, saveDiscoverSettings, exclude, exclusions, unblock, type Entry, type Snapshot } from './store';
 import type { Track } from '../types';
 
@@ -94,7 +96,9 @@ async function sync() {
     }
     else {
       entry.track = undefined;
-      if (job.status === 'failed' || job.status === 'missing' || job.status === 'cancelled') fail(entry, jobError(job) ?? strings().discover.engine.downloadStopped, job.errorCode);
+      // Looked for in its turn and not to be found: the mark this module knows such a song by.
+      if (job.status === 'failed' && job.errorCode === NO_MATCH_CODE) fail(entry, NO_MATCH, job.errorCode);
+      else if (job.status === 'failed' || job.status === 'missing' || job.status === 'cancelled') fail(entry, jobError(job) ?? strings().discover.engine.downloadStopped, job.errorCode);
       else clear(entry);
     }
   }
@@ -140,21 +144,51 @@ async function fill(refresh: boolean) {
     if (!snapshot!.refreshedAt && entries.length) snapshot!.refreshedAt = Date.now();
   });
 }
-async function queue(entry: Entry, background = false, automatic = false) {
-  if (!downloads) throw new Error(strings().discover.engine.needsBuild);
+/**
+ * Asks the queue of downloads for a song, by name.
+ *
+ * Nothing is searched for from here. The song goes into the one queue as a
+ * job with no video yet, behind whatever was asked for before it, and its
+ * video is looked for when its turn comes: by the app's finder while the app
+ * is open, and by the background task for itself when it is not. What comes
+ * of that — a file, or no recording that fits — is read off the job at the
+ * next `sync`, as a download's outcome always was.
+ */
+async function queue(entry: Entry, automatic = false) {
+  // A build from before the queue could be asked by name cannot be, and says so.
+  if (!downloads?.enqueueFindAsync) throw new Error(strings().discover.engine.needsBuild);
   if (entry.track) return;
   const jobs = await downloads.getJobsAsync(false);
   const active = jobs.find(j => j.id === entry.jobId && isActive(j));
   if (active) { if (!automatic) await downloads.prioritizeDiscoverAsync(active.id); return; }
-  emit({ message: strings().discover.engine.findingAudio(entry.title) });
-  const videos = await downloads.searchAsync(`${entry.artist} ${entry.title} official audio`, `discover-${entry.recordingMbid}`);
-  const video = chooseVideo(entry, videos);
-  if (!video) throw new Error(NO_MATCH);
-  const source = { ...video, discoveryTitle: entry.title, discoveryArtist: entry.artist, discoverAutomatic: automatic, discoverWifiOnly: automatic && settings!.wifiOnly };
+  const source = {
+    id: '', url: '', title: entry.title, channel: entry.artist, thumbnail: null, duration: entry.durationSec ?? null,
+    find: { query: findQuery(entry.artist, entry.title), artist: entry.artist, title: entry.title, durationSec: entry.durationSec ?? null },
+    discoveryTitle: entry.title, discoveryArtist: entry.artist, discoverAutomatic: automatic, discoverWifiOnly: automatic && settings!.wifiOnly,
+  };
   if (entry.jobId) snapshot!.retired.push(entry.jobId);
-  entry.jobId = background ? await downloads.queueDiscoverBackgroundAsync(source, entry.recordingMbid)
-    : await downloads.enqueueDiscoverAsync(source, entry.recordingMbid);
+  // Discover's files are its own and not the library's: the folder is only a form filled in.
+  entry.jobId = await downloads.enqueueFindAsync(carried(source), 'mp3', 'Music', entry.recordingMbid);
   clear(entry); commit();
+  // Asked of the phone from here and not through the provider, which is told
+  // so: it reads the jobs again, and that is what sets the finder going.
+  queueChanged();
+}
+/**
+ * How long the background task goes on asking for one song's turn to be
+ * looked for. Longer than the queue makes Discover's own wait after anything
+ * else ended, and a search on top of that; short enough that two of them and
+ * their downloads fit the window the system allows.
+ */
+const BACKGROUND_FIND_MS = 75_000;
+/**
+ * A song somebody tapped cannot be fetched while the queue is paused, and
+ * waiting half an hour to say so is no answer. Said at once, and not kept
+ * with the song: it is the queue's state and not the song's.
+ */
+async function refuseWhilePaused() {
+  const state = await downloads?.queueStateAsync?.();
+  if (state?.paused) throw new Error(strings().discover.engine.paused);
 }
 async function autoDownload(background: boolean) {
   if (!settings!.autoDownload || !downloads) { emit({ waiting: '' }); return; }
@@ -166,9 +200,13 @@ async function autoDownload(background: boolean) {
     if (entry.track || (entry.error && !isWaitingWifi(entry))) continue;
     try {
       const alreadyQueued = view.jobs.some(j => j.id === entry.jobId && isActive(j));
-      await queue(entry, background, true);
+      await queue(entry, true);
       if (!background && !alreadyQueued && ++processed >= 3) break;
       if (background && entry.jobId) {
+        // No app, so no finder: the task looks for its own, for as long as it
+        // can spare. One not found in that time waits in the queue as it is,
+        // and the download below then has nothing to take.
+        await findUntil(downloads, entry.jobId, Date.now() + BACKGROUND_FIND_MS);
         await downloads.downloadDiscoverBackgroundAsync(entry.jobId);
         await sync();
         // Keep each OS work window bounded. Subsequent windows continue the batch.
@@ -310,14 +348,11 @@ export async function prepareDiscover(id: string, abandoned: () => boolean = () 
     await sync();
     const entry = snapshot!.entries.find(e => e.recordingMbid === id);
     if (!entry) throw new Error(strings().discover.engine.changed);
+    if (!entry.track) await refuseWhilePaused();
     clear(entry);
     try { await queue(entry); }
     catch (e) { fail(entry, discoverError(e), failureCode(e)); commit(); throw e; }
     commit();
-  }).catch(e => {
-    // Tapped and not to be found: the next pass takes it out and fills the place.
-    if (isNoMatch(discoverError(e))) void maintainDiscover();
-    throw e;
   });
   // No lock while waiting; minus, settings and other downloads stay usable.
   const deadline = Date.now() + 35 * 60_000;
@@ -327,7 +362,11 @@ export async function prepareDiscover(id: string, abandoned: () => boolean = () 
     const entry = snapshot!.entries.find(e => e.recordingMbid === id);
     if (!entry) throw new Error(strings().discover.engine.gone);
     if (entry.track) return entry.track;
+    // Looked for in the queue and not to be found: the next pass takes it out and fills the place.
+    if (isNoMatch(entry.error)) void maintainDiscover();
     if (entry.error) throw new Error(entry.error);
+    // Paused since it was asked for: the same answer, as soon as it is so.
+    await refuseWhilePaused();
     await new Promise(resolve => setTimeout(resolve, 1000));
   }
   throw new Error(strings().discover.engine.tooLong);

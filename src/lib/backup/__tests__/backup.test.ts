@@ -67,6 +67,7 @@ const details = (track: string, status: string, fetched: number, extra: Row = {}
   fetched_at: fetched,
   track_number: null,
   disc_number: null,
+  cover_searched_at: null,
   ...extra,
 });
 const tag = (track: string, name: string, position: number, source = 'lookup'): Row => ({
@@ -154,6 +155,13 @@ describe('reading a backup', () => {
   it('gives lyrics from before the timing offset an offset of nothing', () => {
     const old = { track_id: '1', plain: 'la', synced: null, fetched_at: 3 };
     assert.equal(parseBackup(wrap({ tables: { track_lyrics: [old] } })).tables.track_lyrics[0]!.offset_ms, 0);
+  });
+
+  it('reads details from before cover searches were remembered as never searched', () => {
+    const { cover_searched_at: _since, ...old } = details('1', 'matched', 3);
+    const read = parseBackup(wrap({ tables: { track_metadata: [old, details('2', 'matched', 3, { cover_searched_at: 9 })] } }));
+    assert.equal(read.tables.track_metadata[0]!.cover_searched_at, null);
+    assert.equal(read.tables.track_metadata[1]!.cover_searched_at, 9);
   });
 
   it('leaves behind the settings that describe the phone', () => {

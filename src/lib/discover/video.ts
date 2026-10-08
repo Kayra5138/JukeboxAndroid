@@ -1,5 +1,9 @@
 import { foldForMatch, matchScore, tokens, VARIANT_MARKERS } from '../metadata/text.ts';
 import type { YouTubeVideo } from '../youtube/types.ts';
+/** What is typed into YouTube for a song known only by its name. The one wording, whoever asks. */
+export function findQuery(artist: string, title: string): string {
+  return `${artist} ${title} official audio`.trim();
+}
 /** Never silently download the first result, a cover, or a live take of a studio recording. */
 export function chooseVideo(song: { title: string; artist: string; durationSec?: number | null }, videos: YouTubeVideo[]): YouTubeVideo | null {
   const query = `${song.artist} ${song.title}`;

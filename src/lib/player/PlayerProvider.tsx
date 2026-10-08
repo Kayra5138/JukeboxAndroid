@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import { AppState } from 'react-native';
@@ -1063,27 +1064,41 @@ export function usePlayerState(): PlayerState {
  * watching — which matters here, because the app keeps playing in the
  * background for hours.
  */
-export function usePlayerPosition(active = true): { positionSec: number; durationSec: number } {
-  const [position, setPosition] = useState({ positionSec: 0, durationSec: 0 });
+type Position = { positionSec: number; durationSec: number };
 
-  useEffect(() => {
-    if (!active) return;
-    let cancelled = false;
-    const read = async () => {
-      /*
-        A reading that fails is skipped, and nothing is said. The last position
-        stays on screen, which is the best guess there is, and this is asked
-        four times a second: a player that has gone away would otherwise be
-        four unhandled rejections a second for as long as the sheet is open.
-      */
-      const status = await JukeboxAudio.getStatusAsync().catch(() => null);
-      if (cancelled || !status?.connected) return;
-      setPosition({
-        positionSec: status.positionSec ?? 0,
-        durationSec: status.durationSec ?? 0,
-      });
-    };
-    void read();
+const NOWHERE: Position = { positionSec: 0, durationSec: 0 };
+let position: Position = NOWHERE;
+const watching = new Set<() => void>();
+let polling: ReturnType<typeof setInterval> | null = null;
+
+async function readPosition(): Promise<void> {
+  /*
+    A reading that fails is skipped, and nothing is said. The last position
+    stays on screen, which is the best guess there is, and this is asked
+    four times a second: a player that has gone away would otherwise be
+    four unhandled rejections a second for as long as the sheet is open.
+  */
+  const status = await JukeboxAudio.getStatusAsync().catch(() => null);
+  if (polling == null || !status?.connected) return;
+  const positionSec = status.positionSec ?? 0;
+  const durationSec = status.durationSec ?? 0;
+  if (positionSec === position.positionSec && durationSec === position.durationSec) return;
+  position = { positionSec, durationSec };
+  for (const told of [...watching]) told();
+}
+
+/**
+ * One clock for everything that shows the position, running only while
+ * something does.
+ *
+ * It used to be kept by the player sheet itself, which meant the whole sheet
+ * -- the artwork, the queue, every button -- was drawn again four times a
+ * second to move a bar and light a line of the lyrics. Now each of the things
+ * that shows the time listens for itself and is the only thing drawn.
+ */
+function watchPosition(told: () => void): () => void {
+  watching.add(told);
+  if (polling == null) {
     /*
       Four times a second. The seek bar would be happy with half that, but the
       lyrics would not: this is how often the sung line can change, so at 500ms
@@ -1091,12 +1106,30 @@ export function usePlayerPosition(active = true): { positionSec: number; duratio
       while something is on screen showing the position, which is why it can
       afford to be this often.
     */
-    const timer = setInterval(() => void read(), 250);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [active]);
+    polling = setInterval(() => void readPosition(), 250);
+    void readPosition();
+  }
+  return () => {
+    watching.delete(told);
+    if (watching.size === 0 && polling != null) {
+      clearInterval(polling);
+      polling = null;
+    }
+  };
+}
 
+const watchNothing = () => () => {};
+const positionNow = () => position;
+
+export function usePlayerPosition(active = true): Position {
+  return useSyncExternalStore(active ? watchPosition : watchNothing, positionNow);
+}
+
+/**
+ * Where the track has got to, for something that acts on it once -- a button
+ * that jumps -- rather than showing it. Only as fresh as the last reading, so
+ * only of use while something on screen is watching.
+ */
+export function playerPositionNow(): Position {
   return position;
 }

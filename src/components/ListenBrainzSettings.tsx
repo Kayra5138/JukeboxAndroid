@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { TextPrompt } from './TextPrompt';
 import { useT } from '../lib/i18n/index';
@@ -81,9 +82,8 @@ export function ListenBrainzSettings({
         failure instanceof Error ? `${failure.name}: ${failure.message}` : typeof failure
       );
       setRefused(said.connect.unreachable);
-    } finally {
-      setChecking(false);
     }
+    setChecking(false);
   };
 
   const prompt = (

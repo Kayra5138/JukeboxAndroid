@@ -32,6 +32,21 @@ export type MetadataStore = {
 };
 
 /**
+ * The record a track is shown as being on, or null.
+ *
+ * On its own because more than the merge needs it: whatever asks which tracks
+ * are one album has to ask about the album the library shows, or two parts of
+ * the app would disagree about which tracks sit together.
+ */
+export function albumShown(
+  track: Pick<Track, 'album'>,
+  found: Pick<TrackMetadata, 'status' | 'album'> | null | undefined
+): string | null {
+  if (!found || found.status === 'not_found') return track.album;
+  return found.status === 'manual' ? (found.album ?? track.album) : (track.album ?? found.album);
+}
+
+/**
  * Online data fills gaps rather than overwriting the file.
  *
  * A lookup can legitimately return a *different* recording — a cover, when the
@@ -64,7 +79,7 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
         ...track,
         title: found.title ?? track.title,
         artist: found.artist ?? track.artist,
-        album: found.album ?? track.album,
+        album: albumShown(track, found),
         artworkUri: found.artworkUrl ?? track.artworkUri,
         genre: found.genre,
         year: found.year,
@@ -78,7 +93,7 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
     return {
       ...track,
       artist: track.artist ?? found.artist,
-      album: track.album ?? found.album,
+      album: albumShown(track, found),
       // Unconditional, unlike the two above: the media store's own album-art
       // provider stopped resolving years ago and the field arrives null from
       // it every time, so a looked-up cover is competing with nothing.

@@ -166,18 +166,20 @@ export const details: Strings['details'] = {
   },
 
   library: {
-    coversSaved: (count) =>
-      `${format.number(count)} albüm kapağı çevrimdışı kullanım için kaydedildi.`,
+    coversSaved: (count) => `${format.number(count)} albüm kapağı eklendi.`,
     stoppedOffline: (matched) =>
       `Hiçbir yanıt gelmediği için arama, ${format.number(matched)} eşleşmeden sonra durdu. Geri kalanlar için hiçbir şey yazılmadı — hâlâ denenmeyi bekliyorlar.`,
+    serviceUnreachable: (service) =>
+      `${service} servisine ulaşılamadı, arama onsuz devam etti. Ona ihtiyacı olanlar olduğu gibi bırakıldı ve bir dahaki sefere denenecek.`,
     stoppedUnexpectedly: 'Arama beklenmedik şekilde durdu.',
 
     nothingAnswered: 'Hiçbir yanıt gelmedi. Durduruluyor.',
-    rateLimited: 'İstek sınırına takıldı, bir dakika bekleniyor…',
+    rateLimited: 'Servislerden biri ara verilmesini istedi. Bir dakika sonra yeniden sorulacak.',
     lookingUp: 'Aranıyor…',
-    lookingUpProgress: (at, total) => `Aranıyor: ${format.number(at)} / ${format.number(total)}…`,
-    coversProgress: (at, total) => `Albüm kapakları: ${format.number(at)} / ${format.number(total)}…`,
-    matchedSoFar: (count) => `Şimdiye kadar ${format.number(count)} eşleşme`,
+    lookingUpProgress: (done, total) =>
+      `Aranıyor… ${format.number(total)} parçadan ${format.number(done)} tanesi tamam`,
+    soFar: (matched, covers) =>
+      `Şimdiye kadar ${format.number(matched)} eşleşme, ${format.number(covers)} kapak`,
     stop: 'Durdur',
 
     selected: (count) => `${format.number(count)} seçili`,

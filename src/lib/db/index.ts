@@ -121,6 +121,15 @@ export const SETTINGS = {
    */
   reduceMotion: 'ui:reduceMotion',
   /**
+   * `'true'` while a round button floats over the app whenever something is
+   * being downloaded; see `components/DownloadsButton.tsx`.
+   *
+   * Off unless asked for. It is drawn over whatever screen is open, and a
+   * thing that turns up over somebody's library unbidden is in the way before
+   * it is useful: the queue has a screen of its own for whoever goes looking.
+   */
+  downloadsButton: 'ui:downloadsButton',
+  /**
    * How late the sound is by the time it is heard, in milliseconds.
    *
    * Only the tiles game reads it, but what it describes belongs to the
@@ -153,6 +162,17 @@ export const SETTINGS = {
    * a theme that is no longer there, it is `'system'`.
    */
   theme: 'ui:theme',
+  /**
+   * The colours of the theme somebody made for themselves, as
+   * `theme/custom.ts` writes them: the page, the accent and perhaps a card.
+   * Kept whether or not that theme is the one chosen, so that going to
+   * another and coming back finds it as it was left. Absent, its defaults.
+   */
+  customTheme: 'ui:theme:custom',
+  /** `'true'` while the app opens in a theme drawn at random from `themeShufflePool`; see `theme/shuffle.ts`. */
+  themeShuffle: 'ui:theme:shuffle',
+  /** The ids of the themes that draw is made from, with commas between. Kept while the draw is off. */
+  themeShufflePool: 'ui:theme:shufflePool',
   /**
    * The language lyrics are translated into, as the translator's tag for it.
    * Absent, English; see `lyrics/target.ts`.

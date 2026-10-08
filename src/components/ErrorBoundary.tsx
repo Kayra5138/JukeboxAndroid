@@ -1,8 +1,9 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, page, usePressed } from '../lib/theme/index';
 
 /**
  * Somewhere for a screen that threw while drawing to land.
@@ -74,7 +75,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     justifyContent: 'center',
     gap: 16,
     padding: 24,
-    backgroundColor: c.bg,
+    ...page(c),
   },
   body: { color: c.text, fontSize: 16, textAlign: 'center' },
   muted: { color: c.textMuted, fontSize: 14, textAlign: 'center' },

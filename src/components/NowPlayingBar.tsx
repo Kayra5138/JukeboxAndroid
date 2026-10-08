@@ -1,6 +1,7 @@
-import { Image } from 'expo-image';
+import { Image } from './Picture';
 import { useCallback } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NextIcon, PauseIcon, PlayIcon, PreviousIcon } from './Icons';
@@ -186,6 +187,14 @@ const SLOP_COLUMN = { top: 6, bottom: 6, left: 2, right: 2 };
 
 /** How wide the panel is when it runs down the side. */
 export const NOW_PLAYING_WIDTH = 132;
+
+/**
+ * How tall the bar is along the bottom: its padding and the cover, or the
+ * two lines beside the cover once the phone's writing is large enough for
+ * them to be the taller. For what is drawn over the app and has to keep
+ * clear of it; see `DownloadsButton`.
+ */
+export const nowPlayingHeight = (fontScale: number) => 20 + Math.max(40, Math.ceil(2 + 36 * fontScale));
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   bar: {

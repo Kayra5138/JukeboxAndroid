@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Image } from 'expo-image';
+import { Image } from './Picture';
 import {
   Animated,
   FlatList,
@@ -26,7 +26,7 @@ import { PlayIcon } from './Icons';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
-import { makeStyles, outlined } from '../lib/theme/index';
+import { laid, makeStyles, outlined } from '../lib/theme/index';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
 import type { Track } from '../lib/types';
 
@@ -696,7 +696,12 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     height: QUEUE_ROW_HEIGHT,
     paddingHorizontal: 16,
   },
-  rowLifted: { backgroundColor: c.surfaceRaised, borderRadius: 8, ...outlined(c) },
+  /*
+    One flat colour, whatever the theme writes its surfaces in. The rows it is
+    carried over go on sliding about underneath, and through a fill of glass
+    every one of them would be read through the row in the hand.
+  */
+  rowLifted: { backgroundColor: laid(c.surfaceRaised, c.bg), borderRadius: 8, ...outlined(c) },
   mark: { width: 12, alignItems: 'center' },
   // No colour of the theme's on the picture itself; see TrackRow's `art`.
   art: { width: 36, height: 36, borderRadius: 4 },

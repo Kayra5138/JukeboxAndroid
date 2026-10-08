@@ -1,3 +1,4 @@
+import type { CustomSeeds } from './custom.ts';
 import type { Strings } from '../i18n/languages.ts';
 
 /**
@@ -126,13 +127,25 @@ export type Surroundings = {
   cover: readonly string[] | null;
   /** Null before Android 12, and on a build from before the app could ask. */
   system: SystemPalette | null;
+  /** The colours somebody chose for a theme of their own; null where none have been, and the theme is its default. */
+  custom: CustomSeeds | null;
 };
 
-/** The parts of the surroundings that have to be fetched, and so are only fetched for a theme that says it wants them. */
-export type Need = 'cover' | 'system';
+/**
+ * The parts of the surroundings that have to be fetched, and so are only
+ * fetched for a theme that says it wants them. `custom` is not fetched — it
+ * is read with the choice of theme, before anything is drawn — but it is
+ * asked for the same way, so that only the theme made from it is made again
+ * when it changes.
+ */
+export type Need = 'cover' | 'system' | 'custom';
 
-/** Where a theme is put in the picker. `basic` is the two the app is by default. */
-export type ThemeGroup = 'basic' | 'light' | 'dark' | 'special';
+/**
+ * Where a theme is put in the picker. `basic` is the two the app is by
+ * default; `effects` is the ones that are more than their colours, whichever
+ * way up they are.
+ */
+export type ThemeGroup = 'basic' | 'light' | 'dark' | 'effects' | 'special';
 
 /** A theme's name: any line of the `themes` section that is not a heading or the word for following the phone. */
 export type ThemeNameKey = Exclude<keyof Strings['themes'], 'system' | `${string}Group`>;

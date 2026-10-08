@@ -1,5 +1,5 @@
-import { StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
+import { Animated, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Image } from './Picture';
 
 import { useColours } from '../lib/theme/index';
 
@@ -332,6 +332,65 @@ export function SelectIcon({ size = 20, color: asked }: { size?: number; color?:
       <Bar length={size * 0.46} thickness={stroke} color={color} angle={-45} x={size * 0.06} y={-size * 0.02} />
     </View>
   );
+}
+
+/**
+ * An arrow and the bar it is headed for, which is two icons: pointing down
+ * at a tray it is a download, and pointing up at a line it is "to the top".
+ *
+ * Drawn from bars like the back arrow, and for its reason. The arrow is a
+ * layer of its own so that it can be moved without the bar: [arrow] is a
+ * style for that layer, which is how the floating button has it drift
+ * towards the tray while something is being fetched.
+ */
+function ArrowToBar({
+  size,
+  color,
+  up,
+  arrow,
+}: {
+  size: number;
+  color: string;
+  up: boolean;
+  arrow?: Animated.WithAnimatedValue<ViewStyle>;
+}) {
+  const stroke = Math.max(1.8, size * 0.1);
+  // Drawn pointing down and turned over for the other one.
+  const way = up ? -1 : 1;
+  const tip = size * 0.12;
+  const head = size * 0.36;
+  // Half the head's length along each axis once it is turned an eighth.
+  const reach = head * 0.3536;
+  return (
+    <View style={[styles.centre, { width: size, height: size }]}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.centre, arrow]}>
+        <Bar length={size * 0.5} thickness={stroke} color={color} angle={90} y={way * (tip - size * 0.25)} />
+        <Bar length={head} thickness={stroke} color={color} angle={way * 45} x={-reach} y={way * (tip - reach)} />
+        <Bar length={head} thickness={stroke} color={color} angle={way * -45} x={reach} y={way * (tip - reach)} />
+      </Animated.View>
+      <Bar length={size * 0.74} thickness={stroke} color={color} y={way * size * 0.37} />
+    </View>
+  );
+}
+
+/** A download: an arrow coming down into a tray. */
+export function DownloadIcon({
+  size = 22,
+  color: asked,
+  arrow,
+}: {
+  size?: number;
+  color?: string;
+  arrow?: Animated.WithAnimatedValue<ViewStyle>;
+}) {
+  const color = useInk(asked);
+  return <ArrowToBar size={size} color={color} up={false} arrow={arrow} />;
+}
+
+/** To the front of a queue: an arrow going up to the line it will stand at. */
+export function ToFrontIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <ArrowToBar size={size} color={color} up arrow={undefined} />;
 }
 
 /** Stacked music cards represent the library. */

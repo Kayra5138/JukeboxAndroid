@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useT } from '../lib/i18n/index';
@@ -12,7 +13,7 @@ import {
   setLibraryRoot,
   type LibraryFolder,
 } from '../lib/media/library';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 
 type Screen =
   | { kind: 'loading' }
@@ -119,7 +120,7 @@ export default function FoldersScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   body: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   button: {

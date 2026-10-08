@@ -1,10 +1,12 @@
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { Opened } from '../lib/backup/index';
 import { formatDateTime } from '../lib/format/date';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, outlinedClip, useColours, usePressed } from '../lib/theme/index';
+import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
 /**
  * What stands between choosing a backup and anything happening to the phone.
@@ -51,6 +53,8 @@ export function BackupSheet({
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
+  // Mounted always and a window only while there is a backup to ask about.
+  useWindowVeil(opened !== null);
   if (!opened) return null;
 
   const said = t.backup;
@@ -153,7 +157,7 @@ export function BackupSheet({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
   sheet: {
     position: 'absolute',
     left: 0,
@@ -182,7 +186,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     ...outlinedClip(c),
   },
   working: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  primary: { backgroundColor: c.primary, borderRadius: 12, padding: 14, gap: 3, marginTop: 4 },
+  primary: { backgroundColor: c.primary, borderRadius: 12, padding: 14, gap: 3, marginTop: 4, ...outlined(c, c.primary) },
   primaryLabel: { color: c.onPrimary, fontSize: 15.5, fontWeight: '600' },
   // The label's own colour, held back: there is no token for a second voice on `primary`.
   primaryHint: { color: c.onPrimary, opacity: 0.7, fontSize: 12.5, lineHeight: 17 },

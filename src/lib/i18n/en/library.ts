@@ -20,6 +20,8 @@ export const library = {
   back: '‹ Back',
   /** What a screen reader calls the long press on a track's row, anywhere one is shown. */
   trackMenu: 'Track options',
+  /** The same for the long press on an album, in the list or in the rack. */
+  albumMenu: 'Album options',
 
   /** `LibraryScreen`. */
   screen: {
@@ -92,6 +94,78 @@ export const library = {
   rack: {
     open: (album: string) => `Open ${album}`,
     openHint: 'Shows the tracks on the album',
+  },
+
+  /** `AlbumMenu`: what a held album offers. */
+  albumActions: {
+    select: { label: 'Select', hint: 'Its tracks, and then whatever else you tap' },
+    rest: {
+      label: 'Find the rest of this album',
+      hint: 'The tracks on it that you do not have yet',
+    },
+  },
+
+  /**
+   * The screen `albumActions.rest` opens: every track of the album, the ones
+   * here and the ones missing, and a way to download the missing ones.
+   */
+  rest: {
+    looking: 'Looking the album up…',
+    /** Which pressing the list was read off: how long it is and when it came out. */
+    release: (count: number, year: number | null) =>
+      year ? `${common.tracks(count)}, ${year}` : common.tracks(count),
+    have: (have: number, total: number) =>
+      `You have ${format.number(have)} of ${format.number(total)}.`,
+    complete: 'You have the whole album.',
+    rivals: 'More than one album goes by this name. This is the one your tracks fit best.',
+    unsure:
+      'None of your tracks were recognised on it, so nothing is ticked. Check that this is the right album first.',
+    disc: (disc: number) => `Disc ${format.number(disc)}`,
+
+    /** The same, while YouTube is asked: for its playlists, and then for what is on one. */
+    lookingTube: 'Looking on YouTube…',
+    readingTube: 'Reading the album…',
+    /** Where the list on screen was read from. */
+    source: {
+      musicbrainz: 'Track list from MusicBrainz',
+      youtube: (playlist: string, channel: string) =>
+        `Track list from YouTube: ${[playlist, channel].filter(Boolean).join(' · ')}`,
+    },
+    /** The quiet link to the other of the two. */
+    other: { youtube: 'Look on YouTube instead', musicbrainz: 'Use MusicBrainz instead' },
+    onTrust:
+      'Taken from YouTube’s album of this name. You have too few of its tracks to check it against, so look it over before downloading.',
+    /** Under MusicBrainz's list, where YouTube was asked as well and had nothing to add. */
+    tubeNotFound: 'No playlist on YouTube could be confirmed as this album.',
+
+    /** A missing track's row, before there is a download to speak for it. */
+    ticks: 'Ticked to be downloaded',
+    waiting: 'Waiting its turn',
+    searching: 'Finding it on YouTube…',
+    noMatch: 'No recording that matches was found',
+    searchFailed: 'The search did not go through',
+    byHand: 'Search by hand',
+    byHandLabel: (title: string) => `Search for ${title} by hand`,
+
+    download: (count: number) =>
+      `Download ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')}`,
+    nothingTicked: 'Tick the tracks to download',
+    stop: 'Stop searching',
+
+    failed: {
+      unnamed:
+        'This album cannot be looked up. It needs a name, and one artist that most of its tracks agree on.',
+      notFound: 'MusicBrainz has no album by this name from this artist.',
+      offline: 'MusicBrainz could not be reached. Check your connection and try again.',
+      throttled: 'MusicBrainz asked to slow down. Give it a minute and try again.',
+      failed: 'The album could not be looked up.',
+      gone: 'This album is no longer in the library.',
+      neither:
+        'This album was not found. MusicBrainz does not list it, and no playlist on YouTube could be confirmed as it.',
+      /** Said only when YouTube's failure has no sentence of its own. */
+      tube: 'YouTube could not be asked for the album.',
+      tooOld: 'This build of Jukebox cannot look albums up on YouTube. Install a newer Android build.',
+    },
   },
 
   /** `TrackMenu`: everything that can be done to one track. */

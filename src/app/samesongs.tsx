@@ -1,11 +1,12 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useT } from '../lib/i18n/index';
 import { keepApart, mergeSongs, sameSongs, type Side, type Suggestion } from '../lib/identity/index';
-import { makeStyles, outlined, outlinedClip, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, outlinedClip, scene, usePressed } from '../lib/theme/index';
 
 /** Where the file is, as much of it as is known. One lost long ago has only a name. */
 const whereabouts = (side: Side) => `${side.folder ?? ''}${side.filename ?? ''}`;
@@ -132,7 +133,7 @@ export default function SameSongsScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   content: { padding: 16, paddingBottom: 32, gap: 14 },
   note: { color: c.textSecondary, fontSize: 13, lineHeight: 19 },
   trouble: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 10 },

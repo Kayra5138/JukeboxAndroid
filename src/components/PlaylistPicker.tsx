@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TextPrompt } from './TextPrompt';
@@ -11,6 +12,7 @@ import {
 } from '../lib/db/playlists';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { scrimOf } from '../lib/theme/Veil';
 
 /**
  * Puts a run of tracks into a list.
@@ -111,7 +113,7 @@ export function PlaylistPicker({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: c.scrim },
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
   sheet: {
     position: 'absolute',
     left: 0,

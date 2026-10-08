@@ -227,7 +227,7 @@ describe('runEnrichment', () => {
       runEnrichment([song('Kokia')], () => {}, controller.signal, db)
     );
 
-    assert.deepEqual(result, { matched: 0, missed: 0, cancelled: true });
+    assert.deepEqual(result, { matched: 0, missed: 0, coversSaved: 0, cancelled: true });
   });
 
   it('resolves with cancelled when stopped before it starts', async () => {

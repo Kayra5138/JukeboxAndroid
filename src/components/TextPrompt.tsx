@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
 /**
  * Asks for one line of text.
@@ -50,6 +52,7 @@ export function TextPrompt({
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
+  useWindowVeil(visible);
 
   // Reset as it opens rather than as it closes, so the field is right from the
   // first frame instead of holding the last thing typed into it.
@@ -109,7 +112,7 @@ export function TextPrompt({
 const useStyles = makeStyles((c) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 28,

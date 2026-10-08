@@ -60,14 +60,10 @@ export const search: Strings['search'] = {
   listCreated: (name) => `Liste oluşturuldu: ${name}. İndirilen parçalar Listeler’de görünecek.`,
   unnamedPlaylist: 'YouTube oynatma listesi',
 
-  downloads: (active) =>
-    active > 0 ? `İndirmeler · ${format.number(active)} etkin` : 'İndirmeler',
   jobLine: (status, mp3) => `${status} · ${mp3 ? 'MP3' : 'Özgün'}`,
-  cancelLabel: (title) => `İptal et: ${title}`,
-  showFewer: 'Daha az indirme göster',
-  showAll: (count) => `${format.number(count)} indirmenin tümünü göster`,
 
   status: {
+    finding: 'YouTube’da aranıyor',
     queued: 'Kuyrukta',
     preparing: 'Hazırlanıyor…',
     downloading: (percent) => `İndiriliyor · %${percent}`,

@@ -3,7 +3,6 @@ import {
   Animated,
   PanResponder,
   StyleSheet,
-  Text,
   View,
   type StyleProp,
   type ViewStyle,
@@ -153,62 +152,96 @@ export function SwipeRow({
     Each panel fades in over the first stretch of its own side's travel and is
     fully lit by the time the row is far enough to act, so how bright it is
     says how close the gesture is to counting.
-  */
-  const leftLit = shift.interpolate({
-    inputRange: [0, TRIGGER * 0.75],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
-  const rightLit = shift.interpolate({
-    inputRange: [-TRIGGER * 0.75, 0],
-    outputRange: [1, 0],
-    extrapolate: 'clamp',
-  });
 
+    Made once, with the travel turned about that holds a panel's writing
+    still, and not again each time the row is drawn.
+  */
+  const { leftLit, rightLit, back } = useMemo(
+    () => ({
+      leftLit: shift.interpolate({
+        inputRange: [0, TRIGGER * 0.75],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      }),
+      rightLit: shift.interpolate({
+        inputRange: [-TRIGGER * 0.75, 0],
+        outputRange: [1, 0],
+        extrapolate: 'clamp',
+      }),
+      back: Animated.multiply(shift, -1),
+    }),
+    [shift]
+  );
+
+  /*
+    A panel is not lain under the row and uncovered. It stands off the side it
+    comes from and is drawn in by the row's own edge, so it is only ever where
+    the row is not; and its writing is moved back by as much, inside it, so
+    the words stay where they were and are cut off at the edge as they would
+    be were the row over them. It looks exactly like a panel being uncovered.
+
+    What it buys is a row that need not be opaque. One that covered its
+    panels had to be painted the colour of the page, and on a page that is
+    not one colour that was a flat strip behind every row of the library.
+  */
   return (
     <View style={[styles.frame, style]}>
       {left ? (
         <Animated.View
           pointerEvents="none"
-          style={[styles.panel, styles.panelLeft, { backgroundColor: left.colour, opacity: leftLit }]}>
-          <Text style={[styles.label, { color: left.tint }]} numberOfLines={1}>
+          style={[
+            styles.panel,
+            styles.panelLeft,
+            { backgroundColor: left.colour, opacity: leftLit, transform: [{ translateX: shift }] },
+          ]}>
+          <Animated.Text
+            style={[styles.label, styles.labelLeft, { color: left.tint, transform: [{ translateX: back }] }]}
+            numberOfLines={1}>
             {left.label}
-          </Text>
+          </Animated.Text>
         </Animated.View>
       ) : null}
       {right ? (
         <Animated.View
           pointerEvents="none"
-          style={[styles.panel, styles.panelRight, { backgroundColor: right.colour, opacity: rightLit }]}>
-          <Text style={[styles.label, { color: right.tint }]} numberOfLines={1}>
+          style={[
+            styles.panel,
+            styles.panelRight,
+            { backgroundColor: right.colour, opacity: rightLit, transform: [{ translateX: shift }] },
+          ]}>
+          <Animated.Text
+            style={[styles.label, styles.labelRight, { color: right.tint, transform: [{ translateX: back }] }]}
+            numberOfLines={1}>
             {right.label}
-          </Text>
+          </Animated.Text>
         </Animated.View>
       ) : null}
-      <Animated.View
-        style={[styles.moving, { transform: [{ translateX: shift }] }]}
-        {...pan.panHandlers}>
+      <Animated.View style={{ transform: [{ translateX: shift }] }} {...pan.panHandlers}>
         {children}
       </Animated.View>
     </View>
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
+const useStyles = makeStyles(() => StyleSheet.create({
   frame: { overflow: 'hidden' },
-  // Opaque, or the panel it uncovers shows through the row that is meant to be
-  // covering it.
-  moving: { backgroundColor: c.bg },
+  /*
+    As wide as the row and wholly off one side of it, cutting its writing to
+    its own shape. No padding of its own: the writing is put back by the
+    panel's width, and that is counted from inside any padding there is.
+  */
   panel: {
     position: 'absolute',
     top: 0,
-    left: 0,
-    right: 0,
     bottom: 0,
+    width: '100%',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    overflow: 'hidden',
   },
-  panelLeft: { alignItems: 'flex-start' },
-  panelRight: { alignItems: 'flex-end' },
-  label: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2 },
+  panelLeft: { left: '-100%', alignItems: 'flex-start' },
+  panelRight: { left: '100%', alignItems: 'flex-end' },
+  label: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2, marginHorizontal: 14 },
+  // Over the row's own place again, a whole width from where the panel is.
+  labelLeft: { left: '100%' },
+  labelRight: { left: '-100%' },
 }));

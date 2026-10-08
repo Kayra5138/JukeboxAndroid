@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable } from '../Pressable';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import {
@@ -10,6 +11,7 @@ import {
 } from '../../lib/equalizer/autoeq';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { scrimOf, useWindowVeil } from '../../lib/theme/Veil';
 
 /**
  * Asks for a headphone correction, as text.
@@ -39,6 +41,7 @@ export function ImportSheet({
   const styles = useStyles();
   const pressed = usePressed();
   const c = useColours();
+  useWindowVeil(visible);
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -131,7 +134,7 @@ export function ImportSheet({
 const useStyles = makeStyles((c) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,

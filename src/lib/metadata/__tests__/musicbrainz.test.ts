@@ -94,6 +94,38 @@ describe('musicbrainz lookupTrack', () => {
     assert.equal(found?.year, 2011);
   });
 
+  it('says which release it took the recording to be from', async () => {
+    stubFetch((url) => {
+      if (url.includes('/artist?')) return { body: artistHit('artist-release') };
+      if (url.includes('/recording?')) {
+        return {
+          body: {
+            recordings: [
+              {
+                id: 'rec-1',
+                title: 'Filament',
+                score: 100,
+                releases: [
+                  { 'release-group': { id: 'rg-best-of', title: 'Best Of', 'secondary-types': ['Compilation'] } },
+                  { 'release-group': { id: 'rg-album', title: 'Pax Vesania', 'primary-type': 'Album' } },
+                ],
+              },
+            ],
+          },
+        };
+      }
+      return { body: {} };
+    });
+
+    const found = await withoutWaiting(() =>
+      lookupTrack(track({ artist: 'Released Somewhere', title: 'Filament' }))
+    );
+
+    // The one its genres are read from, so that two tracks off one record
+    // can be told to be.
+    assert.deepEqual(found?.release, { groupId: 'rg-album', title: 'Pax Vesania' });
+  });
+
   it('prefers the recording’s own genres to the ones it inherits', async () => {
     stubFetch((url) => {
       if (url.includes('/artist?')) return { body: artistHit('artist-3') };

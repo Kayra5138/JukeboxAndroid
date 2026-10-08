@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 
 import { contrast, luminance } from '../colour.ts';
 import { materialColours, samePalette, systemPaletteFrom, TONES } from '../material.ts';
+import { effectsOf } from '../effects.ts';
 import { THEMES } from '../registry.ts';
 import { repaired } from '../repair.ts';
 import { dark } from '../themes/dark.ts';
@@ -133,7 +134,8 @@ describe('the repair', () => {
 
   it('changes nothing in any theme that is written down, at the ratio it is held to', () => {
     for (const theme of THEMES) {
-      if (theme.id === 'dark' || theme.dynamic) continue;
+      // A theme of glass is written in colours with an alpha, which are not grounds to mend text against.
+      if (theme.id === 'dark' || theme.dynamic || effectsOf(theme.colours)) continue;
       const ratio = theme.id === 'contrast' ? 7 : 4.5;
       assert.deepEqual(repaired(theme.colours, theme.base, ratio), theme.colours, theme.id);
     }

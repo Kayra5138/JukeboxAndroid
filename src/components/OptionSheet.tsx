@@ -1,7 +1,9 @@
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
 /**
  * Asks for one of a list, where the list is too long to lay out in a row.
@@ -33,6 +35,7 @@ export function OptionSheet<Value extends string>({
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
+  useWindowVeil(visible);
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -78,7 +81,7 @@ export function OptionSheet<Value extends string>({
 const useStyles = makeStyles((c) => StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: c.scrim,
+    backgroundColor: scrimOf(c),
     alignItems: 'center',
     justifyContent: 'center',
     padding: 28,

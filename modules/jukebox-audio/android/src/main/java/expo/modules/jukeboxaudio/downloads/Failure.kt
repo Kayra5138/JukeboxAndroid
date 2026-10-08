@@ -63,6 +63,11 @@ enum class Failure(val code: String, @StringRes val words: Int) {
   OPEN_DISCOVER("ERR_DOWNLOAD_OPEN_DISCOVER", R.string.jukebox_download_open_discover),
   RETRY_DISCOVER("ERR_DOWNLOAD_RETRY_DISCOVER", R.string.jukebox_download_retry_discover),
   NOT_HERE("ERR_DOWNLOAD_NOT_HERE", R.string.jukebox_download_not_here),
+  /**
+   * A job asked for by name, and none of what the search turned up is that
+   * recording. Nothing went wrong, and trying again will find the same.
+   */
+  NO_MATCH("ERR_DOWNLOAD_NO_MATCH", R.string.jukebox_download_no_match),
 
   /**
    * Anything else. The one kind that may come with words of its own: the
@@ -107,6 +112,15 @@ class YouTubeTrouble(
   override val message: String
     get() = detail ?: failure.english
 }
+
+/**
+ * A search asked for on the queue's behalf that is not to be made, or was
+ * put off: the job is not the one whose turn it is, or somebody typed a
+ * search of their own. Never shown. The queue has already written down what
+ * becomes of the job, and whoever asked only has to ask it what is next.
+ */
+class NotItsTurn(cause: Throwable? = null) :
+  CodedException("ERR_DOWNLOAD_NOT_ITS_TURN", "It is not this search's turn.", cause)
 
 /** As a word: "both", "robot" and "bottom" are in other errors and are not about verification. */
 private val BOT = Regex("\\bbot\\b", RegexOption.IGNORE_CASE)

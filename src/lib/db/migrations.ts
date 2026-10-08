@@ -559,6 +559,23 @@ const LISTENBRAINZ_LISTENS = `
   CREATE INDEX IF NOT EXISTS listenbrainz_listens_state ON listenbrainz_listens (state);
 `;
 
+/**
+ * When a cover was last searched for and not found.
+ *
+ * A track nobody could find at all has a row saying so, and is not asked about
+ * again. A track that was found and has no cover had nothing of the kind: every
+ * pass over the library searched for its cover afresh, three storefronts at
+ * three and a half seconds each, and for a library with a hundred such tracks
+ * that is a quarter of an hour spent on every run learning the same nothing.
+ *
+ * On the track's own row, so that it lives exactly as long as the lookup it
+ * belongs to: forgetting the row to look a track up again forgets this too,
+ * which is the one way of asking for the search to be made again.
+ */
+const COVER_SEARCHED = `
+  ALTER TABLE track_metadata ADD COLUMN cover_searched_at INTEGER;
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -583,6 +600,7 @@ export const MIGRATIONS: string[] = [
   TRANSLATIONS_BY_PART,
   TRACK_IDENTITY,
   LISTENBRAINZ_LISTENS,
+  COVER_SEARCHED,
 ];
 
 /**

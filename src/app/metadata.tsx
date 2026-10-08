@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
+import { Image } from '../components/Picture';
 import {
   ActivityIndicator,
   FlatList,
   PanResponder,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -13,12 +12,14 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   forgetMetadata,
   metadataSummary,
   readAllMetadata,
+  readMetadata,
   type TrackMetadata,
 } from '../lib/db/metadata';
 import { SearchField } from '../components/SearchField';
@@ -27,7 +28,7 @@ import { useTrackArtwork } from '../lib/media/artwork';
 import { enrichLibrary, type EnrichProgress } from '../lib/metadata/enrich';
 import { foldForMatch } from '../lib/metadata/text';
 import { ensureAudioPermission, scanLibrary } from '../lib/media/library';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
 type Row = { track: Track; metadata: TrackMetadata | undefined };
@@ -57,6 +58,26 @@ const ROW_HEIGHT = 78;
 
 /** Drags that begin over the checkboxes select; anywhere else scrolls. */
 const CHECKBOX_COLUMN = 52;
+
+/**
+ * How long results are gathered before the list is told about them.
+ *
+ * A run writes in bursts — a cover going onto every track of a record is one
+ * write per track in the same instant — and each telling walks the whole list.
+ * A third of a second is short enough to read as "as it happens" and long
+ * enough for a burst to be one walk.
+ */
+const SHOW_RESULTS_EVERY_MS = 300;
+
+const SERVICE_NAMES = { musicbrainz: 'MusicBrainz', apple: 'Apple' } as const;
+
+const keyOf = (row: Row) => row.track.id;
+
+const layoutOf = (_data: unknown, index: number) => ({
+  length: ROW_HEIGHT,
+  offset: ROW_HEIGHT * index,
+  index,
+});
 
 export default function MetadataScreen() {
   const [rows, setRows] = useState<Row[] | null>(null);
@@ -225,25 +246,60 @@ export default function MetadataScreen() {
         count read "1 of 5000" until the first real progress arrived and turned
         it into "1 of 37".
       */
-      setProgress({ done: 0, total: 0, matched: 0, throttled: false });
+      setProgress({ done: 0, total: 0, matched: 0, covers: 0, throttled: false });
+
+      /*
+        Results are shown as they are written rather than when the run ends,
+        and only the rows they belong to are touched: every other row keeps the
+        object it had, so the list has nothing to draw again for it. Reading
+        the whole library afresh, which is what the end of the run does, is too
+        much to do every few seconds under somebody's finger.
+      */
+      const touched = new Set<string>();
+      let showing: ReturnType<typeof setTimeout> | null = null;
+      const show = () => {
+        showing = null;
+        const ids = new Set(touched);
+        touched.clear();
+        setRows((current) =>
+          current
+            ? current.map((row) =>
+                ids.has(row.track.id)
+                  ? { track: row.track, metadata: readMetadata(row.track.id) ?? undefined }
+                  : row
+              )
+            : current
+        );
+      };
+      const onSaved = (ids: string[]) => {
+        for (const id of ids) touched.add(id);
+        if (showing == null) showing = setTimeout(show, SHOW_RESULTS_EVERY_MS);
+      };
+
       try {
-        const result = await enrichLibrary(tracks, setProgress, controller.signal);
+        const result = await enrichLibrary(tracks, setProgress, controller.signal, {
+          library: rows?.map((row) => row.track),
+          onSaved,
+        });
         if (result.coversSaved) setOutcome(said.coversSaved(result.coversSaved));
         if (result.stopped === 'offline') {
           setOutcome(said.stoppedOffline(result.matched));
+        } else if (result.unreachable) {
+          setOutcome(said.serviceUnreachable(SERVICE_NAMES[result.unreachable]));
         }
       } catch (error) {
         // Enrichment is documented never to reject, but a press handler is the
         // wrong place to find out that changed.
         setOutcome(error instanceof Error ? error.message : said.stoppedUnexpectedly);
-      } finally {
-        abortRef.current = null;
-        setProgress(null);
-        setSelected(new Set());
-        await refresh();
       }
+      // Nothing above throws again, so this is reached however the run ended.
+      if (showing) clearTimeout(showing);
+      abortRef.current = null;
+      setProgress(null);
+      setSelected(new Set());
+      await refresh();
     },
-    [refresh, said]
+    [refresh, said, rows]
   );
 
   const resetSelected = useCallback(async () => {
@@ -263,6 +319,28 @@ export default function MetadataScreen() {
     forgetMetadata(chosen.map((track) => track.id));
     await run(chosen);
   }, [selected, run]);
+
+  /*
+    Held between renders, so that a list which is only being counted over —
+    the progress above it changes every few seconds for the length of a run —
+    is handed the same thing to draw with and leaves its rows alone.
+  */
+  const selecting = selected.size > 0;
+  const renderRow = useCallback(
+    ({ item }: { item: Row }) => (
+      <MetadataRow
+        row={item}
+        checked={selected.has(item.track.id)}
+        onPress={() =>
+          selecting
+            ? toggle(item.track.id)
+            : router.push({ pathname: '/details', params: { trackId: item.track.id, tab: 'tags' } })
+        }
+        onLongPress={() => toggle(item.track.id)}
+      />
+    ),
+    [selected, selecting, toggle, router]
+  );
 
   if (!rows) {
     return (
@@ -293,16 +371,14 @@ export default function MetadataScreen() {
             <Text style={styles.body}>
               {progress.offline
                 ? said.nothingAnswered
-                : progress.throttled
-                  ? said.rateLimited
-                  : progress.total === 0
-                    ? said.lookingUp
-                    : (progress.phase === 'artwork' ? said.coversProgress : said.lookingUpProgress)(
-                        Math.min(progress.done + 1, progress.total),
-                        progress.total
-                      )}
+                : progress.total === 0
+                  ? said.lookingUp
+                  : said.lookingUpProgress(progress.done, progress.total)}
             </Text>
-            <Text style={styles.muted}>{said.matchedSoFar(progress.matched)}</Text>
+            <Text style={styles.muted}>{said.soFar(progress.matched, progress.covers)}</Text>
+            {/* Beside the count and not instead of it: one service is being
+                left alone for a minute while the other is still being asked. */}
+            {progress.throttled ? <Text style={styles.muted}>{said.rateLimited}</Text> : null}
             <Pressable android_ripple={pressed} style={styles.button} onPress={() => abortRef.current?.abort()}>
               <Text style={styles.buttonLabel}>{said.stop}</Text>
             </Pressable>
@@ -363,26 +439,11 @@ export default function MetadataScreen() {
         {...panResponder.panHandlers}>
         <FlatList
           data={visible}
-          keyExtractor={(row) => row.track.id}
+          keyExtractor={keyOf}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          getItemLayout={(_data, index) => ({
-            length: ROW_HEIGHT,
-            offset: ROW_HEIGHT * index,
-            index,
-          })}
-          renderItem={({ item }) => (
-            <MetadataRow
-              row={item}
-              checked={selected.has(item.track.id)}
-              onPress={() =>
-                selected.size > 0
-                  ? toggle(item.track.id)
-                  : router.push({ pathname: '/details', params: { trackId: item.track.id, tab: 'tags' } })
-              }
-              onLongPress={() => toggle(item.track.id)}
-            />
-          )}
+          getItemLayout={layoutOf}
+          renderItem={renderRow}
         />
       </View>
     </View>
@@ -448,7 +509,7 @@ function MetadataRow({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   centered: { alignItems: 'center', justifyContent: 'center' },
   listWrapper: { flex: 1 },
   header: {

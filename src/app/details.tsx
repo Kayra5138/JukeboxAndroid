@@ -2,11 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GeneralTab } from '../components/details/GeneralTab';
@@ -15,7 +15,7 @@ import { TagsTab } from '../components/details/TagsTab';
 import { useT } from '../lib/i18n/index';
 import { findTrack } from '../lib/media/library';
 import { withMetadata, type EnrichedTrack } from '../lib/media/merge';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 
 const TABS = ['general', 'tags', 'lyrics'] as const;
@@ -142,7 +142,7 @@ export default function DetailsScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
   gone: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
   button: { backgroundColor: c.surfaceRaised, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, ...outlined(c) },

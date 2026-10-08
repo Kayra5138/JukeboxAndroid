@@ -1,7 +1,8 @@
 import { DiscoverSettings } from '../../components/DiscoverSettings';
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
-import { ActivityIndicator, BackHandler, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable } from '../../components/Pressable';
 import { readSetting, SETTINGS, writeSetting } from '../../lib/db/index';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import { libraryRoot } from '../../lib/media/library';
@@ -9,6 +10,7 @@ import { LIBRARY_VIEWS, storedViews, viewsFrom, withView, type LibraryView } fro
 import { OptionSheet } from '../../components/OptionSheet';
 import { PlayerSettings } from '../../components/PlayerSettings';
 import { BackupSheet } from '../../components/BackupSheet';
+import { DownloadsSettings } from '../../components/downloads/SettingsRows';
 import { ListenBrainzSettings } from '../../components/ListenBrainzSettings';
 import {
   applyBackup,
@@ -22,11 +24,21 @@ import { chooseLanguage, LANGUAGES, useLanguage, useT } from '../../lib/i18n/ind
 import { sameSongs } from '../../lib/identity/index';
 import { namedTargets } from '../../lib/lyrics/target';
 import { chooseLyricsTarget, useLyricsTarget, useUnsupportedTargets } from '../../lib/lyrics/useTarget';
-import { DEFAULT_JUMP, JUMP_STEPS, stepFrom } from '../../lib/player/jump';
+import { JUMP_STEPS, stepFrom } from '../../lib/player/jump';
 import { rackWanted, useLandscape } from '../../lib/ui/layout';
 import { usePlayerActions, usePlayerState } from '../../lib/player/PlayerProvider';
-import { makeStyles, outlined, outlinedClip, switchColours, useColours, usePressed } from '../../lib/theme/index';
-import { ThemePicker } from '../../lib/theme/ThemePicker';
+import {
+  makeStyles,
+  outlined,
+  outlinedClip,
+  scene,
+  switchColours,
+  useColours,
+  usePressed,
+  useThemeChoice,
+} from '../../lib/theme/index';
+import { themeOf } from '../../lib/theme/registry';
+import { Behind } from '../../lib/theme/Veil';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SettingsScreen() {
@@ -44,15 +56,24 @@ export default function SettingsScreen() {
   const lyricsTarget = useLyricsTarget();
   const unsupportedTargets = useUnsupportedTargets();
   const [targetsOpen, setTargetsOpen] = useState(false);
-  const [folder, setFolder] = useState('Music');
+  const [languagesOpen, setLanguagesOpen] = useState(false);
+  /** What is chosen, to be named on the row that opens the themes. */
+  const themeChoice = useThemeChoice();
+  const themeNameKey = themeChoice === 'system' ? 'system' : themeOf(themeChoice).nameKey;
+  /*
+    Read as the screen is first drawn as well as each time it is come back
+    to. Starting from placeholders and correcting them a moment later drew
+    the whole screen twice on the way in.
+  */
+  const [folder, setFolder] = useState(() => libraryRoot());
   const [playbackOpen, setPlaybackOpen] = useState(false);
   const { speed, pitch } = usePlayerState();
   const { setSpeed, setPitch } = usePlayerActions();
-  const [rack, setRack] = useState(true);
-  const [still, setStill] = useState(false);
+  const [rack, setRack] = useState(() => rackWanted(true));
+  const [still, setStill] = useState(() => readSetting(SETTINGS.reduceMotion) === 'true');
   /** The ways of looking at the library that its switch offers. */
-  const [views, setViews] = useState<LibraryView[]>(() => viewsFrom(null));
-  const [jump, setJump] = useState(DEFAULT_JUMP);
+  const [views, setViews] = useState<LibraryView[]>(() => viewsFrom(readSetting(SETTINGS.libraryViews)));
+  const [jump, setJump] = useState(() => stepFrom(readSetting(SETTINGS.jumpSeconds)));
   /**
    * Whether tracks are evened out, or null where this build cannot say.
    *
@@ -83,6 +104,13 @@ export default function SettingsScreen() {
   const said = (trouble: unknown, otherwise: string) =>
     trouble instanceof BackupError ? trouble.message : trouble instanceof Error && trouble.message ? trouble.message : otherwise;
 
+  /*
+    None of these ends in a `finally`, though each has something to do
+    whichever way it went. The React Compiler leaves alone any component with
+    one in it, and this screen left alone was drawn afresh, all of it, for
+    every switch thrown and every time it was come back to. Nothing in the
+    handlers below is thrown onwards, so the line after says the same thing.
+  */
   const saveBackup = useCallback(async () => {
     setBusy('export');
     setNote(null);
@@ -92,9 +120,8 @@ export default function SettingsScreen() {
       if (await exportBackup()) setNote({ text: t.common.saved, bad: false });
     } catch (trouble) {
       setNote({ text: said(trouble, t.settings.exportAll.failed), bad: true });
-    } finally {
-      setBusy(null);
     }
+    setBusy(null);
   }, [t]);
 
   const chooseBackup = useCallback(async () => {
@@ -109,9 +136,8 @@ export default function SettingsScreen() {
       }
     } catch (trouble) {
       setNote({ text: said(trouble, t.common.fileUnreadable), bad: true });
-    } finally {
-      setBusy(null);
     }
+    setBusy(null);
   }, [t]);
 
   const bringIn = useCallback(
@@ -125,9 +151,8 @@ export default function SettingsScreen() {
       } catch (trouble) {
         // The write is all or nothing, so a failure here has changed nothing.
         setRefused(t.settings.importBackup.refused(said(trouble, t.settings.importBackup.failed)));
-      } finally {
-        setApplying(false);
       }
+      setApplying(false);
     },
     [opened, t]
   );
@@ -135,7 +160,9 @@ export default function SettingsScreen() {
     setFolder(libraryRoot());
     setStill(readSetting(SETTINGS.reduceMotion) === 'true');
     setRack(rackWanted(true));
-    setViews(viewsFrom(readSetting(SETTINGS.libraryViews)));
+    // The same list is a new array each time it is read, and is not news.
+    const kept = viewsFrom(readSetting(SETTINGS.libraryViews));
+    setViews((before) => (storedViews(before) === storedViews(kept) ? before : kept));
     setJump(stepFrom(readSetting(SETTINGS.jumpSeconds)));
     JukeboxAudio.getLoudnessAsync?.()
       .then((loudness) => setEven(loudness.enabled))
@@ -165,6 +192,8 @@ export default function SettingsScreen() {
   // the row and the tick never name something the list does not hold.
   const offered = targets.filter((target) => target.tag === lyricsTarget || !unsupportedTargets.has(target.tag));
   return <View style={styles.screen}>
+    {/* The page itself, apart from the sheet of playback settings laid over it. */}
+    <Behind veiled={playbackOpen} style={styles.behind}>
     <ScrollView style={{ paddingTop: insets.top }} contentContainerStyle={styles.content}>
       <Text style={styles.brand}>Jukebox</Text>
       <Text style={styles.built}>
@@ -189,39 +218,43 @@ export default function SettingsScreen() {
           */}
           <Text style={styles.section}>{t.format.upper(t.settings.sections.app)}</Text>
           <View style={styles.card}>
-            <View style={styles.row}>
+            <Pressable
+              android_ripple={pressed}
+              accessibilityRole="button"
+              style={styles.row}
+              onPress={() => setLanguagesOpen(true)}>
               <View style={styles.line}>
                 <Text style={styles.title}>{t.settings.language.title}</Text>
                 <View style={styles.choices}>
-                  {LANGUAGES.map((entry) => (
-                    <Pressable
-                      android_ripple={pressed}
-                      key={entry.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: entry.id === language }}
-                      style={[styles.choice, entry.id === language && styles.choiceOn]}
-                      onPress={() => chooseLanguage(entry.id)}>
-                      <Text style={[styles.choiceText, entry.id === language && styles.choiceTextOn]}>
-                        {entry.name}
-                      </Text>
-                    </Pressable>
-                  ))}
+                  <Text style={styles.value} numberOfLines={1}>
+                    {LANGUAGES.find((entry) => entry.id === language)?.name ?? language}
+                  </Text>
+                  <Text style={styles.chevron}>›</Text>
                 </View>
               </View>
               <Text style={styles.muted}>{t.settings.language.note}</Text>
-            </View>
+            </Pressable>
             <View style={styles.rule} />
             {/*
-              Drawn from the list of themes, by a picker that knows nothing
-              else: a theme added to the list is offered here without this
-              screen being touched. Under its title rather than beside it,
-              since a dozen themes with a picture each want the whole width.
+              A row that opens the themes, and no longer the themes
+              themselves. There are two dozen of them, each with a picture,
+              and laid out here they were most of this screen: everything
+              else in Settings was found by scrolling past them.
             */}
-            <View style={styles.row}>
-              <Text style={styles.title}>{t.settings.theme.title}</Text>
-              <ThemePicker />
-              <Text style={styles.muted}>{t.settings.theme.note}</Text>
-            </View>
+            <Link href="/themes" asChild>
+              <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
+                <View style={styles.line}>
+                  <Text style={styles.title}>{t.settings.theme.title}</Text>
+                  <View style={styles.choices}>
+                    <Text style={styles.value} numberOfLines={1}>
+                      {t.themes[themeNameKey]}
+                    </Text>
+                    <Text style={styles.chevron}>›</Text>
+                  </View>
+                </View>
+                <Text style={styles.muted}>{t.settings.theme.open}</Text>
+              </Pressable>
+            </Link>
           </View>
 
           <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.library)}</Text>
@@ -245,6 +278,13 @@ export default function SettingsScreen() {
                 <Text style={styles.muted}>{folder}</Text>
               </Pressable>
             </Link>
+            <View style={styles.rule} />
+            {/*
+              With the folder they are saved to. A component of its own,
+              because it says how the queue stands and so is drawn again as
+              often as the queue is read — which this screen should not be.
+            */}
+            <DownloadsSettings />
             <View style={styles.rule} />
             {/*
               Sideways only, which is why it says so. The rack is records turned
@@ -537,7 +577,23 @@ export default function SettingsScreen() {
         </View>
       </View>
     </ScrollView>
+    </Behind>
     <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch} onSpeed={(value) => void setSpeed(value)} onPitch={(value) => void setPitch(value)} onClose={() => setPlaybackOpen(false)} />
+    {/*
+      Each language written in itself, as it was when they were chips: this
+      is the one setting somebody may have to find without being able to
+      read the rest. A list and not chips, because two fit beside the word
+      Language and the third would not.
+    */}
+    <OptionSheet
+      visible={languagesOpen}
+      heading={t.settings.language.title}
+      note={t.settings.language.note}
+      options={LANGUAGES.map((entry) => ({ value: entry.id, label: entry.name }))}
+      chosen={language}
+      onChoose={chooseLanguage}
+      onClose={() => setLanguagesOpen(false)}
+    />
     <OptionSheet
       visible={targetsOpen}
       heading={t.settings.lyricsLanguage.title}
@@ -561,7 +617,8 @@ export default function SettingsScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
+  behind: { flex: 1 },
   content: { padding: 20, paddingBottom: 32 },
   brand: { color: c.text, fontSize: 28, fontWeight: '600', letterSpacing: -0.4 },
   built: { color: c.textFaint, fontSize: 12, marginTop: 4 },

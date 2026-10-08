@@ -2,6 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
 import { useColorScheme } from 'react-native';
 
+import { DEFAULT_SEEDS, seedsFrom, seedsToSetting, type CustomSeeds } from './custom.ts';
 import {
   currentThemeChoice,
   isOffered,
@@ -16,12 +17,16 @@ import {
   type ThemeChoice,
   type ThemeId,
 } from './registry.ts';
+import { drawn, poolFrom, poolToSetting, withTheme } from './shuffle.ts';
 import { readSystemPalette } from './systemPalette.ts';
 import type { Palette, Theme, ThemeGroup } from './tokens.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index';
+import { createStore } from '../ui/store.ts';
 
 export { withAlpha } from './colour.ts';
+export { DEFAULT_SEEDS, type CustomSeeds } from './custom.ts';
 export { outlined, outlinedClip, outlineWidth } from './edges.ts';
+export { effectsOf, laid, page, scene } from './effects.ts';
 export { THEMES, type ThemeChoice, type ThemeId } from './registry.ts';
 export type { Palette, Theme, ThemeGroup } from './tokens.ts';
 
@@ -37,15 +42,39 @@ export type { Palette, Theme, ThemeGroup } from './tokens.ts';
  * A theme that is worked out as the app runs is no exception. What it is
  * worked out from — the cover that is playing, the phone's palette — is one
  * more value held outside React, kept up to date by `ThemeSurroundings`, and
- * a component that asks for the theme is subscribed to that as well.
+ * a component that asks for the theme is subscribed to that as well. The
+ * colours of the theme somebody made are held there too, and are written
+ * from here, since they are a setting and not something found out.
  */
 
 /** Reads the stored choice. Called once, before anything is drawn; see `loadLanguage` for why. */
 export function loadTheme(): void {
   try {
-    currentThemeChoice.set(themeChoiceFrom(readSetting(SETTINGS.theme)));
+    const stored = themeChoiceFrom(readSetting(SETTINGS.theme));
+    /*
+      Or one drawn from the themes somebody likes, where they have asked for
+      a different one each time. Drawn here, once, and written down as the
+      choice, so that for the rest of this run it is a chosen theme like any
+      other and nothing else has to know how it was come by.
+    */
+    const pool = readSetting(SETTINGS.themeShuffle) === 'true' ? poolFrom(readSetting(SETTINGS.themeShufflePool)) : [];
+    const turn = drawn(pool, stored, Math.random);
+    currentThemeChoice.set(turn ?? stored);
+    if (turn && turn !== stored) writeSetting(SETTINGS.theme, turn);
   } catch {
     // Following the phone is the default, and a fine thing to fall back to.
+  }
+  /*
+    The colours of the theme somebody made, read with the choice so that an
+    app set to it opens in it. Only where some were stored: with none, the
+    theme is its default without being told, and nothing has to be written
+    for an app that never opens the editor.
+  */
+  try {
+    const stored = readSetting(SETTINGS.customTheme);
+    if (stored) themeSurroundings.set({ ...themeSurroundings.get(), custom: seedsFrom(stored) });
+  } catch {
+    // The default colours, which are a theme too.
   }
   // Here and not later, so that an app set to the wallpaper's colours opens in them.
   readSystemPalette();
@@ -55,6 +84,69 @@ export function loadTheme(): void {
 export function chooseTheme(choice: ThemeChoice): void {
   currentThemeChoice.set(choice);
   writeSetting(SETTINGS.theme, choice);
+}
+
+/**
+ * Changes the colours the custom theme is made from, for good.
+ *
+ * Whether or not it is the theme in use: its tile in the picker is drawn
+ * from these, and it is redrawn either way. The app is only redrawn when it
+ * is the one chosen, since no other theme is made again for a change in
+ * something it never looks at.
+ *
+ * A new object each time, which is what says the colours have changed — a
+ * worked-out theme is kept by what it was worked out from, and asked again
+ * with the same object it answers with the same palette. So the object held
+ * is left alone between one change and the next, and is never altered in
+ * place.
+ */
+export function saveCustomTheme(seeds: CustomSeeds): void {
+  const held: CustomSeeds = { background: seeds.background, accent: seeds.accent, surface: seeds.surface };
+  themeSurroundings.set({ ...themeSurroundings.get(), custom: held });
+  writeSetting(SETTINGS.customTheme, seedsToSetting(held));
+}
+
+/** The colours the custom theme is made from at the moment: for its editor. */
+export function useCustomSeeds(): CustomSeeds {
+  const around = useSyncExternalStore(themeSurroundings.subscribe, themeSurroundings.get);
+  return around.custom ?? DEFAULT_SEEDS;
+}
+
+/** Whether the app opens in a theme drawn at random, and from which; held like the choice, for the screen that sets them. */
+const shuffle = createStore<{ on: boolean; pool: readonly ThemeId[] } | null>(null);
+
+function shuffleNow(): { on: boolean; pool: readonly ThemeId[] } {
+  let held = shuffle.get();
+  if (!held) {
+    try {
+      held = {
+        on: readSetting(SETTINGS.themeShuffle) === 'true',
+        pool: poolFrom(readSetting(SETTINGS.themeShufflePool)),
+      };
+    } catch {
+      held = { on: false, pool: [] };
+    }
+    shuffle.set(held);
+  }
+  return held;
+}
+
+/** The draw's two settings, watched. Read from the database the first time anything asks. */
+export function useThemeShuffle(): { on: boolean; pool: readonly ThemeId[] } {
+  return useSyncExternalStore(shuffle.subscribe, shuffleNow);
+}
+
+/** Turns the draw on or off. The list is kept either way. */
+export function setThemeShuffle(on: boolean): void {
+  shuffle.set({ ...shuffleNow(), on });
+  writeSetting(SETTINGS.themeShuffle, on ? 'true' : 'false');
+}
+
+/** Puts a theme into the list the draw is made from, or takes it out. */
+export function setThemeShuffled(theme: ThemeId, on: boolean): void {
+  const pool = withTheme(shuffleNow().pool, theme, on);
+  shuffle.set({ ...shuffleNow(), pool });
+  writeSetting(SETTINGS.themeShufflePool, poolToSetting(pool));
 }
 
 /** What is chosen, which is not always a theme: for the picker. */
@@ -182,10 +274,12 @@ export function ThemeScope({
  * everything that would have gone stale: the words and the colours it wears.
  *
  * By the colours and not by the theme's name, because one theme can change
- * its colours as it runs.
+ * its colours as it runs. By the colours the field itself wears, and not the
+ * page's: a theme whose page follows the record that is playing would make
+ * the field again at every change of track, under the finger typing in it.
  */
 export function hintKey(c: Palette, hint: string): string {
-  return `${hint}|${c.text}|${c.textDisabled}|${c.surface}|${c.bg}`;
+  return `${hint}|${c.text}|${c.textDisabled}|${c.surface}`;
 }
 
 /**
@@ -227,14 +321,15 @@ export function makeStyles<T>(build: (c: Palette) => T): () => T {
  *     ...
  *     <Pressable android_ripple={pressed} onPress={...}>
  *
- * The theme's `pressed` wash, spread from under the finger by Android itself
- * and kept inside the thing pressed, corners and all. Drawn under what the
- * button holds and over its fill, so nothing written on it is dimmed.
+ * The theme's `pressed` wash, spread from under the finger by Android itself.
+ * Asked for over what the button holds and not under it, which is what lets
+ * the app's own `Pressable` keep it to the button's shape, corners and all;
+ * the wash is thin enough that what is written under it is not dimmed.
  *
  * The same object for as long as the colours are the same, like a style
  * sheet, so that handing it to a memoised row is no reason to draw it again.
  */
-export const usePressed = makeStyles((c) => ({ color: c.pressed }));
+export const usePressed = makeStyles((c) => ({ color: c.pressed, foreground: true }));
 
 /**
  * What a `Switch` is coloured with, to be spread onto it:

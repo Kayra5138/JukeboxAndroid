@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Image } from 'expo-image';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from './Pressable';
+import { Image } from './Picture';
 import { useDiscover, useDiscoverPlayback } from '../lib/discover/DiscoverProvider';
 import { discoverError, discoverSaid, keepDiscover, maintainDiscover, rejectDiscover, retryDiscoverFill, undoDiscover } from '../lib/discover/engine';
 import { useT } from '../lib/i18n/index';

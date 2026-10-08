@@ -21,7 +21,51 @@ export const settings = {
   },
   theme: {
     title: 'Theme',
+    /** Under the row in Settings that opens the themes. */
+    open: 'Colours, glass, or one of your own.',
     note: 'System follows the phone’s own light or dark setting.',
+    /** The setting that draws a theme at random each time the app is opened. */
+    shuffle: {
+      title: 'A different theme each time',
+      on: 'On',
+      toggle: 'Pick one at random each time the app opens',
+      note: 'Tick the themes to pick from. The one picked is the theme until the app is next opened, and you can still change it by hand in the meantime.',
+      empty: 'Tick at least one theme for this to do anything.',
+    },
+  },
+  /**
+   * The theme somebody makes, and the screen it is made on. The three colours
+   * are named for what they colour, not for what a designer would call them.
+   */
+  customTheme: {
+    open: 'Custom theme colours',
+    openNote: 'Pick a background and an accent for the Custom theme. Everything else is worked out from them.',
+    preview: 'Preview',
+    background: 'Background',
+    accent: 'Accent',
+    surface: 'Cards',
+    automatic: 'Automatic',
+    automaticNote: 'Worked out from the background',
+    presets: 'Suggested colours',
+    hue: 'Hue',
+    saturation: 'Saturation',
+    lightness: 'Lightness',
+    degrees: (value: string) => `${value}°`,
+    percent: (value: string) => `${value}%`,
+    hex: 'Colour code',
+    /** Said of a colour that could not be used as it was picked. */
+    nudged: (colour: string) => `Shown as ${colour}, so that everything on it can be read.`,
+    note:
+      'The colours of the text are worked out from these, so that it can always be read. A colour you pick may be made a little lighter or darker for the same reason.',
+    use: 'Use this theme',
+    reset: 'Reset',
+    /** The words in the picture of the app. They only have to look like a song. */
+    sample: {
+      title: 'Song title',
+      line: 'Artist · Album',
+      chip: 'Shuffle',
+      button: 'Play',
+    },
   },
 
   tags: { note: 'Track information and album covers' },
@@ -29,6 +73,13 @@ export const settings = {
     title: 'Albums as a rack',
     note:
       'Holding the phone sideways, flick through sleeves instead of reading a list. Tap the one in front to open it.',
+  },
+  downloads: {
+    note: 'What is being downloaded, what is waiting and what has finished.',
+    button: {
+      title: 'Floating downloads button',
+      note: 'A round button over the app while anything is being downloaded, and for a few minutes after. Tap it to see how far along it is.',
+    },
   },
   still: {
     title: 'Hold the decoration still',

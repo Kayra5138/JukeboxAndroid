@@ -1,5 +1,5 @@
 import { rankGenres, type WeightedGenre } from './genres.ts';
-import { request, sleep, statusOf, USER_AGENT } from './http.ts';
+import { pacer, request, sleep, statusOf, USER_AGENT } from './http.ts';
 import { splitCredit } from './credit.ts';
 import { identify } from './identify.ts';
 import { foldForMatch, matchScore } from './text.ts';
@@ -81,12 +81,22 @@ export type MusicBrainzMatch = {
    * to settle.
    */
   oneArtist: boolean | null;
+  /**
+   * The release the recording is from, as far as the search said.
+   *
+   * Not an album to file the track under: a recording is listed on every
+   * release it ever appeared on and this is only the likeliest of them. It is
+   * for telling that two tracks looked up together came off the same record,
+   * which the id says exactly and no comparison of names could.
+   */
+  release?: { groupId: string; title: string | null } | null;
 };
 
 type Tagged = { genres?: WeightedGenre[]; tags?: WeightedGenre[] };
 type ArtistResult = { id: string; name: string; score: number };
 type ReleaseGroup = {
   id: string;
+  title?: string;
   'primary-type'?: string | null;
   'secondary-types'?: string[];
 };
@@ -98,7 +108,7 @@ type RecordingResult = Tagged & {
   releases?: { 'release-group'?: ReleaseGroup }[];
 };
 
-let nextRequestAt = 0;
+const turn = pacer(REQUEST_INTERVAL_MS);
 
 /**
  * One request to MusicBrainz, paced and identified.
@@ -109,9 +119,7 @@ let nextRequestAt = 0;
  * behaving. Anything of ours that asks MusicBrainz anything comes through here.
  */
 export async function musicBrainzGet<T>(path: string, signal?: AbortSignal, attempt = 0): Promise<T> {
-  const wait = nextRequestAt - Date.now();
-  if (wait > 0) await sleep(wait, signal);
-  nextRequestAt = Date.now() + REQUEST_INTERVAL_MS;
+  await turn(signal);
 
   try {
     return await request<T>(
@@ -148,7 +156,7 @@ function labelsOf(entity: Tagged): WeightedGenre[] {
 }
 
 /** Lucene treats these as syntax, and a stray one fails the whole query. */
-function escapeLucene(value: string): string {
+export function escapeLucene(value: string): string {
   return value.replace(/[+\-!(){}\[\]^"~*?:\\/]|&&|\|\|/g, ' ').trim();
 }
 
@@ -198,7 +206,7 @@ async function releaseGroupGenres(
 }
 
 /** The release the song is actually from, as far as the search results say. */
-function releaseGroupOf(recording: RecordingResult): string | undefined {
+function releaseGroupOf(recording: RecordingResult): ReleaseGroup | undefined {
   const groups = (recording.releases ?? [])
     .map((release) => release['release-group'])
     .filter((group): group is ReleaseGroup => group != null);
@@ -208,7 +216,7 @@ function releaseGroupOf(recording: RecordingResult): string | undefined {
       !REPACKAGED.has(group['primary-type'] ?? '') &&
       !(group['secondary-types'] ?? []).some((type) => REPACKAGED.has(type))
   );
-  return (original ?? groups[0])?.id;
+  return original ?? groups[0];
 }
 
 /** Lucene scores loosely, so confirm the titles genuinely agree. */
@@ -327,9 +335,9 @@ export async function lookupTrack(
   // is the most specific answer and the rarest, the release group sometimes
   // carries something, and the artist is the reliable fallback — so all three
   // are merged in that order of confidence.
-  const releaseGroupId = releaseGroupOf(recording);
-  const groupGenres = releaseGroupId
-    ? await releaseGroupGenres(releaseGroupId, signal)
+  const releaseGroup = releaseGroupOf(recording);
+  const groupGenres = releaseGroup
+    ? await releaseGroupGenres(releaseGroup.id, signal)
     : undefined;
 
   const year = Number(recording['first-release-date']?.slice(0, 4));
@@ -346,5 +354,8 @@ export async function lookupTrack(
     genres: rankGenres(labelsOf(recording), groupGenres, resolved?.genres),
     year: Number.isInteger(year) && year > 1900 ? year : null,
     oneArtist,
+    release: releaseGroup
+      ? { groupId: releaseGroup.id, title: releaseGroup.title?.trim() || null }
+      : null,
   };
 }

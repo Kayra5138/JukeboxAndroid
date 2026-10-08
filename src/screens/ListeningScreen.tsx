@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarChart } from '../components/BarChart';
@@ -40,7 +41,7 @@ import {
   type Tally,
 } from '../lib/stats/period';
 import { buildReport, worthReporting } from '../lib/stats/report';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
 
 /** What the columns of the chart are measuring. */
@@ -518,7 +519,7 @@ function readPeriod(): PeriodId {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: c.bg },
+  screen: { flex: 1, ...scene(c) },
   content: { gap: 4 },
   empty: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
   emptyTitle: { color: c.text, fontSize: 16 },
