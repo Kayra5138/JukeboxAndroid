@@ -23,11 +23,20 @@ import java.util.concurrent.atomic.AtomicBoolean
  * before there was a queue to ask, and nothing the queue does of its own
  * accord is ever beside anything.
  *
+ * A fourth kind is not a request to YouTube at all: the extractor itself
+ * being changed for a newer one, or put back (see [ExtractorUpdate]). The
+ * file every one of the others runs is taken away and another put in its
+ * place, so it has the door to itself: it waits for whatever is in flight to
+ * end, a search made by hand included, and nothing begins until it is done.
+ * While it waits the queue starts nothing new, or a run of downloads would
+ * keep it waiting for the length of an album; somebody typing still goes
+ * ahead of it, as they go ahead of everything.
+ *
  * Whoever waits here can still be cancelled: the wait looks at the same
  * token the work would have been stopped by.
  */
 class YouTubeGate {
-  enum class For { DOWNLOAD, FIND, HAND }
+  enum class For { DOWNLOAD, FIND, HAND, UPDATE }
 
   /** The queue's search was stopped for one made by hand. Not a failure: it is to be made again. */
   class GaveWay : Exception("The search gave way to one made by hand.")
@@ -39,9 +48,14 @@ class YouTubeGate {
   private var gaveWay = false
   private var hand = false
   private var handsWaiting = 0
+  private var updating = false
+  private var updatesWaiting = 0
 
   /** A search made by hand is in flight, or waiting to be. */
   val handBusy: Boolean get() = synchronized(lock) { hand || handsWaiting > 0 }
+
+  /** The extractor is being changed, or waiting to be: nothing of the queue's is to start. */
+  val updateBusy: Boolean get() = synchronized(lock) { updating || updatesWaiting > 0 }
 
   /** Does [work] once it is [what]'s turn, and gives the turn up however the work ends. */
   fun <T> hold(what: For, cancelled: AtomicBoolean, work: () -> T): T {
@@ -68,14 +82,23 @@ class YouTubeGate {
       handsWaiting++
       try {
         finding?.let { gaveWay = true; it.set(true) }
-        waitUntil(cancelled) { !hand && finding == null }
+        waitUntil(cancelled) { !hand && finding == null && !updating }
         hand = true
       } finally {
         handsWaiting--
         lock.notifyAll()
       }
+    } else if (what == For.UPDATE) {
+      updatesWaiting++
+      try {
+        waitUntil(cancelled) { !updating && !downloading && finding == null && !hand && handsWaiting == 0 }
+        updating = true
+      } finally {
+        updatesWaiting--
+        lock.notifyAll()
+      }
     } else {
-      waitUntil(cancelled) { !downloading && finding == null && !hand && handsWaiting == 0 }
+      waitUntil(cancelled) { !downloading && finding == null && !hand && handsWaiting == 0 && !updating && updatesWaiting == 0 }
       if (what == For.DOWNLOAD) downloading = true
       else { finding = cancelled; gaveWay = false }
     }
@@ -86,6 +109,7 @@ class YouTubeGate {
       For.DOWNLOAD -> downloading = false
       For.FIND -> { finding = null; gaveWay = false }
       For.HAND -> hand = false
+      For.UPDATE -> updating = false
     }
     lock.notifyAll()
   }

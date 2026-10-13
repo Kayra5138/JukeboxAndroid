@@ -52,6 +52,8 @@ export const downloads = {
   },
   /** In place of a waiting job’s state, on one of Discover’s own. */
   automatic: 'Automatic · waits for the others',
+  /** In place of a waiting job’s state, on one that failed once and is put back for its second try. */
+  retrying: (why: string | null) => (why ? `Trying again · ${why}` : 'Trying again'),
 
   doNext: 'Do this next',
   doNextLabel: (title: string) => `Download ${title} next`,
@@ -67,6 +69,44 @@ export const downloads = {
   },
   unavailable: 'Install a new Android build to download music.',
   readFailed: 'Could not read downloads.',
+
+  /**
+   * yt-dlp's own few lines on the downloads screen, and what a failed
+   * download's row says in place of "Retry" where a newer one would help:
+   * see `lib/youtube/extractor.ts`.
+   */
+  extractor: {
+    heading: 'YouTube downloader',
+    version: (version: string) => `yt-dlp ${version}`,
+    current: 'Up to date',
+    available: (version: string) => `${version} is available`,
+    unchecked: 'Not checked for a newer one yet',
+    /** After "Up to date", how long ago that was found out. */
+    checked: (days: number) =>
+      days === 0 ? 'checked today' : days === 1 ? 'checked yesterday' : `checked ${format.number(days)} days ago`,
+    check: 'Check for update',
+    checking: 'Checking…',
+    update: 'Update',
+    waiting: 'Waiting for the current download to finish…',
+    downloading: (version: string, percent: number) => `Downloading ${version} · ${format.number(percent)}%`,
+    trying: 'Trying the new version…',
+    restoring: 'Putting back the version Jukebox came with…',
+    updated: (version: string) => `Now on ${version}. Downloads that failed can be retried.`,
+    /** The way back from an update that turned out worse than what it replaced. */
+    restore: (version: string) => `Go back to ${version}, which Jukebox came with`,
+    checkFailed: 'Could not check for an update.',
+    trouble: {
+      network: 'Could not reach GitHub. Check the connection and try again.',
+      answer: 'GitHub did not answer with a release. Try again later.',
+      checksum: 'The file that arrived is not the one the release lists. Nothing was changed.',
+      broken: 'The new version does not run on this phone. The one you had is still in place.',
+      failed: 'Could not update. The version you had is still in place.',
+    },
+    rowUpdate: 'Update',
+    rowCheck: 'Check',
+    rowUpdateLabel: (title: string) => `Update the YouTube downloader, to retry ${title}`,
+    rowCheckLabel: (title: string) => `Check for a newer YouTube downloader, to retry ${title}`,
+  },
 
   /** The button that floats over the app, and what it opens. */
   button: {

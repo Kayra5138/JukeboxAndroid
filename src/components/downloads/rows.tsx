@@ -7,7 +7,8 @@ import { Pressable } from '../Pressable';
 import { useT } from '../../lib/i18n/index';
 import type { Strings } from '../../lib/i18n/languages';
 import { laid, makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
-import { canCancel, canMove, canRetry, isAutomatic, namesOf, sameJob, sourceOf } from '../../lib/youtube/queueView';
+import { offerFor, type Advice } from '../../lib/youtube/extractor';
+import { canCancel, canMove, canRetry, isAutomatic, namesOf, retryOf, sameJob, sourceOf } from '../../lib/youtube/queueView';
 import { jobError, statusLabel, type DownloadJob } from '../../lib/youtube/types';
 
 /**
@@ -192,12 +193,16 @@ export const WaitingRow = memo(
     const { title } = namesOf(job);
     const movable = canMove(job);
     const automatic = isAutomatic(job);
+    const again = retryOf(job);
+    // That it failed once and is to be tried again comes before whose it is:
+    // it is the one thing about the row that is news.
+    const state = again ? said.retrying(again.why) : automatic ? said.automatic : statusLabel(job, t);
 
     return (
       <View
         style={[styles.row, { height }, lifted && styles.rowLifted]}
         accessible
-        accessibilityLabel={[title, metaLine(job, t), automatic ? said.automatic : statusLabel(job, t)].join(', ')}
+        accessibilityLabel={[title, metaLine(job, t), state].join(', ')}
         // Dragging is not something a screen reader's user can do. The same
         // moves are in the reader's own list of actions, a place at a time.
         accessibilityActions={
@@ -225,7 +230,7 @@ export const WaitingRow = memo(
             {metaLine(job, t)}
           </Text>
           <Text style={styles.meta} numberOfLines={1}>
-            {automatic ? said.automatic : statusLabel(job, t)}
+            {state}
           </Text>
         </View>
         {/*
@@ -292,22 +297,37 @@ export const WaitingRow = memo(
  * Nothing happens on a tap. The song is in the library, which is where it is
  * played from; what a row here is for is to say how it went, and to ask
  * again for one that went badly.
+ *
+ * Where it went badly in the way an old yt-dlp does, and there is a newer
+ * one or nobody has looked lately, asking again would only fail again: the
+ * row offers the update, or the look, in place of "Retry" (`offerFor`).
+ * Once that is done, or has been tried and did not come off, it is "Retry"
+ * as before.
  */
 export const FinishedRow = memo(
   function FinishedRow({
     job,
     height,
+    advice,
+    busy,
     onRetry,
+    onAdvice,
   }: {
     job: DownloadJob;
     height: number;
+    /** What there is to say about the extractor's age, and whether something is being done about it now. */
+    advice: Advice;
+    busy: boolean;
     onRetry: (id: string) => void;
+    onAdvice: (what: 'update' | 'check') => void;
   }) {
     const t = useT();
     const styles = useStyles();
     const pressed = usePressed();
     const { title } = namesOf(job);
     const failed = job.status === 'failed';
+    const offer = offerFor(job, advice);
+    const said = t.downloads.extractor;
     // The failure in its own words, where it has any.
     const outcome = (failed ? jobError(job) : null) ?? statusLabel(job, t);
     return (
@@ -324,7 +344,17 @@ export const FinishedRow = memo(
             {outcome}
           </Text>
         </View>
-        {canRetry(job) ? (
+        {offer ? (
+          <Pressable
+            android_ripple={pressed}
+            accessibilityRole="button"
+            accessibilityLabel={offer === 'update' ? said.rowUpdateLabel(title) : said.rowCheckLabel(title)}
+            disabled={busy}
+            style={styles.textButton}
+            onPress={() => onAdvice(offer)}>
+            <Text style={styles.link}>{busy ? '…' : offer === 'update' ? said.rowUpdate : said.rowCheck}</Text>
+          </Pressable>
+        ) : canRetry(job) ? (
           <Pressable
             android_ripple={pressed}
             accessibilityRole="button"
@@ -342,7 +372,12 @@ export const FinishedRow = memo(
     );
   },
   (before, after) =>
-    sameJob(before.job, after.job) && before.height === after.height && before.onRetry === after.onRetry
+    sameJob(before.job, after.job) &&
+    before.height === after.height &&
+    before.advice === after.advice &&
+    before.busy === after.busy &&
+    before.onRetry === after.onRetry &&
+    before.onAdvice === after.onAdvice
 );
 
 /** How long a hold has to last before it lifts a row: the queue's own wait. */

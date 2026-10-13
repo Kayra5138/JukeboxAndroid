@@ -32,6 +32,7 @@ import { useCoveredByRoute } from '../lib/player/overlayRoutes';
 import { LyricsView } from './LyricsView';
 import { QueueList } from './QueueList';
 import { CoverPage } from './CoverPage';
+import { PlayerDiscoverSide, PlayerDiscoverUndo } from './discover/PlayingActions';
 import { useTrackMenu } from './useTrackMenu';
 import { creditReader } from '../lib/db/credits';
 import { albumKey } from '../lib/media/albums';
@@ -656,6 +657,14 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           </View>
         </Animated.View>
 
+        {/*
+          Keep and exclude either side of the name, for a song of Discover's;
+          for any other track neither is drawn and the name has the row. Each
+          is a part of its own that listens for that one song, so this sheet
+          is not drawn again for anything Discover does.
+        */}
+        <View style={styles.titleRow}>
+        <PlayerDiscoverSide trackId={current.id} side="keep" small={landscape} />
         <View style={styles.titles}>
           <Text style={[styles.title, landscape && styles.titleWide]} numberOfLines={1}>
             {current.title}
@@ -701,6 +710,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               </>
             ) : null}
           </Text>
+        </View>
+        <PlayerDiscoverSide trackId={current.id} side="exclude" small={landscape} />
         </View>
 
         {error ? <Text style={styles.error}>{error.message}</Text> : null}
@@ -813,6 +824,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               <TranslateIcon size={modeIcon} color={showTranslation ? ON : OFF} />
             </Pressable>
           ) : null}
+          {/* For the ten seconds a song just excluded can be had back, and otherwise not there. */}
+          <PlayerDiscoverUndo />
         </View>
       </View>
   );
@@ -992,7 +1005,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   // and not on a short screen.
   playerWide: { flex: 1, minHeight: 0, gap: 8, paddingBottom: 18 },
   artEmpty: { backgroundColor: c.surfaceRaised },
-  titles: { gap: 3, alignItems: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  titles: { flex: 1, minWidth: 0, gap: 3, alignItems: 'center' },
   titleWide: { fontSize: 16 },
   artistWide: { fontSize: 12.5 },
   title: { color: c.text, fontSize: 19, fontWeight: '600' },

@@ -3,6 +3,7 @@ package expo.modules.jukeboxaudio.downloads
 import androidx.annotation.StringRes
 import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.R
+import expo.modules.jukeboxaudio.Told
 import expo.modules.jukeboxaudio.Words
 import expo.modules.kotlin.exception.CodedException
 
@@ -31,13 +32,21 @@ import expo.modules.kotlin.exception.CodedException
 enum class Failure(val code: String, @StringRes val words: Int) {
   VERIFICATION("ERR_YOUTUBE_VERIFICATION", R.string.jukebox_youtube_verification),
   UNAVAILABLE("ERR_YOUTUBE_UNAVAILABLE", R.string.jukebox_youtube_unavailable),
-  /** YouTube's pages have moved on from the extractor in this build. A newer build is the only cure. */
+  /** YouTube's pages have moved on from the extractor on the phone. A newer extractor is the cure: see [ExtractorUpdate]. */
   OUTDATED("ERR_YOUTUBE_OUTDATED", R.string.jukebox_youtube_outdated),
   NETWORK("ERR_YOUTUBE_NETWORK", R.string.jukebox_youtube_network),
   REFUSED("ERR_YOUTUBE_REFUSED", R.string.jukebox_youtube_refused),
   TIMED_OUT("ERR_YOUTUBE_TIMED_OUT", R.string.jukebox_youtube_timed_out),
   LIVE("ERR_YOUTUBE_LIVE", R.string.jukebox_youtube_live),
   TOO_LONG("ERR_YOUTUBE_TOO_LONG", R.string.jukebox_youtube_too_long),
+  /**
+   * The video chosen for a song is not one: a live stream, or hours long.
+   * The extractor was told to leave such a video alone and did, which it
+   * does without saying which of the two it was, and without failing — it
+   * ends well and leaves no file. Named for what it is, so that it is not
+   * taken for a download that left nothing behind and tried again for ever.
+   */
+  NOT_A_SONG("ERR_YOUTUBE_NOT_A_SONG", R.string.jukebox_youtube_not_a_song),
   NO_AUDIO("ERR_YOUTUBE_NO_AUDIO", R.string.jukebox_youtube_no_audio),
   ENGINE("ERR_YOUTUBE_ENGINE", R.string.jukebox_youtube_engine),
 
@@ -91,8 +100,61 @@ enum class Failure(val code: String, @StringRes val words: Int) {
   }
 }
 
-/** A failure as it happened: which, and for [Failure.FAILED] alone, what was said. */
-class Failed(val failure: Failure, val detail: String? = null) {
+/** Whether a job that failed is worth the queue's trying once more by itself, and how soon. */
+enum class Again { NEVER, SOON, LATER }
+
+/**
+ * Which failures get the one second try the queue gives by itself.
+ *
+ * The question asked of each is whether the same request, made again in a
+ * little while with nobody having done anything, could be answered
+ * differently. Written as a list with no "anything else", so that a failure
+ * added later has to be put on one side or the other.
+ */
+val Failure.again: Again get() = when (this) {
+  // The connection, or YouTube being slow: the commonest failures there are,
+  // and gone by themselves as often as not.
+  Failure.NETWORK, Failure.TIMED_OUT -> Again.SOON
+  // The extractor gave up and did not say why, or left no file. Nothing
+  // says the video is at fault, and a second run often goes through.
+  Failure.FAILED, Failure.NO_AUDIO -> Again.SOON
+  // Cut off from outside: the app was closed in the middle, the system
+  // stopped the service, or the background's short window ran out. The song
+  // never had its try.
+  Failure.INTERRUPTED, Failure.STOPPED, Failure.SERVICE, Failure.PAUSED -> Again.SOON
+  // YouTube saying "not now" — a 403, or asking whether this is a robot. It
+  // is how it answers too many requests, and it passes; but not in twenty
+  // seconds, and asking again at once is more of what it objected to.
+  Failure.REFUSED, Failure.VERIFICATION -> Again.LATER
+
+  // The video's own answer, which will be the same: gone or private, a live
+  // stream, too long, not a video.
+  Failure.UNAVAILABLE, Failure.LIVE, Failure.TOO_LONG, Failure.NOT_A_SONG, Failure.INVALID_VIDEO -> Again.NEVER
+  // Looked for and not there. The search would find the same twenty videos.
+  Failure.NO_MATCH -> Again.NEVER
+  // Only a newer extractor reads YouTube's pages again, and that is fetched
+  // for a press and not by the queue; only a reinstall mends an engine that
+  // could not be unpacked.
+  Failure.OUTDATED, Failure.ENGINE -> Again.NEVER
+  // Not a failure of the song but a rule about the connection, with its own
+  // way back: Discover asks again when there is Wi-Fi.
+  Failure.WAITING_WIFI -> Again.NEVER
+  // What was typed, or where it was to go: the same again is the same mistake.
+  Failure.QUERY, Failure.VIDEO_LINK, Failure.NOT_A_VIDEO, Failure.PLAYLIST_QUERY, Failure.PLAYLIST_LINK,
+  Failure.NO_PLAYLIST, Failure.FOLDER, Failure.QUEUE_FULL, Failure.BATCH, Failure.NOT_HERE -> Again.NEVER
+  // The service could not be started for a press. It is the press that has
+  // to be made again, with the app in front, and these say so.
+  Failure.OPEN_SEARCH, Failure.OPEN_DISCOVER, Failure.RETRY_DISCOVER -> Again.NEVER
+}
+
+/**
+ * A failure as it happened: which, and for [Failure.FAILED] alone, what was said.
+ *
+ * [lasting] is for a failure that has no code of its own to say so and yet
+ * will not be cured by trying again: the library would not take the file.
+ */
+class Failed(val failure: Failure, val detail: String? = null, val lasting: Boolean = false) {
+  val again: Again get() = if (lasting) Again.NEVER else failure.again
   val english: String get() = detail ?: failure.english
 }
 
@@ -126,8 +188,8 @@ class NotItsTurn(cause: Throwable? = null) :
 private val BOT = Regex("\\bbot\\b", RegexOption.IGNORE_CASE)
 
 /**
- * What yt-dlp says when YouTube's pages have moved on from the copy bundled
- * here. Nothing the listener does to the request helps; a newer build does.
+ * What yt-dlp says when YouTube's pages have moved on from the copy on the
+ * phone. Nothing the listener does to the request helps; a newer copy does.
  */
 private val OUTDATED = Regex(
   "Unable to extract|Signature extraction failed|nsig extraction failed|Failed to (?:parse|extract)|Please report this issue",
@@ -144,6 +206,11 @@ private val OUTDATED = Regex(
 fun failed(error: Throwable): Failed {
   generateSequence(error) { it.cause }.take(8).filterIsInstance<YouTubeTrouble>().firstOrNull()
     ?.let { return Failed(it.failure, it.detail) }
+  // The file was fetched and the library would not have it. A file that
+  // arrived short or empty is the download's fault, and another may arrive
+  // whole; anything else the library says, it will say again.
+  val told = generateSequence(error) { it.cause }.take(8).filterIsInstance<Told>().firstOrNull()
+  val lasting = told != null && told.words.id !in setOf(R.string.jukebox_import_cut_short, R.string.jukebox_import_empty)
 
   val text = error.message.orEmpty()
   val known = when {
@@ -154,8 +221,8 @@ fun failed(error: Throwable): Failed {
     text.contains("403") -> Failure.REFUSED
     else -> null
   }
-  return if (known != null) Failed(known)
-  else Failed(Failure.FAILED, text.lineSequence().lastOrNull { it.isNotBlank() }?.take(240))
+  return if (known != null) Failed(known, lasting = lasting)
+  else Failed(Failure.FAILED, text.lineSequence().lastOrNull { it.isNotBlank() }?.take(240), lasting)
 }
 
 /** [error] as something to throw across to JavaScript. */

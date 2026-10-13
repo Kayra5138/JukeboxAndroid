@@ -15,6 +15,8 @@ class JukeboxDownloadsModule : Module() {
   private val io = CoroutineScope(Dispatchers.IO + SupervisorJob())
   /** Cleared when the module goes, so that a call standing in wait for a name to find lets go of its thread. */
   private val alive = java.util.concurrent.atomic.AtomicBoolean(true)
+  /** Set when the module goes, which stops an update of the extractor that is still waiting or fetching. */
+  private val gone = java.util.concurrent.atomic.AtomicBoolean(false)
 
   /**
    * Starts the service for jobs somebody has just asked for, where the queue
@@ -40,7 +42,52 @@ class JukeboxDownloadsModule : Module() {
   }
   override fun definition() = ModuleDefinition {
     Name("JukeboxDownloads")
-    OnDestroy { alive.set(false); io.cancel() }
+
+    /*
+      Said whenever a job changes state: taken, found, finished, failed,
+      cancelled, moved. JavaScript reads the jobs again when it hears it, and
+      that is how it knows a song is in without having to keep asking — which
+      behind the screen it cannot do, having no timers there, and in front of
+      it should not have to do every second for jobs that are only waiting.
+      Nothing travels with it. What changed is whatever the next reading says.
+    */
+    Events("onQueueChanged", "onDiscoverReady", "onPreview", "onExtractorUpdate")
+    OnCreate {
+      val self = java.lang.ref.WeakReference(this@JukeboxDownloadsModule)
+      // Left in place when this module goes, as the player's is: it holds a
+      // weak reference and nothing else, and the next module puts its own here.
+      DownloadStore.told = {
+        self.get()?.takeIf { it.alive.get() }?.let { module ->
+          runCatching { module.sendEvent("onQueueChanged", emptyMap<String, Any?>()) }
+        }
+      }
+      // What became of a preview: see PreviewPlayer.
+      expo.modules.jukeboxaudio.preview.PreviewPlayer.told = { state ->
+        self.get()?.takeIf { it.alive.get() }?.let { module ->
+          runCatching { module.sendEvent("onPreview", state) }
+        }
+      }
+      // A song of Discover's is stored, and here it is: see DownloadStore.heard.
+      DownloadStore.heard = { song ->
+        self.get()?.takeIf { it.alive.get() }?.let { module ->
+          runCatching { module.sendEvent("onDiscoverReady", song) }
+        }
+      }
+    }
+    OnDestroy { alive.set(false); gone.set(true); io.cancel(); expo.modules.jukeboxaudio.preview.PreviewPlayer.stop() }
+
+    /*
+      Thirty seconds of a Discover song, to be heard while the song is
+      fetched. Played apart from the app's player and its queue: see
+      PreviewPlayer. Answers whether the address was one a preview may be
+      played from; what becomes of it is said by `onPreview`.
+    */
+    AsyncFunction("previewStartAsync") { id: String, address: String ->
+      expo.modules.jukeboxaudio.preview.PreviewPlayer.start(context, id, address)
+    }
+    AsyncFunction("previewStopAsync") {
+      expo.modules.jukeboxaudio.preview.PreviewPlayer.stop()
+    }
 
     AsyncFunction("discoverNetworkAsync") {
       DiscoverFiles.networkAllowed(context)
@@ -122,9 +169,16 @@ class JukeboxDownloadsModule : Module() {
       say what the search came to. The order, the waiting and the record of
       all three are here — see WHO GOES FIRST in DownloadQueue.
     */
-    AsyncFunction("enqueueFindAsync") { video: Map<String, Any?>, format: String, folder: String, discoverKey: String? ->
+    AsyncFunction("enqueueFindAsync") { video: Map<String, Any?>, format: String, folder: String, discoverKey: String?, front: Boolean?, hold: Boolean? ->
       DownloadStore.init(context)
-      val id = DownloadStore.enqueueFind(context, JSONObject(video), format, folder, discoverKey)
+      val asked = JSONObject(video)
+      // The sleeve's address is known already, and the song is seconds away at best: see DownloadArtwork.ahead.
+      if (discoverKey != null) DownloadArtwork.ahead(context, asked.text("discoverCover"))
+      // [front] is a song somebody tapped in Discover and is waiting to hear: rule 9 of WHO GOES FIRST.
+      // [hold] is one to be looked for and kept until it is wanted: rule 10.
+      val id = DownloadStore.enqueueFind(context, asked, format, folder, discoverKey, front == true, hold == true)
+      // A tap does not wait for a search that was only being made on the chance of one.
+      if (front == true) DownloadStore.giveWay().forEach { YouTubeEngine.cancelSearch(it, remember = false) }
       // Up from the press that asked, while the app is in front and may start it,
       // and kept up for as long as the names are being worked through.
       DownloadService.wake(context)
@@ -218,6 +272,34 @@ class JukeboxDownloadsModule : Module() {
     AsyncFunction("markDescribedAsync") { id: String ->
       DownloadStore.init(context)
       DownloadStore.described(id)
+    }.runOnQueue(io)
+
+    /*
+      The extractor's own version, and a newer one where there is one: see
+      ExtractorUpdate. The first reads two small files. The second is the one
+      request made of GitHub without being asked — when, and how often, is
+      JavaScript's to decide. The third is made only for a press, and says
+      how far along it is by `onExtractorUpdate`.
+    */
+    AsyncFunction("extractorVersionsAsync") {
+      YouTubeEngine.versions(context)
+    }.runOnQueue(io)
+
+    AsyncFunction("extractorLatestAsync") {
+      ExtractorUpdate.latest()
+    }.runOnQueue(io)
+
+    AsyncFunction("updateExtractorAsync") { version: String ->
+      val self = java.lang.ref.WeakReference(this@JukeboxDownloadsModule)
+      ExtractorUpdate.update(context, version, gone) { phase, percent ->
+        self.get()?.takeIf { it.alive.get() }?.let { module ->
+          runCatching { module.sendEvent("onExtractorUpdate", mapOf("phase" to phase, "percent" to percent)) }
+        }
+      }
+    }.runOnQueue(io)
+
+    AsyncFunction("restoreExtractorAsync") {
+      ExtractorUpdate.restore(context, gone)
     }.runOnQueue(io)
   }
 }

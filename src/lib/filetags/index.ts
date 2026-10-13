@@ -1,5 +1,6 @@
 import { readArtwork } from '../db/metadata.ts';
 import { rewritten } from '../identity/index.ts';
+import { libraryFilesChanged } from '../library/index.ts';
 import { forgetEmbedded } from '../media/artwork.ts';
 import { artworkChanged } from '../media/artworkEvents.ts';
 import type { EnrichedTrack } from '../media/enriched.ts';
@@ -89,6 +90,9 @@ export async function writeToFiles(tracks: EnrichedTrack[], run: Run): Promise<O
 
   // The file's own picture may be a different one now.
   if (anyWritten) artworkChanged();
+  // And its names and its size certainly are. Whoever is showing the library
+  // is shown the files as they now stand, without waiting to be visited.
+  if (anyWritten) libraryFilesChanged();
 
   return tracks
     .filter((track) => results.has(track.id))

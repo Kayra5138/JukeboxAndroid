@@ -157,6 +157,13 @@ describe('reading a backup', () => {
     assert.equal(parseBackup(wrap({ tables: { track_lyrics: [old] } })).tables.track_lyrics[0]!.offset_ms, 0);
   });
 
+  it('reads a song put away from Discover before that was dated as one of no known date', () => {
+    const old = { id: 'recording', song_key: 'artist|song', title: 'Song', artist: 'Artist', reason: 'blocked', until_at: null };
+    const read = parseBackup(wrap({ tables: { discover_exclusions: [old, { ...old, id: 'other', created_at: 77 }] } }));
+    assert.equal(read.tables.discover_exclusions[0]!.created_at, null);
+    assert.equal(read.tables.discover_exclusions[1]!.created_at, 77);
+  });
+
   it('reads details from before cover searches were remembered as never searched', () => {
     const { cover_searched_at: _since, ...old } = details('1', 'matched', 3);
     const read = parseBackup(wrap({ tables: { track_metadata: [old, details('2', 'matched', 3, { cover_searched_at: 9 })] } }));

@@ -1,3 +1,4 @@
+import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiscoverPanel } from '../../components/DiscoverPanel';
 import { QueueLink } from '../../components/downloads/QueueLink';
@@ -23,6 +24,7 @@ const lookUp = (playlist: boolean, text: string, id: string) =>
 export default function YouTubeScreen() {
   const { jobs, error, refresh, enqueue, enqueueBatch } = useDownloads();
   const insets = useSafeAreaInsets();
+  const sides = usePageSides();
   const columns = useListColumns();
   const t = useT();
   const c = useColours();
@@ -133,11 +135,8 @@ export default function YouTubeScreen() {
   );
 
   return (
-    <View
-      style={[
-        styles.screen,
-        { paddingTop: insets.top, paddingLeft: insets.left, paddingRight: insets.right },
-      ]}>
+    <WithNowPlaying style={styles.screen}>
+    <View style={[styles.inside, { paddingTop: insets.top, paddingLeft: sides.left, paddingRight: sides.right }]}>
       <View style={styles.modeRow}>
         <Pressable android_ripple={pressed} accessibilityRole="tab" accessibilityState={{ selected: mode === 'discover' }}
           style={[styles.discoverTab, mode === 'discover' && styles.segmentOn]}
@@ -227,6 +226,7 @@ export default function YouTubeScreen() {
         }}
       />}
     </View>
+    </WithNowPlaying>
   );
 }
 
@@ -236,6 +236,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: 5 },
   downloadHeading: { color: c.textFaint, fontSize: 10, textAlign: 'center', letterSpacing: 1 },
   screen: { flex: 1, ...scene(c) },
+  inside: { flex: 1 },
   resultColumns: { gap: 8 },
   // Without this a row keeps its full width and the pair overflows the screen.
   resultShared: { flex: 1, minWidth: 0 },

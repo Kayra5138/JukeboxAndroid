@@ -2,6 +2,7 @@ import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { db } from '../db/index.ts';
 import { dropFromEveryList } from '../db/playlists.ts';
 import { forgetErased } from '../identity/index.ts';
+import { libraryFilesChanged } from '../library/index.ts';
 
 /**
  * Erases tracks from the device.
@@ -19,6 +20,9 @@ export async function deleteTracks(trackIds: string[]): Promise<boolean> {
   if (!deleted) return false;
 
   forgetEverythingAbout(trackIds);
+  // Said here, so that no way of erasing a file can leave it standing in a
+  // list: the library every screen shows is read again from the device.
+  libraryFilesChanged();
   return true;
 }
 

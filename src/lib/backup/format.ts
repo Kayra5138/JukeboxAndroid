@@ -38,6 +38,9 @@ export type Row = Record<string, Cell>;
 export const TABLES = {
   discover_exclusions: {
     id: 'T!', song_key: 'T!', title: 'T!', artist: 'T!', reason: 'T!', until_at: 'I',
+    // When it was put away. Later than the rest: a backup from before it has
+    // rows without, which are read as rows of no known date.
+    created_at: 'I',
   },
   plays: {
     track_id: 'T!',

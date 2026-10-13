@@ -1,3 +1,4 @@
+import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
 import { DiscoverSettings } from '../../components/DiscoverSettings';
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
@@ -185,6 +186,7 @@ export default function SettingsScreen() {
   }, [playbackOpen]));
   const landscape = useLandscape();
   const insets = useSafeAreaInsets();
+  const sides = usePageSides();
   const built = JukeboxAudio.buildTimestamp;
   const date = built ? new Date(built) : null;
   const targets = namedTargets(t.languages, language);
@@ -194,7 +196,10 @@ export default function SettingsScreen() {
   return <View style={styles.screen}>
     {/* The page itself, apart from the sheet of playback settings laid over it. */}
     <Behind veiled={playbackOpen} style={styles.behind}>
-    <ScrollView style={{ paddingTop: insets.top }} contentContainerStyle={styles.content}>
+    <WithNowPlaying>
+    <ScrollView
+      style={{ paddingTop: insets.top }}
+      contentContainerStyle={[styles.content, { paddingLeft: sides.left + 20, paddingRight: sides.right + 20 }]}>
       <Text style={styles.brand}>Jukebox</Text>
       <Text style={styles.built}>
         {date && Number.isFinite(date.getTime())
@@ -577,6 +582,7 @@ export default function SettingsScreen() {
         </View>
       </View>
     </ScrollView>
+    </WithNowPlaying>
     </Behind>
     <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch} onSpeed={(value) => void setSpeed(value)} onPitch={(value) => void setPitch(value)} onClose={() => setPlaybackOpen(false)} />
     {/*

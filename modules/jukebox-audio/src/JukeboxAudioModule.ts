@@ -162,6 +162,13 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    */
   queryTracksAsync(rootFolder: string): Promise<LibraryTrack[]>;
   /**
+   * A short string that stays the same for as long as `queryTracksAsync` would
+   * answer the same, so the answer need not be fetched to learn it has not
+   * changed. Null when the media store would not say. Absent from a native
+   * build that predates it, where every look at the library is a whole scan.
+   */
+  libraryStampAsync?(rootFolder: string): Promise<string | null>;
+  /**
    * One track by media store id, without reading the rest of the library. Null
    * when there is no such track *or* when it sits outside `rootFolder`, which
    * is the same thing as far as a library rooted there is concerned.

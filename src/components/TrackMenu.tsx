@@ -1,6 +1,8 @@
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from './Pressable';
 
+import { isDiscoverTrack, NOT_FOR_DISCOVER } from './discover/show';
+import { useDiscoverActions, useDiscoverTrack } from '../lib/discover/DiscoverProvider';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
@@ -37,6 +39,12 @@ const ACTIONS: readonly TrackAction[] = [
  *
  * `hidden` is for the entries that would lead back to where the reader already
  * is — "go to album" on a row of that album's own page.
+ *
+ * A song of Discover's is such a track — the queue has them — and is not one
+ * of the library's until it is kept. What goes by the library is left out
+ * for it (see `NOT_FOR_DISCOVER`), and what can be done to a song of
+ * Discover's is put in: keeping it, which is what makes the rest possible,
+ * and turning it or its artist away.
  */
 export function TrackMenu({
   track,
@@ -53,6 +61,7 @@ export function TrackMenu({
   const styles = useStyles();
   const pressed = usePressed();
   useWindowVeil(track !== null);
+  const discover = isDiscoverTrack(track?.id);
   return (
     <Modal
       visible={track !== null}
@@ -78,6 +87,7 @@ export function TrackMenu({
               // nobody knows would lead to an empty screen.
               (action) =>
                 !hidden?.includes(action) &&
+                !(discover && (NOT_FOR_DISCOVER as readonly TrackAction[]).includes(action)) &&
                 (action !== 'album' || Boolean(track.album?.trim()))
             ).map((action) => (
               <Pressable
@@ -91,10 +101,56 @@ export function TrackMenu({
                 <Text style={styles.actionHint}>{t.library.menu[action].hint}</Text>
               </Pressable>
             ))}
+            {discover ? <DiscoverEntries trackId={track.id} onDone={onClose} /> : null}
           </ScrollView>
         ) : null}
       </Pressable>
     </Modal>
+  );
+}
+
+/**
+ * The entries a song of Discover's has in place of the library's.
+ *
+ * A part of its own, drawn only for such a track, so that it is the menu of
+ * a Discover song that listens to Discover and not every screen that has a
+ * menu. Nothing, for a song that has left the list since it was queued:
+ * kept already, or one of a list that has been replaced.
+ */
+function DiscoverEntries({ trackId, onDone }: { trackId: string; onDone: () => void }) {
+  const entry = useDiscoverTrack(trackId);
+  const { keep, exclude, excludeArtist } = useDiscoverActions();
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
+  if (!entry) return null;
+  const said = t.discover.menu;
+  const then = (act: (id: string) => void) => () => {
+    onDone();
+    act(entry.id);
+  };
+  return (
+    <>
+      <Pressable
+        android_ripple={pressed}
+        accessibilityState={{ disabled: entry.keeping }}
+        disabled={entry.keeping}
+        style={styles.action}
+        onPress={then(keep)}>
+        <Text style={styles.actionLabel}>{said.keep.label}</Text>
+        <Text style={styles.actionHint}>{entry.keeping ? t.discover.row.keeping : said.keep.hint}</Text>
+      </Pressable>
+      <Pressable android_ripple={pressed} style={styles.action} onPress={then(exclude)}>
+        <Text style={styles.actionLabel}>{said.exclude.label}</Text>
+        <Text style={styles.actionHint}>{said.exclude.hint}</Text>
+      </Pressable>
+      <Pressable android_ripple={pressed} style={styles.action} onPress={then(excludeArtist)}>
+        <Text style={styles.destructive} numberOfLines={1}>
+          {said.neverArtist.label(entry.artist)}
+        </Text>
+        <Text style={styles.actionHint}>{said.neverArtist.hint}</Text>
+      </Pressable>
+    </>
   );
 }
 

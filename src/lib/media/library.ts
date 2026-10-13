@@ -81,9 +81,29 @@ export async function ensureNotificationPermission(): Promise<boolean> {
  * handed back, so that no screen waits on it.
  */
 export async function scanLibrary(): Promise<Track[]> {
-  const tracks = await JukeboxAudio.queryTracksAsync(libraryRoot());
+  return scanUnder(libraryRoot());
+}
+
+/**
+ * The same, of a folder the caller names. For the one reader that has to know
+ * afterwards which folder its answer was about: `lib/library`, which holds the
+ * library for the screens and must not hold one folder's under another's name.
+ */
+export async function scanUnder(root: string): Promise<Track[]> {
+  const tracks = await JukeboxAudio.queryTracksAsync(root);
   recogniseLater(tracks);
   return tracks;
+}
+
+/**
+ * Whether the library under [root] is as it was, said without reading it: a
+ * short string that is the same for as long as a scan would be. Null when
+ * there is no saying — the media store would not answer, or the native half
+ * of the app is older than the question — and then it has to be scanned.
+ */
+export async function libraryStamp(root: string): Promise<string | null> {
+  if (!JukeboxAudio.libraryStampAsync) return null;
+  return JukeboxAudio.libraryStampAsync(root);
 }
 
 /**

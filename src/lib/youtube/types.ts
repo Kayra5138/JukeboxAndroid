@@ -12,6 +12,14 @@ export type YouTubeVideo = {
    */
   discoveryTitle?: string;
   discoveryArtist?: string;
+  /** The record a Discover song is on, as the catalogue names it; null where it named none. */
+  discoveryAlbum?: string | null;
+  /** The sleeve a Discover song is shown with. The phone keeps a copy as the file's picture and looks nothing up. */
+  discoverCover?: string | null;
+  /** Nobody tapped it: Discover asked, to have it ready. Such a job waits for a time when nothing else is being fetched. */
+  discoverAutomatic?: boolean;
+  /** One of Discover's own that is not to use mobile data. */
+  discoverWifiOnly?: boolean;
   /** The record it was fetched to complete, kept with the job until the file is in. */
   placement?: Placement;
   /**
@@ -44,7 +52,9 @@ export type YouTubeResult = YouTubeVideo | YouTubePlaylist;
 
 export type AudioFormat = 'mp3' | 'original';
 export type DownloadStatus = 'queued' | 'finding' | 'preparing' | 'downloading' | 'converting' |
-  'saving' | 'cancelling' | 'cancelled' | 'failed' | 'done' | 'missing';
+  'saving' | 'cancelling' | 'cancelled' | 'failed' | 'done' | 'missing' |
+  /** Looked for ahead and held: its video is known and nothing is being done about it. Only ever a job of Discover's. */
+  'found';
 export type DownloadJob = {
   discoverKey?: string | null;
   id: string;
@@ -66,8 +76,28 @@ export type DownloadJob = {
   finishedAt?: number | null;
   /** When work on it first began: being looked for, or being fetched. Null while it has only waited. */
   startedAt?: number | null;
+  /**
+   * On its second try. A job that fails in a way trying again might cure is
+   * put back in the queue once by the phone itself, and says so for as long
+   * as that try lasts: while it waits for it, and while it is made. One that
+   * fails again is `failed` like any other.
+   */
+  retrying?: boolean;
+  /** Why the first try failed, in the app's language. Kept on the job afterwards, whichever way the second went. */
+  retryText?: string | null;
+  /** Not before when the second try is made, in milliseconds. */
+  retryAt?: number | null;
   /** Nobody asked for this one by hand: Discover did. It waits for a time when nothing else is being fetched. */
   automatic?: boolean;
+  /**
+   * Looked for ahead of being wanted, to be held when found and not fetched:
+   * rule 10 of WHO GOES FIRST in `DownloadQueue.kt`. Such a job is no
+   * download and is shown on no screen of downloads. Gone from the job once
+   * it is asked for in earnest.
+   */
+  hold?: boolean;
+  /** The picture kept for what was fetched, as a file. For one of Discover's it may arrive after the song. */
+  artworkUri?: string | null;
   /** Finished and since cleared from the list of what was fetched. Kept, because a finished job is also how a video is known to be here already. */
   cleared?: boolean;
 };
@@ -99,5 +129,7 @@ export function durationLabel(seconds: number | null): string {
 
 export function statusLabel(job: DownloadJob, t: Strings = strings()): string {
   const said = t.search.status;
+  // A held job is on no screen that says this; were it ever, waiting is the nearest true thing to say of it.
+  if (job.status === 'found') return said.queued;
   return job.status === 'downloading' ? said.downloading(job.progress) : said[job.status];
 }

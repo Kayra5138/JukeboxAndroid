@@ -82,10 +82,51 @@ object DownloadStore {
       queue.stateChanged = false
       // Whoever stands in [awaitFind] is waiting for exactly this.
       if (jobsChanged || stateChanged) monitor.notifyAll()
+      if (jobsChanged || stateChanged) runCatching { told?.invoke() }
       if (jobsChanged) persist()
       // When the queue last worked only spaces out Discover's own. Losing it costs one early start.
       if (stateChanged) runCatching { persistState() }
     }
+  }
+
+  /**
+   * Told whenever a job changed in a way worth writing down, or the queue
+   * was paused or let go: what JavaScript reads the jobs again for.
+   *
+   * Not for a percentage, which changes many times a second and is read on a
+   * timer by whoever is showing it. This is for the things nobody can time:
+   * a download that has just finished with the screen locked, when no timer
+   * of JavaScript's goes off and the next song is waiting to be queued behind
+   * the one that is playing. Called with the lock held, so whoever is told
+   * must only pass it on.
+   */
+  @Volatile var told: (() -> Unit)? = null
+
+  /**
+   * Told the moment a song of Discover's is stored, with the song: its job,
+   * its recording, and the track it now is.
+   *
+   * [told] would do, in the end: JavaScript would read every job, see this
+   * one finished, ask for its track, and be answered. That is three trips
+   * across to learn one thing the phone already had in its hand, each
+   * waiting its turn, with somebody listening to silence meanwhile. So the
+   * one thing is sent. Nothing depends on it arriving — what [told] sets
+   * going comes to the same in the end.
+   */
+  @Volatile var heard: ((Map<String, Any?>) -> Unit)? = null
+
+  fun ready(id: String, key: String, track: JSONObject) {
+    runCatching { heard?.invoke(mapOf("id" to id, "key" to key, "track" to YouTubeData.map(track))) }
+  }
+
+  /** A stored song's sleeve has come. Written on its job, where the player and the widget look for it, and said. */
+  @Synchronized
+  fun pictured(id: String, artworkUri: String) {
+    if (!loaded) return
+    val job = jobs.firstOrNull { it.optString("id") == id } ?: return
+    job.put("artworkUri", artworkUri)
+    runCatching { persist() }
+    runCatching { told?.invoke() }
   }
 
   /** This, as the thing its own lock is: what [awaitFind] waits on, letting go of the lock while it does. */
@@ -117,13 +158,21 @@ object DownloadStore {
   @Synchronized
   fun list(): List<Map<String, Any?>> = jobs.asReversed().map(::said)
 
-  private fun said(job: JSONObject): Map<String, Any?> = YouTubeData.map(job) + ("errorText" to errorText(job))
+  /*
+    A job on its second try says so, as `retrying`, for as long as the try
+    lasts, with why the first one failed as `retryText`: in the app's
+    language, as `errorText` is.
+  */
+  private fun said(job: JSONObject): Map<String, Any?> = YouTubeData.map(job) +
+    ("errorText" to errorText(job, "error", "errorCode")) +
+    ("retrying" to (job.optBoolean("retried") && job.optString("status") in activeStates)) +
+    ("retryText" to errorText(job, "retryError", "retryErrorCode"))
 
-  private fun errorText(job: JSONObject): String? {
-    if (job.isNull("error")) return null
-    val error = job.optString("error")
+  private fun errorText(job: JSONObject, words: String, code: String): String? {
+    if (job.isNull(words)) return null
+    val error = job.optString(words)
     // A job from before there were codes is known by its sentence instead.
-    val failure = Failure.of(job.text("errorCode")) ?: Failure.saying(error) ?: return error
+    val failure = Failure.of(job.text(code)) ?: Failure.saying(error) ?: return error
     return if (error == failure.english) failure.said else error
   }
 
@@ -136,8 +185,13 @@ object DownloadStore {
     kept { queue.enqueueBatch(videos, format, folder) { exists(context, it) } }
 
   @Synchronized
-  fun enqueueFind(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String?): String =
-    kept { queue.enqueueFind(video, format, folder, discoverKey) { exists(context, it) } }
+  fun enqueueFind(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String?,
+    front: Boolean = false, hold: Boolean = false): String =
+    kept { queue.enqueueFind(video, format, folder, discoverKey, { exists(context, it) }, front, hold) }
+
+  /** Searches under way for held jobs, put back: see [DownloadQueue.giveWay]. Answers which, to be stopped. */
+  @Synchronized
+  fun giveWay(): List<String> = kept { queue.giveWay() }
 
   /** How long [awaitFind] stands before answering that there is nothing yet. */
   const val FIND_WAIT_MS = 25_000L

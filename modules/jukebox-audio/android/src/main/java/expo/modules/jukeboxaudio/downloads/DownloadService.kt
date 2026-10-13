@@ -215,10 +215,17 @@ class DownloadService : Service() {
         }
       }
       val (file, info) = YouTubeEngine.download(
-        this, video.getString("id"), job.getString("format"), directory, cancelled, video, progress)
+        this, video.getString("id"), job.getString("format"), directory, cancelled, video, !job.isNull("discoverKey"), progress)
       if (cancelled.get() || !DownloadStore.beginSaving(id)) throw YoutubeCancelled()
       val trackId = if (!job.isNull("discoverKey")) {
-        DiscoverFiles.store(this, id, file, info, job.getJSONObject("video"))
+        val stored = DiscoverFiles.store(this, id, file, info, video)
+        /*
+          Said the moment the file is where it will stay, before the receipt
+          is written: whoever tapped the song is waiting for exactly this,
+          and the writing-down is nothing they need wait for.
+        */
+        DownloadStore.ready(id, job.getString("discoverKey"), stored)
+        if (stored.isNull("artworkUri")) DiscoverFiles.pictureLater(this, id, video)
         "discover:$id"
       } else LibraryImport.fromDownload(this, file, job.getString("folder"),
         "${info.getString("title")}.${file.extension}") { trackId ->

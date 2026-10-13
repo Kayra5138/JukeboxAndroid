@@ -99,6 +99,16 @@ private val BROWSERS = setOf(
   "com.google.android.googlequicksearchbox",
   // The shade and the lock screen.
   "com.android.systemui",
+  /*
+    Samsung's lock screen, which is not the system's. The card that opens
+    there, and the always-on display, are drawn by a package of their own,
+    and it is that package that asks for a place in the track when the bar
+    on the card is dragged. Play, pause and skip reached the player all the
+    same, since those are sent as key presses and a key press is not asked
+    whose it is; the bar alone was turned away, moved under the finger and
+    went back.
+  */
+  "com.samsung.android.app.aodservice",
   // A head unit or a pair of headphones talking over Bluetooth.
   "com.android.bluetooth"
 )
@@ -151,6 +161,7 @@ class PlaybackService : MediaLibraryService() {
   private var crossfader: Crossfader? = null
   private var sleepTimer: SleepTimer? = null
   private var normaliser: Normaliser? = null
+  private var callQuiet: CallQuiet? = null
 
   private val widgetHandler = Handler(Looper.getMainLooper())
   private val widgetTick = object : Runnable {
@@ -436,12 +447,10 @@ class PlaybackService : MediaLibraryService() {
 
     val player = ExoPlayer.Builder(this, FadingRenderersFactory(this, fade))
       .setAudioAttributes(
-        AudioAttributes.Builder()
-          .setUsage(C.USAGE_MEDIA)
-          .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-          .build(),
+        CallQuiet.MUSIC,
         // Let ExoPlayer request audio focus so playback ducks for navigation
-        // prompts and pauses when another app takes over.
+        // prompts and pauses when another app takes over. The one time it
+        // does not ask is a press of play during a call: see [CallQuiet].
         /* handleAudioFocus = */ true
       )
       // Pause when headphones are unplugged instead of blasting the speaker.
@@ -487,7 +496,8 @@ class PlaybackService : MediaLibraryService() {
       the widget, a headset, the car — so this is the one place that catches
       all of them, and the only place the fades have to be woven in.
     */
-    mediaSession = MediaLibrarySession.Builder(this, FadingPlayer(player, transitions), browsing)
+    val quiet = CallQuiet(this, player).also { callQuiet = it }
+    mediaSession = MediaLibrarySession.Builder(this, FadingPlayer(player, transitions, quiet), browsing)
       .apply { launchAppIntent()?.let { setSessionActivity(it) } }
       .build()
 
@@ -1008,6 +1018,8 @@ class PlaybackService : MediaLibraryService() {
     // player's session, and the crossfader may be holding a second player of
     // its own that nothing else knows about.
     // The timer first of the three, because it speaks to the other two.
+    callQuiet?.release()
+    callQuiet = null
     SleepTimers.register(null)
     sleepTimer?.release()
     sleepTimer = null

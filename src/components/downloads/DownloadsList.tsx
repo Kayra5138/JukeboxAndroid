@@ -9,6 +9,7 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 
+import type { Advice } from '../../lib/youtube/extractor';
 import { FinishedRow, NowRow, SectionHeading, sizesFor, WaitingRow, type Sizes } from './rows';
 import { useT } from '../../lib/i18n/index';
 import { rowShift } from '../../lib/player/queue';
@@ -88,6 +89,9 @@ export function DownloadsList({
   onRetry,
   onMove,
   onClear,
+  advice,
+  adviceBusy,
+  onAdvice,
 }: {
   all: readonly DownloadJob[];
   header: ReactNode;
@@ -99,6 +103,10 @@ export function DownloadsList({
   onRetry: (id: string) => void;
   onMove: (id: string, beforeId: string | null) => Promise<void>;
   onClear: () => void;
+  /** What a failed row may offer in place of "Retry": see `FinishedRow`. */
+  advice: Advice;
+  adviceBusy: boolean;
+  onAdvice: (what: 'update' | 'check') => void;
 }) {
   const t = useT();
   const { fontScale } = useWindowDimensions();
@@ -386,7 +394,7 @@ export function DownloadsList({
                 onCancel={onCancel}
               />
             ) : (
-              <FinishedRow job={item.job} height={sizes.row} onRetry={onRetry} />
+              <FinishedRow job={item.job} height={sizes.row} advice={advice} busy={adviceBusy} onRetry={onRetry} onAdvice={onAdvice} />
             )
           }
         />

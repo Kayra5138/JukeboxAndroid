@@ -60,12 +60,13 @@
 
   <string name="jukebox_youtube_verification">YouTube bu video için doğrulama istiyor. Başka bir kaydı dene.</string>
   <string name="jukebox_youtube_unavailable">Bu video kullanılamıyor ya da özel.</string>
-  <string name="jukebox_youtube_outdated">YouTube değişti ve Jukebox’ın bu sürümü onu henüz okuyamıyor. Jukebox’ı güncelle.</string>
+  <string name="jukebox_youtube_outdated">YouTube değişti ve bu sürümdeki indirici onu henüz okuyamıyor. İndirmeler’den yenisine bak ya da Jukebox’ı güncelle.</string>
   <string name="jukebox_youtube_network">YouTube’a ulaşılamadı. Bağlantını kontrol edip yeniden dene.</string>
   <string name="jukebox_youtube_refused">YouTube bu indirmeyi reddetti. Daha sonra yeniden dene ya da Jukebox’ı güncelle.</string>
   <string name="jukebox_youtube_timed_out">YouTube’un yanıt vermesi çok uzun sürdü. Yeniden dene.</string>
   <string name="jukebox_youtube_live">Canlı yayınlar ve henüz yayınlanmamış videolar indirilemez.</string>
   <string name="jukebox_youtube_too_long">İki saatten kısa bir kayıt seç.</string>
+  <string name="jukebox_youtube_not_a_song">Bulunan video canlı bir yayın ya da bu şarkı olamayacak kadar uzun.</string>
   <string name="jukebox_youtube_no_audio">YouTube bir ses dosyası vermedi.</string>
   <string name="jukebox_youtube_engine">YouTube motoru hazırlanamadı.</string>
   <string name="jukebox_youtube_invalid_video">Geçersiz YouTube videosu.</string>
@@ -167,4 +168,5 @@
   <string name="jukebox_tags_maybe_partly">Dosya kısmen yeniden yazılmış kalmış olabilir (%1$s). Kontrol etmek için çal.</string>
   <string name="jukebox_tags_untouched">%1$s Dosyaya dokunulmadı.</string>
   <string name="jukebox_tags_untouched_after">%1$s. Dosyaya dokunulmadı.</string>
+  <string name="jukebox_under_a_call">Arama sürüyor. Kısık sesle çalıyor.</string>
 </resources>

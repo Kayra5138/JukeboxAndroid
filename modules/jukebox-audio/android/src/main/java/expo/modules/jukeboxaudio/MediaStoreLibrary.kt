@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.Cursor
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.os.Build
 import android.provider.MediaStore
 import java.io.File
 
@@ -87,6 +88,58 @@ object MediaStoreLibrary {
     }
 
     return tracks
+  }
+
+  /**
+   * What [queryTracks] would be answering about, said in one short string: see
+   * [LibraryStamp]. Null when the store will not answer, which is no reason to
+   * believe nothing has changed.
+   *
+   * The same rows as the scan, chosen the same way, but none of what is shown
+   * of them: only what moves when a file does. Where the store counts the
+   * changes made to a row, that count is the whole answer, since nothing the
+   * scan reads can change without it; the date and the size are what an
+   * Android 10 phone has in its place, and the name and the folder are there
+   * for a file renamed or moved, which changes neither. Unsorted, because the
+   * order is not wanted and the store has no index to sort the scan's way by.
+   *
+   * The words an untitled file is shown under go in as well. They come from
+   * the app's language, not from the store, and a scan made in another
+   * language would say them differently.
+   */
+  fun stamp(context: Context, rootFolder: String): String? {
+    val counted = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+    val columns = mutableListOf(
+      MediaStore.Audio.Media._ID,
+      MediaStore.MediaColumns.SIZE,
+      MediaStore.Audio.Media.DATE_MODIFIED,
+      MediaStore.Audio.Media.DISPLAY_NAME,
+      MediaStore.Audio.Media.RELATIVE_PATH
+    )
+    if (counted) columns.add(MediaStore.MediaColumns.GENERATION_MODIFIED)
+
+    return context.contentResolver.query(
+      COLLECTION,
+      columns.toTypedArray(),
+      UNDER_FOLDER,
+      arrayOf(underFolderArg(rootFolder)),
+      null
+    )?.use { cursor ->
+      val stamp = LibraryStamp(Localised.text(context, R.string.jukebox_unknown_title))
+      while (cursor.moveToNext()) {
+        stamp.add(
+          id = cursor.getLong(0),
+          // A null reads as nought here, which is as good a number as any:
+          // it only has to be the same nought the next time.
+          size = cursor.getLong(1),
+          modified = cursor.getLong(2),
+          generation = if (counted) cursor.getLong(5) else 0L,
+          name = if (cursor.isNull(3)) null else cursor.getString(3),
+          folder = if (cursor.isNull(4)) null else cursor.getString(4)
+        )
+      }
+      stamp.toString()
+    }
   }
 
   /**

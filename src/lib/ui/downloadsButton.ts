@@ -38,3 +38,24 @@ export function setDownloadsButtonWanted(on: boolean): void {
   wanted.set(on);
   writeSetting(SETTINGS.downloadsButton, on ? 'true' : 'false');
 }
+
+/**
+ * When the downloads were last looked at: the button's bubble opened, or the
+ * queue's own screen.
+ *
+ * The button marks a run in which something failed, and went on marking it
+ * for as long as the run was recent, to somebody who had opened it, read
+ * which had failed and gone back. Having been looked at is what ends that.
+ * Kept only while the app is open: a run is spoken of for a few minutes
+ * after it ends and no longer, so there is nothing a later opening of the
+ * app could be reminded of.
+ */
+const looked = createStore(0);
+
+export function useDownloadsLookedAt(): number {
+  return useSyncExternalStore(looked.subscribe, looked.get);
+}
+
+export function downloadsLookedAt(): void {
+  looked.set(Date.now());
+}

@@ -1,5 +1,5 @@
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
@@ -38,8 +38,10 @@ import { albumsOf, type Album } from '../lib/media/albums';
 import { artistsOf } from '../lib/media/artists';
 import { foldersOf } from '../lib/media/folders';
 import JukeboxAudio from '../../modules/jukebox-audio';
-import { libraryRoot, scanLibrary } from '../lib/media/library';
-import { withMetadata, type EnrichedTrack } from '../lib/media/merge';
+import { readLibrary } from '../lib/library/index';
+import { useLibraryTracks } from '../lib/library/useLibrary';
+import { libraryRoot } from '../lib/media/library';
+import type { EnrichedTrack } from '../lib/media/merge';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { suggestForPlaylist, type Candidate, type Suggestion } from '../lib/playlists/suggest';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
@@ -110,8 +112,28 @@ export default function PlaylistScreen() {
   /** The whole library, kept for the picker rather than scanned again for it. */
   const [library, setLibrary] = useState<EnrichedTrack[]>([]);
 
+  /*
+    The library is the one held for the whole app (`lib/library`), looked at
+    again for each reading of the list and read off the device only when it
+    has changed. Which library the list was last made from is remembered, so
+    that one arriving later can be told from the one already drawn.
+  */
+  const madeFrom = useRef<EnrichedTrack[] | null>(null);
+  const asking = useRef(0);
+
   const read = useCallback(async () => {
-    const library = withMetadata(await scanLibrary());
+    asking.current += 1;
+    const library = await readLibrary().then(
+      (tracks) => {
+        asking.current -= 1;
+        return tracks;
+      },
+      (failure: unknown) => {
+        asking.current -= 1;
+        throw failure;
+      }
+    );
+    madeFrom.current = library;
     const byId = new Map(library.map((track) => [track.id, track]));
     setLibrary(library);
 
@@ -273,6 +295,19 @@ export default function PlaylistScreen() {
       void load();
     }, [load, downloadRevision])
   );
+
+  /*
+    And read again when the library changes under the list without this
+    screen having asked: the app brought back to the front to find a file
+    gone, or the first true reading of the device arriving behind the copy the
+    app opened on. Not while a reading of the list is waiting for the library
+    itself, which is that same change on its way here by the other road.
+  */
+  const held = useLibraryTracks();
+  useEffect(() => {
+    if (asking.current > 0 || madeFrom.current === null || madeFrom.current === held) return;
+    void load();
+  }, [held, load]);
 
   /*
     The same menu a row in the library opens. Whatever it changes — a file

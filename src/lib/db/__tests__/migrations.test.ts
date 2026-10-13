@@ -540,6 +540,7 @@ describe('one spelling per tag', () => {
     // column cannot be added twice. The one added since is taken off again,
     // which is how a database from before it would have looked.
     database.exec('ALTER TABLE track_metadata DROP COLUMN cover_searched_at');
+    database.exec('ALTER TABLE discover_exclusions DROP COLUMN created_at');
     return database;
   }
 
@@ -599,5 +600,27 @@ describe('one spelling per tag', () => {
       rows(database, 'SELECT tag, COUNT(*) AS n FROM track_tags GROUP BY tag'),
       [{ tag: 'rock', n: 3 }]
     );
+  });
+});
+
+describe('dating what was put away from Discover', () => {
+  it('gives the rows that were there no date, and takes one on the rows that come after', () => {
+    const database = open();
+    migrate(database);
+    // As the release before left it: the table without the column, and somebody's exclusions in it.
+    const dated = MIGRATIONS.findIndex((sql) => sql.includes('ADD COLUMN created_at') && sql.includes('discover_exclusions'));
+    assert.notEqual(dated, -1, 'the migration is no longer in the history');
+    database.exec('ALTER TABLE discover_exclusions DROP COLUMN created_at');
+    database.exec(`PRAGMA user_version = ${dated}`);
+    database.exec(`INSERT INTO discover_exclusions (id, song_key, title, artist, reason, until_at)
+      VALUES ('old', 'artist|song', 'Song', 'Artist', 'blocked', NULL)`);
+
+    assert.equal(migrate(database), MIGRATIONS.length);
+    database.exec(`INSERT INTO discover_exclusions (id, song_key, title, artist, reason, until_at, created_at)
+      VALUES ('new', 'artist|other', 'Other', 'Artist', 'blocked', NULL, 1234)`);
+    assert.deepEqual(rows(database, 'SELECT id, created_at FROM discover_exclusions ORDER BY id'), [
+      { id: 'new', created_at: 1234 },
+      { id: 'old', created_at: null },
+    ]);
   });
 });

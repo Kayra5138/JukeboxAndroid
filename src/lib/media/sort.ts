@@ -81,8 +81,13 @@ function rankOf(character: string): number {
   return code < LETTER ? code : ELSEWHERE + code;
 }
 
-/** Two names already put through {@link canonicalLabel}. */
-function compareFolded(left: string, right: string): number {
+/**
+ * Two names already put through {@link canonicalLabel}.
+ *
+ * Exported for whoever sorts a list long enough to fold each name once and
+ * keep it, rather than twice per pair as {@link compareNames} has to.
+ */
+export function compareFolded(left: string, right: string): number {
   const ours = [...left];
   const theirs = [...right];
   const shared = Math.min(ours.length, theirs.length);

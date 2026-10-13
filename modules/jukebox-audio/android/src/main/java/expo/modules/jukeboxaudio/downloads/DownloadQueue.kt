@@ -74,9 +74,50 @@ class Outside(
  *     next — so that an album of them is one run of the service and not one
  *     for each track. It gives up when nobody is, since nothing here can
  *     find them.
- *  7. The background's one download, [takeById], is held to all of the
+ *  7. A job that failed in a way trying again might cure is tried again
+ *     once, by itself: see [again]. It goes to the end of its kind, and is
+ *     passed over until [RETRY_DELAY_MS] after it failed — longer where
+ *     YouTube said "not now" — while whatever is behind it goes ahead.
+ *     Where nothing else is waiting, a worker that is up sits that out as it
+ *     does rule 3's quiet, and none is started to.
+ *  8. The background's one download, [takeById], is held to all of the
  *     above: it is handed its job only when that job is the one the worker
  *     would have been handed.
+ *  9. A song somebody tapped in Discover goes to the very front of what is
+ *     waiting: see [first]. It is the one thing that is put ahead of what
+ *     was asked for before it, because the person is standing there waiting
+ *     to hear it, and everything else in the queue was asked for by somebody
+ *     who then went on to something else.
+ * 10. A song may be looked for ahead of being wanted, and HELD: asked for
+ *     with `hold`, it is found like any other name and then, instead of
+ *     becoming a download, stays as it is with the status `found` until it
+ *     is asked for again without `hold` — see [release]. Discover does this
+ *     for the songs on its list that nobody has tapped yet, so that a tap
+ *     has no search to wait for and a song with no recording is off the
+ *     list before anybody tries it.
+ *
+ *     A held job is one of Discover's own and is behind everything a person
+ *     asked for (rule 3). But it is a search and not a download — a few
+ *     kilobytes, a few seconds — and is not made to sit out the long quiet
+ *     that spaces Discover's downloads: it may be claimed [FIND_GAP_MS]
+ *     after the last piece of work and after the last such search. Twenty
+ *     songs at the long quiet would be a quarter of an hour of nothing
+ *     happening; at this pace they are a search every eight seconds or so,
+ *     which is slower than somebody typing them. Its ending does not count
+ *     as work to wait after, either, or each one would put off Discover's
+ *     next download by the long quiet again.
+ *
+ *     Nothing is brought up or kept up for it. No worker, no notification,
+ *     no wake lock: it is looked for while JavaScript happens to be there
+ *     asking, and waits when it is not. When somebody taps a song, a held
+ *     search that is under way for another song is put back at once
+ *     ([giveWay]) so that the tap does not wait for it.
+ *
+ *     `found` is not waiting for anything and is not work: it does not
+ *     count towards the queue's limit, is not touched by "cancel all" (those
+ *     are downloads, and this is not one), is not cleared with what has
+ *     finished, and is passed over by every rule above. It can be cancelled
+ *     by name, and is forgotten with its song like any job of Discover's.
  */
 class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   companion object {
@@ -90,10 +131,16 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     const val FIND_WINDOW_MS = 2_000L
     /** How long after anything ended an automatic job may start. */
     const val COOL_DOWN_MS = 45_000L
+    /** How long after any work, and after each other, the searches made ahead for held jobs are spaced. Rule 10. */
+    const val FIND_GAP_MS = 5_000L
     /** How long since JavaScript last asked for a name before it is taken not to be there. */
     const val FINDER_PATIENCE_MS = 10_000L
     /** How long a job may be marked as being looked for with no search to show for it. */
     const val FIND_LEASE_MS = 30_000L
+    /** How long after it failed a job is left before its second try. */
+    const val RETRY_DELAY_MS = 20_000L
+    /** The same where YouTube refused it, which a short wait does not get past. */
+    const val RETRY_THROTTLED_MS = 120_000L
     /** How often the worker asks again while it is held. */
     const val POLL_MS = 250L
   }
@@ -106,6 +153,9 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     private set
   /** When JavaScript last asked for a job to look for. Not kept: a new process has asked for nothing. */
   var finderSeen = 0L
+    private set
+  /** When a search for a held job last ended. Not kept: a new process starts with one search early, which costs nothing. */
+  var lastSought = 0L
     private set
 
   /** Set by anything that changed a job in a way worth keeping, and cleared by whoever writes them down. */
@@ -147,39 +197,92 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   /** Brings [job] to an end. [worked] is whether YouTube was asked anything on its way there. */
   private fun end(job: JSONObject, status: String, failed: Failed? = null, worked: Boolean = true) {
     job.put("status", status).put("finishedAt", clock())
+    job.remove("retryAt")
     fail(job, failed)
     if (worked) ended()
     changed = true
   }
 
   /**
+   * [job] failed while it was being fetched or looked for: it is given its
+   * one second try, or brought to an end. Rule 7 of WHO GOES FIRST.
+   *
+   * That it has had the try is written on the job (`retried`), with why the
+   * first one failed, so that a list can say what it is waiting for; and
+   * stays on it through the app being closed, so that the second failure is
+   * the last however it comes about. [wait] is false where the fault was the
+   * process dying, which is over by the time anybody reads this.
+   */
+  private fun again(job: JSONObject, failed: Failed, worked: Boolean = true, wait: Boolean = true) {
+    val how = failed.again
+    @Suppress("NAME_SHADOWING") val worked = worked && !job.hold
+    if (how == Again.NEVER || job.optBoolean("retried")) return end(job, "failed", failed, worked)
+    val delay = if (!wait) 0 else if (how == Again.LATER) RETRY_THROTTLED_MS else RETRY_DELAY_MS
+    job.put("retried", true).put("retryAt", clock() + delay)
+      .put("retryError", failed.english).put("retryErrorCode", failed.failure.code)
+      .put("status", "queued").put("progress", 0).put("trackId", JSONObject.NULL)
+    job.remove("touched")
+    fail(job, null)
+    // Not back where it was: whatever stopped it may still be there, and the others should not wait to find out.
+    jobs.remove(job)
+    place(job)
+    /*
+      Unless somebody tapped it and is waiting to hear it (rule 9). That one
+      is still first when its wait is over: the others go by it while it
+      waits, since a job held back is passed over, and none of them is put
+      ahead of it for good. Behind everything else that was ever asked for —
+      an album of forty tracks, say — is not where a tap belongs because the
+      connection dropped once.
+    */
+    if (job.optBoolean("fronted")) ahead(job)
+    if (worked) ended()
+    changed = true
+  }
+
+  /** How long until [job] may be tried again; nought for one that is not waiting to be, or whose time has come. */
+  private fun held(job: JSONObject): Long =
+    // Never longer than the longest wait there is: a clock that was put back does not strand it.
+    (job.optLong("retryAt") - clock()).coerceIn(0, RETRY_THROTTLED_MS)
+
+  /** Rule 7: the jobs of [line] whose time has come, or how long until the first of them does. */
+  private fun due(line: List<JSONObject>): Turn {
+    val ready = line.filter { held(it) == 0L }
+    return if (ready.isNotEmpty()) Turn.Of(ready) else Turn.Cooling(line.minOf(::held))
+  }
+
+  /**
    * What a process that died left half done.
    *
-   * A download that was under way is not started again behind anybody's
-   * back: it failed, and says so. What was only waiting still is — the queue
+   * A download that was under way was interrupted, which is a failure like
+   * any other that trying again may cure: it has its one second try, in its
+   * turn, and where it has had that already it failed and says so. Nothing
+   * is started from here either way. What was only waiting still is — the queue
    * outlives the app — and a job that was being looked for goes back to
    * waiting, since nothing of it was fetched. [published] answers whether a
    * file that was being added to the library when the process died got there.
    */
   fun recover(published: (JSONObject) -> Boolean) {
+    val interrupted = mutableListOf<JSONObject>()
     for (job in jobs) when (job.status) {
       "saving" -> if (published(job)) { job.put("progress", 100); end(job, "done", worked = false) }
-        else end(job, "failed", Failed(Failure.INTERRUPTED), worked = false)
-      "preparing", "downloading", "converting" -> end(job, "failed", Failed(Failure.INTERRUPTED), worked = false)
+        else interrupted += job
+      "preparing", "downloading", "converting" -> interrupted += job
       "cancelling" -> end(job, "cancelled", worked = false)
       "finding" -> { job.put("status", "queued"); changed = true }
     }
+    // After the pass, since a second try moves the job in the list being gone through.
+    interrupted.forEach { again(it, Failed(Failure.INTERRUPTED), worked = false, wait = false) }
     jobs.filter { it.status == "queued" && it.automatic }.forEach(::rejoin)
   }
 
   /**
    * The service was stopped under what it was doing. What was being fetched
-   * failed, and says how; what was only waiting still is, and a job that was
+   * failed, and says how, or has its second try; what was only waiting still is, and a job that was
    * being looked for waits again.
    */
   fun interrupt(failure: Failure) {
     for (job in jobs.toList()) when (job.status) {
-      in fetching -> end(job, "failed", Failed(failure))
+      in fetching -> again(job, Failed(failure))
       "finding" -> { job.put("status", "queued"); rejoin(job); changed = true }
     }
   }
@@ -263,22 +366,109 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
    * record it is for.
    */
   fun enqueueFind(video: JSONObject, format: String, folder: String, discoverKey: String?,
-    exists: (JSONObject) -> Boolean): String {
+    exists: (JSONObject) -> Boolean, front: Boolean = false, hold: Boolean = false): String {
     val destination = checked(format, folder, discoverKey)
     val query = video.optJSONObject("find")?.optString("query")?.trim().orEmpty()
     if (query.length !in 1..500) throw YouTubeTrouble(Failure.QUERY)
     video.put("id", "").put("url", "")
     val waiting = { job: JSONObject -> job.status in activeStates && job.status != "cancelling" }
-    val existing = if (discoverKey != null) jobs.lastOrNull { it.text("discoverKey") == discoverKey && (waiting(it) || it.status == "done") }
+    val existing = if (discoverKey != null) jobs.lastOrNull { it.text("discoverKey") == discoverKey && (waiting(it) || it.status == "done" || it.status == "found") }
       else jobs.lastOrNull { it.isNull("discoverKey") && waiting(it) && it.toFind &&
         it.video.getJSONObject("find").optString("query").trim() == query && placed(it.video) == placed(video) }
     if (existing != null) {
-      if (existing.status != "done" || exists(existing)) return existing.getString("id")
+      if (existing.status != "done" || exists(existing)) {
+        // Wanted now, by whoever is asking without `hold`: a held job is let go. Asked to be held again, it already is.
+        if (!hold && existing.hold) release(existing, video)
+        if (front) first(existing)
+        return existing.getString("id")
+      }
       existing.put("status", "missing").put("trackId", JSONObject.NULL)
       changed = true
     }
+    /*
+      Tapped again after its download failed: the video was found the first
+      time and is still the one, so the job that has it is put back rather
+      than a new one made to be searched for all over again.
+    */
+    if (front && discoverKey != null) {
+      val stopped = jobs.lastOrNull { it.text("discoverKey") == discoverKey && it.status in setOf("failed", "cancelled") && !it.toFind }
+      if (stopped != null && retry(stopped.getString("id"))) {
+        first(stopped)
+        return stopped.getString("id")
+      }
+    }
     finderSeen = clock()
-    return add(video, format, destination, discoverKey)
+    val id = add(video, format, destination, discoverKey)
+    val job = jobs.first { it.optString("id") == id }
+    // Only Discover holds, and never what somebody is waiting for.
+    if (hold && !front && discoverKey != null) job.put("hold", true)
+    if (front) first(job)
+    return id
+  }
+
+  /**
+   * Puts [job] ahead of everything that is waiting. Rule 9 of WHO GOES FIRST.
+   *
+   * It becomes a person's job on the way — it may use whatever connection
+   * there is, and does not sit out the quiet Discover's own wait for — and
+   * one that was waiting for its second try has it now: whoever tapped it is
+   * not going to stand there for the two minutes it was put off by. A job
+   * that is already being looked for or fetched is left where it is, since
+   * it is first already.
+   */
+  private fun first(job: JSONObject) {
+    asked(job)
+    job.remove("retryAt")
+    // Remembered, for the second try the queue gives it by itself: see [again].
+    job.put("fronted", true)
+    if (job.status == "queued") ahead(job)
+    changed = true
+  }
+
+  /**
+   * Lets a held job go: from here on it is a download like any other of its
+   * kind. Rule 10 of WHO GOES FIRST.
+   *
+   * One whose video is already known goes into the queue at the end of its
+   * kind, with nothing to look for; one still to be looked for only stops
+   * being held, and becomes a download when it is found. Whether it is
+   * Discover's own, and whether it may use mobile data, is what [request]
+   * says and not what was said when it was held: the looking was allowed on
+   * any connection, and the fetching may not be.
+   */
+  private fun release(job: JSONObject, request: JSONObject?) {
+    job.remove("hold")
+    if (request != null) {
+      for (name in listOf("discoverAutomatic", "discoverWifiOnly")) job.video.put(name, request.optBoolean(name))
+      job.put("automatic", request.optBoolean("discoverAutomatic"))
+    }
+    if (job.status == "found") {
+      job.put("status", "queued").put("progress", 0)
+      jobs.remove(job)
+      place(job)
+    }
+    changed = true
+  }
+
+  /**
+   * Puts back every search under way for a held job, and answers which they
+   * were, for whoever has to stop them. For when somebody has just tapped a
+   * song: the queue does one thing at a time, and a search made on the
+   * chance of a tap must not be the thing a tap waits for.
+   */
+  fun giveWay(): List<String> {
+    val under = jobs.filter { it.status == "finding" && it.hold }
+    for (job in under) { job.put("status", "queued"); job.remove("touched"); changed = true }
+    // Not to be taken up again the moment it is put down: the search it had is still being stopped.
+    if (under.isNotEmpty()) lastSought = clock()
+    return under.map { it.getString("id") }
+  }
+
+  /** Moves a waiting job ahead of every other waiting job. */
+  private fun ahead(job: JSONObject) {
+    jobs.remove(job)
+    val at = jobs.indexOfFirst { it.status == "queued" }
+    if (at < 0) jobs.add(job) else jobs.add(at, job)
   }
 
   /** The place on a record a video was asked for, as a word, or null. Numbers come back from JavaScript as 7.0 and from the file as 7. */
@@ -290,7 +480,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     object Held : Turn()
     /** Nothing may start, and nothing will by waiting. */
     object Rest : Turn()
-    /** Rule 3: Discover's own, and the quiet they wait for has this long to run. */
+    /** Rules 3 and 7: nothing may start for this long, and then something may. */
     class Cooling(val millis: Long) : Turn()
     /** The jobs of the kind whose turn it is, in order. Never empty. */
     class Of(val jobs: List<JSONObject>) : Turn()
@@ -308,11 +498,18 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     if (outside.handBusy || jobs.any { it.status in fetching || it.status == "finding" }) return Turn.Held
     val waiting = jobs.filter { it.status == "queued" }
     val asked = waiting.filter { !it.automatic }
-    if (asked.isNotEmpty()) return Turn.Of(asked)
+    if (asked.isNotEmpty()) return due(asked)
     if (waiting.isEmpty()) return Turn.Rest
     val quiet = since(lastEnded)
-    return if (quiet < COOL_DOWN_MS) Turn.Cooling(COOL_DOWN_MS - quiet) else Turn.Of(waiting)
+    if (quiet >= COOL_DOWN_MS) return due(waiting)
+    // Rule 10: the searches made ahead do not sit out the long quiet, only a short one.
+    val ahead = waiting.filter { it.hold && it.toFind }
+    if (ahead.isEmpty()) return Turn.Cooling(COOL_DOWN_MS - quiet)
+    return if (quiet < FIND_GAP_MS) Turn.Cooling(FIND_GAP_MS - quiet) else due(ahead)
   }
+
+  /** Whether [line] has a name in it that a worker should stay up for: one that will become a download. A held one will not. */
+  private fun namesToFetch(line: List<JSONObject>) = line.any { it.toFind && !it.hold }
 
   /** Notes when work on [job] first began: looking for it, or fetching it. */
   private fun begun(job: JSONObject) { if (job.isNull("startedAt")) job.put("startedAt", clock()) }
@@ -336,7 +533,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
         is Turn.Of -> turn.jobs
       }
       val ready = line.firstOrNull { !it.toFind }
-        ?: return if (finderThere(outside)) Next.Wait(POLL_MS) else Next.Idle
+        ?: return if (namesToFetch(line) && finderThere(outside)) Next.Wait(POLL_MS) else Next.Idle
       val quiet = since(lastEnded)
       if (line.first().toFind && quiet < FIND_WINDOW_MS) return Next.Wait(FIND_WINDOW_MS - quiet)
       if (barred(ready, outside)) continue
@@ -353,9 +550,10 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
    * sits through that, and none is brought up to.
    */
   fun wants(outside: Outside): Boolean = when (val turn = turn(outside)) {
-    is Turn.Held -> true
+    // Held by a search made ahead and by nothing else, there is nothing a worker would be up for: rule 10.
+    is Turn.Held -> outside.handBusy || jobs.any { it.status in fetching || (it.status == "finding" && !it.hold) }
     is Turn.Rest, is Turn.Cooling -> false
-    is Turn.Of -> turn.jobs.any { !it.toFind } || finderThere(outside)
+    is Turn.Of -> turn.jobs.any { !it.toFind } || (namesToFetch(turn.jobs) && finderThere(outside))
   }
 
   /** Whether any job is waiting for its video to be looked for: what a finder has to stay for. */
@@ -373,6 +571,8 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     while (true) {
       val first = (turn(outside) as? Turn.Of)?.jobs?.first() ?: return null
       if (!first.toFind) return null
+      // Rule 10: searches made ahead keep a little apart from each other.
+      if (first.hold && since(lastSought) < FIND_GAP_MS) return null
       if (barred(first, outside)) continue
       begun(first)
       first.put("status", "finding").put("touched", clock())
@@ -398,7 +598,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     job.put("status", "queued")
     rejoin(job)
     finderSeen = clock()
-    ended()
+    if (job.hold) lastSought = clock() else ended()
     changed = true
   }
 
@@ -406,7 +606,8 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   fun failFind(id: String, failed: Failed) {
     val job = find(id)?.takeIf { it.status == "finding" } ?: return
     finderSeen = clock()
-    end(job, "failed", failed)
+    if (job.hold) lastSought = clock()
+    again(job, failed)
   }
 
   /**
@@ -428,7 +629,10 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   fun resolveFind(id: String, found: JSONObject?, exists: (JSONObject) -> Boolean) {
     val job = find(id)?.takeIf { it.status == "finding" } ?: return
     finderSeen = clock()
-    if (found == null) return end(job, "failed", Failed(Failure.NO_MATCH))
+    val held = job.hold
+    if (held) lastSought = clock()
+    // A search made ahead is not work to wait after: rule 10.
+    if (found == null) return end(job, "failed", Failed(Failure.NO_MATCH), worked = !held)
     val videoId = found.optString("id")
     val url = try { YouTubeData.url(videoId) } catch (error: YouTubeTrouble) {
       end(job, "failed", Failed(error.failure))
@@ -460,15 +664,16 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
       .put("channel", found.text("channel") ?: video.optString("channel"))
       .put("thumbnail", found.text("thumbnail")?.takeIf { it.startsWith("https://") } ?: JSONObject.NULL)
       .put("duration", found.optDouble("duration").takeIf { it.isFinite() && it > 0 } ?: JSONObject.NULL)
-    job.put("status", "queued").put("progress", 0)
+    // Held, it stays as it is, with its video known, until it is asked for: rule 10.
+    job.put("status", if (held) "found" else "queued").put("progress", 0)
     job.remove("touched")
-    rejoin(job)
+    if (!held) rejoin(job)
     changed = true
   }
 
   /**
    * The background's way in: this job of Discover's and no other, and only
-   * when it is the one whose turn it is. Rule 7 of WHO GOES FIRST.
+   * when it is the one whose turn it is. Rule 8 of WHO GOES FIRST.
    */
   fun takeById(id: String, outside: Outside): JSONObject? {
     val job = find(id)?.takeIf { it.status == "queued" && !it.toFind && !it.isNull("discoverKey") } ?: return null
@@ -492,9 +697,8 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     val job = jobs.firstOrNull { it.optString("id") == id && !it.isNull("discoverKey") } ?: return
     // An explicit play request is allowed to use the current connection.
     job.video.put("discoverWifiOnly", false).put("discoverAutomatic", false)
-    job.put("automatic", false)
-    if (job.status == "queued") { jobs.remove(job); jobs.add(0, job) }
-    changed = true
+    if (job.hold) release(job, null)
+    first(job)
   }
 
   /**
@@ -541,6 +745,8 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     asked(job)
     job.put("status", "queued").put("progress", 0).put("trackId", JSONObject.NULL)
       .put("finishedAt", JSONObject.NULL).put("startedAt", JSONObject.NULL).put("cleared", false)
+    // Asked for afresh, with a second try of its own to come.
+    for (name in listOf("retried", "retryAt", "retryError", "retryErrorCode")) job.remove(name)
     fail(job, null)
     jobs.remove(job)
     place(job)
@@ -571,11 +777,14 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     val job = find(id) ?: return
     val old = job.status
     if (old == "cancelling" && status in setOf("downloading", "converting", "preparing")) return
+    // Failed while it was being fetched, and not because somebody was stopping it.
+    if (status == "failed" && error != null && old in fetching && old != "cancelling") return again(job, error)
     job.put("status", status).put("progress", progress)
     fail(job, error)
     if (trackId != null) job.put("trackId", trackId)
     if (old != status && status in finished) {
       job.put("finishedAt", clock())
+      job.remove("retryAt")
       if (old in fetching) ended()
     }
     // Progress is transient. State transitions and receipts are durable.
@@ -592,16 +801,21 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   fun cancel(id: String): Stop {
     val job = find(id) ?: return Stop.NOTHING
     return when (job.status) {
-      "queued" -> { end(job, "cancelled", worked = false); Stop.NOTHING }
-      "finding" -> { end(job, "cancelled"); Stop.SEARCH }
+      "queued", "found" -> { end(job, "cancelled", worked = false); Stop.NOTHING }
+      "finding" -> { end(job, "cancelled", worked = !job.hold); Stop.SEARCH }
       "preparing", "downloading", "converting" -> { change(id, "cancelling"); Stop.DOWNLOAD }
       else -> Stop.NOTHING // Publication is a short, non-cancellable commit.
     }
   }
 
-  /** Cancels everything that is waiting or under way, and answers what has to be stopped. */
+  /**
+   * Cancels everything that is waiting or under way, and answers what has to
+   * be stopped. Not what is held or being looked for ahead (rule 10): those
+   * are not downloads, nobody who pressed this was shown them, and stopping
+   * them would only have them looked for again.
+   */
   fun cancelAll(): List<Pair<String, Stop>> =
-    jobs.filter { it.status in activeStates }.map { it.getString("id") }.map { it to cancel(it) }
+    jobs.filter { it.status in activeStates && !it.hold }.map { it.getString("id") }.map { it to cancel(it) }
 
   fun isCancelling(id: String): Boolean = find(id)?.status == "cancelling"
 
@@ -622,3 +836,5 @@ internal val JSONObject.video: JSONObject get() = getJSONObject("video")
 /** Asked for by name, and not yet found. */
 internal val JSONObject.toFind: Boolean get() = video.optJSONObject("find") != null
 internal val JSONObject.automatic: Boolean get() = optBoolean("automatic")
+/** Looked for ahead of being wanted, and to be held when found: rule 10 of WHO GOES FIRST. */
+internal val JSONObject.hold: Boolean get() = optBoolean("hold")

@@ -65,6 +65,8 @@ export const SETTINGS = {
   repeat: 'player:repeat',
   /** Which stretch of history the stats screen opens on. */
   statsPeriod: 'stats:period',
+  /** Which reading of it: the one being lived, the one before, or the stretch up to now. */
+  statsWhich: 'stats:which',
   /**
    * Which way the library was last being looked at: one of the views in
    * `media/views.ts`. Absent, or naming a view that has since been turned off,
@@ -130,6 +132,14 @@ export const SETTINGS = {
    */
   downloadsButton: 'ui:downloadsButton',
   /**
+   * `'false'` where the app is not to look for a newer yt-dlp by itself.
+   * Anything else, and nothing at all, is yes: see `lib/youtube/extractor.ts`
+   * for what the look is, and how rarely it is made.
+   */
+  extractorCheck: 'downloads:extractorCheck',
+  /** What the last look found and when it was made, as `Known` in that file writes it. */
+  extractorKnown: 'downloads:extractorKnown',
+  /**
    * How late the sound is by the time it is heard, in milliseconds.
    *
    * Only the tiles game reads it, but what it describes belongs to the
@@ -169,6 +179,13 @@ export const SETTINGS = {
    * another and coming back finds it as it was left. Absent, its defaults.
    */
   customTheme: 'ui:theme:custom',
+  /**
+   * The theme following the phone uses while the phone is in its light mode,
+   * and the one for its dark mode: a theme's id each. Absent, they are the
+   * plain light theme and the plain dark one.
+   */
+  themeLight: 'ui:theme:light',
+  themeDark: 'ui:theme:dark',
   /** `'true'` while the app opens in a theme drawn at random from `themeShufflePool`; see `theme/shuffle.ts`. */
   themeShuffle: 'ui:theme:shuffle',
   /** The ids of the themes that draw is made from, with commas between. Kept while the draw is off. */

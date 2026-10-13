@@ -20,8 +20,9 @@ export function jobsSignature(jobs: readonly DownloadJob[], paused: boolean): st
     const video = job.video;
     parts.push([
       job.id, job.status, job.progress, job.trackId, job.errorCode ?? null, job.errorText ?? job.error,
-      job.described, job.cleared ?? null, job.automatic ?? null, job.startedAt ?? null, job.finishedAt ?? null,
+      job.described, job.cleared ?? null, job.automatic ?? null, job.retrying ?? null, job.retryText ?? null, job.startedAt ?? null, job.finishedAt ?? null,
       video.id, video.title, video.channel, video.thumbnail, video.find != null, video.placement ?? null,
+      job.hold ?? null, job.artworkUri ?? null,
     ]);
   }
   return JSON.stringify(parts);

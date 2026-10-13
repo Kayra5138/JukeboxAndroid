@@ -130,6 +130,53 @@ class YouTubeGateTest {
     search.finish()
   }
 
+  @Test fun theExtractorIsChangedWithNothingElseAtTheDoor() {
+    val download = Work(For.DOWNLOAD); assertTrue(download.begun())
+    val update = Work(For.UPDATE)
+    assertTrue(update.waiting())
+    assertTrue(gate.updateBusy)
+    // Waiting, it is already ahead of whatever the queue would do next.
+    val next = Work(For.DOWNLOAD); val search = Work(For.FIND)
+    download.finish()
+    assertTrue(update.begun())
+    assertTrue(next.waiting()); assertTrue(search.waiting())
+    // And a search somebody types waits for it too, since the file it would run is the one being changed.
+    val typed = Work(For.HAND)
+    assertTrue(typed.waiting())
+    update.finish()
+    assertFalse(gate.updateBusy)
+    assertTrue(typed.begun())
+    typed.finish()
+    assertTrue(next.begun(600) != search.begun(600))
+    next.cancelled.set(true); search.cancelled.set(true)
+    assertTrue(next.over()); assertTrue(search.over())
+  }
+
+  @Test fun somebodyTypingGoesAheadOfAnUpdateThatIsOnlyWaiting() {
+    val download = Work(For.DOWNLOAD); assertTrue(download.begun())
+    val update = Work(For.UPDATE)
+    assertTrue(update.waiting())
+    val typed = Work(For.HAND)
+    assertTrue(typed.begun())
+    download.finish()
+    assertTrue(update.waiting())
+    typed.finish()
+    assertTrue(update.begun())
+    update.finish()
+  }
+
+  @Test fun anUpdateCancelledWhileItWaitsLeavesTheDoorOpen() {
+    val download = Work(For.DOWNLOAD); assertTrue(download.begun())
+    val update = Work(For.UPDATE)
+    assertTrue(update.waiting())
+    update.cancelled.set(true)
+    assertTrue(update.over())
+    assertFalse(gate.updateBusy)
+    download.finish()
+    val next = Work(For.DOWNLOAD); assertTrue(next.begun())
+    next.finish()
+  }
+
   @Test fun workThatThrowsGivesUpItsTurn() {
     for (what in For.values()) {
       assertThrows(IllegalArgumentException::class.java) {
@@ -139,6 +186,7 @@ class YouTubeGateTest {
     assertFalse(gate.handBusy)
     assertEquals("after", gate.hold(For.DOWNLOAD, AtomicBoolean(false)) { "after" })
     assertEquals("after", gate.hold(For.FIND, AtomicBoolean(false)) { "after" })
+    assertFalse(gate.updateBusy)
   }
 
   @Test fun workAlreadyCancelledIsNotBegun() {

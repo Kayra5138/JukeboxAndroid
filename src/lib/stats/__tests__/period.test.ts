@@ -414,3 +414,95 @@ describe('changeBetween', () => {
     assert.equal(changeBetween(120, 0), null);
   });
 });
+
+describe('the three readings of a period', () => {
+  // A Tuesday, at twenty to three in the afternoon.
+  const now = at(2026, 10, 13, 14, 40);
+  const en = stringsFor('en');
+  const tr = stringsFor('tr');
+
+  it('reads the period before as the calendar has it', () => {
+    assert.deepEqual(rangeOf('day', now, 'last'), { since: at(2026, 10, 12), until: at(2026, 10, 13) });
+    assert.deepEqual(rangeOf('week', now, 'last'), { since: at(2026, 10, 5), until: at(2026, 10, 12) });
+    assert.deepEqual(rangeOf('month', now, 'last'), { since: at(2026, 9, 1), until: at(2026, 10, 1) });
+    assert.deepEqual(rangeOf('year', now, 'last'), { since: at(2025, 1, 1), until: at(2026, 1, 1) });
+    // Compared against the one before that.
+    assert.deepEqual(previousRange('day', now, 'last'), { since: at(2026, 10, 11), until: at(2026, 10, 12) });
+    assert.deepEqual(previousRange('month', now, 'last'), { since: at(2026, 8, 1), until: at(2026, 9, 1) });
+    assert.deepEqual(previousRange('year', now, 'last'), { since: at(2024, 1, 1), until: at(2025, 1, 1) });
+  });
+
+  it('draws the period before in its own columns', () => {
+    assert.equal(bucketsOf('month', now, null, en, 'last').length, 30);
+    assert.equal(bucketsOf('month', at(2026, 3, 10), null, en, 'last').length, 28);
+    const week = bucketsOf('week', now, null, en, 'last');
+    assert.deepEqual([week[0].start, week[6].end, week[0].label], [at(2026, 10, 5), at(2026, 10, 12), 'Mon']);
+    assert.equal(bucketsOf('day', now, null, en, 'last')[0].start, at(2026, 10, 12));
+  });
+
+  it('counts twenty-four hours back to the minute, in hours of the clock', () => {
+    const range = rangeOf('day', now, 'rolling');
+    assert.deepEqual(range, { since: at(2026, 10, 12, 14, 40), until: now + 1 });
+    const buckets = bucketsOf('day', now, null, en, 'rolling');
+    assert.equal(buckets.length, 25);
+    assert.deepEqual([buckets[0].start, buckets[0].end, buckets[0].label], [range.since, at(2026, 10, 12, 15), '14']);
+    assert.deepEqual([buckets[24].start, buckets[24].end, buckets[24].label], [at(2026, 10, 13, 14), range.until, '14']);
+    for (let index = 1; index < buckets.length; index += 1) assert.equal(buckets[index].start, buckets[index - 1].end);
+    // A play a moment ago and one just inside the far end are both counted; one just outside is not.
+    const totals = tally([listen(now), listen(range.since), listen(range.since - 1)], buckets);
+    assert.equal(totals.reduce((sum, total) => sum + total.plays, 0), 2);
+    assert.deepEqual(previousRange('day', now, 'rolling'), { since: at(2026, 10, 11, 14, 40), until: range.since });
+    // On the hour there is no part of an hour at either end.
+    assert.equal(bucketsOf('day', at(2026, 10, 13, 14), null, en, 'rolling').length, 24);
+  });
+
+  it('counts days and months back in whole ones, today and this month among them', () => {
+    assert.deepEqual(rangeOf('week', now, 'rolling'), { since: at(2026, 10, 7), until: at(2026, 10, 14) });
+    assert.deepEqual(rangeOf('month', now, 'rolling'), { since: at(2026, 9, 14), until: at(2026, 10, 14) });
+    assert.deepEqual(rangeOf('year', now, 'rolling'), { since: at(2025, 11, 1), until: at(2026, 11, 1) });
+    assert.deepEqual(previousRange('week', now, 'rolling'), { since: at(2026, 9, 30), until: at(2026, 10, 7) });
+    assert.deepEqual(previousRange('month', now, 'rolling'), { since: at(2026, 8, 15), until: at(2026, 9, 14) });
+    assert.deepEqual(previousRange('year', now, 'rolling'), { since: at(2024, 11, 1), until: at(2025, 11, 1) });
+
+    const week = bucketsOf('week', now, null, en, 'rolling');
+    assert.deepEqual(week.map((bucket) => bucket.label), ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue']);
+    assert.equal(week[6].start, at(2026, 10, 13));
+    const month = bucketsOf('month', now, null, en, 'rolling');
+    assert.deepEqual([month.length, month[0].label, month[29].label, month[29].major], [30, '14', '13', true]);
+    const year = bucketsOf('year', now, null, en, 'rolling');
+    assert.deepEqual([year.length, year[0].start, year[11].start, year[11].label], [12, at(2025, 11, 1), at(2026, 10, 1), 'O']);
+  });
+
+  it('names each as it is', () => {
+    assert.deepEqual(
+      (['last', 'this', 'rolling'] as const).map((which) => titleOf('day', now, en, which)),
+      ['Yesterday', 'Today', 'Last 24 hours']
+    );
+    assert.deepEqual(
+      (['last', 'this', 'rolling'] as const).map((which) => titleOf('week', now, tr, which)),
+      ['Geçen hafta', 'Bu hafta', 'Son 7 gün']
+    );
+    // A month or a year on the calendar is named by what it is.
+    assert.deepEqual(
+      (['last', 'this', 'rolling'] as const).map((which) => titleOf('month', now, en, which)),
+      ['Sep 2026', 'Oct 2026', 'Last 30 days']
+    );
+    assert.deepEqual(
+      (['last', 'this', 'rolling'] as const).map((which) => titleOf('year', now, en, which)),
+      ['2025', '2026', 'Last 12 months']
+    );
+    assert.equal(comparisonOf('day', en, 'last'), 'vs the day before');
+    assert.equal(comparisonOf('week', tr, 'rolling'), 'önceki 7 güne göre');
+    assert.equal(en.stats.report.tracksLead('month', 'rolling'), 'What you reached for in the last 30 days');
+    assert.equal(tr.stats.report.genresLead('day', 'last'), 'Dünün havası');
+  });
+
+  it('reads all time one way', () => {
+    for (const which of ['last', 'this', 'rolling'] as const) {
+      assert.deepEqual(rangeOf('all', now, which), rangeOf('all', now));
+      assert.equal(previousRange('all', now, which), null);
+      assert.equal(titleOf('all', now, en, which), 'All time');
+      assert.equal(bucketsOf('all', now, at(2026, 1, 5), en, which).length, 10);
+    }
+  });
+});

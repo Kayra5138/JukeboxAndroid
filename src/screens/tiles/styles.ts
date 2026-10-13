@@ -118,11 +118,25 @@ export const styles = StyleSheet.create({
     transformOrigin: ['0%', '50%', 0],
   },
 
-  stop: { padding: 10, borderRadius: 999, backgroundColor: DIM, marginTop: 4 },
+  /*
+    As big as a thumb. It is pressed in the middle of a song, by somebody
+    whose eyes are on the foot of the screen and whose hands are busy there:
+    at the size of an ordinary toolbar button it was a thing to aim at, and
+    aiming is a missed key or two.
+  */
+  stop: {
+    width: 56,
+    height: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 28,
+    backgroundColor: DIM,
+    marginTop: 4,
+  },
   /* Kept in the row so nothing beside it moves; only unseen. */
   gone: { opacity: 0 },
-  pauseBars: { flexDirection: 'row', gap: 4 },
-  pauseBar: { width: 4, height: 15, borderRadius: 1, backgroundColor: TEXT },
+  pauseBars: { flexDirection: 'row', gap: 6 },
+  pauseBar: { width: 6, height: 22, borderRadius: 2, backgroundColor: TEXT },
 
   pauseScreen: {
     position: 'absolute',

@@ -1,5 +1,11 @@
 import { db } from './index.ts';
-import { fillCoversIn, markCoverSearchedIn, saveMetadataTo } from './metadataRows.ts';
+import {
+  fillCoversIn,
+  markCoverSearchedIn,
+  placeTracksIn,
+  saveMetadataTo,
+  unplaceTracksIn,
+} from './metadataRows.ts';
 import { ALL_TIME, type Range } from '../stats/period.ts';
 
 /**
@@ -144,6 +150,46 @@ export function saveGenre(trackId: string, genre: string | null): void {
     trackNumber: null,
     discNumber: null,
   });
+}
+
+/**
+ * One track's place on its record, and what its row said of that before.
+ *
+ * `was.status` is null where there was no row.
+ */
+export type Placing = {
+  trackId: string;
+  trackNumber: number | null;
+  discNumber: number | null;
+  was: { status: TrackMetadata['status'] | null; trackNumber: number | null; discNumber: number | null };
+};
+
+/**
+ * Where tracks sit on their record, changed on its own.
+ *
+ * As `saveGenre` is, and for the same reason: the two columns move and the
+ * row stays what it was. A lookup's row is still a lookup's, to be looked up
+ * again when that is asked for; an edit is still an edit. Saved as an edit
+ * instead, a track would keep its place for good — and its names, genre and
+ * cover with it, shut to every lookup after, for the sake of a number.
+ *
+ * Where there is no row, or only a note that nothing was found, one is made
+ * that holds the place and nothing else, and it is a lookup's, not the
+ * user's: nobody typed it, and it can be looked up again like any other. A
+ * pass over the library passes it by, as it does every track that has a row,
+ * so the place is not taken back by one.
+ */
+export function placeTracks(placings: Placing[]): void {
+  placeTracksIn(db(), placings, Date.now());
+}
+
+/**
+ * Puts back what `placeTracks` changed: the numbers each row had, and no row
+ * where there was none. A row whose place has been changed again since is
+ * left as it is.
+ */
+export function unplaceTracks(placings: Placing[]): void {
+  unplaceTracksIn(db(), placings);
 }
 
 /** Track ids that have never been looked up, in the order given. */

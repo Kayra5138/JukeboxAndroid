@@ -1,6 +1,6 @@
 import { format } from './format.ts';
 import { oneOrMany } from '../write.ts';
-import type { PeriodId } from '../../stats/period.ts';
+import type { PeriodId, Which } from '../../stats/period.ts';
 
 /*
   The periods are said three ways and each is its own line, because the next
@@ -9,19 +9,13 @@ import type { PeriodId } from '../../stats/period.ts';
 */
 
 /** What the period is called in the second person, on the cards themselves. */
-function saidAs(period: PeriodId): string {
-  switch (period) {
-    case 'day':
-      return 'today';
-    case 'week':
-      return 'this week';
-    case 'month':
-      return 'this month';
-    case 'year':
-      return 'this year';
-    case 'all':
-      return 'so far';
+function saidAs(period: PeriodId, which: Which): string {
+  if (period === 'all') return 'so far';
+  if (which === 'last') return { day: 'yesterday', week: 'last week', month: 'last month', year: 'last year' }[period];
+  if (which === 'rolling') {
+    return { day: 'the last 24 hours', week: 'the last 7 days', month: 'the last 30 days', year: 'the last 12 months' }[period];
   }
+  return { day: 'today', week: 'this week', month: 'this month', year: 'this year' }[period];
 }
 
 const arrow = (change: number) => (change >= 0 ? '↑' : '↓');
@@ -40,25 +34,34 @@ export const stats = {
 
   period: {
     labels: { day: 'Day', week: 'Week', month: 'Month', year: 'Year', all: 'All' },
-    today: 'Today',
-    thisWeek: 'This week',
+    /**
+     * The three readings of each period, as they are chosen between and, for
+     * a day and a week, as the title over the figures. See `Which`.
+     */
+    which: {
+      day: { last: 'Yesterday', this: 'Today', rolling: 'Last 24 hours' },
+      week: { last: 'Last week', this: 'This week', rolling: 'Last 7 days' },
+      month: { last: 'Last month', this: 'This month', rolling: 'Last 30 days' },
+      year: { last: 'Last year', this: 'This year', rolling: 'Last 12 months' },
+    },
     allTime: 'All time',
     /** A month as a title: `Sep 2026`. */
     monthOf: (date: Date) => `${format.monthsShort[date.getMonth()]} ${date.getFullYear()}`,
     /** What a total is being compared against. Nothing for all time, which has nothing before it. */
-    versus: (period: PeriodId): string => {
-      switch (period) {
-        case 'day':
-          return 'vs yesterday';
-        case 'week':
-          return 'vs last week';
-        case 'month':
-          return 'vs last month';
-        case 'year':
-          return 'vs last year';
-        case 'all':
-          return '';
+    versus: (period: PeriodId, which: Which): string => {
+      if (period === 'all') return '';
+      if (which === 'last') {
+        return { day: 'vs the day before', week: 'vs the week before', month: 'vs the month before', year: 'vs the year before' }[period];
       }
+      if (which === 'rolling') {
+        return {
+          day: 'vs the 24 hours before',
+          week: 'vs the 7 days before',
+          month: 'vs the 30 days before',
+          year: 'vs the 12 months before',
+        }[period];
+      }
+      return { day: 'vs yesterday', week: 'vs last week', month: 'vs last month', year: 'vs last year' }[period];
     },
   },
 
@@ -115,11 +118,12 @@ export const stats = {
   /** What the recap's cards are headed with; see `stats/report.ts`. */
   report: {
     tracksHeading: 'Your top tracks',
-    tracksLead: (period: PeriodId) => `What you reached for ${saidAs(period)}`,
+    tracksLead: (period: PeriodId, which: Which) =>
+      `What you reached for ${which === 'rolling' && period !== 'all' ? 'in ' : ''}${saidAs(period, which)}`,
     artistsHeading: 'Your top artists',
-    artistsLead: (period: PeriodId) => `Who you spent ${saidAs(period)} with`,
+    artistsLead: (period: PeriodId, which: Which) => `Who you spent ${saidAs(period, which)} with`,
     genresHeading: 'Your sound',
-    genresLead: (period: PeriodId) => `The shape of ${saidAs(period)}`,
+    genresLead: (period: PeriodId, which: Which) => `The shape of ${saidAs(period, which)}`,
     clockHeading: 'Your hours',
     clockLead: (hour: string) => `You listened most around ${hour}`,
     numbersHeading: 'By the numbers',

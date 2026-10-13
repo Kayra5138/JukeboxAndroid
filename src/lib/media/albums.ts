@@ -1,4 +1,6 @@
+import { canonicalLabel } from '../metadata/text.ts';
 import type { EnrichedTrack } from './enriched.ts';
+import { compareFolded, compareNames } from './sort.ts';
 
 /**
  * Records, assembled from what the tracks say about themselves.
@@ -71,11 +73,29 @@ export function albumsOf(tracks: EnrichedTrack[]): Album[] {
     });
   }
 
-  return albums.sort(
+  /*
+    By whoever it is by and then by its name, in the library's own alphabet
+    (`sort.ts`) and not the phone's. `localeCompare` was both wrong and slow
+    here: it files by whatever language the phone is in, and on this engine
+    every call of it builds a collator on the other side of the bridge — per
+    pair, for a few hundred records, each time the library is grouped.
+
+    Folded once per record rather than once per pair. A record nobody can be
+    named for goes first, as it did. The key settles what is left, because two
+    names can fold alike and an order that ends in a draw is not one.
+  */
+  const filed = albums.map((album) => ({
+    album,
+    artist: canonicalLabel(album.artist ?? ''),
+    name: canonicalLabel(album.name),
+  }));
+  filed.sort(
     (left, right) =>
-      (left.artist ?? '').localeCompare(right.artist ?? '') ||
-      left.name.localeCompare(right.name)
+      compareFolded(left.artist, right.artist) ||
+      compareFolded(left.name, right.name) ||
+      (left.album.key < right.album.key ? -1 : left.album.key > right.album.key ? 1 : 0)
   );
+  return filed.map((entry) => entry.album);
 }
 
 /**
@@ -100,15 +120,20 @@ export function orderWithin(tracks: EnrichedTrack[]): EnrichedTrack[] {
     return (
       (leftPosition.disc ?? 1) - (rightPosition.disc ?? 1) ||
       leftPosition.track - rightPosition.track ||
-      left.title.localeCompare(right.title)
+      // Only reached by two tracks claiming one position, so folding inside
+      // the comparison costs nothing worth saving.
+      compareNames(left.title, right.title)
     );
   });
 
-  rest.sort((left, right) =>
-    (left.filename ?? left.title).localeCompare(right.filename ?? right.title)
-  );
+  // Every one of these is compared by name, so each is folded once and kept.
+  const unplaced = rest.map((track) => ({
+    track,
+    name: canonicalLabel(track.filename ?? track.title),
+  }));
+  unplaced.sort((left, right) => compareFolded(left.name, right.name));
 
-  return [...numbered, ...rest];
+  return [...numbered, ...unplaced.map((entry) => entry.track)];
 }
 
 /**

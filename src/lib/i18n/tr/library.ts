@@ -53,6 +53,7 @@ export const library: Strings['library'] = {
 
     needsAccess: 'Jukebox’ın bu cihazdaki seslere erişmesi gerekiyor.',
     nothingIn: (folder) => `${folder} klasöründe hiçbir şey yok.`,
+    shuffleAll: 'Hepsini karıştır',
     playsEverythingBelow: 'Jukebox, alt klasörler dahil o klasörün altındaki her şeyi çalar.',
     chooseFolderInSettings: 'Kütüphane klasörünü Ayarlar’dan seçebilirsin.',
 
@@ -90,6 +91,8 @@ export const library: Strings['library'] = {
     unsure:
       'Parçalarının hiçbiri bu albümde tanınmadı, o yüzden hiçbiri işaretli değil. Önce doğru albüm olduğundan emin ol.',
     disc: (disc) => `Disk ${format.number(disc)}`,
+    ordered: (count) => `${format.number(count)} parça albümdeki sırasına kondu.`,
+    undoOrder: 'Geri al',
 
     lookingTube: 'YouTube’da aranıyor…',
     readingTube: 'Albüm okunuyor…',

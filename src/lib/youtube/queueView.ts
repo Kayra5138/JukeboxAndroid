@@ -112,6 +112,20 @@ export function namesOf(job: DownloadJob): { title: string; artist: string } {
   };
 }
 
+/**
+ * Whether a waiting job is waiting to be tried again, having failed once,
+ * and why it failed where the phone said: null for a job that is not, and
+ * `{ why: null }` for one that is with nothing said.
+ *
+ * Only while it waits. Once the second try is under way the row says what
+ * is being done, as it does of a first.
+ */
+export function retryOf(job: DownloadJob): { why: string | null } | null {
+  if (job.retrying !== true || !isWaiting(job)) return null;
+  const why = typeof job.retryText === 'string' && job.retryText.trim() !== '' ? job.retryText.trim() : null;
+  return { why };
+}
+
 /** Only a job still waiting can change places, and one of Discover's never does: those go last. */
 export function canMove(job: DownloadJob): boolean {
   return isWaiting(job) && !isAutomatic(job);
@@ -181,13 +195,15 @@ export type Batch = {
   waiting: number;
   done: number;
   failed: number;
+  /** Those of the failed that nobody has looked at yet: see `batchOf`. */
+  unseen: number;
   /** Every job of the run, the cancelled ones too. Nought is no run at all. */
   total: number;
   /** When the run ended, or null while it is going on and when there is none. */
   endedAt: number | null;
 };
 
-const NO_BATCH: Batch = { current: null, underWay: 0, waiting: 0, done: 0, failed: 0, total: 0, endedAt: null };
+const NO_BATCH: Batch = { current: null, underWay: 0, waiting: 0, done: 0, failed: 0, unseen: 0, total: 0, endedAt: null };
 
 /**
  * The run of the queue the floating button speaks of: every job asked for
@@ -213,8 +229,13 @@ const NO_BATCH: Batch = { current: null, underWay: 0, waiting: 0, done: 0, faile
  *
  * `now` matters only once nothing is left unfinished, for deciding whether
  * the last run is still recent.
+ *
+ * `lookedAt` is when the downloads were last looked at, by whoever is being
+ * told about them. A failure from before then is still a failure and still
+ * counted, but it is not news, and `unseen` leaves it out: the mark that
+ * says something went wrong is for somebody who has not been told.
  */
-export function batchOf(all: readonly DownloadJob[], now: number): Batch {
+export function batchOf(all: readonly DownloadJob[], now: number, lookedAt = -Infinity): Batch {
   const spans: { job: DownloadJob; from: number; to: number }[] = [];
   for (const job of all) {
     if (job.cleared) continue;
@@ -255,7 +276,10 @@ export function batchOf(all: readonly DownloadJob[], now: number): Batch {
       batch.underWay += 1;
       batch.current ??= job;
     } else if (isWaiting(job)) batch.waiting += 1;
-    else if (job.status === 'failed') batch.failed += 1;
+    else if (job.status === 'failed') {
+      batch.failed += 1;
+      if ((job.finishedAt ?? now) > lookedAt) batch.unseen += 1;
+    }
     // A file removed since was fetched all the same.
     else if (job.status === 'done' || job.status === 'missing') batch.done += 1;
   }
@@ -380,6 +404,8 @@ export function sameJob(a: DownloadJob, b: DownloadJob): boolean {
     a.progress === b.progress &&
     a.format === b.format &&
     a.automatic === b.automatic &&
+    a.retrying === b.retrying &&
+    a.retryText === b.retryText &&
     a.discoverKey === b.discoverKey &&
     jobError(a) === jobError(b) &&
     a.video.title === b.video.title &&

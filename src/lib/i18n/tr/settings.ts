@@ -22,6 +22,11 @@ export const settings: Strings['settings'] = {
     title: 'Tema',
     open: 'Renkler, cam ya da kendi yaptığın bir tema.',
     note: 'Sistem seçeneği, telefonun açık ya da koyu tema ayarına uyar.',
+    pair: {
+      light: 'Açık modda',
+      dark: 'Koyu modda',
+      note: 'Sistem seçiliyken, telefon mod değiştirdikçe bu iki tema arasında geçilir.',
+    },
     shuffle: {
       title: 'Her açılışta farklı tema',
       on: 'Açık',
@@ -70,6 +75,10 @@ export const settings: Strings['settings'] = {
     button: {
       title: 'Yüzen indirmeler düğmesi',
       note: 'Bir şey indirilirken ve bittikten sonra birkaç dakika boyunca uygulamanın üzerinde duran yuvarlak bir düğme. Ne durumda olduğunu görmek için dokun.',
+    },
+    check: {
+      title: 'Yeni YouTube indiricisine bak',
+      note: 'Jukebox günde en çok bir kez, yalnızca İndirmeler’i açtığında ya da bir şey indirdiğinde GitHub’a en yeni yt-dlp sürümünü sorar. Senin ya da kütüphanen hakkında hiçbir şey gönderilmez; sen söylemeden de hiçbir şey indirilmez.',
     },
   },
   still: {

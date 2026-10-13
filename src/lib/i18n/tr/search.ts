@@ -89,7 +89,7 @@ export const search: Strings['search'] = {
     playlistLink: 'Bir YouTube oynatma listesi bağlantısı yapıştır ya da oynatma listesi adıyla ara.',
     videoLink: 'Bir şarkı adı ya da geçerli bir YouTube video bağlantısı gir.',
     queueFull: 'İndirme kuyruğu dolu. Birkaç parçanın bitmesini bekleyip yeniden dene.',
-    update: 'YouTube değişti ve Jukebox’ın bu sürümü onu henüz okuyamıyor. Jukebox’ı güncelle.',
+    update: 'YouTube değişti ve bu sürümdeki indirici onu henüz okuyamıyor. İndirmeler’den yenisine bak ya da Jukebox’ı güncelle.',
     unavailable: 'Bu video ya da oynatma listesi kullanılamıyor. Herkese açık başka bir oynatma listesi ya da arama dene.',
     unreachable: 'YouTube’a ulaşılamadı. Bağlantını kontrol edip yeniden dene.',
     refused: 'YouTube bu isteği tamamlayamadı. Daha sonra yeniden dene ya da başka bir sonuç seç.',

@@ -108,9 +108,11 @@ android {
     // The one rule the AAR used to carry for its consumers: the native side
     // looks its bridge class up by name, so R8 must not rename or drop it.
     // Taken from the source rather than copied here, so it cannot drift away
-    // from the code it protects. Minifying is off in release builds today and
-    // this is what stops turning it on from quietly breaking translation.
+    // from the code it protects. Without it, minifying a release build would
+    // quietly break translation.
     consumerProguardFiles new File(bergamotSource, 'foxlet/consumer-rules.pro')
+    // And those this app needs for itself, now that minifying is on.
+    consumerProguardFiles 'consumer-rules.pro'
 
     externalNativeBuild {
       cmake {
@@ -227,7 +229,9 @@ dependencies {
 }
 
 // Bundle a reproducible extractor instead of relying on the wrapper's older
-// embedded version or downloading executable updates on the user's device.
+// embedded version. This is the copy every install starts with and can go
+// back to; a newer release is fetched on the phone only when its owner asks
+// for it, and is kept only while it is newer than this one: ExtractorUpdate.kt.
 def extractorVersion = '2026.08.19'
 def extractorSha256 = '1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6'
 def extractorAssets = layout.buildDirectory.dir('generated/youtubeAssets')

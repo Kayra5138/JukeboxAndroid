@@ -73,6 +73,7 @@ export const library = {
 
     needsAccess: 'Jukebox needs access to the audio on this device.',
     nothingIn: (folder: string) => `Nothing in ${folder}.`,
+    shuffleAll: 'Shuffle all',
     playsEverythingBelow: 'Jukebox plays everything below that folder, including subfolders.',
     chooseFolderInSettings: 'Choose your library folder in Settings.',
 
@@ -121,6 +122,10 @@ export const library = {
     unsure:
       'None of your tracks were recognised on it, so nothing is ticked. Check that this is the right album first.',
     disc: (disc: number) => `Disc ${format.number(disc)}`,
+    /** Said once the tracks already here have been given their places on the record. */
+    ordered: (count: number) =>
+      `Put ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')} in the album’s order.`,
+    undoOrder: 'Undo',
 
     /** The same, while YouTube is asked: for its playlists, and then for what is on one. */
     lookingTube: 'Looking on YouTube…',

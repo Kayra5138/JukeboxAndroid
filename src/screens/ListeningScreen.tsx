@@ -1,3 +1,4 @@
+import { usePageSides, WithNowPlaying } from '../components/NowPlayingBar';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -39,6 +40,8 @@ import {
   // about missing `cloneContents`, which explains nothing.
   type Range as Span,
   type Tally,
+  type Which,
+  WHICH,
 } from '../lib/stats/period';
 import { buildReport, worthReporting } from '../lib/stats/report';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
@@ -74,11 +77,13 @@ type Data = {
 
 export default function StatsScreen() {
   const [period, setPeriod] = useState<PeriodId>('week');
+  const [which, setWhich] = useState<Which>('this');
   const [metric, setMetric] = useState<Metric>('time');
   const [data, setData] = useState<Data | null>(null);
   const [recapOpen, setRecapOpen] = useState(false);
   const landscape = useLandscape();
   const insets = useSafeAreaInsets();
+  const sides = usePageSides();
   const t = useT();
   const c = useColours();
   const styles = useStyles();
@@ -90,7 +95,7 @@ export default function StatsScreen() {
     has the screen read again when it changes, rather than keep a chart whose
     days are still named in the old one.
   */
-  const load = useCallback((id: PeriodId) => {
+  const load = useCallback((id: PeriodId, reading: Which) => {
     /*
       One clock for the whole read. Taken once rather than per query because a
       period asked for at 23:59:59.999 and a chart built a millisecond later
@@ -98,15 +103,15 @@ export default function StatsScreen() {
       to the total above them.
     */
     const at = Date.now();
-    const range = rangeOf(id, at);
-    const earlier = previousRange(id, at);
+    const range = rangeOf(id, at, reading);
+    const earlier = previousRange(id, at, reading);
     const first = firstPlayAt();
     const rows = listens(range);
-    const buckets = bucketsOf(id, at, first, t);
+    const buckets = bucketsOf(id, at, first, t, reading);
 
     setData({
       at,
-      title: titleOf(id, at, t),
+      title: titleOf(id, at, t, reading),
       summary: summarize(range),
       before: earlier ? summarize(earlier) : null,
       beforeDays: earlier ? daysIn(earlier) : 0,
@@ -142,24 +147,41 @@ export default function StatsScreen() {
       if (!restored.current) {
         restored.current = true;
         const saved = readPeriod();
-        // Setting it re-runs this with the right one, so there is still only
-        // ever the one read of the history.
-        if (saved !== period) {
+        const reading = readWhich();
+        // Setting them re-runs this with the right ones, so there is still
+        // only ever the one read of the history.
+        if (saved !== period || reading !== which) {
           setPeriod(saved);
+          setWhich(reading);
           return;
         }
       }
-      load(period);
-    }, [load, period])
+      load(period, which);
+    }, [load, period, which])
   );
 
   const choose = useCallback(
     (id: PeriodId) => {
       setPeriod(id);
       writeSetting(SETTINGS.statsPeriod, id);
-      load(id);
+      load(id, which);
     },
-    [load]
+    [load, which]
+  );
+
+  /*
+    One choice for all four periods and not one each. Somebody who looks at
+    last week and then turns to the month is asking the same question of a
+    longer stretch, and would have to ask it again if the month had gone back
+    to its own.
+  */
+  const read = useCallback(
+    (reading: Which) => {
+      setWhich(reading);
+      writeSetting(SETTINGS.statsWhich, reading);
+      load(period, reading);
+    },
+    [load, period]
   );
 
   const values = useMemo(
@@ -218,17 +240,17 @@ export default function StatsScreen() {
   ] as const;
 
   return (
+    <WithNowPlaying style={styles.screen}>
     <ScrollView
-      style={styles.screen}
       contentContainerStyle={[
         styles.content,
         {
           paddingTop: insets.top + 12,
-          paddingLeft: insets.left + 20,
-          paddingRight: insets.right + 20,
+          paddingLeft: sides.left + 20,
+          paddingRight: sides.right + 20,
         },
       ]}>
-      <View style={styles.periods}>
+      <View style={[styles.periods, period === 'all' && styles.periodsAlone]}>
         {PERIODS.map((entry) => (
           <Pressable
             android_ripple={pressed}
@@ -241,6 +263,29 @@ export default function StatsScreen() {
           </Pressable>
         ))}
       </View>
+
+      {/* All time is read one way, and has no second row. */}
+      {period !== 'all' ? (
+        <View style={styles.readings}>
+          {WHICH.map((entry) => (
+            <Pressable
+              android_ripple={pressed}
+              key={entry}
+              accessibilityRole="button"
+              accessibilityState={{ selected: entry === which }}
+              style={[styles.reading, entry === which && styles.readingOn]}
+              onPress={() => read(entry)}>
+              <Text
+                style={[styles.readingLabel, entry === which && styles.readingLabelOn]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.85}>
+                {t.stats.period.which[period][entry]}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {/* Sideways the headline and the chart sit beside each other: the screen
           is half as tall, and stacking them puts the chart below the fold. */}
@@ -270,7 +315,7 @@ export default function StatsScreen() {
               <Text style={styles.muted}>
                 {' '}
                 {t.stats.screen.against(
-                  comparisonOf(period, t),
+                  comparisonOf(period, t, which),
                   data.before ? formatDuration(data.before.totalSeconds, t) : null
                 )}
               </Text>
@@ -385,6 +430,7 @@ export default function StatsScreen() {
         cards={buildReport(
           {
             period,
+            which,
             at: data.at,
             summary,
             before: data.before,
@@ -399,6 +445,7 @@ export default function StatsScreen() {
         onClose={() => setRecapOpen(false)}
       />
     </ScrollView>
+    </WithNowPlaying>
   );
 }
 
@@ -513,6 +560,11 @@ function had(value: string | null): string | null {
 }
 
 /** The period last looked at, so the screen opens where it was left. */
+function readWhich(): Which {
+  const saved = readSetting(SETTINGS.statsWhich);
+  return WHICH.some((entry) => entry === saved) ? (saved as Which) : 'this';
+}
+
 function readPeriod(): PeriodId {
   const saved = readSetting(SETTINGS.statsPeriod);
   return PERIODS.some((entry) => entry.id === saved) ? (saved as PeriodId) : 'week';
@@ -530,13 +582,33 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     backgroundColor: c.surface,
     borderRadius: 11,
     padding: 3,
-    marginBottom: 20,
+    marginBottom: 10,
     ...outlined(c),
   },
   period: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 9 },
   periodOn: { backgroundColor: c.selected },
   periodLabel: { color: c.textMuted, fontSize: 13.5 },
   periodLabelOn: { color: c.onSelected, fontWeight: '600' },
+
+  // The second question, asked more quietly than the first: which day, which
+  // week. Chips and not another bar, so that the two rows are not mistaken
+  // for one control with ten choices.
+  readings: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  reading: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    backgroundColor: c.surface,
+    paddingVertical: 7,
+    paddingHorizontal: 8,
+    borderRadius: 9,
+    ...outlined(c),
+  },
+  readingOn: { backgroundColor: c.selected, ...outlined(c, c.selected) },
+  readingLabel: { color: c.textMuted, fontSize: 12.5 },
+  readingLabelOn: { color: c.onSelected, fontWeight: '600' },
+  // All time has no second row, and keeps the room the row would have left under it.
+  periodsAlone: { marginBottom: 20 },
 
   wide: { flexDirection: 'row', gap: 26, alignItems: 'flex-start' },
   wideSide: { flex: 1, minWidth: 0 },

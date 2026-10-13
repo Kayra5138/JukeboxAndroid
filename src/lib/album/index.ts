@@ -1,7 +1,8 @@
+import { outOfPlace, type Listing, type Move } from './order.ts';
 import { placedRow, placementOf } from './placement.ts';
 import { findAlbumRest, type Get, type OwnedTrack, type RestOutcome } from './rest.ts';
 import { findAlbumOnYouTube, type Look, type Stage, type YouTubeOutcome } from './youtube.ts';
-import { readMetadata, saveMetadata } from '../db/metadata.ts';
+import { placeTracks, readMetadata, saveMetadata, unplaceTracks } from '../db/metadata.ts';
 import { musicBrainzGet } from '../metadata/musicbrainz.ts';
 import { downloads } from '../youtube/native.ts';
 import type { YouTubeResult } from '../youtube/types.ts';
@@ -140,4 +141,22 @@ export function fileUnderAlbum(trackId: string, video: unknown): boolean {
   if (!row) return false;
   saveMetadata(row);
   return true;
+}
+
+/**
+ * Gives the library's tracks the places [list] has them at, and answers what
+ * was changed, which is also what `undoOrder` needs to change it back.
+ */
+export function putInOrder(
+  list: Listing,
+  tracks: { id: string; trackNumber: number | null; discNumber?: number | null }[],
+  own: ReadonlySet<string>
+): Move[] {
+  const moves = outOfPlace(list, tracks, readMetadata, own);
+  placeTracks(moves);
+  return moves;
+}
+
+export function undoOrder(moves: Move[]): void {
+  unplaceTracks(moves);
 }

@@ -92,7 +92,12 @@ export function rankSuggestions(
   }
 
   return [...merged.values()]
-    .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+    // By the name as it is spelled where two score the same: an order that is
+    // the same on every phone, whatever language the phone is in.
+    .sort(
+      (left, right) =>
+        right.score - left.score || (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)
+    )
     .slice(0, limit)
     .map(({ seen, ...suggestion }) => ({
       ...suggestion,

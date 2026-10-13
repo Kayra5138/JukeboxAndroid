@@ -9,6 +9,8 @@ import {
   resolveTheme,
   SYSTEM_DARK,
   SYSTEM_LIGHT,
+  systemThemes,
+  systemThemesFrom,
   THEME_GROUPS,
   themeChoiceFrom,
   themeOf,
@@ -358,6 +360,38 @@ const ramp = (tint: string) => [
   '#76777f', '#5d5e67', '#45464f', '#2f3038', '#1a1b23', '#000000',
 ];
 const SOME_PALETTE = { accent1: ramp('9'), accent2: ramp('9'), neutral1: ramp('9'), neutral2: ramp('9') };
+
+describe('the pair following the phone goes between', () => {
+  it('is the plain light and the plain dark until somebody says otherwise, or says something that is no theme', () => {
+    assert.deepEqual(systemThemesFrom(null, null), { light: SYSTEM_LIGHT, dark: SYSTEM_DARK });
+    assert.deepEqual(systemThemesFrom('solarised', 'system'), { light: SYSTEM_LIGHT, dark: SYSTEM_DARK });
+    assert.deepEqual(systemThemesFrom('sepia', 'plum'), { light: 'sepia', dark: 'plum' });
+  });
+
+  it('is what following the phone draws, each side in its own mode, and no business of a theme chosen by name', () => {
+    const pair = { light: 'sepia', dark: 'plum' } as const;
+    assert.equal(resolveTheme('system', 'light', NOTHING_AROUND, pair).id, 'sepia');
+    assert.equal(resolveTheme('system', 'dark', NOTHING_AROUND, pair).id, 'plum');
+    assert.equal(resolveTheme('system', null, NOTHING_AROUND, pair).id, 'plum');
+    assert.equal(resolveTheme('forest', 'light', NOTHING_AROUND, pair).id, 'forest');
+  });
+
+  it('may have any theme on either side, a worked-out one among them, which is then worked out', () => {
+    const around = { cover: ['#2a0a0a', '#a02828', '#e06060'], system: null, custom: null };
+    const made = resolveTheme('system', 'dark', around, { light: 'light', dark: 'cover' });
+    assert.equal(made.id, 'cover');
+    assert.notEqual(made.colours.accent, themeOf('dark').colours.accent);
+  });
+
+  it('has fetched for it whatever either side needs, whichever the phone is on', () => {
+    const before = systemThemes.get();
+    systemThemes.set({ light: 'material', dark: 'cover' });
+    assert.deepEqual([...needsOf('system')].sort(), ['cover', 'system']);
+    assert.equal(resolveTheme('system', 'dark').id, 'cover');
+    systemThemes.set(before);
+    assert.deepEqual(needsOf('system'), []);
+  });
+});
 
 describe('a theme that is worked out', () => {
   it('is what it falls back to when nothing is known', () => {

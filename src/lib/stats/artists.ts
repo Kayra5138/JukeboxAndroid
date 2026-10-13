@@ -1,3 +1,4 @@
+import { compareNames } from '../media/sort.ts';
 import { foldForMatch } from '../metadata/text.ts';
 
 /**
@@ -85,7 +86,7 @@ export function tallyArtists(
   }
 
   return [...artists.values()]
-    .sort((a, b) => b.plays - a.plays || b.seconds - a.seconds || a.label.localeCompare(b.label))
+    .sort((a, b) => b.plays - a.plays || b.seconds - a.seconds || compareNames(a.label, b.label))
     .slice(0, Math.max(0, limit))
     .map((artist) => {
       let sample: string | null = null;

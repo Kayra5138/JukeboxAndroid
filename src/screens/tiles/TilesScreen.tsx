@@ -100,6 +100,9 @@ import { Tile } from './Tile';
 import { Wash } from './Wash';
 import { speedName, Words } from './Words';
 
+/** Room round the pause button that counts as it: a press that lands beside it was meant for it. */
+const STOP_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
+
 export default function TilesScreen() {
   const insets = useSafeAreaInsets();
   const { current, isPlaying } = usePlayerState();
@@ -1629,6 +1632,7 @@ export default function TilesScreen() {
           <Pressable
             accessibilityRole="button"
             onPress={pause}
+            hitSlop={STOP_SLOP}
             disabled={phase === 'over'}
             style={[styles.stop, phase === 'over' && styles.gone]}>
             <View style={styles.pauseBars}>

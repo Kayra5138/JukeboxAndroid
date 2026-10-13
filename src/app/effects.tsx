@@ -17,6 +17,8 @@ import { makeStyles, outlined, scene, switchColours, useColours, usePressed } fr
 
 export default function EffectsScreen() {
   const insets = useSafeAreaInsets();
+  // A pushed screen has the whole width of the glass, cutout and all.
+  const sideways = { paddingLeft: 20 + insets.left, paddingRight: 20 + insets.right };
   const { settings, failure, change } = useAudioEffects();
   const t = useT();
   const styles = useStyles();
@@ -41,7 +43,7 @@ export default function EffectsScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]}>
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }, sideways]}>
       {failure ? (
         <Text accessibilityRole="alert" style={styles.bad}>
           {failure}

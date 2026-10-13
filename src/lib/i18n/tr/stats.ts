@@ -1,13 +1,17 @@
 import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
-import type { PeriodId } from '../../stats/period.ts';
+import type { PeriodId, Which } from '../../stats/period.ts';
 
 /*
   A period is not one word dropped into three sentences here: it is "bugün" in
   one, "düne göre" in another and "bugünün" in a third, so every sentence is
   written out for every period.
 */
-const by = (period: PeriodId, said: Record<PeriodId, string>) => said[period];
+type Said = Record<Exclude<PeriodId, 'all'>, string>;
+
+/** One sentence for each reading of each period, and one for all time, which has a single reading. */
+const by = (period: PeriodId, which: Which, said: Record<Which, Said> & { all: string }) =>
+  period === 'all' ? said.all : said[which][period];
 
 const arrow = (change: number) => (change >= 0 ? '↑' : '↓');
 
@@ -22,16 +26,24 @@ export const stats: Strings['stats'] = {
 
   period: {
     labels: { day: 'Gün', week: 'Hafta', month: 'Ay', year: 'Yıl', all: 'Tümü' },
-    today: 'Bugün',
-    thisWeek: 'Bu hafta',
+    which: {
+      day: { last: 'Dün', this: 'Bugün', rolling: 'Son 24 saat' },
+      week: { last: 'Geçen hafta', this: 'Bu hafta', rolling: 'Son 7 gün' },
+      month: { last: 'Geçen ay', this: 'Bu ay', rolling: 'Son 30 gün' },
+      year: { last: 'Geçen yıl', this: 'Bu yıl', rolling: 'Son 12 ay' },
+    },
     allTime: 'Tüm zamanlar',
     monthOf: (date) => `${format.monthsShort[date.getMonth()]} ${date.getFullYear()}`,
-    versus: (period) =>
-      by(period, {
-        day: 'düne göre',
-        week: 'geçen haftaya göre',
-        month: 'geçen aya göre',
-        year: 'geçen yıla göre',
+    versus: (period, which) =>
+      by(period, which, {
+        this: { day: 'düne göre', week: 'geçen haftaya göre', month: 'geçen aya göre', year: 'geçen yıla göre' },
+        last: { day: 'önceki güne göre', week: 'önceki haftaya göre', month: 'önceki aya göre', year: 'önceki yıla göre' },
+        rolling: {
+          day: 'önceki 24 saate göre',
+          week: 'önceki 7 güne göre',
+          month: 'önceki 30 güne göre',
+          year: 'önceki 12 aya göre',
+        },
         all: '',
       }),
   },
@@ -84,30 +96,27 @@ export const stats: Strings['stats'] = {
 
   report: {
     tracksHeading: 'En çok dinlediğin parçalar',
-    tracksLead: (period) =>
-      by(period, {
-        day: 'Bugün en çok dinlediklerin',
-        week: 'Bu hafta en çok dinlediklerin',
-        month: 'Bu ay en çok dinlediklerin',
-        year: 'Bu yıl en çok dinlediklerin',
+    tracksLead: (period, which) =>
+      by(period, which, {
+        this: { day: 'Bugün en çok dinlediklerin', week: 'Bu hafta en çok dinlediklerin', month: 'Bu ay en çok dinlediklerin', year: 'Bu yıl en çok dinlediklerin' },
+        last: { day: 'Dün en çok dinlediklerin', week: 'Geçen hafta en çok dinlediklerin', month: 'Geçen ay en çok dinlediklerin', year: 'Geçen yıl en çok dinlediklerin' },
+        rolling: { day: 'Son 24 saatte en çok dinlediklerin', week: 'Son 7 günde en çok dinlediklerin', month: 'Son 30 günde en çok dinlediklerin', year: 'Son 12 ayda en çok dinlediklerin' },
         all: 'Bugüne kadar en çok dinlediklerin',
       }),
     artistsHeading: 'En çok dinlediğin sanatçılar',
-    artistsLead: (period) =>
-      by(period, {
-        day: 'Bugün sana eşlik edenler',
-        week: 'Bu hafta sana eşlik edenler',
-        month: 'Bu ay sana eşlik edenler',
-        year: 'Bu yıl sana eşlik edenler',
+    artistsLead: (period, which) =>
+      by(period, which, {
+        this: { day: 'Bugün sana eşlik edenler', week: 'Bu hafta sana eşlik edenler', month: 'Bu ay sana eşlik edenler', year: 'Bu yıl sana eşlik edenler' },
+        last: { day: 'Dün sana eşlik edenler', week: 'Geçen hafta sana eşlik edenler', month: 'Geçen ay sana eşlik edenler', year: 'Geçen yıl sana eşlik edenler' },
+        rolling: { day: 'Son 24 saatte sana eşlik edenler', week: 'Son 7 günde sana eşlik edenler', month: 'Son 30 günde sana eşlik edenler', year: 'Son 12 ayda sana eşlik edenler' },
         all: 'Bugüne kadar sana eşlik edenler',
       }),
     genresHeading: 'Tarzın',
-    genresLead: (period) =>
-      by(period, {
-        day: 'Bugünün havası',
-        week: 'Bu haftanın havası',
-        month: 'Bu ayın havası',
-        year: 'Bu yılın havası',
+    genresLead: (period, which) =>
+      by(period, which, {
+        this: { day: 'Bugünün havası', week: 'Bu haftanın havası', month: 'Bu ayın havası', year: 'Bu yılın havası' },
+        last: { day: 'Dünün havası', week: 'Geçen haftanın havası', month: 'Geçen ayın havası', year: 'Geçen yılın havası' },
+        rolling: { day: 'Son 24 saatin havası', week: 'Son 7 günün havası', month: 'Son 30 günün havası', year: 'Son 12 ayın havası' },
         all: 'Bugüne kadarki havan',
       }),
     clockHeading: 'Saatlerin',

@@ -108,8 +108,14 @@ export function suggestForPlaylist({
 
   return scored
     // Ties broken by id so the same library gives the same list twice. A
-    // suggestion panel that reshuffles on every visit reads as noise.
-    .sort((left, right) => right.score - left.score || left.trackId.localeCompare(right.trackId))
+    // suggestion panel that reshuffles on every visit reads as noise. Compared
+    // as plain strings: an id is not a word, any fixed order will do, and
+    // `localeCompare` builds a collator for each pair it is asked about.
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        (left.trackId < right.trackId ? -1 : left.trackId > right.trackId ? 1 : 0)
+    )
     .slice(0, limit);
 }
 

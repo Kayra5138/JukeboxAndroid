@@ -576,6 +576,23 @@ const COVER_SEARCHED = `
   ALTER TABLE track_metadata ADD COLUMN cover_searched_at INTEGER;
 `;
 
+/**
+ * When a song was put away from Discover, or an artist blocked.
+ *
+ * The table said what had been done and never when. Nothing could grow old
+ * in it: three songs by one artist sent away over three years counted, for
+ * good, as three sent away this week, and the artist was left out for ever
+ * by a rule meant to last six months. With a date each row can be weighed
+ * for how long ago it was.
+ *
+ * Rows from before this have none. There is no honest date to give them —
+ * the day of the upgrade would make every old exclusion a fresh one — so
+ * they are left without, and are read as old: see `taste.ts`.
+ */
+const EXCLUSIONS_DATED = `
+  ALTER TABLE discover_exclusions ADD COLUMN created_at INTEGER;
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -601,6 +618,7 @@ export const MIGRATIONS: string[] = [
   TRACK_IDENTITY,
   LISTENBRAINZ_LISTENS,
   COVER_SEARCHED,
+  EXCLUSIONS_DATED,
 ];
 
 /**

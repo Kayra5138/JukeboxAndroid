@@ -6,9 +6,10 @@ import { DEFAULT_SEEDS, seedsFrom, seedsToSetting, type CustomSeeds } from './cu
 import {
   currentThemeChoice,
   isOffered,
+  needsOf,
   resolveTheme,
-  SYSTEM_DARK,
-  SYSTEM_LIGHT,
+  systemThemes,
+  systemThemesFrom,
   THEME_GROUPS,
   themeChoiceFrom,
   themeOf,
@@ -19,7 +20,7 @@ import {
 } from './registry.ts';
 import { drawn, poolFrom, poolToSetting, withTheme } from './shuffle.ts';
 import { readSystemPalette } from './systemPalette.ts';
-import type { Palette, Theme, ThemeGroup } from './tokens.ts';
+import type { Need, Palette, Theme, ThemeGroup } from './tokens.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index';
 import { createStore } from '../ui/store.ts';
 
@@ -49,6 +50,12 @@ export type { Palette, Theme, ThemeGroup } from './tokens.ts';
 
 /** Reads the stored choice. Called once, before anything is drawn; see `loadLanguage` for why. */
 export function loadTheme(): void {
+  try {
+    // Before the choice, since following the phone is drawn with these.
+    systemThemes.set(systemThemesFrom(readSetting(SETTINGS.themeLight), readSetting(SETTINGS.themeDark)));
+  } catch {
+    // The plain pair, which is what it was before there was a choice.
+  }
   try {
     const stored = themeChoiceFrom(readSetting(SETTINGS.theme));
     /*
@@ -149,6 +156,25 @@ export function setThemeShuffled(theme: ThemeId, on: boolean): void {
   writeSetting(SETTINGS.themeShufflePool, poolToSetting(pool));
 }
 
+/** The two themes following the phone goes between, watched. */
+export function useSystemThemes(): { light: ThemeId; dark: ThemeId } {
+  return useSyncExternalStore(systemThemes.subscribe, systemThemes.get);
+}
+
+/** Says which theme following the phone uses in the phone's light mode, or in its dark one. */
+export function chooseSystemTheme(mode: 'light' | 'dark', theme: ThemeId): void {
+  systemThemes.set({ ...systemThemes.get(), [mode]: theme });
+  writeSetting(mode === 'light' ? SETTINGS.themeLight : SETTINGS.themeDark, theme);
+}
+
+/** What the theme in use has to have fetched for it, watched: for whoever does the fetching. */
+export function useThemeNeeds(): readonly Need[] {
+  const choice = useThemeChoice();
+  const pair = useSystemThemes();
+  if (choice !== 'system') return needsOf(choice);
+  return [...new Set([...needsOf(pair.light), ...needsOf(pair.dark)])];
+}
+
 /** What is chosen, which is not always a theme: for the picker. */
 export function useThemeChoice(): ThemeChoice {
   return useSyncExternalStore(currentThemeChoice.subscribe, currentThemeChoice.get);
@@ -167,7 +193,8 @@ export function useTheme(): Theme {
   const choice = useThemeChoice();
   const system = useColorScheme();
   const around = useSyncExternalStore(themeSurroundings.subscribe, themeSurroundings.get);
-  return scoped ?? resolveTheme(choice, system, around);
+  const pair = useSystemThemes();
+  return scoped ?? resolveTheme(choice, system, around, pair);
 }
 
 /** One line of the picker: something to choose, and the themes it would be drawn in, to show a sample of. */
@@ -200,6 +227,7 @@ export function useThemeOffers(): {
   const choice = useThemeChoice();
   const system = useColorScheme();
   const around = useSyncExternalStore(themeSurroundings.subscribe, themeSurroundings.get);
+  const pair = useSystemThemes();
   const scheme = system === 'light' ? 'light' : 'dark';
 
   const offered = THEMES.filter((theme) => isOffered(theme, { ...around, scheme }));
@@ -215,7 +243,8 @@ export function useThemeOffers(): {
       offers.unshift({
         id: 'system',
         nameKey: 'system',
-        samples: [themeOf(SYSTEM_LIGHT), themeOf(SYSTEM_DARK)],
+        // The pair it goes between, each as it is at this moment.
+        samples: [resolveTheme(pair.light, 'light', around), resolveTheme(pair.dark, 'dark', around)],
       });
     }
     return { group, offers };

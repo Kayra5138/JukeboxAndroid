@@ -4,12 +4,15 @@ import { BackHandler, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DownloadsList } from '../components/downloads/DownloadsList';
+import { ExtractorPanel } from '../components/downloads/ExtractorPanel';
 import { Pressable } from '../components/Pressable';
+import { downloadsLookedAt } from '../lib/ui/downloadsButton';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, scene, usePressed } from '../lib/theme/index';
 import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useDownloads } from '../lib/youtube/DownloadsProvider';
 import { youtubeError } from '../lib/youtube/errors';
+import { checkExtractor, updateExtractor, useExtractorAdvice, useExtractorBusy } from '../lib/youtube/extractorState';
 import { downloads } from '../lib/youtube/native';
 import { tallyOf } from '../lib/youtube/queueView';
 
@@ -28,6 +31,10 @@ import { tallyOf } from '../lib/youtube/queueView';
  * Top to bottom in the order of how soon each thing matters: the state of
  * the queue in a sentence with the two controls over all of it, the download
  * under way, the ones waiting in the order they will go, and the history.
+ *
+ * Between the heading and the list, yt-dlp's own lines: which version does
+ * the downloading, and whether there is a newer one (`ExtractorPanel`). It
+ * is here because this is the screen a download fails on.
  */
 export default function DownloadsScreen() {
   const { all, paused, error, refresh, cancel, retry, move, setPaused, clearHistory, cancelAll } = useDownloads();
@@ -39,6 +46,9 @@ export default function DownloadsScreen() {
   /** Whether "cancel all" has been pressed and is waiting to be meant. */
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** What a failed row may offer in place of "Retry", where the failure looks like yt-dlp's age. */
+  const advice = useExtractorAdvice();
+  const adviceBusy = useExtractorBusy();
 
   // With the files looked for, so that a download deleted from the phone
   // since is shown as gone and not as in the library.
@@ -46,6 +56,15 @@ export default function DownloadsScreen() {
     useCallback(() => {
       void refresh(true);
     }, [refresh])
+  );
+
+  // The floating button need not say again what was read here: from the
+  // moment this is opened to the moment it is left.
+  useFocusEffect(
+    useCallback(() => {
+      downloadsLookedAt();
+      return downloadsLookedAt;
+    }, [])
   );
 
   useFocusEffect(
@@ -78,6 +97,11 @@ export default function DownloadsScreen() {
     },
     [retry, t]
   );
+  // What became of either is said beside the version, over the list.
+  const advise = useCallback((what: 'update' | 'check') => {
+    if (what === 'update') void updateExtractor();
+    else void checkExtractor(true);
+  }, []);
   // Removes nothing from the phone, so it is not asked about.
   const clear = useCallback(() => {
     clearHistory().catch(() => {});
@@ -134,6 +158,7 @@ export default function DownloadsScreen() {
           {trouble}
         </Text>
       ) : null}
+      <ExtractorPanel />
     </View>
   );
 
@@ -155,6 +180,9 @@ export default function DownloadsScreen() {
           onRetry={retryOne}
           onMove={move}
           onClear={clear}
+          advice={advice}
+          adviceBusy={adviceBusy}
+          onAdvice={advise}
         />
       </Behind>
 

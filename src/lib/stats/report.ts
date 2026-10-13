@@ -10,6 +10,7 @@ import {
   titleOf,
   type Listen,
   type PeriodId,
+  type Which,
 } from './period.ts';
 
 /**
@@ -102,6 +103,8 @@ export type ReportCard = { tint?: string | null } & (
 
 export type ReportInput = {
   period: PeriodId;
+  /** Which reading of it: see `Which`. Left out, the one being lived through. */
+  which?: Which;
   at: number;
   summary: ListeningSummary;
   before: ListeningSummary | null;
@@ -157,6 +160,7 @@ export function worthReporting(summary: ListeningSummary): boolean {
  */
 export function buildReport(input: ReportInput, t: Strings = strings()): ReportCard[] {
   const { summary, period, at } = input;
+  const which = input.which ?? 'this';
   const cards: ReportCard[] = [];
   const said = t.stats.report;
   const figures = t.stats.figures;
@@ -165,10 +169,10 @@ export function buildReport(input: ReportInput, t: Strings = strings()): ReportC
 
   cards.push({
     kind: 'opening',
-    title: titleOf(period, at, t),
+    title: titleOf(period, at, t, which),
     seconds: summary.totalSeconds,
     change: input.before ? changeBetween(summary.totalSeconds, input.before.totalSeconds) : null,
-    comparison: comparisonOf(period, t),
+    comparison: comparisonOf(period, t, which),
     tint: input.tracks[0]?.sample ?? null,
     // Nine fills a three by three wall; fewer tiles are repeated to fill it.
     wall: input.tracks
@@ -181,7 +185,7 @@ export function buildReport(input: ReportInput, t: Strings = strings()): ReportC
       kind: 'ranking',
       of: 'tracks',
       heading: said.tracksHeading,
-      lead: said.tracksLead(period),
+      lead: said.tracksLead(period, which),
       entries: tracks,
       tint: tracks[0].sample,
     });
@@ -193,7 +197,7 @@ export function buildReport(input: ReportInput, t: Strings = strings()): ReportC
       kind: 'ranking',
       of: 'artists',
       heading: said.artistsHeading,
-      lead: said.artistsLead(period),
+      lead: said.artistsLead(period, which),
       entries: artists,
       tint: artists[0].sample,
     });
@@ -205,7 +209,7 @@ export function buildReport(input: ReportInput, t: Strings = strings()): ReportC
       kind: 'ranking',
       of: 'genres',
       heading: said.genresHeading,
-      lead: said.genresLead(period),
+      lead: said.genresLead(period, which),
       entries: genres,
       tint: genres[0].sample,
     });
@@ -265,7 +269,7 @@ export function buildReport(input: ReportInput, t: Strings = strings()): ReportC
 
   cards.push({
     kind: 'closing',
-    title: titleOf(period, at, t),
+    title: titleOf(period, at, t, which),
     seconds: summary.totalSeconds,
     track: tracks[0]?.label ?? null,
     artist: artists[0]?.label ?? null,

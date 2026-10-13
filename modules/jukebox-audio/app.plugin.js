@@ -65,6 +65,14 @@ function withWindowBehindTheSplash(config) {
  * version catalog, which is why it is set here rather than in a gradle file
  * that prebuild would overwrite.
  */
+/**
+ * Release builds are shrunk: R8 drops the code nothing calls and shortens
+ * the names of the rest, which took the app's own code from 49 MB to 17 and
+ * the APK from 121 MB to 89. What has to be kept from it is in the module's
+ * `consumer-rules.pro`, each rule with its reason.
+ */
+const MINIFY = 'android.enableMinifyInReleaseBuilds';
+
 module.exports = function withJukeboxMinSdk(config) {
   config = withWindowBehindTheSplash(config);
   config = withAndroidManifest(config, (mod) => {
@@ -77,13 +85,14 @@ module.exports = function withJukeboxMinSdk(config) {
         (item) =>
           !(
             item.type === 'property' &&
-            [KEY, 'expo.useLegacyPackaging', 'reactNativeArchitectures'].includes(item.key)
+            [KEY, 'expo.useLegacyPackaging', 'reactNativeArchitectures', MINIFY].includes(item.key)
           )
       )
       .concat(
         { type: 'property', key: KEY, value: MIN_SDK },
         { type: 'property', key: 'expo.useLegacyPackaging', value: 'true' },
-        { type: 'property', key: 'reactNativeArchitectures', value: ARCHITECTURES }
+        { type: 'property', key: 'reactNativeArchitectures', value: ARCHITECTURES },
+        { type: 'property', key: MINIFY, value: 'true' }
       );
     return mod;
   });

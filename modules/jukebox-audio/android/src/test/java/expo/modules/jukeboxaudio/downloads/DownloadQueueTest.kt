@@ -68,7 +68,7 @@ class DownloadQueueTest {
     assertTrue(queue.next(quiet) is Next.Wait)
     queue.complete(first, "1")
     assertEquals(second, taken())
-    queue.change(second, "failed", error = Failed(Failure.NETWORK))
+    queue.change(second, "failed", error = Failed(Failure.UNAVAILABLE))
     assertTrue(queue.next(quiet) is Next.Idle)
   }
 
@@ -225,9 +225,9 @@ class DownloadQueueTest {
   @Test fun aSearchThatFailedSaysWhy() {
     val faint = name("Faint")
     claimed()
-    queue.failFind(faint, Failed(Failure.NETWORK))
+    queue.failFind(faint, Failed(Failure.OUTDATED))
     assertEquals("failed", status(faint))
-    assertEquals("ERR_YOUTUBE_NETWORK", job(faint).getString("errorCode"))
+    assertEquals("ERR_YOUTUBE_OUTDATED", job(faint).getString("errorCode"))
     // Too late to say anything else of it.
     queue.resolveFind(faint, video(1), here)
     assertEquals("failed", status(faint))
@@ -366,6 +366,287 @@ class DownloadQueueTest {
     assertEquals(mine, (queue.next(Outside(wifi = { false })) as Next.Take).job.getString("id"))
   }
 
+  @Test fun aSongSomebodyTappedGoesAheadOfEverythingWaiting() {
+    val album = name("Faint"); val video = download(1); val mine = ownNamed("Numb")
+    assertEquals(listOf(album, video, mine), order())
+    // Tapped: a new job for another song, put first, and a person's from the start.
+    val tapped = queue.enqueueFind(named("Crawling"), "original", "Music", another, here, front = true)
+    assertEquals(listOf(tapped, album, video, mine), order())
+    assertFalse(job(tapped).getBoolean("automatic"))
+    assertEquals(tapped, claimed())
+  }
+
+  @Test fun tappingASongThatIsAlreadyWaitingMovesItAndMakesItSomebodys() {
+    val asked = download(1)
+    val mine = queue.enqueueFind(named("Numb").put("discoverAutomatic", true).put("discoverWifiOnly", true),
+      "original", "Music", recording, here)
+    assertEquals(listOf(asked, mine), order())
+    assertEquals(mine, queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true))
+    assertEquals(listOf(mine, asked), order())
+    assertFalse(job(mine).getBoolean("automatic"))
+    assertFalse(job(mine).getJSONObject("video").getBoolean("discoverWifiOnly"))
+    // No quiet to sit out, and no Wi-Fi to wait for: it is looked for now.
+    assertEquals(mine, queue.claimFind(Outside(wifi = { false }))?.getString("id"))
+  }
+
+  @Test fun aTapDoesNotWaitOutASecondTry() {
+    val mine = queue.enqueueFind(named("Numb"), "original", "Music", recording, here)
+    muchLater()
+    claimed()
+    queue.failFind(mine, Failed(Failure.NETWORK))
+    assertNull(claimed())
+    queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true)
+    assertEquals(mine, claimed())
+  }
+
+  @Test fun tappedAgainAfterItsDownloadFailedItIsNotLookedForAgain() {
+    val mine = queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true)
+    assertEquals(mine, claimed())
+    queue.resolveFind(mine, video(1), here)
+    assertEquals(mine, taken())
+    failing(mine, Failure.UNAVAILABLE)
+    assertEquals("failed", status(mine))
+    val other = download(2)
+    // The same job, with the video it found, first in line and nothing to search for.
+    assertEquals(mine, queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true))
+    assertEquals(listOf(mine, other), order())
+    assertNull(claimed())
+    assertEquals(mine, taken())
+  }
+
+  @Test fun aTappedSongThatFailsOnceIsStillFirstForItsSecondTry() {
+    val tapped = queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true)
+    val album = (1..3).map(::download)
+    assertEquals(tapped, claimed())
+    queue.resolveFind(tapped, video(9), here)
+    assertEquals(tapped, taken())
+    failing(tapped, Failure.NETWORK)
+    // Put back for its second try, and at the front: not behind the album asked for meanwhile.
+    assertEquals("queued", status(tapped))
+    assertEquals(listOf(tapped) + album, order())
+    // While it waits the others go by it, one at a time.
+    assertEquals(album[0], taken())
+    queue.complete(album[0], "1")
+    now += DownloadQueue.RETRY_DELAY_MS
+    // Its wait over, it is the next, ahead of the rest of the album.
+    assertEquals(tapped, taken())
+    assertEquals(listOf(album[1], album[2]), order())
+  }
+
+  @Test fun aJobNobodyTappedGoesToTheEndOfItsKindForItsSecondTryAsBefore() {
+    val a = download(1); val b = download(2)
+    assertEquals(a, taken())
+    failing(a, Failure.NETWORK)
+    assertEquals(listOf(b, a), order())
+  }
+
+  @Test fun aVideoTheExtractorWasToldToLeaveAloneIsNotTriedAgain() {
+    assertTrue(YouTubeData.filteredOut("[download] Some stream does not pass filter (!is_live & duration<?7200), skipping .."))
+    assertFalse(YouTubeData.filteredOut("[download] 100% of 3.51MiB in 00:02"))
+    assertEquals(Again.NEVER, Failure.NOT_A_SONG.again)
+    val mine = queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true)
+    claimed()
+    queue.resolveFind(mine, video(1), here)
+    taken()
+    failing(mine, Failure.NOT_A_SONG)
+    assertEquals("failed", status(mine))
+    assertEquals("ERR_YOUTUBE_NOT_A_SONG", job(mine).getString("errorCode"))
+    // Where the same nothing used to be a file gone missing, which is tried again.
+    assertEquals(Again.SOON, Failure.NO_AUDIO.again)
+  }
+
+  /* Rule 10: songs looked for ahead, and held. */
+  private val third = "cccccccc-dddd-eeee-ffff-000000000000"
+  private fun held(title: String, key: String) = queue.enqueueFind(
+    named(title).put("discoverAutomatic", true).put("discoverWifiOnly", false), "original", "Music", key, here, hold = true)
+
+  @Test fun aHeldSongIsFoundAndThenStaysAsItIs() {
+    val numb = held("Numb", recording)
+    muchLater()
+    assertEquals(numb, claimed())
+    queue.resolveFind(numb, video(1), here)
+    assertEquals("found", status(numb))
+    assertEquals(videoId(1), job(numb).getJSONObject("video").getString("id"))
+    // Not waiting, not work: nothing for a worker, nothing to look for, and no quiet to keep after it.
+    assertTrue(order().isEmpty())
+    assertTrue(queue.next(quiet) is Next.Idle)
+    assertFalse(queue.wants(quiet))
+    assertNull(claimed())
+    assertFalse(queue.namesWaiting())
+    // Asked to be held again, it is the same job and still held.
+    assertEquals(numb, held("Numb", recording))
+    assertEquals("found", status(numb))
+    // And it is as it was after the app has been closed.
+    val again = DownloadQueue { now }
+    again.read(queue.written())
+    again.recover { false }
+    assertEquals("found", again.jobs.single().getString("status"))
+  }
+
+  @Test fun aTapLetsAHeldSongGoToTheFrontWithNothingToLookFor() {
+    val numb = held("Numb", recording)
+    muchLater()
+    claimed(); queue.resolveFind(numb, video(1), here)
+    val album = download(2)
+    assertEquals(numb, queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true))
+    assertEquals(listOf(numb, album), order())
+    assertFalse(job(numb).getBoolean("automatic"))
+    assertFalse(job(numb).has("hold"))
+    assertNull(claimed())
+    assertEquals(numb, taken())
+  }
+
+  @Test fun theSongsKeptReadyLetOneGoAsDiscoversOwnUnderTheRuleOfTheDay() {
+    val numb = held("Numb", recording)
+    muchLater()
+    claimed(); queue.resolveFind(numb, video(1), here)
+    val asked = download(2)
+    // Let go by Discover itself: behind what was asked for, its own, and now not to use mobile data.
+    queue.enqueueFind(named("Numb").put("discoverAutomatic", true).put("discoverWifiOnly", true), "original", "Music", recording, here)
+    assertEquals(listOf(asked, numb), order())
+    assertTrue(job(numb).getBoolean("automatic"))
+    assertTrue(job(numb).getJSONObject("video").getBoolean("discoverWifiOnly"))
+    assertEquals(asked, taken())
+    queue.complete(asked, "2")
+    assertFalse((queue.next(quiet) as Next.Wait).awake)
+    now += DownloadQueue.COOL_DOWN_MS
+    assertEquals(numb, taken())
+  }
+
+  @Test fun aSongLetGoWhileItIsStillBeingLookedForBecomesADownloadWhenItIsFound() {
+    val numb = held("Numb", recording)
+    muchLater()
+    assertEquals(numb, claimed())
+    queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true)
+    assertEquals("finding", status(numb))
+    queue.resolveFind(numb, video(1), here)
+    assertEquals("queued", status(numb))
+    assertEquals(numb, taken())
+  }
+
+  @Test fun searchesMadeAheadKeepAShortGapAndNotTheLongQuiet() {
+    val a = held("Numb", recording); val b = held("Faint", another); val c = held("Crawling", third)
+    val asked = download(1)
+    // Behind what somebody asked for, like anything of Discover's.
+    assertNull(claimed())
+    assertEquals(asked, taken())
+    queue.complete(asked, "1")
+    assertNull(claimed())
+    now += DownloadQueue.FIND_GAP_MS
+    // A few seconds after the download, not three quarters of a minute.
+    assertEquals(a, claimed())
+    queue.resolveFind(a, video(2), here)
+    assertNull(claimed())
+    now += DownloadQueue.FIND_GAP_MS - 1
+    assertNull(claimed())
+    now += 1
+    assertEquals(b, claimed())
+    // None to be found: it fails, and that is not work to wait the long quiet after.
+    val ended = queue.lastEnded
+    queue.resolveFind(b, null, here)
+    assertEquals("failed", status(b))
+    assertEquals("ERR_DOWNLOAD_NO_MATCH", job(b).getString("errorCode"))
+    assertEquals(ended, queue.lastEnded)
+    now += DownloadQueue.FIND_GAP_MS
+    assertEquals(c, claimed())
+  }
+
+  @Test fun nothingIsBroughtUpOrKeptUpForASearchMadeAhead() {
+    val a = held("Numb", recording)
+    muchLater()
+    // A finder is there and asking; a worker still has nothing to be up for.
+    val there = Outside(finderWaiting = true)
+    assertFalse(queue.wants(there))
+    assertTrue(queue.next(there) is Next.Idle)
+    assertEquals(a, queue.claimFind(there)?.getString("id"))
+    assertFalse(queue.wants(there))
+    // One that is up for something else waits out the search, one thing at a time.
+    assertTrue(queue.next(there) is Next.Wait)
+    // A name somebody asked for is another matter, as before.
+    queue.resolveFind(a, video(1), here)
+    name("Faint")
+    assertTrue(queue.wants(there))
+  }
+
+  @Test fun discoversOwnDownloadsStillWaitTheLongQuietWhileSearchesGoOn() {
+    val mine = own(1)
+    val a = held("Numb", another)
+    val asked = download(2)
+    assertEquals(asked, taken()); queue.complete(asked, "2")
+    now += DownloadQueue.FIND_GAP_MS
+    assertEquals(a, claimed())
+    queue.resolveFind(a, video(3), here)
+    assertEquals("queued", status(mine))
+    assertFalse((queue.next(quiet) as Next.Wait).awake)
+    now += DownloadQueue.COOL_DOWN_MS
+    assertEquals(mine, taken())
+  }
+
+  @Test fun aTapDoesNotWaitForASearchMadeAhead() {
+    val a = held("Numb", recording)
+    muchLater()
+    assertEquals(a, claimed())
+    val tapped = queue.enqueueFind(named("Faint"), "original", "Music", another, here, front = true)
+    assertEquals(listOf(a), queue.giveWay())
+    assertEquals("queued", status(a))
+    assertTrue(job(a).getBoolean("hold"))
+    assertEquals(tapped, claimed())
+    // What the stopped search then says of itself is said of a job no longer being looked for, and changes nothing.
+    queue.failFind(a, Failed(Failure.FAILED))
+    assertEquals("queued", status(a))
+    assertFalse(job(a).optBoolean("retried"))
+    assertTrue(queue.giveWay().isEmpty())
+  }
+
+  @Test fun aHeldSongIsCancelledByNameAndLeftAloneByCancelAll() {
+    val found = held("Numb", recording)
+    muchLater()
+    claimed(); queue.resolveFind(found, video(1), here)
+    val waiting = held("Faint", another)
+    val asked = download(2)
+    assertEquals(listOf(asked to Stop.NOTHING), queue.cancelAll())
+    assertEquals("found", status(found))
+    assertEquals("queued", status(waiting))
+    queue.clearFinished()
+    assertFalse(job(found).optBoolean("cleared"))
+    assertEquals(Stop.NOTHING, queue.cancel(found))
+    assertEquals("cancelled", status(found))
+    assertEquals(Stop.NOTHING, queue.cancel(waiting))
+    // Cancelled, it is no job of that song's: asked for again it is looked for anew.
+    assertNotEquals(found, held("Numb", recording))
+  }
+
+  @Test fun pausedNoSearchIsMadeAhead() {
+    val a = held("Numb", recording)
+    muchLater()
+    queue.setPaused(true)
+    assertNull(claimed())
+    queue.setPaused(false)
+    assertEquals(a, claimed())
+  }
+
+  @Test fun aSearchMadeAheadThatFailsIsTriedOnceMoreAndThenFails() {
+    val a = held("Numb", recording)
+    muchLater()
+    claimed()
+    val ended = queue.lastEnded
+    queue.failFind(a, Failed(Failure.NETWORK))
+    assertEquals("queued", status(a))
+    assertEquals(ended, queue.lastEnded)
+    now += DownloadQueue.RETRY_DELAY_MS
+    assertEquals(a, claimed())
+    queue.failFind(a, Failed(Failure.NETWORK))
+    assertEquals("failed", status(a))
+  }
+
+  @Test fun aTapLeavesWhatIsUnderWayAlone() {
+    val first = download(1)
+    assertEquals(first, taken())
+    val tapped = queue.enqueueFind(named("Numb"), "original", "Music", recording, here, front = true)
+    assertEquals("preparing", status(first))
+    assertEquals(listOf(tapped), order())
+  }
+
   @Test fun movingKeepsWhatWasAskedForAheadOfWhatWasNot() {
     val a = download(1); val b = download(2); val c = download(3)
     val x = own(4); val y = own(5, another)
@@ -406,7 +687,7 @@ class DownloadQueueTest {
 
   @Test fun retryGoesToTheEndOfWhatWasAskedFor() {
     val a = download(1); val b = download(2); val x = own(3)
-    taken(); queue.change(a, "failed", error = Failed(Failure.NETWORK))
+    taken(); queue.change(a, "failed", error = Failed(Failure.UNAVAILABLE))
     queue.clearFinished()
     assertTrue(job(a).getBoolean("cleared"))
     assertTrue(queue.retry(a))
@@ -428,7 +709,7 @@ class DownloadQueueTest {
   @Test fun clearingMarksAndRemovesNothing() {
     val done = download(1); val failed = download(2); val waiting = download(3)
     taken(); queue.complete(done, "1")
-    taken(); queue.change(failed, "failed", error = Failed(Failure.NETWORK))
+    taken(); queue.change(failed, "failed", error = Failed(Failure.UNAVAILABLE))
     queue.clearFinished()
     assertEquals(3, queue.jobs.size)
     assertTrue(job(done).getBoolean("cleared"))
@@ -488,11 +769,14 @@ class DownloadQueueTest {
     val later = DownloadQueue { now }
     later.jobs.addAll(queue.jobs)
     later.recover { it.getString("id") == saved }
-    assertEquals("failed", status(running))
-    assertEquals("ERR_DOWNLOAD_INTERRUPTED", job(running).getString("errorCode"))
+    // Cut off, which is no fault of the song's: its one second try, in its turn.
+    assertEquals("queued", status(running))
+    assertTrue(job(running).getBoolean("retried"))
+    assertEquals("ERR_DOWNLOAD_INTERRUPTED", job(running).getString("retryErrorCode"))
+    assertTrue(job(running).isNull("error"))
     assertEquals("queued", status(waiting))
     assertEquals("done", status(saved))
-    assertEquals("failed", status(unsaved))
+    assertEquals("queued", status(unsaved))
     assertEquals("cancelled", status(going))
     assertEquals("queued", status(named))
     assertTrue(job(named).getJSONObject("video").has("find"))
@@ -566,6 +850,7 @@ class DownloadQueueTest {
     val running = download(1); val waiting = download(2); val named = name("Faint"); val mine = own(3)
     taken()
     queue.change(running, "downloading", 30)
+    job(running).put("retried", true)
     queue.interrupt(Failure.STOPPED)
     assertEquals("failed", status(running))
     assertEquals("ERR_DOWNLOAD_STOPPED", job(running).getString("errorCode"))
@@ -662,8 +947,10 @@ class DownloadQueueTest {
     later.read(queue.written())
     later.recover { false }
     val after = later.jobs.associate { it.getString("id") to it.getString("status") }
-    assertEquals(listOf("queued", "queued", "failed", "failed", "failed", "failed", "cancelled",
+    // What was being fetched was interrupted, and waits for the second try that earns it.
+    assertEquals(listOf("queued", "queued", "queued", "queued", "queued", "queued", "cancelled",
       "cancelled", "failed", "done", "missing"), ids.map { after[it] })
+    assertEquals(4, later.jobs.count { it.optBoolean("retried") })
     // Written down, so that it is not all done again the next time.
     assertTrue(later.changed)
     val again = DownloadQueue { now }
@@ -703,5 +990,250 @@ class DownloadQueueTest {
     queue.touch()
     now -= 60 * 60_000
     assertEquals(mine, taken())
+  }
+
+  /*
+    The one second try. A job is failed here the way the worker fails it:
+    taken, and then said to have failed with a reason.
+  */
+  private fun failing(id: String, failure: Failure) = queue.change(id, "failed", error = Failed(failure))
+
+  @Test fun eachFailureIsWorthASecondTryOrIsNot() {
+    val soon = setOf(Failure.NETWORK, Failure.TIMED_OUT, Failure.FAILED, Failure.NO_AUDIO,
+      Failure.INTERRUPTED, Failure.STOPPED, Failure.SERVICE, Failure.PAUSED)
+    val later = setOf(Failure.REFUSED, Failure.VERIFICATION)
+    for (failure in Failure.values()) {
+      val expected = when (failure) { in soon -> Again.SOON; in later -> Again.LATER; else -> Again.NEVER }
+      assertEquals(failure.name, expected, failure.again)
+
+      val fresh = DownloadQueue { now }
+      val id = fresh.enqueue(video(1), "mp3", "Music", null, here)
+      fresh.next(quiet)
+      fresh.change(id, "failed", error = Failed(failure))
+      val job = fresh.jobs.single()
+      assertEquals(failure.name, if (expected == Again.NEVER) "failed" else "queued", job.getString("status"))
+      assertEquals(failure.name, expected != Again.NEVER, job.optBoolean("retried"))
+      if (expected != Again.NEVER) {
+        val wait = if (expected == Again.LATER) DownloadQueue.RETRY_THROTTLED_MS else DownloadQueue.RETRY_DELAY_MS
+        assertEquals(failure.name, now + wait, job.getLong("retryAt"))
+        assertEquals(failure.code, job.getString("retryErrorCode"))
+        assertTrue(job.isNull("error"))
+        assertTrue(job.isNull("finishedAt"))
+      } else assertEquals(failure.code, job.getString("errorCode"))
+    }
+    // The library refusing the file is no code of its own, and no better the second time.
+    val refused = DownloadQueue { now }
+    val id = refused.enqueue(video(1), "mp3", "Music", null, here)
+    refused.next(quiet)
+    refused.change(id, "failed", error = Failed(Failure.FAILED, "The music library would not accept a new file.", lasting = true))
+    assertEquals("failed", refused.jobs.single().getString("status"))
+  }
+
+  @Test fun theSecondFailureIsTheLast() {
+    val id = download(1)
+    taken(); failing(id, Failure.NETWORK)
+    assertEquals("queued", status(id))
+    now += DownloadQueue.RETRY_DELAY_MS
+    assertEquals(id, taken())
+    queue.change(id, "downloading", 40)
+    failing(id, Failure.TIMED_OUT)
+    assertEquals("failed", status(id))
+    assertEquals("ERR_YOUTUBE_TIMED_OUT", job(id).getString("errorCode"))
+    assertEquals(now, job(id).getLong("finishedAt"))
+    assertFalse(job(id).has("retryAt"))
+    assertTrue(queue.next(quiet) is Next.Idle)
+  }
+
+  @Test fun aSecondTryThatSucceedsIsADownloadLikeAnyOther() {
+    val id = download(1)
+    taken(); failing(id, Failure.NETWORK)
+    now += DownloadQueue.RETRY_DELAY_MS
+    taken(); queue.complete(id, "9")
+    assertEquals("done", status(id))
+    assertTrue(job(id).isNull("error"))
+    assertEquals("9", job(id).getString("trackId"))
+  }
+
+  @Test fun theRetriedJobGoesToTheEndOfItsOwnPart() {
+    val a = download(1); val b = download(2); val c = download(3)
+    val x = own(4); val y = own(5, another)
+    assertEquals(a, taken()); failing(a, Failure.NETWORK)
+    // Behind the others somebody asked for, ahead of Discover's own.
+    assertEquals(listOf(b, c, a, x, y), order())
+    assertFalse(job(a).getBoolean("automatic"))
+    // And they do not wait for it.
+    assertEquals(b, taken()); queue.complete(b, "2")
+    assertEquals(c, taken()); queue.complete(c, "3")
+
+    queue.cancel(a)
+    now += DownloadQueue.COOL_DOWN_MS
+    assertEquals(x, taken()); failing(x, Failure.NETWORK)
+    assertEquals(listOf(y, x), order())
+    assertTrue(job(x).getBoolean("automatic"))
+  }
+
+  @Test fun itIsNotTriedAgainBeforeItsTimeAndTheWorkerSleepsThroughTheWait() {
+    val id = download(1)
+    taken(); failing(id, Failure.NETWORK)
+    // The only job there is: nothing to do but wait, asleep, and not ask again and again.
+    val wait = queue.next(quiet) as Next.Wait
+    assertEquals(DownloadQueue.RETRY_DELAY_MS, wait.millis)
+    assertFalse(wait.awake)
+    assertEquals("queued", status(id))
+    // No worker is started to sit it out.
+    assertFalse(queue.wants(quiet))
+    now += DownloadQueue.RETRY_DELAY_MS - 1
+    assertEquals(1L, (queue.next(quiet) as Next.Wait).millis)
+    now += 1
+    assertTrue(queue.wants(quiet))
+    assertEquals(id, taken())
+  }
+
+  @Test fun aRefusalWaitsLonger() {
+    val id = download(1)
+    taken(); failing(id, Failure.REFUSED)
+    now += DownloadQueue.RETRY_DELAY_MS
+    assertEquals(DownloadQueue.RETRY_THROTTLED_MS - DownloadQueue.RETRY_DELAY_MS, (queue.next(quiet) as Next.Wait).millis)
+    now += DownloadQueue.RETRY_THROTTLED_MS
+    assertEquals(id, taken())
+  }
+
+  @Test fun whatIsAskedForMeanwhileGoesAheadOfTheWait() {
+    val id = download(1)
+    taken(); failing(id, Failure.NETWORK)
+    val other = download(2)
+    assertEquals(other, taken())
+    queue.complete(other, "2")
+    // Discover's own do not slip in while something asked for is waiting its time.
+    val mine = own(3)
+    job(id).put("retryAt", now + 2 * DownloadQueue.COOL_DOWN_MS)
+    now += DownloadQueue.COOL_DOWN_MS
+    assertFalse((queue.next(quiet) as Next.Wait).awake)
+    assertEquals("queued", status(mine))
+    now += DownloadQueue.COOL_DOWN_MS
+    assertEquals(id, taken())
+  }
+
+  @Test fun aSearchThatFailedIsMadeAgainOnce() {
+    val faint = name("Faint"); val numb = name("Numb")
+    assertEquals(faint, claimed())
+    queue.failFind(faint, Failed(Failure.NETWORK))
+    assertEquals(listOf(numb, faint), order())
+    assertTrue(job(faint).getJSONObject("video").has("find"))
+    assertEquals(numb, claimed())
+    queue.resolveFind(numb, null, here)
+    // Its time has not come, and there is still a name for a finder to stay for.
+    assertNull(claimed())
+    assertTrue(queue.namesWaiting())
+    now += DownloadQueue.RETRY_DELAY_MS
+    assertEquals(faint, claimed())
+    queue.failFind(faint, Failed(Failure.NETWORK))
+    assertEquals("failed", status(faint))
+    // None that fits is an answer, not a fault: no second try at all.
+    assertFalse(job(numb).optBoolean("retried"))
+  }
+
+  @Test fun theMarkOutlivesTheAppAndAnInterruptedJobIsRetriedOnceOnly() {
+    val id = download(1)
+    taken(); queue.change(id, "downloading", 20)
+
+    val second = DownloadQueue { now }
+    second.read(queue.written())
+    second.recover { false }
+    val kept = second.jobs.single()
+    assertEquals("queued", kept.getString("status"))
+    assertTrue(kept.getBoolean("retried"))
+    // The fault was the app being closed, which is over: no wait.
+    assertEquals(id, (second.next(quiet) as Next.Take).job.getString("id"))
+
+    // Closed again in the middle of the second try.
+    val third = DownloadQueue { now }
+    third.read(second.written())
+    assertTrue(third.jobs.single().getBoolean("retried"))
+    third.recover { false }
+    assertEquals("failed", third.jobs.single().getString("status"))
+    assertEquals("ERR_DOWNLOAD_INTERRUPTED", third.jobs.single().getString("errorCode"))
+
+    // And a job waiting out its time when the app was closed still has only the one.
+    val other = download(2)
+    queue.change(id, "cancelled")
+    taken(); failing(other, Failure.NETWORK)
+    val fourth = DownloadQueue { now }
+    fourth.read(queue.written())
+    fourth.recover { false }
+    val waiting = fourth.jobs.first { it.getString("id") == other }
+    assertEquals(now + DownloadQueue.RETRY_DELAY_MS, waiting.getLong("retryAt"))
+    now += DownloadQueue.RETRY_DELAY_MS
+    assertEquals(other, (fourth.next(quiet) as Next.Take).job.getString("id"))
+    fourth.change(other, "failed", error = Failed(Failure.NETWORK))
+    assertEquals("failed", waiting.getString("status"))
+  }
+
+  @Test fun pressingRetryIsAskingAfreshWithASecondTryOfItsOwn() {
+    val id = download(1)
+    taken(); failing(id, Failure.NETWORK)
+    now += DownloadQueue.RETRY_DELAY_MS
+    taken(); failing(id, Failure.NETWORK)
+    assertEquals("failed", status(id))
+    assertTrue(queue.retry(id))
+    assertFalse(job(id).has("retried"))
+    assertFalse(job(id).has("retryError"))
+    assertEquals(id, taken())
+    failing(id, Failure.NETWORK)
+    assertEquals("queued", status(id))
+    assertTrue(job(id).getBoolean("retried"))
+  }
+
+  @Test fun aJobWaitingToBeTriedAgainIsWaitingLikeAnyOther() {
+    val a = download(1); val b = download(2); val c = download(3)
+    taken(); failing(a, Failure.NETWORK)
+    assertEquals(listOf(b, c, a), order())
+    // Moved, it keeps its time: the front of the line is not a way round the wait.
+    assertTrue(queue.move(a, b))
+    assertEquals(listOf(a, b, c), order())
+    assertEquals(b, taken())
+    queue.complete(b, "2")
+    // Cancelled during the wait, it is cancelled, and nothing waits for it.
+    assertEquals(Stop.NOTHING, queue.cancel(a))
+    assertEquals("cancelled", status(a))
+    assertFalse(job(a).has("retryAt"))
+    assertEquals(c, taken())
+  }
+
+  @Test fun stoppingAJobIsNotAFailureToTryAgain() {
+    val id = download(1)
+    taken()
+    queue.cancel(id)
+    // The background's road says "failed" of a job that was being cancelled.
+    queue.change(id, "failed", error = Failed(Failure.PAUSED))
+    assertEquals("failed", status(id))
+    assertFalse(job(id).optBoolean("retried"))
+    // And Wi-Fi keeps its own way back.
+    val mine = own(2, wifiOnly = true)
+    now += DownloadQueue.COOL_DOWN_MS
+    assertTrue(queue.next(Outside(wifi = { false })) is Next.Idle)
+    assertEquals("failed", status(mine))
+    assertFalse(job(mine).optBoolean("retried"))
+  }
+
+  @Test fun theBackgroundsDownloadHasItsSecondTryToo() {
+    val mine = own(1)
+    muchLater()
+    assertEquals(mine, queue.takeById(mine, quiet)!!.getString("id"))
+    failing(mine, Failure.PAUSED)
+    assertEquals("queued", status(mine))
+    // Not before its time, and the quiet Discover's own keep.
+    assertNull(queue.takeById(mine, quiet))
+    now += DownloadQueue.COOL_DOWN_MS
+    assertEquals(mine, queue.takeById(mine, quiet)!!.getString("id"))
+    failing(mine, Failure.NETWORK)
+    assertEquals("failed", status(mine))
+  }
+
+  @Test fun aClockPutBackDoesNotStrandAJobWaitingToBeTriedAgain() {
+    val id = download(1)
+    taken(); failing(id, Failure.NETWORK)
+    now -= 24 * 60 * 60_000L
+    assertTrue((queue.next(quiet) as Next.Wait).millis <= DownloadQueue.RETRY_THROTTLED_MS)
   }
 }

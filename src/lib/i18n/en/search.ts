@@ -95,7 +95,7 @@ export const search = {
     playlistLink: 'Paste a YouTube playlist link, or search by playlist name.',
     videoLink: 'Enter a song name or a valid YouTube video link.',
     queueFull: 'The download queue is full. Wait for some tracks to finish, then try again.',
-    update: 'YouTube has changed and this version of Jukebox cannot read it yet. Update Jukebox.',
+    update: 'YouTube has changed and the downloader in this version cannot read it yet. Check for a newer one in Downloads, or update Jukebox.',
     unavailable: 'This video or playlist is unavailable. Try another public playlist or search.',
     unreachable: 'Could not reach YouTube. Check your connection and try again.',
     refused: 'YouTube could not complete this request. Try again later or choose another result.',

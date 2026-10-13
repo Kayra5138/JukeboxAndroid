@@ -1,5 +1,6 @@
 import { foldForMatch } from '../metadata/text.ts';
 import type { EnrichedTrack } from './enriched.ts';
+import { compareNames } from './sort.ts';
 
 export type SearchResult = {
   tracks: EnrichedTrack[];
@@ -39,7 +40,7 @@ export function search(tracks: EnrichedTrack[], query: string): SearchResult {
     tracks: matches,
     // Exact names first: typing "rock" should offer "rock" before "post-rock".
     matchedTags: [...matchedTags].sort(
-      (a, b) => Number(foldForMatch(b) === needle) - Number(foldForMatch(a) === needle) || a.localeCompare(b)
+      (a, b) => Number(foldForMatch(b) === needle) - Number(foldForMatch(a) === needle) || compareNames(a, b)
     ),
   };
 }

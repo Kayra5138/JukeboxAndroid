@@ -90,6 +90,14 @@ object YouTubeData {
       .distinctBy { it.getString("id") }.take(limit)
   }
 
+  /**
+   * Whether the extractor left a video alone because it was told to: what it
+   * prints when a video does not pass the filter it was given. It prints it
+   * and ends as if all were well, with no file, so this line is the only
+   * place a live stream is told from a download that went missing.
+   */
+  fun filteredOut(output: String): Boolean = output.contains("does not pass filter")
+
   fun folder(value: String): String {
     val parts = value.trim('/').split('/')
     if (parts.firstOrNull() != "Music" || parts.any { it.isBlank() || it == "." || it == ".." || it.contains('\\') }) {

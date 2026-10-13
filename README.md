@@ -7,6 +7,55 @@ history and your stats stay on the device, unless you choose to connect
 ListenBrainz and switch sending on. It is free software (GPL-3.0-or-later), and
 it comes with a rhythm game built out of your own songs, because why not.
 
+<p>
+  <img src="docs/screenshots/player.jpg" width="16%" alt="The player, with what is up next under it">
+  <img src="docs/screenshots/library.jpg" width="16%" alt="The library, in the Night glass theme">
+  <img src="docs/screenshots/discover.jpg" width="16%" alt="Discover: songs you do not have, each with the reason it is there">
+  <img src="docs/screenshots/stats.jpg" width="16%" alt="Stats for last week, with the week before beside each figure">
+  <img src="docs/screenshots/themes.jpg" width="16%" alt="The themes: light, dark, and glass">
+  <img src="docs/screenshots/tiles.jpg" width="16%" alt="Piano tiles, played to one of your own songs">
+</p>
+<p>
+  <img src="docs/screenshots/rack.jpg" width="49%" alt="Albums as a rack of records, with the phone on its side">
+  <img src="docs/screenshots/lyrics.jpg" width="49%" alt="The player on its side, with the lyrics following the song">
+</p>
+
+## Install
+
+Jukebox is not on Google Play. It runs on Android 10 or newer, on a 64-bit ARM
+phone, which is nearly every phone made in the last several years.
+
+**With Obtainium**, which installs an app from its releases and tells you when
+there is a newer one:
+
+1. Install [Obtainium](https://obtainium.imranr.dev/).
+2. In Obtainium, choose *Add app* and paste this address:
+
+   ```
+   https://github.com/Kayra5138/JukeboxAndroid
+   ```
+
+3. Press *Add*, then *Install*.
+
+A newer release shows up in Obtainium by itself from then on, and installs over
+the one you have with your library, lists and history as they were.
+
+If Obtainium is already on the phone you are reading this on,
+[this link adds Jukebox in one tap][obtainium]. It goes through Obtainium's
+own redirect page, which is not Jukebox's and carries that site's analytics;
+the three steps above reach the same place without it.
+
+**By hand**: download the `.apk` from the
+[latest release](https://github.com/Kayra5138/JukeboxAndroid/releases/latest)
+and open it. Android asks once whether your browser or file manager may
+install apps. To update, do the same with a newer release.
+
+Every release is signed with the same key, so one installs over another
+whichever way it was fetched. A copy you built yourself is signed with your
+own key and will not: uninstall first if you switch (see [Building](#building)).
+
+[obtainium]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22Kayra5138.Jukebox%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FKayra5138%2FJukeboxAndroid%22%2C%22author%22%3A%22Kayra5138%22%2C%22name%22%3A%22Jukebox%22%7D
+
 ## Features
 
 ### Library and playback
@@ -153,11 +202,15 @@ it comes with a rhythm game built out of your own songs, because why not.
   MusicBrainz has no answer the album is looked for on YouTube, and taken
   only when it can be shown to be the same record. Either source can be
   switched to by hand.
+- The same screen puts the tracks you already have in the record's order,
+  where they had no number or the wrong one, and offers to undo it.
 
 ### Stats and recap
 
 - Every listen past 30 seconds is recorded. So is every skip.
 - Stats by day, week, month, year or all time, compared with the period before.
+- Each of those read three ways: yesterday, today or the last 24 hours; last
+  week, this week or the last 7 days; and so for a month and a year.
 - A chart you can scrub, with the top tracks, artists and genres behind it.
 - A song by two artists counts for both. `Eminem, Rihanna` is never an artist
   of its own, and `Earth, Wind & Fire` is never three.
@@ -192,20 +245,40 @@ it comes with a rhythm game built out of your own songs, because why not.
 
 ### Discover
 
-- A list of songs made from your last 30 days of listening: half from artists
-  you already play, half from new ones.
-- Powered by ListenBrainz: real listening habits, not a catalogue's idea of
-  genre.
-- **+** keeps a song in your library, **−** excludes it for good. Either way
-  another song takes its place.
-- 10 to 40 songs. Refresh by hand, or on a schedule you pick.
-- Tap a song to fetch it, or let them download ahead, on Wi-Fi only if you
-  want. Scheduled refresh and automatic downloads are off until you turn them
-  on.
-- A song with no studio recording to be found gives up its place to the next
-  best one.
-- Genres are searched in the pairs you play together, like `j-pop` + `rock`,
-  not one famous tag at a time.
+- A list of songs you do not have, made from what you have been playing:
+  about half from artists you already listen to, half from new ones, with no
+  more than two songs by any artist.
+- The taste it works from is on the phone, your own plays and skips, and
+  never leaves it. ListenBrainz, Deezer and MusicBrainz are asked only about
+  artists and songs: who is near whom, and what an artist is best known
+  for. An artist both ListenBrainz and Deezer name counts for more, and the
+  artists you play most lead the most of the list. Either may be out of
+  reach and the list is still made from the other.
+- Every row says why the song is there: *More from …*, *Because you play …*,
+  *Like … · dream pop*.
+- **Tap a song and it plays.** It goes to the front of the download queue
+  and starts when it is in; the next few are kept ready, on Wi-Fi unless you
+  say otherwise, so most taps play at once. The window follows the song
+  that is playing. A song is fetched as the audio YouTube has, without
+  conversion.
+- **Thirty seconds while it arrives.** A song that is not ready yet plays
+  Deezer's preview of it for the few seconds the download takes, then the
+  whole song takes over from its start. A preview is in no queue, no
+  history and no scrobble. It can be turned off.
+- **+** keeps a song in your library, with the plays it has had; **−** turns
+  it away. Swipe a row either way, or use the buttons, on the row, in the
+  player and on the bar. Another song takes its place at the end of the
+  list, which never reorders under your finger.
+- **What you do changes what comes next.** Turning a song away counts
+  against its artist for six months, keeping one counts for it, and an
+  artist can be turned away altogether (and let back in, in the settings).
+- **How well known** a song is does not matter unless you ask: there is a
+  setting for mostly well-known songs, or mostly lesser-known ones.
+- 10 to 40 songs. Refresh by hand, or on a schedule you pick. A new list
+  arrives when its first few songs are ready, and songs you did not keep stay
+  away: three months if you heard them, two weeks if you did not.
+- No live takes, and no remaster of a song you already have. A song with no
+  studio recording to be found gives up its place.
 
 ### Downloads
 
@@ -224,8 +297,16 @@ it comes with a rhythm game built out of your own songs, because why not.
   next, and what has been. Drag to reorder, send one to the front, cancel,
   try a failed one again, pause the whole queue, or clear what is finished,
   which removes nothing from the phone.
+- **A download that fails is tried once more by itself**, after a short
+  wait, when trying again could help: the network, a time-out, the app being
+  closed in the middle. The queue says so on the row.
 - **A floating button**, off unless you switch it on, appears while something
   is being fetched and says what, and how much is left.
+- **yt-dlp can be brought up to date from inside the app.** When YouTube
+  changes, an old yt-dlp begins to fail. Downloads names the version in use,
+  says when there is a newer one, and fetches it when you ask: from yt-dlp's
+  own release, checked against that release's sums, and tried before it is
+  trusted. The copy the app came with can be gone back to.
 
 ### Piano Tiles
 
@@ -271,6 +352,9 @@ from the song itself.
 
 - English or Turkish, chosen in Settings rather than taken from the phone. The
   notification, the widget and Android Auto follow the same choice.
+- **Your own pair for day and night.** Following the phone goes between two
+  themes, and you choose which: any theme for its light mode, any for its
+  dark.
 - **A different theme each time**, if you like: tick the themes you want and
   the app opens in one of them at random, never the one it was last in.
 - Twenty-two themes, or follow the phone between light and dark. Six light
@@ -354,12 +438,17 @@ the only one that sends anything about you.
 | Fetch lyrics | LRCLIB |
 | Translate lyrics | Mozilla (model download, once per language); LRCLIB (the original writing of romanised lyrics) |
 | Open a recap | MusicBrainz, Wikimedia Commons (artist photos) |
-| Ask for recommendations | ListenBrainz, Cover Art Archive, YouTube (the songs) |
+| Ask for recommendations | ListenBrainz, Deezer and MusicBrainz (artists and songs; nothing about you), Cover Art Archive and Deezer (covers), YouTube (the songs) |
+| Tap a recommendation that is not ready | Deezer (a thirty-second preview, unless turned off) |
+| Open Downloads, or ask for a download | GitHub (whether there is a newer yt-dlp; at most once a day, and it can be turned off) |
+| Press Update on the Downloads screen | GitHub (the newer yt-dlp, about 3 MB) |
 | Use the Search tab | YouTube |
 | Browse in the car | iTunes (a cover not saved yet, fetched once) |
 | Connect ListenBrainz and switch sending on | ListenBrainz (your listens) |
 
 ## Requirements
+
+To build it. To run it, see [Install](#install).
 
 - Android 10 (API 29) or newer, 64-bit ARM
 - Node 22.6+ (the tests run TypeScript directly through Node's type stripping)

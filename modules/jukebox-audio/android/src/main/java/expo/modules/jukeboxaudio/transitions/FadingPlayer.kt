@@ -2,6 +2,7 @@ package expo.modules.jukeboxaudio.transitions
 
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import expo.modules.jukeboxaudio.CallQuiet
 
 /**
  * The player as everything else sees it, with the transitions folded in.
@@ -18,11 +19,14 @@ import androidx.media3.common.Player
  */
 class FadingPlayer(
   player: Player,
-  private val crossfader: Crossfader
+  private val crossfader: Crossfader,
+  private val quiet: CallQuiet
 ) : ForwardingPlayer(player) {
 
   override fun play() {
     woken()
+    // A press of play, from wherever: during a call it is taken to mean it.
+    quiet.pressed()
     if (crossfader.play()) return
     super.play()
   }
@@ -52,6 +56,7 @@ class FadingPlayer(
   override fun setPlayWhenReady(playWhenReady: Boolean) {
     if (playWhenReady) {
       woken()
+      quiet.pressed()
       if (crossfader.play()) return
     } else if (crossfader.pause()) {
       return

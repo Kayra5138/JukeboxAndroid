@@ -1,4 +1,5 @@
 import {
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -12,7 +13,7 @@ import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-n
 
 import JukeboxAudio from '../../modules/jukebox-audio';
 import { useT } from '../lib/i18n/index';
-import { useTrackArtwork } from '../lib/media/artwork';
+import { useTrackArtwork, warmArtwork } from '../lib/media/artwork';
 import type { Album } from '../lib/media/albums';
 import { laid, makeStyles } from '../lib/theme/index';
 
@@ -34,9 +35,15 @@ import { laid, makeStyles } from '../lib/theme/index';
  * view lays its children end to end.
  *
  * Every transform runs on the native driver, so a flick through a hundred
- * records is the compositor's work and not JavaScript's. Only the handful of
- * cards near the front are mounted at all; the rest would be a hundred animated
- * views to draw nine.
+ * records is the compositor's work and not JavaScript's. Only the cards near
+ * the front are mounted at all — the ones that show and a few past them either
+ * side, see {@link AHEAD}; the rest would be a hundred animated views to draw
+ * nine.
+ *
+ * Which cards those are is the one thing JavaScript does decide, a detent at a
+ * time, and it hears where the rail is a little after the rail is there. So
+ * everything a detent costs here is kept small: a flick that outruns it shows
+ * as sleeves turning up late, which is the fault this file has had most often.
  */
 
 /**
@@ -48,6 +55,73 @@ import { laid, makeStyles } from '../lib/theme/index';
  * that ran out of records.
  */
 const NEIGHBOURS = 7;
+
+/**
+ * How many more are kept mounted past the last one that shows, either side.
+ *
+ * A sleeve is mounted from here, where the scroll is heard about a frame or
+ * more after it happened, and its picture is read off the disk only once it
+ * is. Mounted exactly where it starts to show, it had no time for either: one
+ * detent of lag and it faded in late, and its picture later still. These are
+ * the head start — drawn at no opacity, so they cost the compositor nothing,
+ * but there, with their pictures in hand, by the time the rack reaches them.
+ *
+ * Not more, because each is a picture held in memory and a handful of
+ * animated values the native driver works out every frame of a scroll.
+ */
+const AHEAD = 4;
+
+/**
+ * Turn on to have the rack say how it kept up, each time it comes to rest.
+ *
+ * Off, and nothing below is reached: no listener is given to the pictures and
+ * nothing is counted. On, it writes one line to the log per flick — see
+ * {@link tally} for what the numbers are. Not for leaving on.
+ */
+const MEASURE = false;
+
+/**
+ * What {@link MEASURE} counts between one rest and the next.
+ *
+ * `gap` is the longest JavaScript went without hearing of the scroll, which
+ * should be a frame or two; `jump` the most sleeves that went by between two
+ * hearings. `decoded` are the pictures that had to be read off the disk rather
+ * than found in memory, and `late` the ones that arrived on a sleeve already
+ * showing — which is the thing that is seen — with `nearest` how close to the
+ * front the worst of them was.
+ */
+const AT_REST = { last: 0, gap: 0, passed: 0, jump: 0, pictures: 0, decoded: 0, late: 0, nearest: NEIGHBOURS };
+const tally = { ...AT_REST, front: 0 };
+
+function countScroll(index: number) {
+  const now = performance.now();
+  if (tally.last > 0) tally.gap = Math.max(tally.gap, now - tally.last);
+  tally.last = now;
+  const moved = Math.abs(index - tally.front);
+  tally.front = index;
+  tally.passed += moved;
+  tally.jump = Math.max(tally.jump, moved);
+}
+
+function countPicture(away: number, from: string) {
+  tally.pictures += 1;
+  if (from !== 'memory') tally.decoded += 1;
+  if (away >= NEIGHBOURS) return;
+  tally.late += 1;
+  tally.nearest = Math.min(tally.nearest, away);
+}
+
+function reportFlick() {
+  if (tally.passed > 0 || tally.pictures > 0) {
+    console.log(
+      `[rack] passed ${tally.passed} sleeves, at most ${tally.jump} between two scroll events, ` +
+        `${Math.round(tally.gap)} ms the longest wait for one; ${tally.pictures} pictures, ` +
+        `${tally.decoded} off the disk, ${tally.late} onto a sleeve already showing` +
+        (tally.late > 0 ? ` (nearest ${tally.nearest.toFixed(1)} from the front)` : '')
+    );
+  }
+  Object.assign(tally, AT_REST);
+}
 
 /**
  * Where each record sits, as a share of a sleeve's width from the middle, and
@@ -217,7 +291,8 @@ export function CoverFlow({
   const viewport = width;
   const lead = Math.max(0, (viewport - step) / 2);
 
-  const scroll = useRef(new Animated.Value(0)).current;
+  // Kept as state and not in a ref: it is read while drawing, every time.
+  const [scroll] = useState(() => new Animated.Value(0));
   const rail = useRef<ScrollView>(null);
   const stage = useRef<View>(null);
   const [front, setFront] = useState(0);
@@ -280,15 +355,63 @@ export function CoverFlow({
    * Tapped mid-flick it is square to nothing, and whatever it opens into would
    * set out from a sleeve that is not where it was said to be. So it is settled
    * and opening waits for the next tap.
+   *
+   * Which record is in front is asked of the rail, here and in the two below,
+   * and not taken from `front`. They are the same number — `front` is this,
+   * rounded, by the same scroll event — but one that is read when a finger
+   * lands rather than when the rack is drawn. Taken from `front`, each of
+   * these was a new function at every detent and was handed to every sleeve
+   * and every slot, so passing a record redrew all of them: a few hundred
+   * pressables, on the thread that has to say which sleeves exist.
    */
   const open = () => {
-    const album = albums[front];
+    const album = albums[Math.round(at.current)];
     if (!album) return;
     if (!squared()) return settle();
     sleeve((found) => {
       if (found) onOpen(album, found);
     });
   };
+
+  /**
+   * A slot of the rail tapped. The one in front opens; any other comes to the
+   * front, which is what reaching past it into the rack would do.
+   */
+  const reach = (index: number) => {
+    if (index === Math.round(at.current)) open();
+    else rail.current?.scrollTo({ x: index * step, animated: true });
+  };
+
+  /**
+   * The record in front held down. Only where it stands square: mid-flick the
+   * one under the finger is not yet the one the caption names.
+   */
+  const hold = onHold
+    ? (album: Album) => {
+        if (squared()) onHold(album);
+      }
+    : undefined;
+
+  /** Where a picture arrived, for {@link MEASURE}. */
+  const pictured = (album: Album, from: string) =>
+    countPicture(Math.abs(albums.indexOf(album) - at.current), from);
+
+  /*
+    The covers, found before the rack is thrown across them, nearest first.
+
+    A sleeve otherwise asks for its own as it is mounted, which is the wrong
+    moment twice over: it is drawn empty and then again with its picture, and
+    after a hard flick its question is behind those of every sleeve the flick
+    passed on the way there.
+  */
+  useEffect(() => {
+    const from = Math.round(at.current) || 0;
+    const covers = [albums[from]?.tracks[0]];
+    for (let out = 1; out < albums.length; out += 1) {
+      covers.push(albums[from + out]?.tracks[0], albums[from - out]?.tracks[0]);
+    }
+    return warmArtwork(covers);
+  }, [albums]);
 
   useImperativeHandle(ref, () => ({
     sleeveOf: (key, then) => {
@@ -318,38 +441,42 @@ export function CoverFlow({
       A frame late, because the rail has to have been laid out at the new size
       before it can be told where to sit in it.
     */
-    const target = front * step;
+    /*
+      Which record was in front is read off the rail, as it is at `open`, and
+      for a reason of its own. This is a correction for the geometry changing
+      under the rack and must run only when the spacing does: taken from
+      `front` it either runs at every detent, which stops a flick dead, or is
+      kept from that by switching a lint rule off — and a component with a rule
+      switched off is one the compiler will not take, so nothing in the rack
+      was remembered between one detent and the next.
+    */
+    const target = Math.round(at.current) * step;
     const frame = requestAnimationFrame(() => {
       rail.current?.scrollTo(
         { x: target, animated: false }
       );
     });
     return () => cancelAnimationFrame(frame);
-    // Deliberately only on the spacing: this is a correction for the geometry
-    // changing under the rack, not something to do every time it is flicked.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const onScroll = useMemo(
-    () =>
-      Animated.event([{ nativeEvent: { contentOffset: { x: scroll } } }], {
-        useNativeDriver: true,
-        listener: (event: { nativeEvent: { contentOffset: { x: number; y: number } } }) => {
-          const offset = event.nativeEvent.contentOffset.x;
-          at.current = offset / step;
-          const index = Math.round(at.current);
-          setFront((held) => {
-            if (index === held) return held;
-            // A record coming to the front clicks, the way a detent does.
-            // Fired from here rather than from an effect so it lands with the
-            // movement rather than a frame after it.
-            JukeboxAudio.tick?.();
-            return index;
-          });
-        },
-      }),
-    [scroll, step]
+  /** Told where the rail is, in points, each time it moves. */
+  const heard = useCallback(
+    (offset: number) => {
+      at.current = offset / step;
+      const index = Math.round(at.current);
+      if (MEASURE) countScroll(index);
+      setFront((held) => {
+        if (index === held) return held;
+        // A record coming to the front clicks, the way a detent does.
+        // Fired from here rather than from an effect so it lands with the
+        // movement rather than a frame after it.
+        JukeboxAudio.tick?.();
+        return index;
+      });
+    },
+    [step]
   );
+  const onScroll = useRailEvent(scroll, heard);
 
   /**
    * Each record's distance from the front, as an animated value it keeps.
@@ -360,28 +487,32 @@ export function CoverFlow({
    * subtraction nodes to wire up and left the old ones attached. The wiring is
    * done on the frame the flick lands on, which is exactly where the animation
    * was seen to stop dead and then crawl back into place.
+   *
+   * One for every record there is, made together, rather than each as it is
+   * first wanted: a list filled in while the rack is being drawn is something
+   * changed behind the compiler's back, and it will not take a component that
+   * does it. One of these that nothing is drawn from is not wired to anything
+   * and is never worked out, so the ones far from the front cost a few words.
    */
-  const offsetOf = useMemo(() => {
+  const count = albums.length;
+  const offsets = useMemo(() => {
     const progress = Animated.divide(scroll, step);
-    const held = new Map<number, Animated.AnimatedNode>();
-    return (index: number) => {
-      const found = held.get(index);
-      if (found) return found as Animated.AnimatedSubtraction<number>;
-      const made = Animated.subtract(index, progress);
-      held.set(index, made);
-      return made;
-    };
-  }, [scroll, step]);
+    return Array.from({ length: count }, (_, index) => Animated.subtract(index, progress));
+  }, [count, scroll, step]);
 
   /*
     Drawn back to front, so the card at the front of the rack is painted last
     and therefore over the others. `zIndex` cannot be animated on the native
     driver, and a static one would have the fan overlapping the wrong way round
     on one side.
+
+    Further out than the fan reaches, by {@link AHEAD}: those are mounted and
+    not yet seen.
   */
   const visible = useMemo(() => {
     const shown: number[] = [];
-    for (let index = front - NEIGHBOURS; index <= front + NEIGHBOURS; index += 1) {
+    const mounted = NEIGHBOURS + AHEAD;
+    for (let index = front - mounted; index <= front + mounted; index += 1) {
       if (index >= 0 && index < albums.length) shown.push(index);
     }
     return shown.sort((left, right) => Math.abs(right - front) - Math.abs(left - front));
@@ -441,30 +572,19 @@ export function CoverFlow({
           const { x, y } = event.nativeEvent.velocity ?? { x: 0, y: 0 };
           if (Math.abs(x) < FLICK) settle();
         }}
-        onMomentumScrollEnd={settle}
+        onMomentumScrollEnd={
+          MEASURE
+            ? () => {
+                settle();
+                reportFlick();
+              }
+            : settle
+        }
         contentContainerStyle={{
           paddingHorizontal: lead,
           width: albums.length * step + lead * 2,
         }}>
-        <View
-          style={[
-            styles.slots,
-            styles.slotsWide,
-            { width: albums.length * step },
-          ]}>
-          {albums.map((album, index) => (
-            <Pressable
-              key={album.key}
-              style={{ width: step, height: '100%' }}
-              onPress={() => {
-                // The one in front opens; any other comes to the front, which
-                // is what reaching past it into the rack would do.
-                if (index === front) open();
-                else rail.current?.scrollTo({ x: index * step, animated: true });
-              }}
-            />
-          ))}
-        </View>
+        <Slots albums={albums} step={step} onReach={reach} />
         {/*
           The records, inside the rail rather than beside it.
 
@@ -514,23 +634,13 @@ export function CoverFlow({
               pointerEvents={index === front ? 'box-none' : 'none'}>
               <Card
                 album={albums[index]}
-                offset={offsetOf(index)}
+                offset={offsets[index]!}
                 step={step}
                 size={card}
                 inFront={index === front}
-                onPress={() => {
-                  if (index === front) open();
-                }}
-                // Only where it stands square. Mid-flick the one under the
-                // finger is not yet the one the caption names.
-                onHold={
-                  onHold && index === front
-                    ? () => {
-                        const album = albums[index];
-                        if (album && squared()) onHold(album);
-                      }
-                    : undefined
-                }
+                onOpen={open}
+                onHold={hold}
+                onPicture={MEASURE ? pictured : undefined}
               />
             </View>
           ))}
@@ -550,14 +660,73 @@ export function CoverFlow({
   );
 }
 
-function Card({
+/**
+ * The rail's scroll, tied to the value the cards are drawn from and reported
+ * to [heard] as well.
+ *
+ * A hook of its own on the compiler's account. What hears the scroll writes
+ * where the rail is into a ref, and built in the rack itself that is a function
+ * touching a ref handed to another function while drawing — which the compiler
+ * takes for a ref read while drawing, and then leaves the whole rack alone.
+ * Handed to a hook it is what it is: something kept for later.
+ */
+function useRailEvent(scroll: Animated.Value, heard: (offset: number) => void) {
+  return useMemo(
+    () =>
+      Animated.event([{ nativeEvent: { contentOffset: { x: scroll } } }], {
+        useNativeDriver: true,
+        listener: (event: { nativeEvent: { contentOffset: { x: number; y: number } } }) =>
+          heard(event.nativeEvent.contentOffset.x),
+      }),
+    [scroll, heard]
+  );
+}
+
+/**
+ * The slots of the rail, one to a record and a detent wide: what a tap lands
+ * on when it lands beside the record in front.
+ *
+ * Apart from the rack, and remembered, because there is one of these for every
+ * record in the library and nothing about them changes as the rack is flicked.
+ * Drawn along with it they were all drawn again at each detent.
+ */
+const Slots = memo(function Slots({
+  albums,
+  step,
+  onReach,
+}: {
+  albums: Album[];
+  step: number;
+  onReach: (index: number) => void;
+}) {
+  const styles = useStyles();
+  const slot = { width: step, height: '100%' as const };
+  return (
+    <View style={[styles.slots, styles.slotsWide, { width: albums.length * step }]}>
+      {albums.map((album, index) => (
+        <Pressable key={album.key} style={slot} onPress={() => onReach(index)} />
+      ))}
+    </View>
+  );
+});
+
+/**
+ * One record of the rack.
+ *
+ * Remembered, and handed nothing that changes as the rack moves except whether
+ * it is the one in front. So a detent draws two of these again — the one that
+ * was in front and the one that now is — and mounts one, rather than drawing
+ * all of them; where each one is has never been JavaScript's to say.
+ */
+const Card = memo(function Card({
   album,
   offset,
   step,
   size,
   inFront,
-  onPress,
+  onOpen,
   onHold,
+  onPicture,
 }: {
   album: Album;
   /** Where this card sits relative to the front one, in cards. */
@@ -567,12 +736,20 @@ function Card({
   size: number;
   /** The one square on, which is the only one a tap opens. */
   inFront: boolean;
-  onPress: () => void;
-  onHold?: () => void;
+  /** Opens whichever record is in front. The same function for every card. */
+  onOpen: () => void;
+  /** The same again for a record held down; only the one in front offers it. */
+  onHold?: (album: Album) => void;
+  /** Told when the picture is there and where it came from. Only while measuring. */
+  onPicture?: (album: Album, from: string) => void;
 }) {
   const t = useT();
   const styles = useStyles();
   const artwork = useTrackArtwork(album.tracks[0] ?? null);
+  const press = () => {
+    if (inFront) onOpen();
+  };
+  const held = inFront && onHold ? () => onHold(album) : undefined;
 
   /*
     Only the difference between where the fan wants this record and where the
@@ -636,18 +813,24 @@ function Card({
           accessibilityHint={inFront ? t.library.rack.openHint : undefined}
           // Named, as a row's is: nobody finds a held sleeve by trying.
           accessibilityActions={
-            onHold ? [{ name: 'longpress', label: t.library.albumMenu }] : undefined
+            held ? [{ name: 'longpress', label: t.library.albumMenu }] : undefined
           }
           onAccessibilityAction={
-            onHold &&
+            held &&
             ((event) => {
-              if (event.nativeEvent.actionName === 'longpress') onHold();
+              if (event.nativeEvent.actionName === 'longpress') held();
             })
           }
-          onPress={onPress}
-          onLongPress={onHold}>
+          onPress={press}
+          onLongPress={held}>
           {artwork ? (
-            <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
+            <Image
+              source={{ uri: artwork }}
+              style={styles.art}
+              contentFit="cover"
+              cachePolicy={KEPT}
+              onLoad={onPicture && ((event) => onPicture(album, event.cacheType))}
+            />
           ) : (
             <View style={[styles.art, styles.artEmpty]} />
           )}
@@ -658,7 +841,19 @@ function Card({
       <Mirror uri={artwork} size={size} />
     </Animated.View>
   );
-}
+});
+
+/**
+ * Where a sleeve's picture is kept once it has been read: in memory as well as
+ * on the disk.
+ *
+ * Left to itself the image view keeps nothing in memory, so a sleeve was read
+ * off the disk and decoded each time it was mounted — passed a second ago or
+ * not — and its reflection, which is the same picture at the same size, was a
+ * second reading of its own. In memory the two are one picture, and a sleeve
+ * the rack comes back to has it on the frame it is mounted.
+ */
+const KEPT = 'memory-disk';
 
 /**
  * A sleeve reflected off whatever it is standing on.
@@ -683,6 +878,7 @@ function Mirror({ uri, size }: { uri: string | null; size: number }) {
             { transform: [{ scaleY: -1 }] },
           ]}
           contentFit="cover"
+          cachePolicy={KEPT}
         />
       ) : null}
       {[0.1, 0.28, 0.46, 0.64, 0.82, 0.95].map((cover, band) => {

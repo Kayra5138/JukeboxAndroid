@@ -60,12 +60,13 @@
        well, which is what JavaScript should recognise it by: see Failure.kt. -->
   <string name="jukebox_youtube_verification">YouTube requires verification for this video. Try another recording.</string>
   <string name="jukebox_youtube_unavailable">This video is unavailable or private.</string>
-  <string name="jukebox_youtube_outdated">YouTube has changed and this version of Jukebox cannot read it yet. Update Jukebox.</string>
+  <string name="jukebox_youtube_outdated">YouTube has changed and the downloader in this version cannot read it yet. Check for a newer one in Downloads, or update Jukebox.</string>
   <string name="jukebox_youtube_network">Could not reach YouTube. Check your connection and retry.</string>
   <string name="jukebox_youtube_refused">YouTube refused this download. Try again later or update Jukebox.</string>
   <string name="jukebox_youtube_timed_out">YouTube took too long to respond. Try again.</string>
   <string name="jukebox_youtube_live">Live streams and upcoming videos cannot be downloaded.</string>
   <string name="jukebox_youtube_too_long">Choose a recording shorter than two hours.</string>
+  <string name="jukebox_youtube_not_a_song">The video found is a live stream or far too long to be this song.</string>
   <string name="jukebox_youtube_no_audio">YouTube did not produce an audio file.</string>
   <string name="jukebox_youtube_engine">Could not prepare the YouTube engine.</string>
   <string name="jukebox_youtube_invalid_video">Invalid YouTube video.</string>
@@ -179,4 +180,6 @@
   <string name="jukebox_tags_untouched">%1$s The file has not been touched.</string>
   <!-- %1$s is whatever the system said went wrong, which has no full stop. -->
   <string name="jukebox_tags_untouched_after">%1$s. The file has not been touched.</string>
+  <!-- A toast, when play is pressed during a call and the music is played quietly under it. -->
+  <string name="jukebox_under_a_call">A call is on. Playing quietly.</string>
 </resources>

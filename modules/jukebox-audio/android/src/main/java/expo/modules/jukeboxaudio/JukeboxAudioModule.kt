@@ -154,6 +154,11 @@ class JukeboxAudioModule : Module() {
       MediaStoreLibrary.queryTracks(context, rootFolder)
     }.runOnQueue(io)
 
+    // Whether the library is as it was, without reading it: see LibraryStamp.
+    AsyncFunction("libraryStampAsync") { rootFolder: String ->
+      MediaStoreLibrary.stamp(context, rootFolder)
+    }.runOnQueue(io)
+
     AsyncFunction("queryTrackAsync") { trackId: String, rootFolder: String ->
       MediaStoreLibrary.queryTrack(context, trackId, rootFolder)
     }.runOnQueue(io)

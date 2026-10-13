@@ -6,24 +6,29 @@ import { useT } from '../../lib/i18n/index';
 import { makeStyles, switchColours, useColours, usePressed } from '../../lib/theme/index';
 import { setDownloadsButtonWanted, useDownloadsButtonWanted } from '../../lib/ui/downloadsButton';
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
+import { setExtractorCheckWanted, useExtractor } from '../../lib/youtube/extractorState';
+import { downloads } from '../../lib/youtube/native';
 import { tallyOf } from '../../lib/youtube/queueView';
 
 /**
- * The two rows Settings has about downloads: the way into their screen,
- * which says beside its name how the queue stands, and the switch for the
- * button that floats over the app.
+ * The rows Settings has about downloads: the way into their screen, which
+ * says beside its name how the queue stands, the switch for the button that
+ * floats over the app, and the switch for the look the app makes by itself
+ * for a newer yt-dlp — which says under it what that look sends, and is not
+ * there on a build of the phone's side that cannot make it.
  *
  * Here and not written into Settings because of that first row. The queue
  * is read again every second while anything is being fetched, and whatever
- * listens to it is drawn again each time: this is two rows, and Settings is
+ * listens to it is drawn again each time: this is three rows, and Settings is
  * the longest screen in the app.
  *
  * The styles are Settings' own rows over again, as the themes' screen has
- * them too, so that these two are not told from their neighbours.
+ * them too, so that these are not told from their neighbours.
  */
 export function DownloadsSettings() {
   const { all, paused } = useDownloads();
   const floating = useDownloadsButtonWanted();
+  const looking = useExtractor().wanted;
   const t = useT();
   const c = useColours();
   const styles = useStyles();
@@ -63,6 +68,23 @@ export function DownloadsSettings() {
         </View>
         <Text style={styles.muted}>{t.settings.downloads.button.note}</Text>
       </View>
+      {downloads?.extractorLatestAsync ? (
+        <>
+          <View style={styles.rule} />
+          <View style={styles.row}>
+            <View style={styles.line}>
+              <Text style={styles.title}>{t.settings.downloads.check.title}</Text>
+              <Switch
+                value={looking}
+                accessibilityLabel={t.settings.downloads.check.title}
+                onValueChange={setExtractorCheckWanted}
+                {...switchColours(c, looking)}
+              />
+            </View>
+            <Text style={styles.muted}>{t.settings.downloads.check.note}</Text>
+          </View>
+        </>
+      ) : null}
     </>
   );
 }

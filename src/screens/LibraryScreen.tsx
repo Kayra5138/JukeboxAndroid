@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { Pressable } from '../components/Pressable';
 
-import { PlayIcon } from '../components/Icons';
+import { PlayIcon, ShuffleIcon } from '../components/Icons';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
 import { SearchField } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
@@ -27,7 +27,7 @@ import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
 import { TagPrompt } from '../components/TagPrompt';
 import { WriteFilesSheet } from '../components/WriteFilesSheet';
-import { NowPlayingBar } from '../components/NowPlayingBar';
+import { NowPlayingBar, usePageSides } from '../components/NowPlayingBar';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { BROWSE_ROW_HEIGHT, BrowseRow } from '../components/BrowseRow';
 import { AlbumListing } from '../components/AlbumListing';
@@ -55,13 +55,11 @@ import { addTagToTracks } from '../lib/db/tags';
 import { canWriteFiles } from '../lib/filetags';
 import { SwipeRow } from '../components/SwipeRow';
 import { TRACK_ROW_HEIGHT, TrackRow } from '../components/TrackRow';
-import {
-  ensureAudioPermission,
-  ensureNotificationPermission,
-  libraryRoot,
-  scanLibrary,
-} from '../lib/media/library';
-import { withMetadata, type EnrichedTrack } from '../lib/media/merge';
+import { refreshLibrary } from '../lib/library/index';
+import { keepMap } from '../lib/library/reconcile';
+import { useLibrary } from '../lib/library/useLibrary';
+import { ensureNotificationPermission, libraryRoot } from '../lib/media/library';
+import type { EnrichedTrack } from '../lib/media/merge';
 import { search, searchNamed } from '../lib/media/search';
 import {
   viewShown,
@@ -79,12 +77,6 @@ import { lastPlayedAt, playCounts } from '../lib/db/history';
 import { artistKey, spreadShuffle } from '../lib/media/shuffle';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
-
-type Screen =
-  | { kind: 'loading' }
-  | { kind: 'denied' }
-  | { kind: 'library'; tracks: EnrichedTrack[] }
-  | { kind: 'error'; message: string };
 
 /** A stable empty library, so the searching below is not re-run over a new one. */
 const NOTHING: EnrichedTrack[] = [];
@@ -154,7 +146,13 @@ export default function LibraryScreen() {
   const styles = useStyles();
   const pressed = usePressed();
   const downloadRevision = useDownloadLibraryRevision();
-  const [screen, setScreen] = useState<Screen>({ kind: 'loading' });
+  /*
+    The library is not this screen's own. It is read once for the whole app
+    and held (`lib/library`), and what is drawn here is that: a reading which
+    finds nothing new hands back the list already on screen, track for track,
+    so coming back to this tab redraws nothing and builds nothing again.
+  */
+  const screen = useLibrary();
   const [query, setQuery] = useState('');
   const [headerHeight, setHeaderHeight] = useState(0);
   /*
@@ -224,6 +222,7 @@ export default function LibraryScreen() {
   const middle = useRef<View>(null);
   const landscape = useLandscape();
   const insets = useSafeAreaInsets();
+  const sides = usePageSides();
   const [note, setNote] = useState<string | null>(null);
 
   // Restored in an effect rather than in the first render: opening the
@@ -310,6 +309,14 @@ export default function LibraryScreen() {
   const [writingTo, setWritingTo] = useState<EnrichedTrack[] | null>(null);
   const columns = useListColumns();
   const { playQueue, playNext, addToQueue } = usePlayerActions();
+  /*
+    Everything there is, shuffled the way the player shuffles a queue: spread
+    so that an artist does not come up twice running, and not a plain draw.
+  */
+  const shuffleAll = () => {
+    if (library.length === 0) return;
+    void playQueue(spreadShuffle(library, artistKey), 0);
+  };
   const { current } = usePlayerState();
   const router = useRouter();
 
@@ -675,18 +682,15 @@ export default function LibraryScreen() {
     setSelected(new Set());
   }, []);
 
-  const load = useCallback(async () => {
-    // The spinner is for having nothing to show, not for re-reading something
-    // already on screen. Swapping the list out for it on every focus tore the
-    // list down and rebuilt it at the top, losing the reader's place — which is
-    // what made coming back from another tab start over.
-    setScreen((shown) => (shown.kind === 'library' ? shown : { kind: 'loading' }));
+  /*
+    Asks for the library to be looked at again, and reads what this screen
+    keeps for itself beside it. The looking is cheap and mostly finds nothing:
+    see `lib/library/store.ts` for when it turns into a reading. [force] is
+    for somebody pressing a button that says so.
+  */
+  const load = useCallback(async (force = false) => {
+    await refreshLibrary(force);
     try {
-      if (!(await ensureAudioPermission())) {
-        setScreen({ kind: 'denied' });
-        return;
-      }
-      setScreen({ kind: 'library', tracks: withMetadata(await scanLibrary()) });
       // With the library and not once: a lookup made on another screen may
       // have settled whether a credit is one artist or two.
       const reader = creditReader();
@@ -694,14 +698,34 @@ export default function LibraryScreen() {
       // Re-read with the library rather than once, so a track played on another
       // screen and then returned from has moved by the time the list is seen
       // again — which is the whole point of ordering by it.
-      setPlayed(lastPlayedAt());
+      // Kept as the maps they were when they say what they said: the list is
+      // put in order again for a new one, and a visit on which nothing was
+      // played in between should cost no more than the asking.
+      const latest = lastPlayedAt();
+      setPlayed((before) => keepMap(before, latest));
       const listens = new Map<string, number>();
       for (const [id, count] of playCounts()) listens.set(id, count.plays);
-      setCounts(listens);
+      setCounts((before) => keepMap(before, listens));
     } catch (error) {
-      setScreen({ kind: 'error', message: String(error) });
+      // The list is on screen either way. What could not be read is what it
+      // is ordered and credited by, and that is asked for again on the next
+      // visit.
+      console.warn('The listening history could not be read for the library.', error);
     }
   }, []);
+
+  /*
+    A look at the device that failed while a library was on show leaves the
+    library where it is, and says so here rather than taking the list away to
+    say it: what is on screen was true a moment ago and very likely still is.
+  */
+  const failure = screen.kind === 'library' ? screen.failure : null;
+  useEffect(() => {
+    if (failure == null) return;
+    setNote(failure);
+    const gone = setTimeout(() => setNote(null), 4000);
+    return () => clearTimeout(gone);
+  }, [failure]);
 
   /*
     The long-press menu and the list picker behind it, which every screen that
@@ -956,7 +980,7 @@ export default function LibraryScreen() {
             ? t.library.screen.needsAccess
             : screen.message}
         </Text>
-        <Pressable android_ripple={pressed} style={styles.button} onPress={() => void load()}>
+        <Pressable android_ripple={pressed} style={styles.button} onPress={() => void load(true)}>
           <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
         </Pressable>
       </View>
@@ -1032,7 +1056,11 @@ export default function LibraryScreen() {
         two screens disagreed about where the same panel began. What needs
         keeping clear of the clock is the header, and that asks for itself.
       */
-      edges={landscape ? ['right'] : ['top', 'left', 'right']}>
+      /*
+        Nor a right edge while the panel is down that side, for the reason
+        there is no left one: the panel keeps clear of the edge itself.
+      */
+      edges={landscape ? (sides.right > 0 ? RIGHT_EDGE : NO_EDGES) : UPRIGHT_EDGES}>
       {/* All of the screen the list picker is laid over, when it is. */}
       <Behind veiled={menuVeiled} style={landscape ? styles.sideways : styles.upright}>
         <View
@@ -1198,6 +1226,23 @@ export default function LibraryScreen() {
                   ? `${libraryRoot()} · ${t.library.screen.folders(shownHeadings.length)}`
                   : `${libraryRoot()} · ${t.common.tracks(library.length)}`)}
           </Text>
+          {/*
+            The whole library, in a new order, from the line that says how
+            much of it there is. Only on the tracks, and not while a note is
+            on the line or tracks are being ticked: then the line is saying
+            something else, and this is not what a tap there would mean.
+          */}
+          {view === 'tracks' && note == null && !selecting && library.length > 1 ? (
+            <Pressable
+              android_ripple={pressed}
+              accessibilityRole="button"
+              hitSlop={8}
+              style={styles.shuffleAll}
+              onPress={shuffleAll}>
+              <ShuffleIcon size={15} color={c.accent} />
+              <Text style={styles.shuffleAllLabel}>{t.library.screen.shuffleAll}</Text>
+            </Pressable>
+          ) : null}
         </View>
         )}
       </View>
@@ -1414,6 +1459,10 @@ export default function LibraryScreen() {
   );
 }
 
+const RIGHT_EDGE = ['right'] as const;
+const NO_EDGES = [] as const;
+const UPRIGHT_EDGES = ['top', 'left', 'right'] as const;
+
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
   upright: { flex: 1 },
@@ -1487,6 +1536,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   bulkDestructive: { color: c.danger, fontSize: 13 },
   meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   metaText: { color: c.textFaint, fontSize: 12, flexShrink: 1 },
+  shuffleAll: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  shuffleAllLabel: { color: c.accent, fontSize: 12.5 },
   links: { flexDirection: 'row', gap: 16 },
   link: { color: c.accent, fontSize: 13 },
 

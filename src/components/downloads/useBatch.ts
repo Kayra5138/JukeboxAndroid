@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
+import { useDownloadsLookedAt } from '../../lib/ui/downloadsButton';
 import { batchOf, RUN_LINGER_MS, type Batch } from '../../lib/youtube/queueView';
 
 /**
@@ -18,13 +19,14 @@ import { batchOf, RUN_LINGER_MS, type Batch } from '../../lib/youtube/queueView'
  */
 export function useBatch(): Batch {
   const { all } = useDownloads();
+  const lookedAt = useDownloadsLookedAt();
   const [seen, setSeen] = useState(() => ({ all, at: Date.now() }));
   let now = seen.at;
   if (seen.all !== all) {
     now = Date.now();
     setSeen({ all, at: now });
   }
-  const batch = batchOf(all, now);
+  const batch = batchOf(all, now, lookedAt);
   const endedAt = batch.endedAt;
   useEffect(() => {
     if (endedAt == null) return;

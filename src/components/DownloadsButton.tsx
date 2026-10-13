@@ -4,6 +4,7 @@ import { Animated, BackHandler, Easing, Keyboard, StyleSheet, Text, useWindowDim
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useBatch } from './downloads/useBatch';
+import { useDiscoverPreview } from './discover/hooks';
 import { DownloadIcon } from './Icons';
 import { NOW_PLAYING_WIDTH, nowPlayingHeight } from './NowPlayingBar';
 import { Pressable } from './Pressable';
@@ -12,7 +13,7 @@ import { useT } from '../lib/i18n/index';
 import { usePlayerState } from '../lib/player/PlayerProvider';
 import { laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { useSheetOpen } from '../lib/theme/Veil';
-import { useDownloadsButtonWanted } from '../lib/ui/downloadsButton';
+import { downloadsLookedAt, useDownloadsButtonWanted } from '../lib/ui/downloadsButton';
 import { useLandscape } from '../lib/ui/layout';
 import { motionReduced } from '../lib/ui/motion';
 import { useDownloads } from '../lib/youtube/DownloadsProvider';
@@ -29,7 +30,7 @@ const MARGIN = 14;
 /** The five tabs, which have the bar along the bottom or down the left. */
 const TABS = new Set(['/', '/lists', '/search', '/stats', '/settings']);
 /** The screens that draw the bar of what is playing at their foot, or down their right. */
-const WITH_PLAYER = new Set(['/', '/lists', '/playlist']);
+const WITH_PLAYER = new Set(['/', '/lists', '/search', '/stats', '/settings', '/playlist']);
 /**
  * Where the button would be in the way: the game, which is the whole screen
  * and played with both thumbs, and the downloads' own screen, which says
@@ -105,8 +106,21 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
     One small mark on its shoulder: a tick when the run is over, an
     exclamation mark where any of it failed, and otherwise how many are left
     — said only when that is more than the one the ring is already showing.
+    The exclamation mark is for a failure nobody has looked at. Once the
+    bubble or the queue's screen has been opened it has said what it had to,
+    and a run with a failure in it gets no tick either.
   */
-  const badge = finished ? (batch.failed > 0 ? '!' : '✓') : left > 1 ? (left > 99 ? '99+' : String(left)) : null;
+  const alarmed = batch.unseen > 0;
+  const badge = finished
+    ? alarmed ? '!' : batch.failed > 0 ? null : '✓'
+    : left > 1 ? (left > 99 ? '99+' : String(left)) : null;
+
+  // Looked at for as long as the bubble is open, and so at whatever fails meanwhile.
+  useEffect(() => {
+    if (!open) return;
+    downloadsLookedAt();
+    return downloadsLookedAt;
+  }, [open]);
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
@@ -179,7 +193,7 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
           <View style={styles.badge} pointerEvents="none">
             <Text
               allowFontScaling={false}
-              style={finished ? (batch.failed > 0 ? styles.badgeBad : styles.badgeGood) : styles.badgeText}>
+              style={finished ? (alarmed ? styles.badgeBad : styles.badgeGood) : styles.badgeText}>
               {badge}
             </Text>
           </View>
@@ -208,7 +222,9 @@ function useSpot(pathname: string): { right: number; bottom: number } {
   const insets = useSafeAreaInsets();
   const landscape = useLandscape();
   const { fontScale } = useWindowDimensions();
-  const playing = usePlayerState().current != null && WITH_PLAYER.has(pathname);
+  // A preview of a Discover song has the bar too, with nothing in the player.
+  const previewing = useDiscoverPreview() != null;
+  const playing = (usePlayerState().current != null || previewing) && WITH_PLAYER.has(pathname);
   if (landscape) {
     return {
       // The panel reaches the edge of the glass itself, cutout and all.

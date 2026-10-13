@@ -56,6 +56,13 @@ type PlayerActions = {
   addToQueue: (track: Track) => Promise<void>;
   moveInQueue: (from: number, to: number) => Promise<void>;
   removeFromQueue: (index: number) => Promise<void>;
+  /**
+   * Takes a track out of the queue wherever it is in it, every time it is in
+   * it. For whoever knows the track and cannot know the row: something that
+   * is not a screen holds a copy of the queue that is a moment old, and a
+   * row number read off that copy is the number of some other track by now.
+   */
+  removeTrackFromQueue: (trackId: string) => Promise<void>;
   /** Rearranges the queue, keeping what is playing where it is. */
   shuffleQueue: () => Promise<void>;
   cycleRepeat: () => Promise<void>;
@@ -737,6 +744,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     [flushSession, placeCurrent, refused]
   );
 
+  const removeTrackFromQueue = useCallback(
+    async (trackId: string) => {
+      // Last row first, so that the rows still to be looked at keep their numbers. Read from the
+      // queue as it is held here, which is changed before the player is told and so is never behind.
+      for (let index = queueRef.current.length - 1; index >= 0; index--) {
+        if (queueRef.current[index]?.id === trackId) await removeFromQueue(index);
+      }
+    },
+    [removeFromQueue]
+  );
+
   /*
     Speed and pitch are one pair to ExoPlayer, and are kept here as one pair.
 
@@ -993,6 +1011,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       addToQueue,
       moveInQueue,
       removeFromQueue,
+      removeTrackFromQueue,
       shuffleQueue,
       cycleRepeat,
       setSpeed,
@@ -1011,6 +1030,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       addToQueue,
       moveInQueue,
       removeFromQueue,
+      removeTrackFromQueue,
       shuffleQueue,
       cycleRepeat,
       setSpeed,

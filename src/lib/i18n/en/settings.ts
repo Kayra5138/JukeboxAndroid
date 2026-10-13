@@ -24,6 +24,12 @@ export const settings = {
     /** Under the row in Settings that opens the themes. */
     open: 'Colours, glass, or one of your own.',
     note: 'System follows the phone’s own light or dark setting.',
+    /** The two themes System goes between. */
+    pair: {
+      light: 'In light mode',
+      dark: 'In dark mode',
+      note: 'The two themes System goes between, as the phone does.',
+    },
     /** The setting that draws a theme at random each time the app is opened. */
     shuffle: {
       title: 'A different theme each time',
@@ -79,6 +85,11 @@ export const settings = {
     button: {
       title: 'Floating downloads button',
       note: 'A round button over the app while anything is being downloaded, and for a few minutes after. Tap it to see how far along it is.',
+    },
+    /** The look for a newer yt-dlp that the app makes by itself: see `lib/youtube/extractor.ts`. */
+    check: {
+      title: 'Look for a newer YouTube downloader',
+      note: 'At most once a day, and only when you open Downloads or download something, Jukebox asks GitHub which yt-dlp is the latest. Nothing about you or your library is sent, and nothing is fetched until you say so.',
     },
   },
   still: {

@@ -2,9 +2,16 @@ import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
-import { fillCoversIn, markCoverSearchedIn, saveMetadataTo, type MetadataDb } from '../metadataRows.ts';
+import {
+  fillCoversIn,
+  markCoverSearchedIn,
+  placeTracksIn,
+  saveMetadataTo,
+  unplaceTracksIn,
+  type MetadataDb,
+} from '../metadataRows.ts';
 import { migrate } from '../migrations.ts';
-import type { TrackMetadata } from '../metadata.ts';
+import type { Placing, TrackMetadata } from '../metadata.ts';
 
 /**
  * The statements themselves, against a real SQLite brought up by the real
@@ -29,7 +36,14 @@ function open() {
     database
       .prepare('SELECT status, album, artwork_url, cover_searched_at FROM track_metadata WHERE track_id = ?')
       .get(id) as { status: string; album: string | null; artwork_url: string | null; cover_searched_at: number | null };
-  return { target, read };
+  /** The whole row but for when it was written, or undefined where there is none. */
+  const whole = (id: string) => {
+    const found = database.prepare('SELECT * FROM track_metadata WHERE track_id = ?').get(id);
+    if (!found) return undefined;
+    const { fetched_at: _when, ...rest } = found;
+    return { ...rest };
+  };
+  return { target, read, whole };
 }
 
 const entry = (trackId: string, changes: Partial<TrackMetadata> = {}): TrackMetadata => ({
@@ -109,5 +123,93 @@ describe('remembering a search that found no cover', () => {
 
     assert.equal(read('1').cover_searched_at, null);
     assert.equal(read('1').status, 'manual');
+  });
+});
+
+describe('giving tracks their places on a record', () => {
+  const full = (trackId: string, changes: Partial<TrackMetadata> = {}) =>
+    entry(trackId, { album: 'Ruins', artworkUrl: 'file:///covers/a.jpg', trackNumber: 7, discNumber: 2, ...changes });
+  const miss = (trackId: string) =>
+    entry(trackId, { status: 'not_found', source: null, title: null, artist: null, genre: null, year: null });
+  const placing = (trackId: string, was: Placing['was'], trackNumber = 3, discNumber: number | null = null): Placing => ({
+    trackId, trackNumber, discNumber, was,
+  });
+  const NONE = { status: null, trackNumber: null, discNumber: null };
+
+  it('moves the two columns of a row that is there, a lookup’s or an edit, and nothing else', () => {
+    const { target, whole } = open();
+    saveMetadataTo(target, full('found'), 1);
+    saveMetadataTo(target, full('typed', { status: 'manual', source: 'manual' }), 1);
+    markCoverSearchedIn(target, ['found'], 77);
+    const before = { found: whole('found'), typed: whole('typed') };
+
+    placeTracksIn(
+      target,
+      [
+        placing('found', { status: 'matched', trackNumber: 7, discNumber: 2 }),
+        placing('typed', { status: 'manual', trackNumber: 7, discNumber: 2 }, 4, 1),
+      ],
+      2
+    );
+
+    assert.deepEqual(whole('found'), { ...before.found, track_number: 3, disc_number: null });
+    assert.deepEqual(whole('typed'), { ...before.typed, track_number: 4, disc_number: 1 });
+  });
+
+  it('makes a row of the place alone where there is none, and of a note that nothing was found', () => {
+    const { target, whole } = open();
+    saveMetadataTo(target, miss('missed'), 1);
+
+    placeTracksIn(target, [placing('new', NONE), placing('missed', { ...NONE, status: 'not_found' }, 5)], 2);
+
+    const bare = {
+      status: 'matched', source: null, title: null, artist: null, album: null, genre: null,
+      year: null, artwork_url: null, disc_number: null, cover_searched_at: null,
+    };
+    assert.deepEqual(whole('new'), { track_id: 'new', ...bare, track_number: 3 });
+    assert.deepEqual(whole('missed'), { track_id: 'missed', ...bare, track_number: 5 });
+  });
+
+  it('is put back exactly: the numbers a row had, a miss a miss, and no row where there was none', () => {
+    const { target, whole } = open();
+    saveMetadataTo(target, full('found'), 1);
+    saveMetadataTo(target, full('typed', { status: 'manual', source: 'manual', trackNumber: null, discNumber: null }), 1);
+    saveMetadataTo(target, miss('missed'), 1);
+    const before = ['found', 'typed', 'missed', 'new'].map(whole);
+    const placings = [
+      placing('found', { status: 'matched', trackNumber: 7, discNumber: 2 }),
+      placing('typed', { status: 'manual', trackNumber: null, discNumber: null }, 4, 1),
+      placing('missed', { ...NONE, status: 'not_found' }, 5),
+      placing('new', NONE, 6),
+    ];
+
+    placeTracksIn(target, placings, 2);
+    unplaceTracksIn(target, placings);
+
+    assert.deepEqual(['found', 'typed', 'missed', 'new'].map(whole), before);
+  });
+
+  it('keeps what a made row was given since, and takes only the place back', () => {
+    const { target, whole } = open();
+    const placings = [placing('new', NONE)];
+    placeTracksIn(target, placings, 2);
+    fillCoversIn(target, [{ trackIds: ['new'], uri: 'file:///covers/a.jpg', album: 'Ruins' }]);
+
+    unplaceTracksIn(target, placings);
+
+    assert.equal(whole('new')?.artwork_url, 'file:///covers/a.jpg');
+    assert.equal(whole('new')?.track_number, null);
+  });
+
+  it('does not take back a place that has been changed again since', () => {
+    const { target, whole } = open();
+    saveMetadataTo(target, full('found'), 1);
+    const placings = [placing('found', { status: 'matched', trackNumber: 7, discNumber: 2 })];
+    placeTracksIn(target, placings, 2);
+    saveMetadataTo(target, full('found', { status: 'manual', trackNumber: 9, discNumber: null }), 3);
+
+    unplaceTracksIn(target, placings);
+
+    assert.equal(whole('found')?.track_number, 9);
   });
 });

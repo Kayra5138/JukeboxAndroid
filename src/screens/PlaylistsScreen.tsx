@@ -5,7 +5,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { NowPlayingBar } from '../components/NowPlayingBar';
+import { NowPlayingBar, usePageSides } from '../components/NowPlayingBar';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { TextPrompt } from '../components/TextPrompt';
 import { AUTO_LISTS } from '../lib/db/autoLists';
@@ -18,7 +18,8 @@ import {
 } from '../lib/db/playlists';
 import { tagCounts, trackIdsWithTag, type TagCount } from '../lib/db/tags';
 import { useT } from '../lib/i18n/index';
-import { scanLibrary } from '../lib/media/library';
+import { refreshLibrary } from '../lib/library/index';
+import { useLibrary } from '../lib/library/useLibrary';
 import { makeStyles, outlined, scene, usePressed } from '../lib/theme/index';
 import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
@@ -36,6 +37,7 @@ export default function PlaylistsScreen() {
   const router = useRouter();
   const downloadRevision = useDownloadLibraryRevision();
   const insets = useSafeAreaInsets();
+  const sides = usePageSides();
   const landscape = useLandscape();
   const t = useT();
   const styles = useStyles();
@@ -60,67 +62,70 @@ export default function PlaylistsScreen() {
   }, []);
 
   /*
-    The covers are loaded after the rows rather than with them. Reading the
-    library is a trip to the media store, and the names and counts — which are
-    what the screen is actually for — are already in hand without it.
+    The library, as it is held for the whole app (`lib/library`): this screen
+    does not read it, only asks on each visit below that it be looked at again.
+    Null until there is one to show, and the same list from one render to the
+    next for as long as nothing in it has changed.
+  */
+  const shared = useLibrary();
+  const library: Track[] | null = shared.kind === 'library' ? shared.tracks : null;
+
+  /*
+    The covers are worked out after the rows rather than with them. The names
+    and counts — which are what the screen is actually for — are in hand
+    without the library, and are drawn without waiting for it.
   */
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const library = await scanLibrary();
-      if (cancelled) return;
-      const byId = new Map(library.map((entry) => [entry.id, entry]));
-      const resolved = new Map<number, Track[]>();
-      /*
-        Counted against the library as well as drawn from it. A list keeps a
-        member whose file is outside the library today, and the row should say
-        how many tracks opening it will show, not how many are written down.
-      */
-      const present = new Map<number, number>();
-      for (const [id, trackIds] of playlistMembers()) {
-        const here = trackIds
-          .map((trackId) => byId.get(trackId))
-          .filter((entry): entry is Track => entry != null);
-        present.set(id, here.length);
-        resolved.set(id, here.slice(0, COVER_TRACKS));
-      }
-      /*
-        A list that follows a tag keeps no membership to read the first four
-        out of, so they are asked of the tag instead. Without this every tag
-        list wears the empty square, which reads as a list with nothing in it
-        next to a count saying otherwise.
-      */
-      for (const list of lists ?? []) {
-        if (!list.tag) continue;
-        const here = trackIdsWithTag(list.tag)
-          .map((trackId) => byId.get(trackId))
-          .filter((entry): entry is Track => entry != null);
-        present.set(list.id, here.length);
-        resolved.set(list.id, here.slice(0, COVER_TRACKS));
-      }
-      setCovers(resolved);
-      setCounts(present);
-    })().catch((failure) => {
-      /*
-        The rows are already drawn from what the lists say of themselves, and
-        that is what they keep: the squares stay empty and the counts are the
-        stored ones. Not worth a screen of its own — nothing here is lost, and
-        the library is asked again the next time the lists are read, which is
-        every return to this tab.
-      */
-      console.warn('Could not read the library for the list covers', failure);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [lists]);
+    // No library yet, or none to be had: the rows keep what the lists say of
+    // themselves, the squares stay empty and the counts are the stored ones.
+    // An empty library is another matter, and is counted like any other.
+    if (!library) return;
+    const byId = new Map(library.map((entry) => [entry.id, entry]));
+    const resolved = new Map<number, Track[]>();
+    /*
+      Counted against the library as well as drawn from it. A list keeps a
+      member whose file is outside the library today, and the row should say
+      how many tracks opening it will show, not how many are written down.
+    */
+    const present = new Map<number, number>();
+    for (const [id, trackIds] of playlistMembers()) {
+      const here = trackIds
+        .map((trackId) => byId.get(trackId))
+        .filter((entry): entry is Track => entry != null);
+      present.set(id, here.length);
+      resolved.set(id, here.slice(0, COVER_TRACKS));
+    }
+    /*
+      A list that follows a tag keeps no membership to read the first four
+      out of, so they are asked of the tag instead. Without this every tag
+      list wears the empty square, which reads as a list with nothing in it
+      next to a count saying otherwise.
+    */
+    for (const list of lists ?? []) {
+      if (!list.tag) continue;
+      const here = trackIdsWithTag(list.tag)
+        .map((trackId) => byId.get(trackId))
+        .filter((entry): entry is Track => entry != null);
+      present.set(list.id, here.length);
+      resolved.set(list.id, here.slice(0, COVER_TRACKS));
+    }
+    setCovers(resolved);
+    setCounts(present);
+  }, [library, lists]);
 
   /** What the row says a list holds: the stored number until the library is in. */
   const held = (list: Playlist) => counts.get(list.id) ?? list.trackCount;
 
   // Reloaded on focus, so a list edited or emptied on the detail screen is
   // described correctly on the way back.
-  useFocusEffect(useCallback(() => load(), [load, downloadRevision]));
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      // And the library looked at again, for the covers and the counts. It
+      // says for itself when it has changed, and usually it has not.
+      void refreshLibrary();
+    }, [load, downloadRevision])
+  );
 
   const create = useCallback(
     (name: string) => {
@@ -169,16 +174,9 @@ export default function PlaylistsScreen() {
           styles.content,
           {
             paddingTop: insets.top + 18,
-            /*
-              Neither inset sideways. What touches the edges of the screen
-              there is the rail on one side and the player's panel on the
-              other, and both keep clear of whatever is at them; asking again
-              here adds a second inset's worth of nothing to one side only,
-              which is what left this sitting off-centre in a space it was
-              supposed to be filling evenly.
-            */
-            paddingLeft: (landscape ? 0 : insets.left) + 20,
-            paddingRight: (landscape ? 0 : insets.right) + 20,
+            // See usePageSides for why these are not the phone's own sideways.
+            paddingLeft: sides.left + 20,
+            paddingRight: sides.right + 20,
             paddingBottom: insets.bottom + 32,
           },
         ]}>

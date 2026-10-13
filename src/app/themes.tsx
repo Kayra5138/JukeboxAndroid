@@ -3,9 +3,11 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { OptionSheet } from '../components/OptionSheet';
 import { Pressable } from '../components/Pressable';
 import { useT } from '../lib/i18n/index';
 import {
+  chooseSystemTheme,
   makeStyles,
   outlinedClip,
   scene,
@@ -14,7 +16,10 @@ import {
   switchColours,
   useColours,
   usePressed,
+  useSystemThemes,
+  useThemeOffers,
   useThemeShuffle,
+  type ThemeId,
 } from '../lib/theme/index';
 import { ThemePicker } from '../lib/theme/ThemePicker';
 
@@ -43,6 +48,17 @@ export default function ThemesScreen() {
   const shuffle = useThemeShuffle();
   const [drawOpen, setDrawOpen] = useState(false);
   const said = t.settings.theme.shuffle;
+  /*
+    The pair following the phone goes between, and which side of it is being
+    chosen just now. Any theme the picker offers may stand on either side.
+  */
+  const pair = useSystemThemes();
+  const [choosing, setChoosing] = useState<'light' | 'dark' | null>(null);
+  const { groups } = useThemeOffers();
+  const themes = groups
+    .flatMap((group) => group.offers)
+    .flatMap((offer) => (offer.id === 'system' ? [] : [{ value: offer.id, label: t.themes[offer.nameKey] }]));
+  const named = (id: ThemeId) => themes.find((theme) => theme.value === id)?.label ?? id;
 
   return (
     <View style={styles.screen}>
@@ -56,6 +72,30 @@ export default function ThemesScreen() {
             <ThemePicker />
             <Text style={styles.muted}>{t.settings.theme.note}</Text>
           </View>
+          {/*
+            What System means, in the card with the picker it is a tile of.
+            The tile shows the pair; these two rows are where it is chosen.
+          */}
+          {(['light', 'dark'] as const).map((mode) => (
+            <View key={mode}>
+              <View style={styles.rule} />
+              <Pressable
+                android_ripple={pressed}
+                accessibilityRole="button"
+                style={styles.row}
+                onPress={() => setChoosing(mode)}>
+                <View style={styles.line}>
+                  <Text style={styles.title}>{t.settings.theme.pair[mode]}</Text>
+                  <View style={styles.value}>
+                    <Text style={styles.valueText} numberOfLines={1}>
+                      {named(pair[mode])}
+                    </Text>
+                    <Text style={styles.chevron}>›</Text>
+                  </View>
+                </View>
+              </Pressable>
+            </View>
+          ))}
         </View>
 
         {/*
@@ -128,6 +168,17 @@ export default function ThemesScreen() {
           ) : null}
         </View>
       </ScrollView>
+      <OptionSheet
+        visible={choosing !== null}
+        heading={choosing ? t.settings.theme.pair[choosing] : ''}
+        note={t.settings.theme.pair.note}
+        options={themes}
+        chosen={choosing ? pair[choosing] : pair.light}
+        onChoose={(theme) => {
+          if (choosing) chooseSystemTheme(choosing, theme);
+        }}
+        onClose={() => setChoosing(null)}
+      />
     </View>
   );
 }

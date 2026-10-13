@@ -16,6 +16,25 @@ import { strings, type Strings } from '../i18n/languages.ts';
 
 export type PeriodId = 'day' | 'week' | 'month' | 'year' | 'all';
 
+/**
+ * Which reading of a period: the one being lived through, the one before it,
+ * or as much time as it holds counted back from now.
+ *
+ * A day is `today`, `yesterday`, or the last twenty-four hours, and they are
+ * three different questions. Today at nine in the morning is an hour of
+ * listening and says nothing yet; yesterday is the last whole day there is;
+ * and the last twenty-four hours is the only one of the three that is always
+ * a day long. All time has one reading, and is read the same whichever is
+ * asked for.
+ */
+export type Which = 'this' | 'last' | 'rolling';
+
+/** In the order they are offered: what was, what is, and the stretch that runs up to now. */
+export const WHICH: Which[] = ['last', 'this', 'rolling'];
+
+/** How many days a rolling month is. A calendar month is not a length; this is. */
+const ROLLING_MONTH_DAYS = 30;
+
 /** Half open: a play at `since` is in, a play at `until` belongs to the next one. */
 export type Range = { since: number; until: number };
 
@@ -80,8 +99,60 @@ function startOfYear(at: number): Date {
   return new Date(new Date(at).getFullYear(), 0, 1);
 }
 
-/** What [id] covers around [now]. */
-export function rangeOf(id: PeriodId, now: number): Range {
+/**
+ * The last moment of the period before the one [now] is in.
+ *
+ * Everything asked about a period that is over is asked as of this moment:
+ * its range, its columns and its name are those of whatever period a clock
+ * stopped here would call the present one.
+ */
+function lastOf(id: PeriodId, now: number): number {
+  return rangeOf(id, now).since - 1;
+}
+
+/** [at] moved by whole hours, days or months on the calendar, the time of day kept. */
+function moved(at: number, by: { hours?: number; days?: number; months?: number }): number {
+  const date = new Date(at);
+  if (by.months) date.setMonth(date.getMonth() + by.months);
+  if (by.days) date.setDate(date.getDate() + by.days);
+  if (by.hours) date.setHours(date.getHours() + by.hours);
+  return +date;
+}
+
+/**
+ * A stretch counted back from [now].
+ *
+ * Twenty-four hours is to the minute, and ends now. The others are in whole
+ * days and whole months and end with the present one, which is what "the
+ * last seven days" means to anybody who says it on a Tuesday afternoon:
+ * today and the six before, and not from Tuesday afternoon a week ago.
+ */
+function rolling(id: PeriodId, now: number): Range {
+  switch (id) {
+    case 'day':
+      // A play at this very moment is in, so the end is the moment after.
+      return { since: moved(now, { hours: -24 }), until: now + 1 };
+    case 'week': {
+      const today = +startOfDay(now);
+      return { since: moved(today, { days: -6 }), until: moved(today, { days: 1 }) };
+    }
+    case 'month': {
+      const today = +startOfDay(now);
+      return { since: moved(today, { days: 1 - ROLLING_MONTH_DAYS }), until: moved(today, { days: 1 }) };
+    }
+    case 'year': {
+      const month = +startOfMonth(now);
+      return { since: moved(month, { months: -11 }), until: moved(month, { months: 1 }) };
+    }
+    case 'all':
+      return ALL_TIME;
+  }
+}
+
+/** What [id] covers around [now], read as [which]. */
+export function rangeOf(id: PeriodId, now: number, which: Which = 'this'): Range {
+  if (id !== 'all' && which === 'last') return rangeOf(id, lastOf(id, now));
+  if (id !== 'all' && which === 'rolling') return rolling(id, now);
   switch (id) {
     case 'day': {
       const start = startOfDay(now);
@@ -118,25 +189,45 @@ export function rangeOf(id: PeriodId, now: number): Range {
  *
  * Null for all time, which has nothing before it.
  */
-export function previousRange(id: PeriodId, now: number): Range | null {
+export function previousRange(id: PeriodId, now: number, which: Which = 'this'): Range | null {
   if (id === 'all') return null;
+  if (which === 'last') return previousRange(id, lastOf(id, now));
+  if (which === 'rolling') {
+    // As long a stretch again, ending where this one begins.
+    const { since } = rolling(id, now);
+    switch (id) {
+      case 'day':
+        return { since: moved(since, { hours: -24 }), until: since };
+      case 'week':
+        return { since: moved(since, { days: -7 }), until: since };
+      case 'month':
+        return { since: moved(since, { days: -ROLLING_MONTH_DAYS }), until: since };
+      case 'year':
+        return { since: moved(since, { months: -12 }), until: since };
+    }
+  }
   return rangeOf(id, rangeOf(id, now).since - 1);
 }
 
-/** How the period is named on screen: `Today`, `September`, `2026`. */
-export function titleOf(id: PeriodId, now: number, t: Strings = strings()): string {
-  const date = new Date(now);
+/**
+ * How the period is named on screen: `Today`, `Yesterday`, `Last 7 days`,
+ * `Sep 2026`, `2025`.
+ *
+ * A month or a year that is on the calendar is named by what it is and not
+ * by where it stands from here: last month is `Sep 2026`.
+ */
+export function titleOf(id: PeriodId, now: number, t: Strings = strings(), which: Which = 'this'): string {
+  if (id === 'all') return t.stats.period.allTime;
+  if (which === 'rolling') return t.stats.period.which[id].rolling;
+  const date = new Date(which === 'last' ? lastOf(id, now) : now);
   switch (id) {
     case 'day':
-      return t.stats.period.today;
     case 'week':
-      return t.stats.period.thisWeek;
+      return t.stats.period.which[id][which];
     case 'month':
       return t.stats.period.monthOf(date);
     case 'year':
       return String(date.getFullYear());
-    case 'all':
-      return t.stats.period.allTime;
   }
 }
 
@@ -146,8 +237,8 @@ export function titleOf(id: PeriodId, now: number, t: Strings = strings()): stri
  * The whole phrase and not only the day, because where the "against" goes is
  * the language's business: Turkish hangs it on the end, `düne göre`.
  */
-export function comparisonOf(id: PeriodId, t: Strings = strings()): string {
-  return t.stats.period.versus(id);
+export function comparisonOf(id: PeriodId, t: Strings = strings(), which: Which = 'this'): string {
+  return t.stats.period.versus(id, which);
 }
 
 /**
@@ -164,10 +255,13 @@ export function bucketsOf(
   id: PeriodId,
   now: number,
   firstAt?: number | null,
-  t: Strings = strings()
+  t: Strings = strings(),
+  which: Which = 'this'
 ): Bucket[] {
   const DAY_NAMES = t.format.weekdaysShort;
   const MONTH_NAMES = t.format.monthsShort;
+  if (id !== 'all' && which === 'last') return bucketsOf(id, lastOf(id, now), firstAt, t);
+  if (id !== 'all' && which === 'rolling') return rollingBuckets(id, now, t);
   switch (id) {
     case 'day': {
       const start = startOfDay(now);
@@ -251,6 +345,76 @@ export function bucketsOf(
         };
       });
     }
+  }
+}
+
+/**
+ * The columns of a stretch counted back from now: the same hours, days and
+ * months a period on the calendar is drawn in, ending with the present one.
+ *
+ * Twenty-four hours is the one that does not fall on its columns. It is
+ * drawn in hours of the clock all the same, since an hour named `14` that
+ * ran from 14:37 would not be the hour anybody means; so its first column
+ * and its last are the part of an hour the stretch reaches into, and there
+ * are twenty-five of them wherever now is not on the hour.
+ */
+function rollingBuckets(id: PeriodId, now: number, t: Strings): Bucket[] {
+  const range = rolling(id, now);
+  switch (id) {
+    case 'day': {
+      const buckets: Bucket[] = [];
+      let from = range.since;
+      while (from < range.until) {
+        const hour = new Date(from);
+        hour.setMinutes(0, 0, 0);
+        const next = new Date(hour);
+        next.setHours(next.getHours() + 1);
+        const to = Math.min(+next, range.until);
+        buckets.push({ start: from, end: to, label: String(hour.getHours()).padStart(2, '0'), major: hour.getHours() % 6 === 0 });
+        from = to;
+      }
+      // On the hour, the moment kept past now would be a column of its own
+      // with nothing in it but that moment. It belongs to the hour before.
+      const last = buckets[buckets.length - 1];
+      if (buckets.length > 1 && last.end - last.start <= 1) {
+        buckets.pop();
+        buckets[buckets.length - 1].end = last.end;
+      }
+      return buckets;
+    }
+    case 'week':
+      return steps(7, (index) => {
+        const from = moved(range.since, { days: index });
+        return {
+          start: from,
+          end: moved(range.since, { days: index + 1 }),
+          label: t.format.weekdaysShort[(new Date(from).getDay() + 6) % 7],
+          major: true,
+        };
+      });
+    case 'month':
+      return steps(ROLLING_MONTH_DAYS, (index) => {
+        const from = moved(range.since, { days: index });
+        return {
+          start: from,
+          end: moved(range.since, { days: index + 1 }),
+          label: String(new Date(from).getDate()),
+          // A week apart counting back from today, so that today is one of those named.
+          major: (ROLLING_MONTH_DAYS - 1 - index) % 7 === 0,
+        };
+      });
+    case 'year':
+      return steps(12, (index) => {
+        const from = moved(range.since, { months: index });
+        return {
+          start: from,
+          end: moved(range.since, { months: index + 1 }),
+          label: t.format.monthsShort[new Date(from).getMonth()][0],
+          major: true,
+        };
+      });
+    case 'all':
+      return [];
   }
 }
 

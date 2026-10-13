@@ -1,63 +1,93 @@
-import { createContext, use, useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
 import { AppState } from 'react-native';
+import { useLanguage } from '../i18n/index';
 import { usePlayerActions, usePlayerState } from '../player/PlayerProvider';
-import { ensureNotificationPermission } from '../media/library';
 import { scheduleDiscover } from './background';
-import { discoverView, subscribeDiscover, maintainDiscover, prepareDiscover, protectDiscoverQueue, refreshDiscoverReceipts } from './engine';
-import type { Track } from '../types';
-const Context = createContext<{ play: (id: string) => Promise<void>; stopPreparing: () => void } | null>(null);
-export function useDiscover() { return useSyncExternalStore(subscribeDiscover, discoverView); }
-export function useDiscoverPlayback() { return use(Context)!; }
+import {
+  attachPlayer, discoverActions, discoverBackgrounded, discoverEntry, discoverView, entryForTrack, maintainDiscover, playerChanged,
+  subscribeDiscover, type DiscoverActions,
+} from './engine';
+import type { DiscoverEntryView, DiscoverView } from './view';
+
+export type { DiscoverActions } from './engine';
+export type {
+  DiscoverEntryState, DiscoverEntryView, DiscoverNotice, DiscoverProblem, DiscoverStatus, DiscoverView,
+} from './view';
+
+/**
+ * Discover as it is to be shown: the songs, the list's own state, the last
+ * thing done, and the settings.
+ *
+ * Drawn again whenever anything in it changes, which is what a header wants
+ * and a row does not: a row takes its song from `useDiscoverEntry`, or is
+ * handed one of `entries` and remembered by it. A song's view is the same
+ * object until something shown of that song changes.
+ */
+export function useDiscover(): DiscoverView {
+  // The words in the view are in the language of the moment, so a change of language is a change of view.
+  useLanguage();
+  return useSyncExternalStore(subscribeDiscover, discoverView);
+}
+
+/** One song of the list, or null once it has left it. Drawn again only when that song changes. */
+export function useDiscoverEntry(id: string): DiscoverEntryView | null {
+  useLanguage();
+  return useSyncExternalStore(subscribeDiscover, () => discoverEntry(id));
+}
+
+/**
+ * The song of the list that a file in the player is, or null for a file that
+ * is not one: for offering keep and exclude on what is playing. Asked with
+ * the playing track's id, whatever it is.
+ */
+export function useDiscoverTrack(trackId: string | null | undefined): DiscoverEntryView | null {
+  useLanguage();
+  return useSyncExternalStore(subscribeDiscover, () => entryForTrack(trackId));
+}
+
+/** What can be done to the list. The same functions always, and usable from anywhere: nothing here needs a component. */
+export function useDiscoverActions(): DiscoverActions {
+  return discoverActions;
+}
+
+/**
+ * Joins Discover to the player and to the app coming and going.
+ *
+ * The engine is not a component and cannot see the player, so what the
+ * player is doing is told to it from here, and what it wants of the player
+ * is done from here. That is all this holds. There is no timer in it: the
+ * engine hears of a download from the queue's own reading, and keeps the one
+ * timer it needs for itself.
+ */
 export function DiscoverProvider({ children }: { children: ReactNode }) {
-  const player = usePlayerState();
-  const actions = usePlayerActions();
-  const queue = useRef<Track[]>(player.queue);
-  queue.current = player.queue;
-  const token = useRef(0);
-  useEffect(() => { protectDiscoverQueue(player.queue); }, [player.queue]);
+  const { current, queue, isPlaying } = usePlayerState();
+  const { playQueue, addToQueue, removeTrackFromQueue } = usePlayerActions();
+  const currentId = current?.id ?? null;
+
   useEffect(() => {
+    playerChanged(currentId, queue.map((track) => track.id), isPlaying);
+  }, [currentId, queue, isPlaying]);
+
+  useEffect(() => {
+    const detach = attachPlayer({
+      play: (tracks) => playQueue(tracks, 0),
+      add: addToQueue,
+      remove: removeTrackFromQueue,
+    });
+    // Listened to for as long as the app is up, whether or not a screen is: songs are kept ready behind any of them.
+    const unsubscribe = subscribeDiscover(() => {});
     void maintainDiscover();
     void scheduleDiscover().catch(console.warn);
-    const foreground = () => { if (AppState.currentState === 'active') void maintainDiscover(); };
-    const subscription = AppState.addEventListener('change', foreground);
-    let nextAutomatic = 0;
-    const timer = setInterval(() => {
-      if (AppState.currentState !== 'active') return;
-      const view = discoverView();
-      if (!view.busy && Date.now() >= nextAutomatic && view.settings.autoDownload && (view.snapshot?.pending ?? view.snapshot?.entries)?.some(e => !e.track && !e.jobId && !e.error)) {
-        nextAutomatic = Date.now() + 10_000;
-        void maintainDiscover();
-      } else if (!view.busy && view.jobs.some(j => ['queued','finding','preparing','downloading','converting','saving','cancelling'].includes(j.status))) void refreshDiscoverReceipts().catch(console.warn);
-    }, 1500);
-    const check = setInterval(foreground, 60_000);
-    return () => { subscription.remove(); clearInterval(timer); clearInterval(check); token.current++; };
-  }, []);
-  const play = async (id: string) => {
-    const request = ++token.current;
-    await ensureNotificationPermission();
-    const entries = discoverView().snapshot?.entries ?? [];
-    const index = entries.findIndex(e => e.recordingMbid === id);
-    if (index < 0) return;
-    const before = queue.current;
-    const track = await prepareDiscover(id, () => request !== token.current || queue.current !== before);
-    if (request !== token.current) return;
-    if (queue.current !== before) return;
-    const following = [...entries.slice(index + 1), ...entries.slice(0, index)];
-    const initial = [track];
-    while (following[0]?.track) initial.push(following.shift()!.track!);
-    await actions.playQueue(initial, 0);
-    queue.current = initial;
-    // Download-on-tap starts immediately; following songs join the same queue as they arrive.
-    void (async () => {
-      for (const entry of following) {
-        if (request !== token.current) break;
-        try {
-          const next = await prepareDiscover(entry.recordingMbid, () => request !== token.current || queue.current[0]?.id !== track.id);
-          if (request !== token.current || queue.current[0]?.id !== track.id) break;
-          await actions.addToQueue(next);
-        } catch { /* A failed recording is shown in Discover; keep the rest playable. */ }
-      }
-    })();
-  };
-  return <Context value={{ play, stopPreparing: () => { token.current++; } }}>{children}</Context>;
+    const subscription = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void maintainDiscover();
+      else discoverBackgrounded();
+    });
+    return () => {
+      subscription.remove();
+      unsubscribe();
+      detach();
+    };
+  }, [playQueue, addToQueue, removeTrackFromQueue]);
+
+  return <>{children}</>;
 }

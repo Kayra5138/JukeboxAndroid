@@ -25,6 +25,50 @@ const found = new Map<string, string>();
  */
 export function forgetEmbedded(trackId: string): void {
   found.delete(trackId);
+  asked.delete(trackId);
+}
+
+/**
+ * The tracks {@link warmArtwork} has already asked about, picture or none.
+ *
+ * Not the cache of misses that was taken out of the map above. Nothing drawn
+ * reads this: a row still asks for itself each time it comes on screen, so a
+ * cover that turns up later is still found. It only stops the same run of
+ * questions being put again each time a list is rebuilt.
+ */
+const asked = new Set<string>();
+
+/**
+ * Finds the covers of [tracks] before anything is drawing them, in the order
+ * given, and answers with what stops it.
+ *
+ * For a view that can be thrown across the whole library faster than its
+ * covers can be asked for one by one. A row that asks for itself is drawn
+ * empty first and again when the answer comes, and that answer waits behind
+ * every row the throw passed on its way; with the covers found beforehand a
+ * row has its picture the first time it is drawn.
+ *
+ * One at a time, so that a few hundred files being opened is a queue behind
+ * whatever the screen itself is asking for and not a crowd in front of it.
+ * A track that already carries a picture of the app's own is not asked about:
+ * that is the one the hook shows, and it is there without asking.
+ */
+export function warmArtwork(tracks: readonly (Track | null | undefined)[]): () => void {
+  let stopped = false;
+  const run = async () => {
+    for (const track of tracks) {
+      if (stopped) return;
+      if (!track || found.has(track.id) || asked.has(track.id)) continue;
+      if (track.artworkUri?.startsWith('file://')) continue;
+      asked.add(track.id);
+      await artworkFor(track.id);
+    }
+  };
+  // A cover not found beforehand is asked for by its row, as it always was.
+  run().catch(() => undefined);
+  return () => {
+    stopped = true;
+  };
 }
 
 /**

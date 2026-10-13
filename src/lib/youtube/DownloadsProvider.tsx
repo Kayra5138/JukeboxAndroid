@@ -1,6 +1,7 @@
 import { createContext, use, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { carried, unlisted } from './carried';
+import { extractorWanted } from './extractorState';
 import { downloads } from './native';
 import { isActive, type AudioFormat, type DownloadJob, type FindRequest, type YouTubeVideo } from './types';
 import { ensureNotificationPermission, libraryRoot } from '../media/library';
@@ -10,6 +11,7 @@ import { fileUnderAlbum } from '../album/index';
 import { strings } from '../i18n/index';
 import { armFinder, awaitsFinding, kickFinder } from './finder';
 import { arrivedSignature, filingKey, jobsSignature } from './signature';
+import { publishJobs, readOnChange, standAsReader } from './watch';
 
 /** Being fetched at this moment: the states a download's progress moves in. */
 const FETCHING: readonly string[] = ['preparing', 'downloading', 'converting', 'saving', 'cancelling'];
@@ -102,7 +104,10 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
         const word = jobsSignature(every, held);
         if (word === seen.current) return;
         seen.current = word;
-        setAll(kept);
+        // And whoever is not a screen: Discover's engine goes by the same reading.
+        publishJobs({ jobs: kept, paused: held });
+        // Not the songs Discover is only looking for ahead: those are not downloads, and no screen of downloads shows them.
+        setAll(kept.some((job) => job.hold) ? kept.filter((job) => !job.hold) : kept);
         setPausedState(held);
         // A playlist is brought up to date by what has arrived, and only then.
         const landed = arrivedSignature(next);
@@ -153,6 +158,16 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     // The finder says when it has taken or settled a job, and anybody who
     // asked the phone for one themselves says so: either way, read again.
     const disarm = downloads ? armFinder(downloads, { changed: () => void reread() }, () => void reread()) : () => {};
+    /*
+      The phone says when a job has changed state, and the jobs are read
+      again for it. That is what tells of a download that finished by itself
+      — nobody did anything to it, so nobody else reads — and it is the only
+      thing that does with the screen locked, where the timer below is not
+      running. A build from before the phone said so says nothing, and the
+      timer is then all there is, as it was.
+    */
+    const heard = downloads?.addListener?.('onQueueChanged', readOnChange(reread));
+    const standing = standAsReader();
     let tick = 0;
     /*
       Only while the app is in front: behind another, timers do not go off
@@ -172,7 +187,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') void refresh(true);
     });
-    return () => { clearInterval(timer); subscription.remove(); disarm(); };
+    return () => { clearInterval(timer); subscription.remove(); disarm(); heard?.remove(); standing(); };
   }, [refresh, reread]);
 
   /*
@@ -228,9 +243,17 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [descriptionId, trackId, refresh]);
 
+  /*
+    Each of the five below that put something in the queue is somebody doing
+    so by hand, which is one of the two moments the app may look for a newer
+    yt-dlp by itself, where a look is due: `extractorWanted`, and see
+    `extractor.ts`. Discover's own are asked of the phone elsewhere and do
+    not come through here.
+  */
   const enqueue = useCallback(async (video: YouTubeVideo, format: AudioFormat) => {
     if (!downloads) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
+    extractorWanted();
     await downloads.enqueueAsync(carried(video), format, libraryRoot());
     // An older in-flight read may predate the enqueue. Always read again after
     // it, otherwise an initially empty queue would never start polling.
@@ -240,6 +263,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   const enqueueBatch = useCallback(async (videos: YouTubeVideo[], format: AudioFormat) => {
     if (!downloads) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
+    extractorWanted();
     registerYouTubePlaylist(videos);
     // A list just made may be of songs that arrived long ago, with no job
     // of them changed by its making: the next reading is to be gone through.
@@ -253,6 +277,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   const enqueueAll = useCallback(async (videos: YouTubeVideo[], format: AudioFormat) => {
     if (!downloads) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
+    extractorWanted();
     // All of them or none, as the phone takes a batch: a queue too full for the record leaves it as it was.
     await downloads.enqueueBatchAsync(videos.map((video) => carried(unlisted(video))), format, libraryRoot());
     await refresh(true);
@@ -275,6 +300,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   const enqueueFind = useCallback(async (video: YouTubeVideo & { find: FindRequest }, format: AudioFormat) => {
     if (!downloads?.enqueueFindAsync) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
+    extractorWanted();
     await downloads.enqueueFindAsync(carried(video), format, libraryRoot(), null);
     await refresh(true);
   }, [refresh]);
@@ -282,6 +308,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     const native = downloads;
     if (!native?.enqueueFindAsync) throw new Error(strings().search.unavailable.downloads);
     await ensureNotificationPermission();
+    extractorWanted();
     // One refused — the queue is full — and the ones before it are still in, and shown.
     let refused: unknown = null;
     for (const video of videos) {

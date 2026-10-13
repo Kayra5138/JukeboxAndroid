@@ -408,3 +408,125 @@ export function SearchIcon({ size = 22, color: asked }: { size?: number; color?:
   const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/search.svg')} size={size} color={color} />;
 }
+
+/** An arrow coming round to where it set out from: fetch this again. */
+export function RefreshIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/refresh.svg')} size={size} color={color} />;
+}
+
+/**
+ * A plus, a minus, a tick and a cross: two bars or one, crossed or laid end
+ * to end. Drawn and not written for the reason the transport is — `+` and
+ * `−` as characters are as thick and as tall as the phone's font makes them,
+ * and sat in a row of drawn icons as two glyphs from somewhere else.
+ */
+function Strokes({
+  size,
+  children,
+}: {
+  size: number;
+  children: React.ReactNode;
+}) {
+  return <View style={[styles.centre, { width: size, height: size }]}>{children}</View>;
+}
+
+const strokeOf = (size: number) => Math.max(1.8, size * 0.1);
+
+/** Add this: keep it, put it with the rest. */
+export function PlusIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  const stroke = strokeOf(size);
+  return (
+    <Strokes size={size}>
+      <Bar length={size * 0.72} thickness={stroke} color={color} />
+      <Bar length={size * 0.72} thickness={stroke} color={color} angle={90} />
+    </Strokes>
+  );
+}
+
+/** Take this away. */
+export function MinusIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return (
+    <Strokes size={size}>
+      <Bar length={size * 0.72} thickness={strokeOf(size)} color={color} />
+    </Strokes>
+  );
+}
+
+/** Done, or there: the two strokes `SelectIcon` has in its box, without the box. */
+export function TickIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  const stroke = strokeOf(size);
+  return (
+    <Strokes size={size}>
+      <Bar length={size * 0.36} thickness={stroke} color={color} angle={45} x={-size * 0.21} y={size * 0.1} />
+      <Bar length={size * 0.66} thickness={stroke} color={color} angle={-45} x={size * 0.12} y={-size * 0.01} />
+    </Strokes>
+  );
+}
+
+/** Put this away: a notice, a sheet. */
+export function CrossIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  const stroke = strokeOf(size);
+  return (
+    <Strokes size={size}>
+      <Bar length={size * 0.78} thickness={stroke} color={color} angle={45} />
+      <Bar length={size * 0.78} thickness={stroke} color={color} angle={-45} />
+    </Strokes>
+  );
+}
+
+/**
+ * A ring with a mark in it: an "i" for what there is to know, and the same
+ * turned over, an exclamation mark, for what has gone wrong. One drawing,
+ * since the two are one shape either way up — a stem and a dot.
+ */
+function Ringed({ size, color, alert }: { size: number; color: string; alert: boolean }) {
+  const stroke = Math.max(1.6, size * 0.09);
+  // The dot leads on an "i" and follows on an exclamation mark.
+  const way = alert ? -1 : 1;
+  return (
+    <View style={[styles.centre, { width: size, height: size }]}>
+      <View
+        style={{
+          position: 'absolute',
+          width: size * 0.92,
+          height: size * 0.92,
+          borderRadius: size / 2,
+          borderWidth: stroke,
+          borderColor: color,
+        }}
+      />
+      <Bar length={stroke * 1.15} thickness={stroke * 1.15} color={color} y={-way * size * 0.21} />
+      <Bar length={size * 0.3} thickness={stroke} color={color} angle={90} y={way * size * 0.09} />
+    </View>
+  );
+}
+
+/** More about this. */
+export function InfoIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <Ringed size={size} color={color} alert={false} />;
+}
+
+/** Something went wrong here. A shape of its own, so that it is not the colour alone that says so. */
+export function AlertIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <Ringed size={size} color={color} alert />;
+}
+
+/** Three bars of a level meter, held still: this is the one that is playing. */
+export function PlayingIcon({ size = 16, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  const width = size * 0.2;
+  return (
+    <View style={[styles.row, { width: size, height: size, alignItems: 'flex-end', justifyContent: 'space-between' }]}>
+      {[0.55, 1, 0.75].map((tall) => (
+        <View key={tall} style={{ width, height: size * tall, borderRadius: 1, backgroundColor: color }} />
+      ))}
+    </View>
+  );
+}

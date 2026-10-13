@@ -137,6 +137,7 @@ export default function RootLayout() {
             <Stack.Screen name="themes" options={{ title: t.nav.themes }} />
             <Stack.Screen name="theme" options={{ title: t.nav.customTheme }} />
             <Stack.Screen name="downloads" options={{ title: t.nav.downloads }} />
+            <Stack.Screen name="discover-settings" options={{ title: t.discover.settings.title }} />
           </Stack>
           {/*
             Over the navigator, so that it stays put while one screen slides

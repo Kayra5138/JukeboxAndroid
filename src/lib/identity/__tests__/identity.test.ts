@@ -359,6 +359,21 @@ describe('moving a history', () => {
     assert.deepEqual(database.all(`SELECT offset_ms, source FROM track_lyrics`), [{ offset_ms: 250, source: 'manual' }]);
   });
 
+  it('carries what was heard of a Discover song to the file it becomes when it is kept', () => {
+    // Before it is kept the song is not a file of the library and has no number: it is known by its download.
+    const discover = 'discover:0f8fad5b-d9cb-469f-a165-70867728950e';
+    const { database } = open();
+    fill(database, discover, { plays: 3, tags: [['dream pop', 'lookup']] });
+    database.run(`INSERT INTO skips (track_id, title, started_at, seconds_played, duration_sec) VALUES (?, 's', 5, 3, 200)`, discover);
+
+    database.transaction(() => readdress(database, [{ from: discover, to: '4711' }], never));
+
+    for (const table of ['plays', 'skips', 'track_tags']) {
+      assert.deepEqual([...new Set(idsIn(database, table))], ['4711'], table);
+    }
+    assert.equal(idsIn(database, 'plays').length, 3);
+  });
+
   it('keeps what was typed by hand over what was looked up, whichever side had it', () => {
     const { database } = open();
     fill(database, '1', { status: 'manual', lyrics: ['mine', 'manual'] });

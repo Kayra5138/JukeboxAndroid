@@ -5,6 +5,7 @@ import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useT } from '../lib/i18n/index';
+import { libraryFilesChanged } from '../lib/library/index';
 import {
   DEFAULT_ROOT,
   ensureAudioPermission,
@@ -63,6 +64,9 @@ export default function FoldersScreen() {
   const choose = useCallback(
     (path: string) => {
       setLibraryRoot(path);
+      // Begun here and not left for the library screen to ask on the way
+      // back, so the other folder is being read while this one slides away.
+      libraryFilesChanged();
       router.back();
     },
     [router]

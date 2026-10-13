@@ -1,9 +1,12 @@
 import { Image } from './Picture';
-import { useCallback } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useCallback, type ReactNode } from 'react';
+import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useDiscoverPreview } from './discover/hooks';
+import { PlayingKeep } from './discover/PlayingActions';
+import { PreviewBar } from './discover/PreviewBar';
 import { NextIcon, PauseIcon, PlayIcon, PreviousIcon } from './Icons';
 import { TrackStrip } from './TrackStrip';
 import { useT } from '../lib/i18n/index';
@@ -12,6 +15,7 @@ import { useOpenPlayer } from '../lib/player/NowPlayingSheet';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { makeStyles, outlineWidth, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
+import { useLandscape } from '../lib/ui/layout';
 
 /** One track's cover, looked up per card so the neighbours arrive with theirs. */
 function Cover({ track, column }: { track: Track; column: boolean }) {
@@ -25,6 +29,53 @@ function Cover({ track, column }: { track: Track; column: boolean }) {
     <View style={[shape, styles.artEmpty]} />
   );
 }
+
+/**
+ * A screen with the bar at its foot, or beside it when the phone is on its
+ * side: for the screens that are one scrolling page and have nothing else to
+ * arrange round it.
+ *
+ * The library and the lists lay the bar out themselves, among their own
+ * columns. Search, Stats and Settings had none at all, so what was playing
+ * could be seen and stopped from two tabs and not from the other three —
+ * leaving the tab one was on to pause a song.
+ */
+export function WithNowPlaying({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const landscape = useLandscape();
+  return (
+    <View style={[landscape ? around.sideways : around.upright, style]}>
+      <View style={around.page}>{children}</View>
+      <NowPlayingBar column={landscape} />
+    </View>
+  );
+}
+
+/**
+ * What a tab's page keeps clear of at its two sides.
+ *
+ * Upright, whatever the phone says is there. Sideways the page does not reach
+ * the edges of the glass: the rail of tabs is at one and keeps clear of what
+ * is at it, and the panel of what is playing, when there is one, does the
+ * same at the other. A page that asked again had a second inset's worth of
+ * nothing on one side only, and sat off-centre in the room it was given. So
+ * sideways there is nothing on the left, and on the right only when no panel
+ * stands between the page and the edge.
+ */
+export function usePageSides(): { left: number; right: number } {
+  const insets = useSafeAreaInsets();
+  const landscape = useLandscape();
+  const playing = usePlayerState().current != null;
+  const previewing = useDiscoverPreview() != null;
+  if (!landscape) return { left: insets.left, right: insets.right };
+  return { left: 0, right: playing || previewing ? 0 : insets.right };
+}
+
+const around = StyleSheet.create({
+  upright: { flex: 1 },
+  sideways: { flex: 1, flexDirection: 'row' },
+  // Able to shrink below its contents, so that a long page scrolls inside it and does not push the bar off.
+  page: { flex: 1, minWidth: 0, minHeight: 0 },
+});
 
 /**
  * Just enough to see what is playing and get to the full player. Shuffle,
@@ -43,6 +94,7 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
   const { current, currentIndex, queue, repeat, isPlaying } = usePlayerState();
   const { toggle, next, previous, skipToIndex } = usePlayerActions();
   const openPlayer = useOpenPlayer();
+  const preview = useDiscoverPreview();
   const insets = useSafeAreaInsets();
   const t = useT();
   const styles = useStyles();
@@ -84,6 +136,14 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
     ),
     [column, openPlayer, styles, t]
   );
+
+  /*
+    A preview of a Discover song is being heard. It is not in the player, and
+    what the player has is whatever was paused for it: named here, that would
+    be the wrong song under the right sound. So for as long as it lasts this
+    is the preview's bar, on every screen this one is on.
+  */
+  if (preview) return <PreviewBar preview={preview} column={column} width={NOW_PLAYING_WIDTH} />;
 
   if (!current) return null;
 
@@ -141,6 +201,12 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
         style={column ? undefined : styles.strip}
       />
       <View style={column ? styles.columnControls : styles.inline}>
+        {/*
+          Keep, for a song of Discover's: nothing for any other track. Along
+          the bottom it is the first of the controls; down the side the three
+          fill their row, and it has the line under them.
+        */}
+        {column ? null : <PlayingKeep trackId={current.id} style={styles.control} hitSlop={slop} />}
         <Pressable
           android_ripple={pressed}
           style={styles.control}
@@ -170,6 +236,7 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
           <NextIcon size={16} />
         </Pressable>
       </View>
+      {column ? <PlayingKeep trackId={current.id} style={styles.columnKeep} hitSlop={slop} /> : null}
     </View>
   );
 }
@@ -244,4 +311,5 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  columnKeep: { alignSelf: 'center', paddingHorizontal: 16, paddingVertical: 8, alignItems: 'center', justifyContent: 'center' },
 }));

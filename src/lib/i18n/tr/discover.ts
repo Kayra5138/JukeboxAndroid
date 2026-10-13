@@ -4,35 +4,88 @@ import type { Strings } from '../en/index.ts';
 export const discover: Strings['discover'] = {
   panel: {
     heading: 'Bir sonraki dinleyişin için',
-    mix: (count) => `${format.number(count)} keşif · yarısı tanıdık, yarısı yeni sanatçılar`,
     refresh: 'Yenile',
-    about:
-      'Son 30 gününe göre hazırlanır. + şarkıyı Kütüphane’de tutar. − şarkıyı sonraki keşiflerden çıkarır. İkisi de başka bir şarkıya yer açar.',
     updated: (date) => `Güncellendi: ${date}`,
-    preparing: 'Keşfet hazırlanıyor…',
-    nextList: (ready, count) =>
-      `Sonraki liste hazırlanıyor · ${format.number(ready)}/${format.number(count)} hazır. Yeni liste hazır olana kadar şimdiki şarkıların kullanılabilir. Hazırlık takılırsa yeniden denemek için Yenile’ye dokun.`,
-    saved: (title) => `${title} Kütüphane’ye kaydedildi.`,
-    restored: 'Şarkı Keşfet’e geri alındı.',
-    excludedUndo: 'Şarkı hariç tutuldu · Geri al',
 
-    finding: 'Bir sonraki şarkın aranıyor…',
-    waitingToBeFound: 'Bulunmayı bekleyen bir keşif var',
-    place: (place, count) => `Sıra ${format.number(place)} / ${format.number(count)}`,
-
-    playLabel: (title) => `Çal: ${title}`,
-    keepLabel: (title) => `Kütüphane’de tut: ${title}`,
-    neverLabel: (title) => `Bir daha önerme: ${title}`,
     familiar: (because) => `Sanatçılarından başka şarkılar · ${because}`,
     fresh: (because) => `Yeni bir sanatçı · ${because}`,
-    songPreparing: 'Hazırlanıyor…',
-    ready: 'Çalmaya hazır',
-    waitingToDownload: 'İndirilmeyi bekliyor',
-    tapToDownload: 'İndirip çalmak için dokun',
+  },
+
+  header: {
+    notYet: 'Henüz liste yok',
+    about: 'Keşfet hakkında',
+    settings: 'Keşfet ayarları',
+    findMore: 'Daha fazla bul',
+    dismiss: 'Kapat',
+  },
+
+  about: {
+    heading: 'Keşfet hakkında',
+    what:
+      'Sende henüz olmayan şarkılar; son 30 günde dinlediklerine göre seçilir: sanatçılarından başka şarkılar ve onlara yakın sanatçılar.',
+    source:
+      'Dinlediklerin bu telefonda okunur. Öneriler ListenBrainz ve MusicBrainz’den gelir; bir şarkının sesi, çalınacağı zaman YouTube’dan indirilir.',
+    keep: 'Kütüphane’de tut, şarkıyı Kütüphane’ne ekler. Şarkı bulunmuş olur ve listeden çıkar.',
+    exclude:
+      'Bu şarkı olmasın, şarkıyı listeden çıkarır ve şarkı bir daha önerilmez. Menüden aynısını sanatçısı için de söyleyebilirsin.',
+    room: 'İkisinde de yerine başka bir şarkı gelir. Aynısını satırı yana çekerek de yapabilirsin; fazlası için satıra basılı tut.',
+  },
+
+  row: {
+    keep: 'Kütüphane’de tut',
+    exclude: 'Bu şarkı olmasın',
+    swipeKeep: 'Tut',
+    swipeExclude: 'Olmasın',
+    willPlay: 'Hazır olunca çalacak',
+    preview: 'Ön dinleme · şarkı yolda',
+    previewStop: 'Ön dinlemeyi durdurur. Şarkı hazır olunca yine çalar',
+    willKeep: 'Hazır olunca Kütüphane’ye',
+    keeping: 'Kütüphane’ye kaydediliyor…',
+    failed: 'İndirilemedi · yeniden denemek için dokun',
+    needsBuild: 'Güncel sürüm gerekiyor',
+    waitingWifi: 'Wi-Fi bekleniyor · indirmek için dokun',
+    noMatch: 'Kayıt bulunamadı',
+    percent: (percent) => `%${format.number(percent)}`,
+    gettingReady: 'İndiriliyor',
+    hint: 'Şarkıyı çalar; gerekirse önce indirir',
+    nowPlaying: (title) => `Çalıyor: ${title}`,
+    menu: 'Şarkı seçenekleri',
+  },
+
+  menu: {
+    play: { label: 'Çal', hint: 'Gerekirse önce indirilir' },
+    keep: { label: 'Kütüphane’de tut', hint: 'Artık senin olur ve bu listeden çıkar' },
+    exclude: { label: 'Bu şarkı olmasın', hint: 'Listeden çıkar ve bir daha önerilmez' },
+    neverArtist: {
+      label: (artist) => `${artist} hiç olmasın`,
+      hint: 'Bu sanatçının hiçbir şarkısı bir daha önerilmez',
+    },
+    why: 'Neden bu şarkı',
+    seeds: (artists) => `Dinlediklerinden: ${artists}`,
+    tags: (tags) => `Türü: ${tags}`,
+    freshArtist: 'Kütüphanende olmayan bir sanatçı',
+  },
+
+  empty: {
+    building: 'Listen hazırlanıyor…',
+    none: 'Henüz bir liste yok. Yenile’ye dokun; Keşfet dinlediklerinden bir liste hazırlasın.',
+    findingMore: 'Başka şarkılar aranıyor…',
+    short: (missing) => `${format.number(missing)} yer boş.`,
+  },
+
+  player: {
+    kept: 'Kütüphane’ye kaydedildi',
+  },
+
+  preview: {
+    label: 'Ön dinleme',
+    note: 'Şarkının tamamı hazır olunca başlayacak',
+    stop: 'Ön dinlemeyi durdur',
   },
 
   settings: {
     heading: 'Keşfet',
+    title: 'Keşfet ayarları',
     count: 'Keşif şarkıları',
     countNote:
       'Yarısı tanıdık sanatçılar, yarısı yeni. Kaydedilen ve hariç tutulan şarkıların yerine hemen yenisi gelir.',
@@ -41,44 +94,129 @@ export const discover: Strings['discover'] = {
     manual: 'Elle',
     refreshNote:
       'Arka plandaki işlerin ne zaman çalışacağına Android karar verir. Zamanı geçmiş bir yenileme, Jukebox’ı yeniden açtığında da yapılır. Kaydedilmemiş keşiflerin yerine yenileri gelir; sıradaki şarkılar, çalma işi bitene kadar tutulur.',
-    auto: 'Otomatik indir',
-    autoNote: 'MP3 ses. Kapalıyken, indirip dinlemeye başlamak için bir şarkıya dokun.',
-    wifi: 'Otomatik indirmeler yalnızca Wi-Fi’da',
+    ready: 'Sıradaki şarkıları hazır tut',
+    readyNone: 'Hiçbiri',
+    readyNote:
+      'Dokunduğunda hemen çalsın diye önceden indirilir: listenin ilk şarkıları ya da çalanın ardından gelenler. Hiçbiri seçiliyse şarkı, ona dokunduğunda indirilir.',
+    wifi: 'Şarkıları yalnızca Wi-Fi’da hazır tut',
     wifiNote:
-      'Kotasız Wi-Fi kullanır. Bir şarkıya dokunarak başlattığın indirmeler mobil veri kullanabilir.',
-    wifiNoteOff:
-      'Bunu seçmek için otomatik indirmeyi aç. Bir şarkıya dokunarak başlattığın indirmeler mobil veri kullanabilir.',
-    excluded: (open) => `Hariç tutulan şarkılar ${open ? '−' : '+'}`,
+      'Kotasız Wi-Fi kullanır. Dokunduğun şarkı, o an hangi bağlantı varsa onunla indirilir.',
+    preview: 'Şarkı inerken ön dinleme çal',
+    previewNote:
+      'Dokunduğun şarkı henüz hazır değilse hemen Deezer’dan 30 saniyelik bir ön dinlemeyle başlar; şarkının tamamı indiğinde baştan çalmaya geçer. Ön dinleme, dinleme olarak sayılmaz.',
+    nextList: 'Şimdiki listen olduğu gibi kalır. Sonraki liste buna göre seçilir.',
+    excluded: 'Hariç tutulan şarkılar',
     noneExcluded: 'Hariç tutulan şarkı yok.',
     allowAgain: 'Yeniden izin ver',
+    allowAgainLabel: (title) => `Yeniden izin ver: ${title}`,
+    unblock: 'Engeli kaldır',
+    unblockLabel: (artist) => `Engeli kaldır: ${artist}`,
     failed: 'Keşfet ayarları güncellenemedi. Lütfen yeniden dene.',
   },
 
-  engine: {
-    checking: 'Keşfet kontrol ediliyor…',
-    learning: (artist) => `${artist} inceleniyor…`,
-    exploring: (tags) => `${tags} keşfediliyor…`,
-    findingSongs: (artist) => `${artist} şarkıları aranıyor…`,
-    findingAudio: (title) => `Ses aranıyor: ${title}…`,
-    waitingWifi: 'Kotasız Wi-Fi bekleniyor',
-    waitingConnection: 'Bağlantı bekleniyor',
+  state: {
+    idle: 'İndirip çalmak için dokun',
+    starting: 'Başlıyor…',
+    waitingFind: 'Aranmayı bekliyor',
+    waitingDownload: 'İndirilmeyi bekliyor',
+    waitingRetry: 'Birazdan yeniden denenecek',
+    finding: 'Kayıt aranıyor…',
+    preparing: 'İndirme başlıyor…',
+    downloading: (percent) => `İndiriliyor · %${format.number(percent)}`,
+    converting: 'Tamamlanıyor…',
+    saving: 'Neredeyse hazır…',
+    ready: 'Çalmaya hazır',
+    playing: 'Çalıyor',
+    willPlay: (doing) => `${doing} Hazır olunca çalacak.`,
+    preview: (doing) => `Ön dinleme çalıyor. ${doing}`,
+    willKeep: (doing) => `${doing} Hazır olunca Kütüphane’ye kaydedilecek.`,
+    keeping: 'Kütüphane’ye kaydediliyor…',
+    noMatch: 'Bu şarkının bir kaydı bulunamadı. Yerini başka bir şarkı alıyor.',
+    waitingWifi: 'Wi-Fi bekleniyor · şimdi indirmek için dokun',
+  },
 
-    noMatch: 'Eşleşen bir stüdyo kaydı bulunamadı. Yerini başka bir şarkı alıyor.',
-    downloadFailed: 'Bu indirme tamamlanamadı. Lütfen daha sonra yeniden dene.',
-    failed: 'Keşfet tamamlanamadı. Lütfen yeniden dene.',
-    fileMissing: 'Dosya yok. Yeniden indirmek için dokun.',
-    downloadStopped: 'İndirme durdu. Yeniden denemek için dokun.',
-    paused: 'İndirmeler duraklatıldı. Bu şarkıyı indirmek için indirmeleri sürdür.',
-    notEnough: 'Henüz yeterince yeni şarkı yok. Şimdiki listen korundu.',
+  failure: {
+    generic: 'Bu indirme tamamlanamadı.',
+    fileMissing: 'Dosya artık telefonda değil.',
+    stopped: 'İndirme durduruldu.',
     needsBuild: 'Keşfet şarkılarını indirmek için güncel sürümü yükle.',
+    retry: (reason) => `${reason} Yeniden denemek için dokun.`,
+  },
+
+  status: {
+    building: 'Şarkılar aranıyor…',
+    buildingArtists: (done, total) =>
+      `Şarkılar aranıyor · ${format.number(done)}/${format.number(total)} sanatçı`,
+    preparing: (ready, target) =>
+      `Yeni liste yolda · ${format.number(target)} şarkıdan ${format.number(ready)} tanesi hazır. Şimdi görmek için yeniden Yenile’ye dokun.`,
+    offline: 'Bağlantı yok. Listen korundu; bağlantı gelince yeni şarkılar aranacak.',
+    offlineEmpty: 'Bağlantı yok. Bağlantı gelince Keşfet listeni hazırlayacak.',
+    noLibrary: 'Kütüphanene biraz müzik ekle; Keşfet’in bir çıkış noktası olsun.',
+    noTaste: 'Biraz müzik ekle ya da birkaç şarkı dinle; Keşfet’in bir çıkış noktası olsun.',
+    unreachable: 'Önerilere ulaşılamadı. Listen korundu; lütfen daha sonra yeniden dene.',
+    unreachableEmpty: 'Önerilere ulaşılamadı. Lütfen daha sonra yeniden dene.',
+    exhausted: 'Henüz yeterince yeni şarkı yok. Listen olduğu gibi korundu.',
+    exhaustedEmpty: 'Henüz önerecek yeni bir şey yok. Biraz daha dinleyip yeniden dene.',
+    timedOut: 'Şarkıları aramak çok uzun sürdü ve durduruldu. Lütfen yeniden dene.',
+    throttled: 'Keşfet az önce baktı. Bir dakika sonra yeniden dene.',
+    failed: 'Keşfet tamamlanamadı. Lütfen yeniden dene.',
+    waitingWifi: 'Sıradaki şarkılar Wi-Fi olunca indirilecek. Şimdi indirmek için bir şarkıya dokun.',
+    waitingConnection: 'Sıradaki şarkılar bağlantı gelince indirilecek.',
+    paused: 'İndirmeler duraklatıldı. Şarkıları indirmek için indirmeleri sürdür.',
+  },
+
+  notice: {
+    kept: (title) => `${title} Kütüphane’ye kaydedildi.`,
+    excluded: (title) => `${title} bir daha önerilmeyecek.`,
+    excludedArtist: (artist) => `${artist} bir daha önerilmeyecek.`,
+    restored: (title) => `${title} listeye geri alındı.`,
+    refreshed: 'İşte yeni listen.',
+    keepFailed: (title) => `${title} Kütüphane’ye kaydedilemedi. Lütfen yeniden dene.`,
+    undo: 'Geri al',
+  },
+
+  engine: {
     needsTaste:
       'Keşfet’in zevkini tanıyabilmesi için biraz müzik ekle ya da birkaç şarkı dinle.',
     nothingFetched:
       'Öneri alınamadı. Şimdiki Keşfet listen korundu; lütfen daha sonra yeniden dene.',
-    cancelled: 'Çalma isteği iptal edildi.',
-    changed: 'Bu öneri değişti. Başka bir şarkı seç.',
-    gone: 'Bu şarkı artık Keşfet’te değil.',
-    tooLong: 'İndirme çok uzun sürüyor. Lütfen yeniden dene.',
-    unavailable: 'Şarkı artık kullanılamıyor.',
+  },
+
+  taste: {
+    popularity: 'Şarkıların bilinirliği',
+    popularityKnown: 'Çok bilinenler',
+    popularityAny: 'Fark etmez',
+    popularityDeep: 'Az bilinenler',
+    popularityNote:
+      'Keşfet tanınmış sanatçılara ve en çok dinlenen şarkılarına mı, yoksa daha az kişinin bulduğu sanatçılara ve şarkılara mı ağırlık versin? Fark etmez dersen yeni bir sanatçıyı en bilinen şarkılarından biriyle tanıtır.',
+
+    neverArtistLabel: (artist) => `Bir daha önerme: ${artist}`,
+    blockedArtists: 'Engellenen sanatçılar',
+    noneBlockedArtists: 'Engellenen sanatçı yok.',
+    blockedArtistsNote:
+      'Bir şarkıyı hariç tutman, sanatçısının da daha az önerilmesini sağlar. Aynı sanatçının üç şarkısını hariç tutarsan Keşfet o sanatçıyı altı ay boyunca önermez.',
+  },
+
+  why: {
+    moreFrom: (artist) => `${artist} şarkılarından`,
+    becauseYouPlay: (artists) => `${artists} dinlediğin için`,
+    both: (first, second) => `${first} ve ${second}`,
+    like: (artist) => `${artist} gibi`,
+    withGenre: (line, genre) => `${line} · ${genre}`,
+    fromTags: (tags) => `Dinlediğin türlerden: ${tags}`,
+    unexplained: 'Senin için seçildi',
+    veryNear: 'Dinlediklerine çok yakın',
+    near: 'Dinlediklerine yakın',
+    farther: 'Biraz daha uzaktan',
+  },
+
+  gathering: {
+    around: (artist, done, total) =>
+      `${artist} çevresi dinleniyor · ${format.number(done)} / ${format.number(total)} sanatçı`,
+    artists: (done, total) => `${format.number(done)} / ${format.number(total)} sanatçı`,
+    naming: 'Şarkıların adları öğreniliyor…',
+    offline: 'Bağlantı yok. Keşfet, bağlantı olduğunda yeni şarkılar arayacak.',
+    throttled: 'Öneri servisi Keşfet’ten yavaşlamasını istedi. Lütfen birkaç dakika sonra yeniden dene.',
+    nothing: 'Bu sefer yeni bir şey bulunamadı. Şimdiki Keşfet listen korundu; lütfen daha sonra yeniden dene.',
   },
 };

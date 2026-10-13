@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   afterMove,
+  retryOf,
   dropOf,
   AUTOMATIC_REACH_MS,
   batchOf,
@@ -20,6 +21,8 @@ import {
   tallyOf,
 } from '../queueView.ts';
 import type { DownloadJob } from '../types.ts';
+import { downloads as enDownloads } from '../../i18n/en/downloads.ts';
+import { downloads as trDownloads } from '../../i18n/tr/downloads.ts';
 
 const MIN = 60_000;
 const NOW = 1_800_000_000_000;
@@ -257,3 +260,42 @@ test('a row put back where it was, or dropped nowhere, tells the phone nothing',
   assert.equal(dropOf(ids, 7, 0), null);
   assert.equal(dropOf([], 0, 0), null);
 });
+
+test('a job put back for its second try says so while it waits, and why', () => {
+  const waiting = job('a', 'queued', { retrying: true, retryText: 'Could not reach YouTube. Check your connection and retry.' });
+  assert.deepEqual(retryOf(waiting), { why: 'Could not reach YouTube. Check your connection and retry.' });
+  assert.equal(enDownloads.retrying(retryOf(waiting)!.why), 'Trying again · Could not reach YouTube. Check your connection and retry.');
+  assert.equal(trDownloads.retrying(retryOf(waiting)!.why).startsWith('Yeniden denenecek · '), true);
+  // Nothing said about why: still said to be tried again.
+  assert.deepEqual(retryOf(job('a', 'queued', { retrying: true, retryText: null })), { why: null });
+  assert.equal(enDownloads.retrying(null), 'Trying again');
+  assert.equal(trDownloads.retrying(null), 'Yeniden denenecek');
+});
+
+test('only a job waiting for its second try is said to be', () => {
+  assert.equal(retryOf(job('a', 'queued')), null);
+  // Under way, the row says what is being done; ended, how it ended.
+  assert.equal(retryOf(job('a', 'downloading', { retrying: true, retryText: 'x' })), null);
+  assert.equal(retryOf(job('a', 'failed', { retrying: false, retryText: 'x', error: 'y' })), null);
+  assert.equal(retryOf(job('a', 'done', { retrying: false, retryText: 'x' })), null);
+  // And a row is drawn again when it becomes one.
+  const before = job('a', 'queued');
+  assert.equal(sameJob(before, { ...before, retrying: true, retryText: 'x' }), false);
+});
+
+test('a failure that has been looked at is counted and is not news', () => {
+  const all = [
+    job('a', 'failed', { createdAt: NOW - 3 * MIN, finishedAt: NOW - 2 * MIN }),
+    job('b', 'done', { createdAt: NOW - 2 * MIN, finishedAt: NOW - MIN }),
+  ];
+  assert.deepEqual(pick(batchOf(all, NOW)), { failed: 1, unseen: 1 });
+  assert.deepEqual(pick(batchOf(all, NOW, NOW - 3 * MIN)), { failed: 1, unseen: 1 });
+  assert.deepEqual(pick(batchOf(all, NOW, NOW - MIN)), { failed: 1, unseen: 0 });
+  // One that fails after the look is news again, and the earlier one still is not.
+  const later = [...all, job('c', 'failed', { createdAt: NOW - MIN, finishedAt: NOW - 10_000 })];
+  assert.deepEqual(pick(batchOf(later, NOW, NOW - MIN)), { failed: 2, unseen: 1 });
+});
+
+function pick(batch: { failed: number; unseen: number }) {
+  return { failed: batch.failed, unseen: batch.unseen };
+}

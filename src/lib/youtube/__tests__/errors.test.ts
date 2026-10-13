@@ -15,7 +15,7 @@ test('network failures explain how to recover', () => {
 });
 test('an outdated extractor says to update, not to try another result', () => {
   const error = new Error('java.lang.IllegalStateException: YouTube has changed and this version of Jukebox cannot read it yet. Update Jukebox.');
-  assert.match(youtubeError(error, 'Try again.'), /Update Jukebox/);
+  assert.match(youtubeError(error, 'Try again.'), /update Jukebox/);
 });
 test('"bot" is a word, not three letters of another one', () => {
   assert.equal(youtubeError(new Error('both streams were robotically bottomed out'), 'Search failed.'), 'Search failed.');

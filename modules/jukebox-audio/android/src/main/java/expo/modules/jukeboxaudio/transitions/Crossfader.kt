@@ -1,5 +1,6 @@
 package expo.modules.jukeboxaudio.transitions
 
+import expo.modules.jukeboxaudio.CallQuiet
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -543,7 +544,7 @@ class Crossfader(
       nudgeEnd = null
       runCatching { player.playbackParameters = main.playbackParameters }
     }
-    player.volume = 1f
+    player.volume = CallQuiet.level
     mainFade.fadeIn(fadeMs, settings.equalPower)
     if (automatic) Crossfades.mark()
     move(direction)

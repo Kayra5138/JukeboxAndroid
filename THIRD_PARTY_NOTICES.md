@@ -52,6 +52,10 @@ Notes:
   its upstream notices.
 - yt-dlp is fetched by the build at that version and rejected if its SHA-256
   does not match.
+- The app can replace that copy with a newer official release of yt-dlp when
+  its user asks it to. That one is fetched by the phone from the same GitHub
+  releases and checked against the checksums the release publishes, not
+  against a hash chosen here.
 - Anyone redistributing the app must keep these notices and meet the GPL's
   source-code obligations. Describing the combined app as MIT-only would be
   incomplete.

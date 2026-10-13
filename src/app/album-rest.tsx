@@ -6,16 +6,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LIST_COVER_SIZE } from '../components/ListHeading';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { Pressable } from '../components/Pressable';
-import { lookUpAlbumOnYouTube, lookUpAlbumRest } from '../lib/album/index';
+import { lookUpAlbumOnYouTube, lookUpAlbumRest, putInOrder, undoOrder } from '../lib/album/index';
 import { downloadFor, findFor, jobsForPlaces, slotState, unsought } from '../lib/album/fetch';
+import { placedByApp, placedKey, vouchedFor, type Move } from '../lib/album/order';
 import { sharedGenre, slotOf, type Placement } from '../lib/album/placement';
 import type { RestOutcome, RestTrack } from '../lib/album/rest';
 import type { Stage, YouTubeOutcome } from '../lib/album/youtube';
 import { useT } from '../lib/i18n/index';
 import type { Strings } from '../lib/i18n/index';
 import { albumsOf, type Album } from '../lib/media/albums';
-import { scanLibrary } from '../lib/media/library';
-import { withMetadata } from '../lib/media/merge';
+import { readLibrary } from '../lib/library/index';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { useDownloadLibraryRevision, useDownloads } from '../lib/youtube/DownloadsProvider';
 import { youtubeError } from '../lib/youtube/errors';
@@ -35,6 +35,10 @@ type Source = 'musicbrainz' | 'youtube';
 /** The list on screen, whichever of the two it was read from. */
 type Shown = {
   source: Source;
+  /** Which list it is, so that one showing of it can be told from the next. */
+  id: string;
+  /** What vouches for a playlist; null for the catalogue's list. */
+  by: 'tracks' | 'album' | null;
   tracks: (RestTrack & { video?: YouTubeVideo })[];
   discs: number;
   year: number | null;
@@ -144,14 +148,25 @@ export default function AlbumRestScreen() {
   const [choice, setChoice] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   /** Why the queue would not take what was last asked of it, until it is asked again. */
   const [refused, setRefused] = useState<string | null>(null);
+  /**
+   * The list the library's tracks were last put in the order of, what that
+   * moved — kept for as long as the screen is open, to be undone by — and
+   * every number this has given a track, which are the app's to change again.
+   */
+  const [order, setOrder] = useState<{ list: string; moves: Move[]; own: ReadonlySet<string> } | null>(null);
+  /** Counted up when the places are written, which is a change no download made. */
+  const [placed, setPlaced] = useState(0);
 
   // Read again whenever a download lands, which is when a missing track stops
-  // being one.
+  // being one, and whenever the tracks here have been given other places.
   useEffect(() => {
     let live = true;
-    scanLibrary().then(
+    // The library held for the whole app, looked at again: a download landed
+    // is a file the device owns up to, and places written are a write to the
+    // app's own tables, and either is noticed there without being said.
+    readLibrary().then(
       (tracks) => {
-        if (live) setAlbum(albumsOf(withMetadata(tracks)).find((entry) => entry.key === key) ?? null);
+        if (live) setAlbum(albumsOf(tracks).find((entry) => entry.key === key) ?? null);
       },
       () => {
         if (live) setAlbum(null);
@@ -160,7 +175,7 @@ export default function AlbumRestScreen() {
     return () => {
       live = false;
     };
-  }, [key, revision]);
+  }, [key, revision, placed]);
 
   /*
     Asked again for every reading of the library, since what is missing is
@@ -230,6 +245,8 @@ export default function AlbumRestScreen() {
   const shown: Shown | null = playlist
     ? {
         source: 'youtube',
+        id: `youtube:${playlist.playlist.id}`,
+        by: playlist.by,
         tracks: playlist.tracks,
         discs: 1,
         year: null,
@@ -239,6 +256,8 @@ export default function AlbumRestScreen() {
     : catalogue && (!pending || asked === 'youtube')
       ? {
           source: 'musicbrainz',
+          id: `musicbrainz:${catalogue.release.id}`,
+          by: null,
           tracks: catalogue.tracks,
           discs: catalogue.discs,
           year: catalogue.release.year,
@@ -246,6 +265,46 @@ export default function AlbumRestScreen() {
           rivals: catalogue.rivals,
         }
       : null;
+
+  /*
+    The tracks that are here, put where the list has them: once for each
+    showing of a list, and only of one the library's own tracks vouch for
+    (see `album/order.ts`). Not while the other list is being fetched — the
+    one on screen is about to be left. Going over to the other list is another
+    showing, so the tracks follow whichever is up, the ones the app filed
+    included, and two of them are not left claiming one number between two
+    lists. Undoing is not: the list is the same one, and is not gone over
+    again for having been undone.
+  */
+  const listed = shown && !pending && vouchedFor(shown) ? shown.id : null;
+  useEffect(() => {
+    if (!album || !shown || listed == null || order?.list === listed) return;
+    const own = new Set([...placedByApp(jobs, key), ...(order?.own ?? [])]);
+    let moves: Move[] = [];
+    try {
+      moves = putInOrder(shown, album.tracks, own);
+    } catch {
+      // The database would not take it. The album stays in the order it was in.
+    }
+    for (const move of moves) {
+      own.add(placedKey(move.trackId, { track: move.trackNumber, disc: move.discNumber }));
+    }
+    setOrder({ list: listed, moves, own });
+    if (moves.length > 0) setPlaced((value) => value + 1);
+  }, [album, shown, listed, order, jobs, key]);
+
+  const undo = () => {
+    if (!order) return;
+    try {
+      undoOrder(order.moves);
+    } catch {
+      // Nothing was put back, and the line stays to be tried again.
+      return;
+    }
+    setOrder({ ...order, moves: [] });
+    setPlaced((value) => value + 1);
+  };
+  const moved = order && order.list === listed ? order.moves.length : 0;
 
   const genre = album ? sharedGenre(album.tracks) : null;
   const places: Placement[] =
@@ -492,6 +551,19 @@ export default function AlbumRestScreen() {
               </View>
             ) : null}
 
+            {moved > 0 ? (
+              <View style={styles.ordered}>
+                <Text style={styles.orderedText}>{said.ordered(moved)}</Text>
+                <Pressable
+                  android_ripple={pressed}
+                  accessibilityRole="button"
+                  style={styles.undo}
+                  onPress={undo}>
+                  <Text style={styles.otherLabel}>{said.undoOrder}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             {notice ? (
               <View style={styles.notice}>
                 <Text accessibilityRole="alert" style={styles.note}>
@@ -717,6 +789,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   // A link and not a button: the list on screen is the answer, and this is the second opinion.
   other: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
   otherLabel: { color: c.accent, fontSize: 12.5 },
+  // What was done unasked, said as quietly as a hint, with the way back beside it.
+  ordered: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  orderedText: { flexShrink: 1, color: c.textFaint, fontSize: 12, lineHeight: 18 },
+  undo: { minHeight: 32, justifyContent: 'center' },
 
   disc: {
     color: c.textFaint,

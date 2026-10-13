@@ -91,6 +91,126 @@ describe('albumsOf', () => {
   });
 });
 
+describe('the order albumsOf hands records back in', () => {
+  /** One record per pair, each with a single track, handed over in the order given. */
+  const filed = (records: [artist: string | null, album: string][]) =>
+    albumsOf(
+      records.map(([artist, album], at) => song(String(at), { title: 'A', album, artist }))
+    ).map((album) => [album.artist, album.name]);
+
+  /** The same for records told apart by who they are by: each has a name of its own. */
+  const byArtist = (artists: string[]) =>
+    filed(artists.map((artist, at) => [artist, `Record ${at}`])).map(([artist]) => artist);
+
+  it('files by who a record is by, and then by what it is called', () => {
+    assert.deepEqual(
+      filed([
+        ['Mor ve Ötesi', 'Dünya Yalan Söylüyor'],
+        ['Duman', 'Seni Kendime Sakladım'],
+        ['Duman', 'Belki Alışman Lazım'],
+      ]),
+      [
+        ['Duman', 'Belki Alışman Lazım'],
+        ['Duman', 'Seni Kendime Sakladım'],
+        ['Mor ve Ötesi', 'Dünya Yalan Söylüyor'],
+      ]
+    );
+  });
+
+  it('reads the alphabet as Turkish does, whatever language the phone is in', () => {
+    // Each of these comes after the letter it looks like and before the next
+    // one along, and the undotted i comes before the dotted. Folded to ASCII,
+    // or left to a phone in English, they come out in some other order.
+    assert.deepEqual(
+      byArtist([
+        'Şebnem Ferah',
+        'Sezen Aksu',
+        'Tarkan',
+        'Kibariye',
+        'Kıraç',
+        'Hande Yener',
+        'Özdemir Erdoğan',
+        'Orhan Gencebay',
+        'Pinhani',
+        'Çelik',
+        'Cem Karaca',
+        'Duman',
+      ]),
+      [
+        'Cem Karaca',
+        'Çelik',
+        'Duman',
+        'Hande Yener',
+        'Kıraç',
+        'Kibariye',
+        'Orhan Gencebay',
+        'Özdemir Erdoğan',
+        'Pinhani',
+        'Sezen Aksu',
+        'Şebnem Ferah',
+        'Tarkan',
+      ]
+    );
+  });
+
+  it('takes no notice of case', () => {
+    // By code point every capital comes before every small letter, which
+    // files `adamlar` after `Zakkum`.
+    assert.deepEqual(
+      byArtist([
+        'Zakkum',
+        'adamlar',
+        'BÜYÜK EV ABLUKADA',
+        'Athena',
+      ]),
+      ['adamlar', 'Athena', 'BÜYÜK EV ABLUKADA', 'Zakkum']
+    );
+  });
+
+  it('puts digits before letters, and reads them a character at a time', () => {
+    assert.deepEqual(
+      byArtist([
+        'Adamlar',
+        '9 Lazy 9',
+        'maNga',
+        '10cc',
+        '2Pac',
+      ]),
+      // `10cc` before `2Pac`: a name is not a number, and nobody looks for
+      // one by its size.
+      ['10cc', '2Pac', '9 Lazy 9', 'Adamlar', 'maNga']
+    );
+  });
+
+  it('puts records nobody can be named for first, by their own names', () => {
+    assert.deepEqual(
+      filed([
+        ['Athena', 'Holigan'],
+        [null, 'Şarkılar'],
+        ['10cc', 'Bloody Tourists'],
+        [null, 'Sampler'],
+      ]),
+      [
+        [null, 'Sampler'],
+        [null, 'Şarkılar'],
+        ['10cc', 'Bloody Tourists'],
+        ['Athena', 'Holigan'],
+      ]
+    );
+  });
+
+  it('comes out the same whatever order the tracks arrived in', () => {
+    const records: [string | null, string][] = [
+      ['Duman', 'Darmaduman'],
+      ['duman', 'Belki'],
+      [null, 'İz'],
+      [null, 'iz bırak'],
+      ['Çelik', 'Ateşteyim'],
+    ];
+    assert.deepEqual(filed([...records].reverse()), filed(records));
+  });
+});
+
 describe('orderWithin', () => {
   it('puts numbered tracks in their own order', () => {
     const ordered = orderWithin([
@@ -131,6 +251,28 @@ describe('orderWithin', () => {
     ]);
 
     assert.deepEqual(names(ordered), ['Real', 'Zero']);
+  });
+
+  it('reads unnumbered filenames in the library\'s alphabet, without regard to case', () => {
+    const ordered = orderWithin([
+      song('1', { title: 'd', filename: 'şarkı.mp3' }),
+      song('2', { title: 'c', filename: 'Sarkı.mp3' }),
+      song('3', { title: 'b', filename: 'ışık.mp3' }),
+      song('4', { title: 'a', filename: 'Zil.mp3' }),
+      song('5', { title: 'e', filename: '02 ara.mp3' }),
+    ]);
+
+    assert.deepEqual(names(ordered), ['e', 'b', 'c', 'd', 'a']);
+  });
+
+  it('breaks a tie for one position by title', () => {
+    const ordered = orderWithin([
+      song('1', { title: 'Şimdi', trackNumber: 1 }),
+      song('2', { title: 'sonra', trackNumber: 1 }),
+      song('3', { title: 'Önce', trackNumber: 1 }),
+    ]);
+
+    assert.deepEqual(names(ordered), ['Önce', 'sonra', 'Şimdi']);
   });
 
   it('leaves a record nobody numbered in filename order', () => {

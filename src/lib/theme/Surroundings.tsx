@@ -2,9 +2,9 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
 import { colouredStops, type CoverReading } from './coverAccent.ts';
-import { needsOf, themeSurroundings } from './registry.ts';
+import { themeSurroundings } from './registry.ts';
 import { readSystemPalette } from './systemPalette.ts';
-import { useThemeChoice } from './index';
+import { useThemeNeeds } from './index';
 import { artworkFor } from '../media/artwork';
 import { artworkRevision, subscribeArtwork } from '../media/artworkEvents';
 import { usePlayerState } from '../player/PlayerProvider';
@@ -34,7 +34,7 @@ import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
  * state, so the ticking of a song never arrives here.
  */
 export function ThemeSurroundings() {
-  const wantsCover = needsOf(useThemeChoice()).includes('cover');
+  const wantsCover = useThemeNeeds().includes('cover');
   const trackId = usePlayerState().current?.id ?? null;
   // A cover replaced from the Tags screen is a new cover for the same track.
   const revision = useSyncExternalStore(subscribeArtwork, artworkRevision);

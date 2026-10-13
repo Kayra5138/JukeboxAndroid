@@ -26,7 +26,7 @@ export const REQUEST_TIMEOUT_MS = 15_000;
  */
 export const USER_AGENT = 'Jukebox/0.1 ( https://github.com/Kayra5138/JukeboxAndroid )';
 
-type Classified = { status?: number; network?: boolean; throttled?: boolean; said?: string | null; headers?: Headers };
+type Classified = { status?: number; network?: boolean; slow?: boolean; throttled?: boolean; said?: string | null; headers?: Headers };
 
 /** The service answered, and the answer was a refusal. */
 export function httpError(service: string, status: number): Error {
@@ -45,9 +45,21 @@ export function asThrottle(error: unknown): unknown {
   return error instanceof Error ? Object.assign(error, { throttled: true }) : error;
 }
 
-/** Nothing answered: no route, no name resolution, or no reply in time. */
-export function networkError(message: string): Error {
-  return Object.assign(new Error(message), { network: true });
+/**
+ * Nothing answered: no route, no name resolution, or no reply in time.
+ *
+ * [slow] is the last of those: the request went out and the wait for an
+ * answer ran out. It is still a network error to everything that asks only
+ * that, and is told apart by {@link isSlow} by the one caller that has to
+ * say whether the phone is offline or the service is down.
+ */
+export function networkError(message: string, slow = false): Error {
+  return Object.assign(new Error(message), slow ? { network: true, slow: true } : { network: true });
+}
+
+/** A request that was sent and not answered in time, as against one that never left. */
+export function isSlow(error: unknown): boolean {
+  return (error as Classified | null)?.slow === true;
 }
 
 /**
@@ -274,7 +286,7 @@ export async function request<T>(
     return await read(response);
   } catch (error) {
     if (signal?.aborted) throw abortError();
-    if (timedOut) throw networkError(`${service} did not answer in time`);
+    if (timedOut) throw networkError(`${service} did not answer in time`, true);
     if (statusOf(error) != null) throw error;
     // fetch rejects with a TypeError when it never reached the host, which is
     // the only way "offline" ever presents itself.

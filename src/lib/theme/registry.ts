@@ -67,9 +67,31 @@ export type ThemeId = (typeof THEMES)[number]['id'];
 /** Follow the phone, or one theme by name. */
 export type ThemeChoice = 'system' | ThemeId;
 
-/** What `'system'` means when the phone is in its light mode, and in its dark one. */
+/** What `'system'` means when the phone is in its light mode, and in its dark one, until somebody says otherwise. */
 export const SYSTEM_LIGHT: ThemeId = 'light';
 export const SYSTEM_DARK: ThemeId = 'dark';
+
+/** The two themes following the phone goes between: one for its light mode, one for its dark. */
+export type SystemThemes = { light: ThemeId; dark: ThemeId };
+
+/** The pair a stored pair of settings means. One that names no theme, or is absent, is the default for its side. */
+export function systemThemesFrom(light: string | null, dark: string | null): SystemThemes {
+  const named = (stored: string | null, otherwise: ThemeId): ThemeId =>
+    THEMES.find((theme) => theme.id === stored)?.id ?? otherwise;
+  return { light: named(light, SYSTEM_LIGHT), dark: named(dark, SYSTEM_DARK) };
+}
+
+/**
+ * The pair in use. Held like the choice itself, outside React, and read by
+ * `resolveTheme`: following the phone is then one choice with two themes
+ * behind it, and which two is a setting like any other.
+ *
+ * Any theme may stand on either side. A dark theme by day is an odd thing to
+ * want and nobody's business to forbid; and the themes that are worked out —
+ * from the cover, from the wallpaper — settle which way up they are for
+ * themselves.
+ */
+export const systemThemes = createStore<SystemThemes>({ light: SYSTEM_LIGHT, dark: SYSTEM_DARK });
 
 export const DEFAULT_THEME_CHOICE: ThemeChoice = 'system';
 
@@ -128,14 +150,19 @@ function inSurroundings(theme: Theme, around: Surroundings): Theme {
  *
  * [around] is for the themes that are worked out, and can be left off by
  * anything that only wants to know which theme a choice means.
+ *
+ * [pair] is the two themes following the phone goes between. A component
+ * hands in the pair it is watching, so that what it draws is plainly made
+ * from it; anything else can leave it off and gets the pair in use.
  */
 export function resolveTheme(
   choice: ThemeChoice,
   system: string | null | undefined,
-  around: Omit<Surroundings, 'scheme'> = NOTHING_AROUND
+  around: Omit<Surroundings, 'scheme'> = NOTHING_AROUND,
+  pair: SystemThemes = systemThemes.get()
 ): Theme {
   const scheme = system === 'light' ? 'light' : 'dark';
-  const theme = choice === 'system' ? themeOf(scheme === 'light' ? SYSTEM_LIGHT : SYSTEM_DARK) : themeOf(choice);
+  const theme = themeOf(choice === 'system' ? pair[scheme] : choice);
   if (!theme.dynamic) return theme;
   /*
     Only what the theme said it needs is passed on, so that it is not made
@@ -157,7 +184,14 @@ export function isOffered(theme: Theme, around: Surroundings): boolean {
 
 /** What has to be fetched for a choice to be drawn: nothing, for most. */
 export function needsOf(choice: ThemeChoice): readonly Need[] {
-  return choice === 'system' ? [] : (themeOf(choice).dynamic?.needs ?? []);
+  if (choice !== 'system') return themeOf(choice).dynamic?.needs ?? [];
+  /*
+    Both sides of the pair, whichever the phone is on: it can change its mind
+    while the app is open, and the theme it turns to should find what it
+    needs already fetched.
+  */
+  const { light, dark } = systemThemes.get();
+  return [...new Set([...(themeOf(light).dynamic?.needs ?? []), ...(themeOf(dark).dynamic?.needs ?? [])])];
 }
 
 /** What has been chosen. Set through `chooseTheme`; read by `useTheme`. */
