@@ -131,6 +131,8 @@ export const SETTINGS = {
    * it is useful: the queue has a screen of its own for whoever goes looking.
    */
   downloadsButton: 'ui:downloadsButton',
+  /** `'true'` where the player has its heart: see `lib/ui/heart.ts`. */
+  heart: 'ui:heart',
   /**
    * `'false'` where the app is not to look for a newer yt-dlp by itself.
    * Anything else, and nothing at all, is yes: see `lib/youtube/extractor.ts`

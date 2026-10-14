@@ -7,6 +7,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: 'Çalan bir şey yok.',
+    heart: 'Kalp',
     repeat: { off: 'Tekrarla', all: 'Tümünü tekrarla', one: 'Tek parçayı tekrarla' },
     back: (seconds) => `${seconds} saniye geri`,
     forward: (seconds) => `${seconds} saniye ileri`,

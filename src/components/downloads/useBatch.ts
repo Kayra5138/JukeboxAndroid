@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
 import { useDownloadsLookedAt } from '../../lib/ui/downloadsButton';
-import { batchOf, RUN_LINGER_MS, type Batch } from '../../lib/youtube/queueView';
+import { batchOf, type Batch } from '../../lib/youtube/queueView';
 
 /**
  * The recent downloads, kept up to date: see `batchOf` for what they are.
@@ -27,12 +27,12 @@ export function useBatch(): Batch {
     setSeen({ all, at: now });
   }
   const batch = batchOf(all, now, lookedAt);
-  const endedAt = batch.endedAt;
+  const goesAt = batch.goesAt;
   useEffect(() => {
-    if (endedAt == null) return;
-    const wait = Math.max(0, endedAt + RUN_LINGER_MS - Date.now()) + 50;
+    if (goesAt == null) return;
+    const wait = Math.max(0, goesAt - Date.now()) + 50;
     const timer = setTimeout(() => setSeen((held) => ({ all: held.all, at: Date.now() })), wait);
     return () => clearTimeout(timer);
-  }, [endedAt]);
+  }, [goesAt]);
   return batch;
 }

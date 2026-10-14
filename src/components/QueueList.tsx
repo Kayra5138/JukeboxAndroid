@@ -26,7 +26,8 @@ import { PlayIcon } from './Icons';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
-import { laid, makeStyles, outlined } from '../lib/theme/index';
+import { laid, makeStyles, outlined, useColours, withAlpha } from '../lib/theme/index';
+import { glassOf } from '../lib/theme/Veil';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
 import type { Track } from '../lib/types';
 
@@ -178,6 +179,19 @@ const PULL_TICK_MS = 16;
 const DragContext = createContext<Drag>({ from: null, to: null });
 
 /**
+ * How many rows there are where they are to stand on a plate, and nought
+ * where they are not.
+ *
+ * A page of glass with rows written straight onto it has nothing of its own:
+ * the rows hang in front of whatever is behind, out of focus, and read as
+ * part of it. A plate under them is what makes the page a thing with the
+ * list on it. The list is drawn a row at a time, so the plate is too: every
+ * row brings its own strip of it, the first and last with the corners, and
+ * strips that touch are one sheet.
+ */
+const PlateContext = createContext(0);
+
+/**
  * The slot a row sits in, and how far it slides while another row is dragged.
  *
  * The row being dragged is not drawn here at all — it is hidden, and a copy is
@@ -199,6 +213,8 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>
   const styles = useStyles();
   const dragging = from === index;
   const shift = from !== null && to !== null ? rowShift(index, from, to) : 0;
+  const rows = use(PlateContext);
+  const plate = rows > 0 ? [styles.plate, index === 0 && styles.plateTop, index === rows - 1 && styles.plateFoot] : null;
 
   // `onFocusCapture` is not forwarded: it exists to highlight separators around
   // a focused row, and there are no separators here.
@@ -208,6 +224,7 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>
       style={[
         style,
         styles.slot,
+        plate,
         dragging && styles.hidden,
         shift !== 0 && { transform: [{ translateY: shift * QUEUE_ROW_HEIGHT }] },
       ]}>
@@ -247,6 +264,7 @@ export function QueueList({
   onLongPress,
   header,
   footer,
+  plate = false,
 }: {
   queue: Track[];
   currentIndex: number;
@@ -261,8 +279,11 @@ export function QueueList({
   onLongPress?: (index: number) => void;
   header?: ReactNode;
   footer?: ReactNode;
+  /** Stand the rows on a plate, where screens are glass: see `PlateContext`. Nothing in any other theme. */
+  plate?: boolean;
 }) {
   const styles = useStyles();
+  const c = useColours();
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const offset = useRef(new Animated.Value(0)).current;
@@ -595,6 +616,7 @@ export function QueueList({
       style={styles.fill}
       {...responder.panHandlers}>
       <DragContext value={{ from, to }}>
+      <PlateContext value={plate && glassOf(c) > 0 ? queue.length : 0}>
         <FlatList
           ref={scroll}
           data={queue}
@@ -652,6 +674,7 @@ export function QueueList({
             />
           )}
         />
+      </PlateContext>
       </DragContext>
 
       {/*
@@ -689,6 +712,20 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   fill: { flex: 1 },
   list: { paddingBottom: 24 },
   slot: { height: QUEUE_ROW_HEIGHT },
+  /*
+    A strip of the plate: the colour a raised card comes to on the page, most
+    of the way to solid, so that it is plainly in front of what is behind and
+    still lets the light of it through; and a line of light down each side.
+  */
+  plate: {
+    marginHorizontal: 10,
+    backgroundColor: withAlpha(laid(c.surfaceRaised, c.bg), 0.66),
+    borderColor: c.borderStrong,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  plateTop: { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderTopWidth: StyleSheet.hairlineWidth },
+  plateFoot: { borderBottomLeftRadius: 18, borderBottomRightRadius: 18, borderBottomWidth: StyleSheet.hairlineWidth },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

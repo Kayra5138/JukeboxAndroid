@@ -1,7 +1,7 @@
 import { strings, type Strings } from '../i18n/languages.ts';
 import { youtubeError } from '../youtube/errors.ts';
 import {
-  FILE_MISSING, KEEP_FAILED, NEEDS_BUILD, NOT_A_SONG, STOPPED, UNSORTED, stagedProgress,
+  FILE_MISSING, KEEP_FAILED, NEEDS_BUILD, NOT_A_SONG, STOPPED, UNSORTED, seenOf, stagedProgress,
   type Item, type Live, type ProblemCode, type State,
 } from './core.ts';
 import { NO_MATCH_CODE, WAITING_WIFI, type DiscoverSettings } from './policy.ts';
@@ -23,7 +23,7 @@ import { explainEntry, type Why } from './why.ts';
  */
 
 export type DiscoverEntryState =
-  | 'idle' | 'waiting' | 'finding' | 'fetching' | 'ready' | 'noMatch' | 'waitingWifi' | 'failed';
+  | 'idle' | 'waiting' | 'finding' | 'fetching' | 'ready' | 'waitingWifi' | 'failed';
 
 export type DiscoverEntryView = {
   /** The recording's id. The same for as long as the song is on the list, and the key to draw its row by. */
@@ -44,7 +44,7 @@ export type DiscoverEntryView = {
   /** For `fetching`: how far along, and for `downloading` the percentage. */
   stage?: 'preparing' | 'downloading' | 'converting' | 'saving';
   progress?: number;
-  /** For `failed`, `noMatch` and `waitingWifi`: which failure, and what to say of it. */
+  /** For `failed` and `waitingWifi`: which failure, and what to say of it. */
   failure?: { code: string; text: string };
   /** The state as one line for under the title, whatever the state. */
   said: string;
@@ -80,11 +80,25 @@ export type DiscoverStatus = {
   preparing: { ready: number; target: number; count: number; since: number; text: string } | null;
   /** Why there is no list, or not a whole one. Stands until it is no longer so, or is dismissed. */
   problem: DiscoverProblem | null;
-  /** Why the songs kept ready are not being fetched, when they would be. */
-  waiting: { reason: 'wifi' | 'connection' | 'paused'; text: string } | null;
+  /**
+   * The list is filling in: songs that were chosen are being confirmed, and
+   * each is shown as it is. `known` are on the screen, of `total` chosen.
+   * Null once every song that can be confirmed today has been.
+   */
+  filling: { known: number; total: number; text: string } | null;
+  /**
+   * Why songs are not coming when they would be: the ones kept ready not
+   * being fetched (`wifi`, `connection`, `paused`), or the ones chosen not
+   * being confirmed — no connection, the queue paused, or (`later`) they
+   * could not be checked just now and are tried again tomorrow or on asking.
+   */
+  waiting: { reason: 'wifi' | 'connection' | 'paused' | 'later'; text: string } | null;
+  /** How many songs are on the screen, and how many are chosen and not yet confirmed. */
+  shown: number;
+  unconfirmed: number;
   /** When the list on show was made, or null for none yet. */
   updatedAt: number | null;
-  /** How many songs the list is meant to have, and how many places are empty. */
+  /** How many songs the list is meant to have, and how many places have no song chosen for them at all. */
   count: number;
   vacancies: number;
 };
@@ -143,10 +157,11 @@ export function viewCache(): ViewCache {
 export function failureText(failure: { code: string; detail?: string | null }, t: Strings = strings()): string {
   const said = t.discover;
   switch (failure.code) {
+    // Only ever of a song that was on the screen, and so had been found once: one that never was found never had a row.
     case NO_MATCH_CODE:
-    // The only video found for it was not a song at all. To whoever is looking at the list that is the same thing.
+      return said.failure.retry(said.failure.noRecording);
     case NOT_A_SONG:
-      return said.state.noMatch;
+      return said.failure.retry(said.failure.notASong);
     case WAITING_WIFI:
       return said.state.waitingWifi;
     case NEEDS_BUILD:
@@ -164,7 +179,6 @@ export function failureText(failure: { code: string; detail?: string | null }, t
 }
 
 function stateOf(item: Item, live: Live | undefined): DiscoverEntryState {
-  if (item.goneAt != null) return 'noMatch';
   if (live) return live.phase;
   if (item.track) return 'ready';
   if (item.failure) return item.failure.code === WAITING_WIFI ? 'waitingWifi' : 'failed';
@@ -190,7 +204,7 @@ function entry(made: Omit<Made, 'view'>): DiscoverEntryView {
   const song = item.song;
   const state = stateOf(item, live);
   const said = t.discover.state;
-  const failure = (state === 'failed' || state === 'noMatch' || state === 'waitingWifi') && item.failure
+  const failure = (state === 'failed' || state === 'waitingWifi') && item.failure
     ? { code: item.failure.code, text: failureText(item.failure, t) }
     : undefined;
   const busy = state === 'waiting' || state === 'finding' || state === 'fetching';
@@ -223,7 +237,8 @@ function entry(made: Omit<Made, 'view'>): DiscoverEntryView {
     willPlay,
     previewing,
     keeping: keeping || !!item.keep,
-    canPlay: state !== 'noMatch',
+    // Always, now: a row is only ever a song that can be fetched. Kept for what still asks.
+    canPlay: true,
   };
 }
 
@@ -243,11 +258,25 @@ const PROBLEM_TEXT: Record<ProblemCode, (t: Strings, hasList: boolean) => string
 
 function statusOf(s: State, t: Strings): DiscoverStatus {
   const said = t.discover.status;
-  const shown = s.list.filter((item) => item.goneAt == null).length;
+  const chosen = s.list.filter((item) => item.goneAt == null);
+  const shown = seenOf(s.list).length;
+  const unconfirmed = chosen.length - shown;
+  // Looked for and come to nothing today: not being looked for now. The rest are, or are about to be.
+  const later = chosen.filter((item) => !item.seen && item.soughtAt != null && !item.jobId && !s.seeking.has(item.id)).length;
+  const coming = unconfirmed - later;
+  const offline = !!s.network && !s.network.connected;
   const progress = stagedProgress(s);
   const building = s.building;
   const someoneWaits = s.list.some((item) => s.live.get(item.id)?.phase === 'waiting');
-  const reason = s.paused && someoneWaits ? 'paused' : s.held;
+  /*
+    One reason, and the truest: a queue that is paused stops everything, no
+    connection stops the looking as well as the fetching, and only then what
+    holds back the songs kept ready, or that some could not be checked.
+  */
+  const reason = s.paused && (someoneWaits || coming > 0) ? 'paused'
+    : offline && unconfirmed > 0 ? 'connection'
+      : s.held ?? (later > 0 && coming === 0 ? 'later' : null);
+  const confirming = unconfirmed > 0 && (reason === 'paused' || reason === 'connection' || reason === 'later');
   return {
     building: building && {
       ...building,
@@ -264,13 +293,20 @@ function statusOf(s: State, t: Strings): DiscoverStatus {
       text: PROBLEM_TEXT[s.problem.code](t, shown > 0),
       retryAt: s.problem.retryAt,
     },
+    filling: coming > 0 && !offline && !s.paused
+      ? { known: shown, total: chosen.length, text: said.filling(shown, chosen.length) }
+      : null,
     waiting: reason && {
       reason,
-      text: reason === 'paused' ? said.paused : reason === 'wifi' ? said.waitingWifi : said.waitingConnection,
+      text: reason === 'paused' ? (confirming && !someoneWaits ? said.findingPaused : said.paused)
+        : reason === 'connection' ? (confirming ? said.findingOffline : said.waitingConnection)
+          : reason === 'later' ? said.findingLater : said.waitingWifi,
     },
+    shown,
+    unconfirmed,
     updatedAt: s.refreshedAt || null,
     count: s.settings.count,
-    vacancies: Math.max(0, s.settings.count - shown),
+    vacancies: Math.max(0, s.settings.count - chosen.length),
   };
 }
 
@@ -318,7 +354,8 @@ export function viewOf(s: State, cache: ViewCache, t: Strings = strings()): Disc
   const current = s.player.currentId;
   const made = new Map<string, Made>();
   const entries: DiscoverEntryView[] = [];
-  for (const item of s.list) {
+  // Only the songs that are known to be there: see WHAT IS SHOWN in `core.ts`.
+  for (const item of seenOf(s.list)) {
     const inputs = {
       item,
       live: s.live.get(item.id),

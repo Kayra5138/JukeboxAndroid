@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { HeartButton } from './Heart';
+import { useHeartWanted } from '../lib/ui/heartWanted';
 import { Image } from './Picture';
 import { useRouter } from 'expo-router';
 import {
@@ -32,6 +34,7 @@ import { useCoveredByRoute } from '../lib/player/overlayRoutes';
 import { LyricsView } from './LyricsView';
 import { QueueList } from './QueueList';
 import { CoverPage } from './CoverPage';
+import { glassOf, glassPage } from '../lib/theme/Veil';
 import { PlayerDiscoverSide, PlayerDiscoverUndo } from './discover/PlayingActions';
 import { useTrackMenu } from './useTrackMenu';
 import { creditReader } from '../lib/db/credits';
@@ -272,6 +275,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const pressed = usePressed();
   const c = useColours();
   /** One colour, lit or not: the whole of what these buttons say about state. */
+  const heart = useHeartWanted();
   const ON = c.text;
   const OFF = c.textDisabled;
   const { current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error } =
@@ -824,6 +828,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               <TranslateIcon size={modeIcon} color={showTranslation ? ON : OFF} />
             </Pressable>
           ) : null}
+          {heart ? <HeartButton key={current?.id ?? 'none'} size={modeIcon} on={c.accent} off={OFF} style={styles.mode} /> : null}
           {/* For the ten seconds a song just excluded can be had back, and otherwise not there. */}
           <PlayerDiscoverUndo />
         </View>
@@ -958,7 +963,12 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...page(c) },
+  /*
+    In a theme of glass on a phone that can blur, a wash with the app showing
+    through it, out of focus: see `NowPlayingHost`, which is what puts it so.
+    Anywhere else, the page.
+  */
+  screen: { flex: 1, ...(glassOf(c) > 0 ? glassPage(c) : page(c)) },
   // Upright, everything but the sheets laid over the player: the column the
   // screen itself was, one step further in.
   behind: { flex: 1, minHeight: 0 },

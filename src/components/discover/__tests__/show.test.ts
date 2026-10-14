@@ -31,7 +31,9 @@ const song = (more: Partial<DiscoverEntryView> = {}): DiscoverEntryView => ({
 });
 
 const status = (more: Partial<DiscoverStatus> = {}): DiscoverStatus => ({
-  building: null, preparing: null, problem: null, waiting: null, updatedAt: 1, count: 20, vacancies: 0, ...more,
+  building: null, preparing: null, problem: null, filling: null, waiting: null, updatedAt: 1, count: 20, vacancies: 0,
+  // Every song that is chosen is on the screen, unless a test says otherwise.
+  shown: 20 - (more.vacancies ?? 0), unconfirmed: 0, ...more,
 });
 
 test('a song that is only there to be tapped says whose it is and why, and how long', () => {
@@ -117,10 +119,11 @@ test('what went wrong takes the place of the reason, shortly, and is never writt
   assert.equal(wifi.tone, 'muted');
   assert.equal(wifi.line, said.waitingWifi);
 
-  const none = rowShows(song({ state: 'noMatch', canPlay: false, failure: { code: 'ERR_DOWNLOAD_NO_MATCH', text: en.discover.state.noMatch } }), en);
-  assert.equal(none.mark, 'none');
-  assert.equal(none.gone, true);
-  assert.equal(none.line, said.noMatch);
+  // A row whose song turned out not to be fetchable after all is a failed row like any other, and stays to be tapped.
+  const none = rowShows(song({ state: 'failed', failure: { code: 'ERR_DOWNLOAD_NO_MATCH', text: en.discover.failure.noRecording } }), en);
+  assert.equal(none.mark, 'alert');
+  assert.equal(none.gone, false);
+  assert.equal(none.line, said.failed);
 });
 
 test('a row is said in the language it is read in', () => {
@@ -277,4 +280,28 @@ test('a row whose preview is being heard says so in place of everything else, an
   assert.ok(rowLabel(song({ state: 'fetching', willPlay: true, previewing: true }), tr).includes(tr.discover.row.preview));
   // A keep that was pressed is still what the row says: it is the answer to something asked.
   assert.notEqual(rowShows(song({ state: 'fetching', willPlay: true, previewing: true, keeping: true }), en).line, said.preview);
+});
+
+test('a list that is filling in says so on the line a build has, and where the list would be it is rows to come', () => {
+  const filling = { known: 7, total: 20, text: en.discover.status.filling(7, 20) };
+  assert.deepEqual(statusLine(status({ filling, shown: 7, unconfirmed: 13 })), { kind: 'building', text: 'Finding songs · 7 of 20', fraction: 0.35 });
+  assert.equal(tr.discover.status.filling(7, 20), 'Şarkılar bulunuyor · 7/20');
+  // None confirmed yet, straight after a build: not "there is no list", and not a problem, whatever else is so.
+  const none = status({ filling: { known: 0, total: 20, text: '' }, shown: 0, unconfirmed: 20 });
+  assert.deepEqual(emptyShows(none), { kind: 'skeleton' });
+  assert.deepEqual(emptyShows({ ...none, problem: { code: 'exhausted', text: 'x' } }), { kind: 'skeleton' });
+  // What is being done comes after what is wrong, as ever, once there are rows for it to stand over.
+  assert.equal(statusLine(status({ filling, shown: 7, unconfirmed: 13, problem: { code: 'offline', text: 'x' } })).kind, 'problem');
+  // A list short of songs to look for says more are coming while they are, under the rows.
+  assert.equal(listFoot(status({ vacancies: 4, filling, shown: 7, unconfirmed: 9 }), 7), 'finding');
+});
+
+test('songs that are chosen and cannot be confirmed now say why where the list would be, and offer a press only where one helps', () => {
+  const waits = (reason: 'connection' | 'paused' | 'later', text: string) =>
+    emptyShows(status({ shown: 0, unconfirmed: 20, waiting: { reason, text } }));
+  assert.deepEqual(waits('connection', 'offline'), { kind: 'problem', text: 'offline', action: null });
+  assert.deepEqual(waits('paused', 'paused'), { kind: 'problem', text: 'paused', action: null });
+  assert.deepEqual(waits('later', 'later'), { kind: 'problem', text: 'later', action: 'findMore' });
+  // With rows on the screen the same reason is the line over them.
+  assert.deepEqual(statusLine(status({ shown: 5, unconfirmed: 15, waiting: { reason: 'connection', text: 'offline' } })), { kind: 'waiting', text: 'offline' });
 });

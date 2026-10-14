@@ -9,6 +9,7 @@ export const player = {
   /** The player itself; see `PlayerSheet`. */
   sheet: {
     nothingPlaying: 'Nothing playing.',
+    heart: 'Heart',
     /** What the repeat button is called in each of its three states. */
     repeat: { off: 'Repeat', all: 'Repeat all', one: 'Repeat one' },
     back: (seconds: number) => oneOrMany(seconds, 'Back 1 second', `Back ${seconds} seconds`),

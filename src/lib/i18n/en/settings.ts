@@ -6,13 +6,38 @@ export const settings = {
   lastBuilt: (when: string) => `Last built: ${when}`,
   lastBuiltUnknown: 'Last built: available after installing the new APK',
 
+  /**
+   * The categories the tab is a menu of, each the name of a row there and the
+   * title of the page it opens; and the two headings left inside those pages.
+   */
   sections: {
-    app: 'App',
-    library: 'Library',
-    views: 'Library views',
-    data: 'Your data',
+    look: 'Look',
+    sound: 'Sound',
     player: 'Player',
+    library: 'Library',
+    downloads: 'Downloads & Discover',
+    data: 'Your data',
+    views: 'Library views',
     experimental: 'Experimental',
+  },
+  /**
+   * The line under each category on the tab: what is inside, or how things
+   * stand there where that is worth more. Short enough for one line on a
+   * narrow phone.
+   */
+  /**
+   * The line or two under each category's name on the tab: what is behind it,
+   * in words. Beside the name goes what is live, where anything is.
+   */
+  categories: {
+    look: 'The theme, albums as a rack, motion, and which views the library offers.',
+    sound: 'The equalizer and effects, even loudness, crossfade, and speed and pitch.',
+    player: 'How far the jump buttons go, and the language lyrics are translated into.',
+    library: 'The folder your music is in, tags and covers, and files that may be the same song.',
+    /** Beside Library's name: how many files are waiting to be called one song or two. */
+    waiting: (count: number) => `${format.number(count)} to decide`,
+    downloads: 'The download queue and its floating button, Discover, and keeping the YouTube downloader up to date.',
+    data: 'Back everything up or bring a backup in, and ListenBrainz (experimental).',
   },
 
   language: {
@@ -21,7 +46,7 @@ export const settings = {
   },
   theme: {
     title: 'Theme',
-    /** Under the row in Settings that opens the themes. */
+    /** Under the row that opens the themes. */
     open: 'Colours, glass, or one of your own.',
     note: 'System follows the phone’s own light or dark setting.',
     /** The two themes System goes between. */
@@ -80,6 +105,8 @@ export const settings = {
     note:
       'Holding the phone sideways, flick through sleeves instead of reading a list. Tap the one in front to open it.',
   },
+  /** The last row of the player's page. What it turns on is not described anywhere else, on purpose. */
+  heart: { title: 'Heart', note: 'A heart on the player. It keeps nothing.' },
   downloads: {
     note: 'What is being downloaded, what is waiting and what has finished.',
     button: {
@@ -92,6 +119,8 @@ export const settings = {
       note: 'At most once a day, and only when you open Downloads or download something, Jukebox asks GitHub which yt-dlp is the latest. Nothing about you or your library is sent, and nothing is fetched until you say so.',
     },
   },
+  /** Under the row that opens Discover's settings from the page of downloads. */
+  discover: { note: 'How long the list is, how often it is made anew, and what has been turned away.' },
   still: {
     title: 'Hold the decoration still',
     note:

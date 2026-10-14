@@ -115,10 +115,13 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
     ? alarmed ? '!' : batch.failed > 0 ? null : '✓'
     : left > 1 ? (left > 99 ? '99+' : String(left)) : null;
 
-  // Looked at for as long as the bubble is open, and so at whatever fails meanwhile.
+  /*
+    Looked at when the bubble is shut again, and not when it is opened: a run
+    that has ended and been looked at is no longer spoken of, and saying so
+    as the bubble opened would take the button away from under it.
+  */
   useEffect(() => {
     if (!open) return;
-    downloadsLookedAt();
     return downloadsLookedAt;
   }, [open]);
 

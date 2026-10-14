@@ -6,12 +6,23 @@ export const settings: Strings['settings'] = {
   lastBuiltUnknown: 'Son derleme: güncel sürüm yüklendikten sonra görünür',
 
   sections: {
-    app: 'Uygulama',
-    library: 'Kütüphane',
-    views: 'Kütüphane görünümleri',
-    data: 'Verilerin',
+    look: 'Görünüm',
+    sound: 'Ses',
     player: 'Oynatıcı',
+    library: 'Kütüphane',
+    downloads: 'İndirmeler ve Keşfet',
+    data: 'Verilerin',
+    views: 'Kütüphane görünümleri',
     experimental: 'Deneysel',
+  },
+  categories: {
+    look: 'Tema, albümlerin raf görünümü, hareket ve kütüphanenin sunduğu görünümler.',
+    sound: 'Ekolayzer ve efektler, ses düzeyini eşitleme, çapraz geçiş, hız ve perde.',
+    player: 'Atlama düğmelerinin süresi ve şarkı sözlerinin çevrildiği dil.',
+    library: 'Müziğinin bulunduğu klasör, etiketler ve kapaklar, aynı şarkı olabilecek dosyalar.',
+    waiting: (count) => `${format.number(count)} karar bekliyor`,
+    downloads: 'İndirme kuyruğu ve yüzen düğmesi, Keşfet ve YouTube indiricisini güncel tutma.',
+    data: 'Her şeyi yedekle ya da bir yedeği içe aktar; ListenBrainz (deneysel).',
   },
 
   language: {
@@ -70,6 +81,7 @@ export const settings: Strings['settings'] = {
     note:
       'Telefonu yan tutarken liste okumak yerine kapakların arasında gezin. Açmak için öndeki kapağa dokun.',
   },
+  heart: { title: 'Kalp', note: 'Oynatıcıda bir kalp. Hiçbir şey kaydetmez.' },
   downloads: {
     note: 'İndirilmekte olanlar, sırada bekleyenler ve tamamlananlar.',
     button: {
@@ -81,6 +93,7 @@ export const settings: Strings['settings'] = {
       note: 'Jukebox günde en çok bir kez, yalnızca İndirmeler’i açtığında ya da bir şey indirdiğinde GitHub’a en yeni yt-dlp sürümünü sorar. Senin ya da kütüphanen hakkında hiçbir şey gönderilmez; sen söylemeden de hiçbir şey indirilmez.',
     },
   },
+  discover: { note: 'Listenin uzunluğu, ne sıklıkla yenilendiği ve hariç tutulanlar.' },
   still: {
     title: 'Animasyonları azalt',
     note:

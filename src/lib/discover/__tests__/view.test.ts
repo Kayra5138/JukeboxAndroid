@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EMPTY, FILE_MISSING, initial, reduce, type Event, type Song, type State } from '../core.ts';
+import { EMPTY, FILE_MISSING, initial, reduce, type Event, type Item, type Song, type State } from '../core.ts';
 import { DEFAULT_SETTINGS } from '../policy.ts';
 import { failureText, viewCache, viewOf } from '../view.ts';
 import { confirmed, problemOf } from '../fault.ts';
@@ -26,9 +26,15 @@ let now = 1_000_000_000_000;
 function listed(): State {
   const pool = Array.from({ length: 30 }, (_, n) => song(n));
   const state = initial({ ...EMPTY, pool, attemptAt: now - 86_400_000, refreshedAt: now }, { ...DEFAULT_SETTINGS, count: 6, ready: 0 });
-  return reduce(state, { type: 'jobs', jobs: [], paused: false }, now).state;
+  return allSeen(reduce(state, { type: 'jobs', jobs: [], paused: false }, now).state);
 }
-const after = (state: State, ...events: Event[]) => events.reduce((s, event) => reduce(s, event, now).state, state);
+/** Every song there is taken as found: what is held to here is how a song is shown, not how it comes to be. */
+function allSeen(state: State): State {
+  const all = (items: readonly Item[]) => items.map((item) => (item.seen ? item : { ...item, seen: true as const }));
+  if (state.list.every((item) => item.seen) && (state.staged?.items.every((item) => item.seen) ?? true)) return state;
+  return { ...state, list: all(state.list), staged: state.staged && { ...state.staged, items: all(state.staged.items) } };
+}
+const after = (state: State, ...events: Event[]) => events.reduce((s, event) => allSeen(reduce(s, event, now).state), state);
 
 test('a song is shown with what it is, why it is here and the one state it is in', () => {
   const state = listed();
@@ -92,7 +98,8 @@ test('a failure is kept as a code and said in the language the view is read in',
 test('every failure has words, and none of them is a raw message', () => {
   assert.equal(failureText({ code: FILE_MISSING }, en), en.discover.failure.retry(en.discover.failure.fileMissing));
   assert.equal(failureText({ code: 'ERR_DOWNLOAD_WAITING_WIFI' }, en), en.discover.state.waitingWifi);
-  assert.equal(failureText({ code: 'ERR_DOWNLOAD_NO_MATCH' }, tr), tr.discover.state.noMatch);
+  assert.equal(failureText({ code: 'ERR_DOWNLOAD_NO_MATCH' }, tr), tr.discover.failure.retry(tr.discover.failure.noRecording));
+  assert.equal(failureText({ code: 'ERR_YOUTUBE_NOT_A_SONG' }, en), en.discover.failure.retry(en.discover.failure.notASong));
   // The extractor's own line is read for what it is about and is not shown.
   const unsorted = failureText({ code: 'ERR_DOWNLOAD_FAILED', detail: 'ERROR: [youtube] abc: HTTP Error 403: Forbidden' }, en);
   assert.equal(unsorted, en.discover.failure.retry(en.search.errors.refused));
@@ -251,4 +258,91 @@ test('a song being previewed says so on its row and as what is playing, for as l
   assert.equal(view.preview, null);
   assert.equal(view.entries[0].previewing, false);
   assert.equal(view.entries[0].willPlay, true);
+});
+
+/* What is drawn is what is known to be there. */
+
+const WIFI = { connected: true, wifi: true };
+const NOBODY: ReadonlySet<string> = new Set();
+const TO_FIND = { id: '', url: '', title: '', channel: '', thumbnail: null, duration: null, find: { query: 'q', artist: 'a', title: 't', durationSec: null } };
+const held = (key: string, status: DownloadJob['status'], more: Partial<DownloadJob> = {}) => job(key, { status, hold: true, automatic: true, ...more });
+/** A list just chosen, of which nothing is confirmed, with the app in front. */
+function chosen(network = WIFI, paused = false): State {
+  const pool = Array.from({ length: 30 }, (_, n) => song(n));
+  let state = initial({ ...EMPTY, pool, attemptAt: now - 86_400_000, refreshedAt: now }, { ...DEFAULT_SETTINGS, count: 6, ready: 0 });
+  for (const event of [{ type: 'jobs', jobs: [], paused }, { type: 'maintain', network, away: NOBODY, hidden: NOBODY }] as Event[]) {
+    state = reduce(state, event, now).state;
+  }
+  return state;
+}
+const step = (state: State, ...events: Event[]) => events.reduce((s, event) => reduce(s, event, now).state, state);
+
+test('a list that has just been chosen draws no rows and says it is finding songs; each song is drawn as it is found, and then the line goes', () => {
+  let state = chosen();
+  const ids = state.list.map((item) => item.id);
+  assert.equal(ids.length, 6);
+  let view = viewOf(state, viewCache(), en);
+  assert.deepEqual(view.entries, []);
+  assert.deepEqual(view.status.filling, { known: 0, total: 6, text: 'Finding songs · 0 of 6' });
+  assert.equal(view.status.shown, 0);
+  assert.equal(view.status.unconfirmed, 6);
+  // No place is empty: six songs are chosen. And nothing is wrong.
+  assert.equal(view.status.vacancies, 0);
+  assert.equal(view.status.problem, null);
+  assert.equal(view.status.waiting, null);
+
+  const cache = viewCache();
+  let jobs: DownloadJob[] = [];
+  for (let found = 1; found <= 6; found++) {
+    for (const key of state.seeking) state = step(state, { type: 'asked', id: key, jobId: `job-${key}`, hold: true });
+    jobs = [...jobs, held(ids[found - 1], 'found')];
+    state = step(state, { type: 'jobs', jobs: [...jobs, ...ids.slice(found, found + 2).map((key) => held(key, 'queued', { video: TO_FIND }))], paused: false });
+    view = viewOf(state, cache, en);
+    assert.deepEqual(view.entries.map((entry) => entry.id), ids.slice(0, found));
+    assert.equal(view.entries[found - 1].state, 'idle');
+    assert.equal(view.status.filling?.text ?? null, found < 6 ? `Finding songs · ${found} of 6` : null);
+  }
+  assert.equal(viewOf(state, cache, tr).status.filling, null);
+});
+
+test('with no connection, or the queue paused, the rows that are confirmed stay and the reason the rest wait is said once', () => {
+  let state = chosen();
+  const ids = state.list.map((item) => item.id);
+  for (const key of state.seeking) state = step(state, { type: 'asked', id: key, jobId: `job-${key}`, hold: true });
+  state = step(state, { type: 'jobs', jobs: [held(ids[0], 'found'), held(ids[1], 'found'), held(ids[2], 'queued', { video: TO_FIND })], paused: false });
+  const online = viewOf(state, viewCache(), en);
+  assert.equal(online.entries.length, 2);
+
+  const offline = viewOf(step(state, { type: 'network', network: { connected: false, wifi: false } }), viewCache(), en);
+  assert.deepEqual(offline.entries.map((entry) => entry.id), ids.slice(0, 2));
+  assert.equal(offline.status.filling, null);
+  assert.deepEqual(offline.status.waiting, { reason: 'connection', text: en.discover.status.findingOffline });
+
+  const paused = viewOf(step(state, { type: 'jobs', jobs: state.jobs, paused: true }), viewCache(), tr);
+  assert.equal(paused.entries.length, 2);
+  assert.equal(paused.status.filling, null);
+  assert.deepEqual(paused.status.waiting, { reason: 'paused', text: tr.discover.status.findingPaused });
+
+  // Never online at all: no rows, and the reason and not "there is no list".
+  const never = viewOf(chosen({ connected: false, wifi: false }), viewCache(), en);
+  assert.deepEqual(never.entries, []);
+  assert.equal(never.status.waiting?.reason, 'connection');
+  assert.equal(never.status.unconfirmed, 6);
+});
+
+test('songs that could not be checked just now are said to be tried again later, and are not counted as coming', () => {
+  let state = chosen();
+  const ids = state.list.map((item) => item.id);
+  for (let round = 0; round < 6 && state.seeking.size; round++) {
+    for (const key of state.seeking) state = step(state, { type: 'askFailed', id: key, code: 'ERR_YOUTUBE_REFUSED', hold: true });
+  }
+  const view = viewOf(state, viewCache(), en);
+  assert.deepEqual(view.entries, []);
+  assert.equal(view.status.filling, null);
+  assert.deepEqual(view.status.waiting, { reason: 'later', text: en.discover.status.findingLater });
+  // Asked for again by hand, they are coming once more.
+  const again = viewOf(step(state, { type: 'findMore' }), viewCache(), en);
+  assert.equal(again.status.filling?.total, 6);
+  assert.equal(again.status.waiting, null);
+  assert.equal(ids.length, 6);
 });

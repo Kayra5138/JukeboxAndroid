@@ -44,7 +44,7 @@ export const GLASS: Palette = {
   successSoft: '#b0efc41a',
   warning: '#f5da98',
 
-  scrim: '#060a1899',
+  scrim: '#060a1855',
   pressed: '#ffffff1f',
 
   switchTrack: '#ffffff26',
@@ -61,7 +61,7 @@ export const GLASS: Palette = {
 export const GLASS_FINISH = {
   sheen: 'linear-gradient(180deg, #ffffff1a 0px, #ffffff00 56px)',
   shadow: null,
-  veil: 18,
+  veil: 8,
   coverWash: 0.7,
 } as const;
 

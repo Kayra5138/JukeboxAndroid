@@ -67,7 +67,7 @@ export const frost: Theme = {
       ],
       sheen: 'linear-gradient(180deg, #ffffff80 0px, #ffffff00 48px)',
       shadow: null,
-      veil: 18,
+      veil: 8,
       coverWash: 0.8,
     }
   ),

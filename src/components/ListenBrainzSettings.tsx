@@ -313,8 +313,8 @@ export function ListenBrainzSettings({
 }
 
 /*
-  The same measures as the cards in `settings.tsx`, which this sits among.
-  Repeated rather than shared because that screen's styles are its own, as the
+  The same measures as the cards of Settings, which this sits among.
+  Repeated rather than shared because those styles are the pages' own, as the
   Discover card's are; a card that looked nearly like its neighbours would be
   worse than either.
 */

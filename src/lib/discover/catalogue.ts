@@ -5,9 +5,11 @@ import { strings, type Strings } from '../i18n/languages.ts';
 import { splitCredit } from '../metadata/credit.ts';
 import { isGenre } from '../metadata/genres.ts';
 import { isAbortError } from '../metadata/http.ts';
-import { MIN_ARTIST_SCORE, musicBrainzGet } from '../metadata/musicbrainz.ts';
+import { foldForMatch } from '../metadata/text.ts';
+import { musicBrainzGet } from '../metadata/musicbrainz.ts';
 import type { Track } from '../types.ts';
 import { exclusionRows } from './feedback.ts';
+import { identify, identityKey, titlesByArtist, type IdentityStore } from './identity.ts';
 import { relatedArtists, searchArtists, topTracks } from './deezer.ts';
 import {
   artistFacts,
@@ -71,34 +73,35 @@ import { looseSongKey } from './variants.ts';
  * what Deezer's terms have to say about being asked.
  */
 
-type Artist = { id: string; name: string; score?: number };
-
 /**
- * Names the catalogue was asked about during this run of the app and had
- * nobody for.
+ * What was asked about a name during this run of the app, and answered with
+ * nobody.
  *
  * A miss is written to the database as well, and is deliberately not believed
- * from there: the catalogue gains artists, and a name that was not in it last
- * year must not be shut out for good. But asking again on every build cost a
- * request and a second and a half for each name that was never going to be
- * there, every time. So a miss is believed for as long as the app stays open.
+ * from there: the catalogue gains artists and recordings, and a band that was
+ * not in it last year must not be shut out for good. But asking again on
+ * every build cost a request and a second and a half for each name that was
+ * never going to be there, every time. So a miss is believed for as long as
+ * the app stays open — and is filed with the titles it was asked with, so
+ * that a name asked about with other songs is asked about again.
  */
-const missed = new Set<string>();
+const askedThisRun = new Map<string, string | null>();
 
-async function resolve(name: string, now: number, signal?: AbortSignal): Promise<string | null> {
-  const cached = knownArtistId(name);
-  if (cached) return cached;
-  if (missed.has(name)) return null;
+/**
+ * The table of names and ids, read and written under {@link identityKey}.
+ *
+ * Which is how every id remembered before a name was settled by its songs is
+ * retired without being deleted: those rows are under the bare name, nothing
+ * reads a bare name any more, and each name is asked about once more.
+ */
+const remembered = (now: number): IdentityStore => ({
+  get: (how, name) => knownArtistId(identityKey(how, name)),
+  put: (how, name, id) => rememberArtistId(identityKey(how, name), id, now),
+});
 
-  const data = await musicBrainzGet<{ artists?: Artist[] }>(
-    `/artist/?query=${encodeURIComponent(name)}&fmt=json&limit=1`,
-    signal
-  );
-  const first = data.artists?.[0];
-  const id = first && (first.score ?? 0) >= MIN_ARTIST_SCORE ? first.id : null;
-  rememberArtistId(name, id, now);
-  if (!id) missed.add(name);
-  return id;
+async function resolve(name: string, titles: readonly string[], now: number, signal?: AbortSignal): Promise<string | null> {
+  const settled = await identify(name, titles, (path) => musicBrainzGet<unknown>(path, signal), remembered(now), askedThisRun);
+  return settled.id;
 }
 
 /** What the catalogues answered lately, for as long as the app stays open. */
@@ -213,7 +216,7 @@ export async function buildPool(
   ];
   const standing = standings(feedback, now);
 
-  const seeds = chooseSeeds({
+  const chosen = chooseSeeds({
     recent: profile.artists,
     kept: feedbackFrom(rows).filter((event) => event.kind === 'kept').map((event) => event.artist),
     allTime: byArtist(ever, (row) => row.artist, (row) => row.seconds ?? 0, splitCredit).map((row) => ({
@@ -228,6 +231,18 @@ export async function buildPool(
     limit,
     edition,
   });
+
+  /*
+    What somebody has under each of those names, the most played first. A name
+    is seven artists to a catalogue, and these titles are the only thing that
+    says which of them is on this phone; see `identity.ts`. The songs kept
+    from Discover count: an artist started from for a kept song has, at
+    first, that song and no other.
+  */
+  const heard = new Map<string, number>();
+  for (const play of plays) heard.set(play.track_id, (heard.get(play.track_id) ?? 0) + Math.min(600, Math.max(0, play.seconds_played)));
+  const titles = titlesByArtist(library, heard, rows.filter((row) => row.reason === 'saved' && !!row.title));
+  const seeds = chosen.map((seed) => ({ ...seed, titles: (titles.get(foldForMatch(seed.name)) ?? []).slice(0, 12) }));
 
   /*
     Two tags at a time, the pairs that turn up together on what was played.
@@ -264,7 +279,7 @@ export async function buildPool(
     remembering(
       closing(
         {
-          resolve: (name, stop) => resolve(name, now, stop),
+          resolve: (name, titles, stop) => resolve(name, titles, now, stop),
           similar: similarArtists,
           popularity: artistPopularity,
           facts: artistFacts,

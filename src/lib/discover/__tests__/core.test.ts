@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BUILD_AGAIN_MS, BUILD_EVERY_MS, EMPTY, FILE_MISSING, NO_MATCH_SHOWN_MS, RETRY_AFTER_MS, STAGE_WAIT_MS, STOPPED, UNDO_MS,
-  initial, itemOf, reduce, wakeAt, wanted,
+  confirmable, initial, itemOf, reduce, seenOf, stagedProgress, wakeAt, wanted,
   type Effect, type Event, type Item, type Song, type State,
 } from '../core.ts';
 import { DAY, DEFAULT_SETTINGS, songKey, type DiscoverSettings } from '../policy.ts';
@@ -74,8 +74,21 @@ class Desk {
       for (const effect of out.effects) {
         if (effect.kind === 'ask' && effect.hold) this.send({ type: 'askFailed', id: effect.id, code: 'ERR_TEST', hold: true });
       }
+      this.confirm();
     }
     return out.effects;
+  }
+
+  /**
+   * Takes every song there is as confirmed, where it stands: for what is
+   * held to here that is not about songs coming to be seen, the phone is
+   * taken to have found each one the moment it was chosen.
+   */
+  confirm(): void {
+    const all = (items: readonly Item[]) => (items.some((item) => !item.seen) ? items.map((item) => (item.seen ? item : { ...item, seen: true as const })) : items);
+    const list = all(this.state.list);
+    const staged = this.state.staged && { ...this.state.staged, items: all(this.state.staged.items) };
+    if (list !== this.state.list || staged?.items !== this.state.staged?.items) this.state = { ...this.state, list, staged };
   }
 
   later(ms: number): Effect[] {
@@ -242,22 +255,21 @@ test('a job that failed for good says which failure, as a code, and the tap that
   assert.equal(desk.item(a).failure, undefined);
 });
 
-test('a song with no recording gives its place up: the next song is at the end at once, and the row goes after a moment', () => {
+test('a song on the screen that turns out to have no recording stays, as a row that failed, and is not taken from under the tap', () => {
   const desk = new Desk({ ready: 0 });
   desk.open();
   const before = desk.ids();
   const [a] = first(desk, 1);
   desk.send({ type: 'play', id: id(a) });
   desk.send({ type: 'asked', id: id(a), jobId: `job-${id(a)}` });
-  const effects = desk.jobs([job(id(a), 'failed', { errorCode: 'ERR_DOWNLOAD_NO_MATCH' })]);
-  assert.deepEqual(desk.of('away', effects).map((e) => [e.song.recordingMbid, e.reason]), [[id(a), 'unmatched']]);
-  // Still there, saying so, with every row where it was and one more at the end.
-  assert.deepEqual(desk.ids().slice(0, 10), before);
-  assert.equal(desk.ids().length, 11);
-  assert.ok(desk.item(a).goneAt);
-  desk.later(NO_MATCH_SHOWN_MS);
-  assert.deepEqual(desk.ids(), [...before.slice(1), desk.ids()[9]]);
-  assert.equal(desk.ids().length, 10);
+  const effects = desk.jobs([job(id(a), 'failed', { errorCode: 'ERR_DOWNLOAD_NO_MATCH', video: { id: '', url: '', title: '', channel: '', thumbnail: null, duration: null, find: { query: 'q', artist: 'a', title: 't', durationSec: null } } })]);
+  // Somebody tapped it. It says it could not be fetched; it is not put away, and no other song slips into its place.
+  assert.equal(desk.of('away', effects).length, 0);
+  assert.equal(NO_MATCH_SHOWN_MS, 0);
+  assert.deepEqual(desk.ids(), before);
+  assert.equal(desk.item(a).failure?.code, 'ERR_DOWNLOAD_NO_MATCH');
+  assert.equal(desk.item(a).goneAt, undefined);
+  assert.equal(desk.state.intent, null);
 });
 
 test('the next few songs are asked for as Discover’s own, on Wi-Fi, and no more than that', () => {
@@ -986,117 +998,188 @@ test('a shorter list does not drop a song that is being kept', () => {
   assert.equal(desk.of('cancel').length, 0);
 });
 
-test('a new list whose every song has gone is not shown as an empty list', () => {
-  const desk = new Desk({ ready: 2 }, 12);
-  desk.open();
-  const old = desk.ids();
-  desk.send({ type: 'refresh' });
-  // Two songs are all the pool has beyond the list, and the list was two long when it was asked.
-  desk.state = { ...desk.state, list: desk.state.list.slice(0, 2), settings: { ...desk.state.settings, count: 2 } };
-  desk.send({ type: 'built', refresh: true, pool: desk.state.pool.filter((song) => !old.slice(2).includes(song.recordingMbid)) });
-  const staged = desk.state.staged!.items.map((item) => item.id);
-  assert.equal(staged.length, 2);
-  for (const key of staged) desk.send({ type: 'asked', id: key, jobId: `job-${key}` });
-  desk.jobs(staged.map((key) => job(key, 'failed', { errorCode: 'ERR_DOWNLOAD_NO_MATCH' })));
-  // Both rows are only there to say so, and none of nothing is not "the first few are ready".
-  assert.ok(desk.state.staged);
-  assert.deepEqual(desk.ids(), old.slice(0, 2));
-  desk.later(NO_MATCH_SHOWN_MS);
-  desk.later(STAGE_WAIT_MS);
-  assert.equal(desk.state.staged, null);
-  assert.deepEqual(desk.ids(), old.slice(0, 2));
-  assert.equal(desk.problem(), 'exhausted');
-});
 
-test('a video that turned out not to be a song gives the place up like a song with no recording, and is never tried again', () => {
+test('a song on the screen whose video turns out not to be a song stays as a failed row, and is never fetched again behind anybody’s back', () => {
   const desk = new Desk({ ready: 1 });
   desk.open();
   const before = desk.ids();
-  const [a] = first(desk, 1);
+  const [a, b] = first(desk, 2);
   desk.send({ type: 'asked', id: id(a), jobId: `job-${id(a)}` });
   desk.done = [];
-  // What the phone says of a live stream or a two-hour video. It used to say "no audio", which is tried again daily.
+  // What the phone says of a live stream or a two-hour video, found out only when it came to be fetched.
   desk.jobs([job(id(a), 'failed', { errorCode: 'ERR_YOUTUBE_NOT_A_SONG' })]);
-  assert.deepEqual(desk.of('away').map((e) => [e.song.recordingMbid, e.reason]), [[id(a), 'unmatched']]);
-  assert.ok(desk.item(a).goneAt);
-  assert.equal(desk.ids().length, 11);
-  desk.later(NO_MATCH_SHOWN_MS);
-  assert.deepEqual(desk.ids().slice(0, 9), before.slice(1));
+  assert.equal(desk.of('away').length, 0);
+  assert.deepEqual(desk.ids(), before);
+  assert.equal(desk.item(a).failure?.code, 'ERR_YOUTUBE_NOT_A_SONG');
+  // Its place among the songs kept ready goes to the next, and it waits to be tapped or taken off.
+  assert.deepEqual(desk.asks().map((ask) => ask.id), [id(b)]);
   desk.later(DAY * 2);
   assert.ok(!desk.asks().some((ask) => ask.id === id(a)));
 });
 
-/* Songs looked for ahead, and held. */
+/* Songs looked for ahead, and held — and shown only once they are found. */
 
-/** A desk on which the songs asked to be looked for ahead are the test's to answer. */
+/**
+ * A desk on which nothing is taken as confirmed: the list is chosen and
+ * nobody can see any of it, and the songs asked to be looked for are the
+ * test's to answer.
+ */
 function seeking(settings: Partial<DiscoverSettings> = {}, songs = 60): Desk {
-  const desk = new Desk(settings, songs);
+  const desk = new Desk(settings, songs, false);
   desk.ahead = true;
+  desk.send({ type: 'tick' });
+  desk.state = { ...desk.state, refreshedAt: desk.now, attemptAt: desk.now - DAY, building: null };
+  desk.done = [];
   return desk;
 }
 const heldJob = (key: string, status: DownloadStatus, more: Partial<DownloadJob> = {}) =>
   job(key, status, { hold: true, automatic: true, ...more });
+const TO_FIND = { id: '', url: '', title: '', channel: '', thumbnail: null, duration: null, find: { query: 'q', artist: 'a', title: 't', durationSec: null } };
 /** The phone answers an asking-ahead with a job, which then waits to be looked for. */
 function answer(desk: Desk, ...keys: string[]): void {
   for (const key of keys) desk.send({ type: 'asked', id: key, jobId: `job-${key}`, hold: true });
 }
+/** What is on the screen: the confirmed songs, in their order. */
+const seen = (desk: Desk) => seenOf(desk.state.list).map((item) => item.id);
+/** The phone finds every song it has been asked to look for, until there is nothing more to ask. Answers the jobs as it leaves them. */
+function findAll(desk: Desk, jobs: DownloadJob[] = []): DownloadJob[] {
+  for (let round = 0; round < 50 && desk.state.seeking.size; round++) {
+    const keys = [...desk.state.seeking];
+    answer(desk, ...keys);
+    jobs = [...jobs.filter((other) => !keys.includes(other.discoverKey!)), ...keys.map((key) => heldJob(key, 'found'))];
+    desk.jobs(jobs);
+  }
+  return jobs;
+}
 
-test('the songs nobody has asked for are looked for ahead, after the ones kept ready, a few at a time and in the order of the list', () => {
-  const desk = seeking({ ready: 2 });
+test('a new list shows nothing until a song is found, and then the songs one by one, in the order of the list', () => {
+  const desk = seeking({ ready: 0 });
   const effects = desk.open();
   const ids = desk.ids();
-  // The two kept ready are asked for in earnest; the next three are only to be looked for, on any connection.
-  assert.deepEqual(desk.asks(effects).map((ask) => ask.id), ids.slice(0, 2));
-  assert.deepEqual(desk.seeks(effects).map((ask) => [ask.id, ask.front, ask.wifiOnly]), ids.slice(2, 5).map((key) => [key, false, false]));
-  // No more until the phone has answered, however often it is looked over.
-  desk.done = [];
-  desk.send({ type: 'tick' });
-  desk.jobs([]);
-  assert.equal(desk.seeks().length, 0);
-  // Answered, they wait to be looked for, and nothing more is asked while three are under way.
-  answer(desk, ...ids.slice(2, 5));
-  desk.jobs(ids.slice(2, 5).map((key) => heldJob(key, 'queued')));
-  assert.equal(desk.seeks().length, 0);
-  // One found: the next is asked for. And so on down the list, and never past the end of it.
-  desk.jobs([heldJob(ids[2], 'found'), heldJob(ids[3], 'finding'), heldJob(ids[4], 'queued')]);
-  assert.deepEqual(desk.seeks().map((ask) => ask.id), [ids[5]]);
-  answer(desk, ids[5]);
-  desk.done = [];
-  desk.jobs(ids.slice(2, 6).map((key) => heldJob(key, 'found')));
-  assert.deepEqual(desk.seeks().map((ask) => ask.id), ids.slice(6, 9));
-  answer(desk, ...ids.slice(6, 9));
-  desk.done = [];
-  desk.jobs(ids.slice(2, 9).map((key) => heldJob(key, 'found')));
-  assert.deepEqual(desk.seeks().map((ask) => ask.id), [ids[9]]);
-  answer(desk, ids[9]);
-  desk.done = [];
-  desk.jobs(ids.slice(2, 10).map((key) => heldJob(key, 'found')));
-  desk.later(DAY * 3);
-  // Every song found, and that is the end of it: none is looked for twice.
-  assert.equal(desk.seeks().length, 0);
-  assert.deepEqual(desk.state.list.slice(2).map((item) => item.ahead), Array(8).fill('found'));
-});
-
-test('a song being looked for ahead, or found and held, is a row with nothing to say', () => {
-  const desk = seeking({ ready: 0 });
-  desk.open();
-  const [a, b] = desk.ids();
-  answer(desk, a, b);
-  desk.jobs([heldJob(a, 'finding'), heldJob(b, 'found')]);
+  assert.equal(ids.length, 10);
+  // Chosen, and nobody can see any of it. The first three are being looked for.
+  assert.deepEqual(seen(desk), []);
+  assert.deepEqual(desk.seeks(effects).map((ask) => [ask.id, ask.front, ask.wifiOnly]), ids.slice(0, 3).map((key) => [key, false, false]));
+  assert.equal(desk.asks().length, 0);
+  answer(desk, ...ids.slice(0, 3));
+  desk.jobs(ids.slice(0, 3).map((key) => heldJob(key, 'queued', { video: TO_FIND })));
+  assert.deepEqual(seen(desk), []);
+  // Waiting and being looked for are nothing to see either, and nothing is said of them.
+  desk.jobs([heldJob(ids[0], 'finding', { video: TO_FIND }), ...ids.slice(1, 3).map((key) => heldJob(key, 'queued', { video: TO_FIND }))]);
+  assert.deepEqual(seen(desk), []);
   assert.equal(desk.state.live.size, 0);
-  assert.equal(desk.state.list[0].ahead, 'seeking');
-  assert.equal(desk.state.list[1].ahead, 'found');
-  assert.equal(desk.state.list[0].failure, undefined);
-  // And it is not what the songs kept ready, or a tap, are waiting on.
-  assert.equal(desk.state.intent, null);
+  // Found: the first row. And the fourth song is asked for, so that three are always under way.
+  desk.done = [];
+  desk.jobs([heldJob(ids[0], 'found'), ...ids.slice(1, 3).map((key) => heldJob(key, 'queued', { video: TO_FIND }))]);
+  assert.deepEqual(seen(desk), [ids[0]]);
+  assert.deepEqual(desk.seeks().map((ask) => ask.id), [ids[3]]);
+  desk.jobs([heldJob(ids[0], 'found'), heldJob(ids[1], 'found'), heldJob(ids[2], 'queued', { video: TO_FIND })]);
+  assert.deepEqual(seen(desk), ids.slice(0, 2));
+  // To the end of the list, and no further: every song found is every song shown, in the order it was chosen in.
+  findAll(desk, ids.slice(0, 3).map((key) => heldJob(key, 'found')));
+  assert.deepEqual(seen(desk), ids);
+  assert.deepEqual(desk.ids(), ids);
+  desk.done = [];
+  desk.later(DAY * 3);
+  assert.equal(desk.seeks().length, 0);
 });
 
-test('a tap on a song whose video is already found asks for it at the front and goes straight to fetching', () => {
+test('a song with no recording is never seen: it gives its place up unseen, and the next candidate is looked for the same way', () => {
   const desk = seeking({ ready: 0 });
   desk.open();
-  const [a] = desk.ids();
-  answer(desk, a);
-  desk.jobs([heldJob(a, 'found')]);
+  const before = desk.ids();
+  answer(desk, ...before.slice(0, 3));
+  desk.done = [];
+  desk.jobs([heldJob(before[0], 'failed', { errorCode: 'ERR_DOWNLOAD_NO_MATCH', video: TO_FIND }),
+    heldJob(before[1], 'found'), heldJob(before[2], 'queued', { video: TO_FIND })]);
+  // Gone in the same breath, with nothing said, and never on the screen. Another is chosen in its stead, at the end, unseen.
+  assert.deepEqual(desk.of('away').map((e) => [e.song.recordingMbid, e.reason]), [[before[0], 'unmatched']]);
+  assert.ok(!desk.ids().includes(before[0]));
+  assert.equal(desk.ids().length, 10);
+  const newcomer = desk.ids().find((key) => !before.includes(key))!;
+  assert.deepEqual(seen(desk), [before[1]]);
+  assert.equal(desk.state.notice, null);
+  // And it is looked for in its turn, after the songs that were chosen before it.
+  findAll(desk, [heldJob(before[1], 'found'), heldJob(before[2], 'found')]);
+  assert.deepEqual(seen(desk), [...before.slice(1), newcomer]);
+  assert.ok(desk.seeks().some((ask) => ask.id === newcomer));
+});
+
+test('a row never appears above rows already on the screen: a song confirmed late joins at the end', () => {
+  const desk = seeking({ ready: 0 });
+  desk.open();
+  const ids = desk.ids();
+  answer(desk, ...ids.slice(0, 3));
+  // The first could not be looked for just now; the second and third are found.
+  desk.jobs([heldJob(ids[0], 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK', video: TO_FIND }), heldJob(ids[1], 'found'), heldJob(ids[2], 'found')]);
+  assert.deepEqual(seen(desk), [ids[1], ids[2]]);
+  const shownBefore = seen(desk);
+  let jobs = findAll(desk, [heldJob(ids[1], 'found'), heldJob(ids[2], 'found')]);
+  assert.deepEqual(seen(desk), ids.slice(1));
+  // A day on it is looked for again and found. Everything that was on the screen is where it was; it is the last row.
+  desk.later(DAY);
+  jobs = findAll(desk, jobs);
+  assert.deepEqual(seen(desk), [...ids.slice(1), ids[0]]);
+  assert.deepEqual(seen(desk).slice(0, 2), shownBefore);
+});
+
+test('a search that came to nothing for a passing reason leaves the song unseen until tomorrow, or until more are asked for', () => {
+  const desk = seeking({ ready: 0 }, 10);
+  desk.open();
+  const ids = desk.ids();
+  answer(desk, ids[0]);
+  desk.jobs([heldJob(ids[0], 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK', video: TO_FIND })]);
+  const row = desk.state.list.find((item) => item.id === ids[0])!;
+  assert.equal(row.failure, undefined);
+  assert.equal(row.jobId, undefined);
+  assert.equal(row.seen, undefined);
+  assert.equal(row.soughtAt, desk.now);
+  // The phone could not be asked at all for another: the same. And so for the rest, so that nothing is left under way.
+  while (desk.state.seeking.size) desk.send({ type: 'askFailed', id: [...desk.state.seeking][0], code: 'ERR_TEST', hold: true });
+  assert.deepEqual(seen(desk), []);
+  assert.ok(desk.state.list.every((item) => !confirmable(desk.state, item, desk.now)));
+  desk.done = [];
+  desk.later(DAY - 1);
+  assert.equal(desk.seeks().length, 0);
+  // Asked for by hand, they are looked for again now, and the catalogue is not troubled for songs it has already given.
+  const pressed = desk.send({ type: 'findMore' });
+  assert.deepEqual(desk.seeks(pressed).map((ask) => ask.id), ids.slice(0, 3));
+  assert.equal(desk.of('build', pressed).length, 0);
+  // Left alone they would have been looked for again when the day was up.
+  const left = seeking({ ready: 0 }, 10);
+  left.open();
+  while (left.state.seeking.size) left.send({ type: 'askFailed', id: [...left.state.seeking][0], code: 'ERR_TEST', hold: true });
+  left.done = [];
+  left.later(DAY);
+  assert.equal(left.seeks().length, 3);
+});
+
+test('a job left by an older version that fails while still being looked for is forgotten the same way, and is no red row', () => {
+  const desk = seeking({ ready: 0 });
+  desk.open();
+  const ids = desk.ids();
+  while (desk.state.seeking.size) desk.send({ type: 'askFailed', id: [...desk.state.seeking][0], code: 'ERR_TEST', hold: true });
+  // One of Discover's own from before songs were held: looked for and fetched in one job.
+  desk.jobs([job(ids[0], 'queued', { automatic: true, video: TO_FIND })]);
+  assert.deepEqual(seen(desk), []);
+  assert.equal(desk.state.live.size, 0);
+  desk.jobs([job(ids[0], 'failed', { errorCode: 'ERR_YOUTUBE_TIMED_OUT', video: TO_FIND })]);
+  const row = desk.state.list.find((item) => item.id === ids[0])!;
+  assert.equal(row.failure, undefined);
+  assert.equal(row.seen, undefined);
+  // And one that got as far as having a video is a song that can be shown, whatever became of the fetching.
+  desk.jobs([job(ids[1], 'queued', { automatic: true })]);
+  assert.deepEqual(seen(desk), [ids[1]]);
+  desk.jobs([job(ids[1], 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK' })]);
+  assert.deepEqual(seen(desk), [ids[1]]);
+  assert.equal(desk.state.list[0].failure?.code, 'ERR_YOUTUBE_NETWORK');
+});
+
+test('a tap on a song goes straight to fetching: its video was found before it was ever shown', () => {
+  const desk = seeking({ ready: 0 });
+  desk.open();
+  const jobs = findAll(desk);
+  const [a] = seen(desk);
   desk.done = [];
   desk.send({ type: 'play', id: a });
   // The same asking as any tap: the phone lets the held job go, to the front. Nothing is looked for.
@@ -1104,73 +1187,39 @@ test('a tap on a song whose video is already found asks for it at the front and 
   assert.equal(desk.state.list[0].ahead, undefined);
   assert.equal(desk.state.live.get(a)?.phase, 'waiting');
   desk.send({ type: 'asked', id: a, jobId: `job-${a}` });
-  desk.jobs([job(a, 'downloading', { progress: 10 })]);
+  desk.jobs([job(a, 'downloading', { progress: 10 }), ...jobs.filter((other) => other.discoverKey !== a)]);
   assert.deepEqual(desk.state.live.get(a), { phase: 'fetching', stage: 'downloading', progress: 10 });
   assert.equal(desk.state.intent?.id, a);
 });
 
-test('the songs kept ready take a found song as their own when the window reaches it', () => {
-  const desk = seeking({ ready: 1 });
-  desk.open();
-  const [a, b] = desk.ids();
-  answer(desk, b);
-  desk.jobs([heldJob(b, 'found')]);
-  desk.send({ type: 'asked', id: a, jobId: `job-${a}` });
-  desk.jobs([job(a, 'done'), heldJob(b, 'found')]);
-  desk.send({ type: 'track', id: a, jobId: `job-${a}`, track: track(`job-${a}`) });
-  desk.done = [];
-  // The first is played; the window is now the second, which is found and only has to be let go.
-  desk.send({ type: 'play', id: a });
-  assert.deepEqual(desk.asks().map((ask) => [ask.id, ask.front, ask.hold, ask.wifiOnly]), [[b, false, false, true]]);
-});
-
-test('a song found ahead to have no recording leaves the list at once, with nothing said, and another takes its place at the end', () => {
-  const desk = seeking({ ready: 0 });
-  desk.open();
-  const before = desk.ids();
-  const [a] = before;
-  answer(desk, a);
-  desk.done = [];
-  desk.jobs([heldJob(a, 'failed', { errorCode: 'ERR_DOWNLOAD_NO_MATCH' })]);
-  // Gone in the same breath: nobody asked for it, and there is no moment of a row saying so.
-  assert.deepEqual(desk.ids().slice(0, 9), before.slice(1));
-  assert.equal(desk.ids().length, 10);
-  assert.ok(!before.includes(desk.ids()[9]));
-  assert.deepEqual(desk.of('away').map((e) => [e.song.recordingMbid, e.reason]), [[a, 'unmatched']]);
-  assert.ok(desk.state.retired.includes(`job-${a}`));
-  assert.equal(desk.state.notice, null);
-});
-
-test('a search ahead that came to nothing for a passing reason is forgotten until tomorrow, and the row is as it was', () => {
-  const desk = seeking({ ready: 0 }, 10);
+test('nothing reaches a song that is not on the screen: not a tap, a keep, a taking-off, the songs kept ready or the song after the one playing', () => {
+  const desk = seeking({ ready: 2 });
   desk.open();
   const ids = desk.ids();
-  answer(desk, ids[0]);
+  // With songs to keep ready and none confirmed, nothing is fetched: there is nothing shown to fetch.
+  assert.equal(desk.asks().length, 0);
+  assert.equal(wanted(desk.state, desk.now).length, 0);
+  for (const type of ['play', 'keep', 'exclude'] as const) {
+    const state = desk.state;
+    assert.equal(desk.send({ type, id: ids[5] }).length, 0, type);
+    assert.equal(desk.state, state, type);
+  }
+  // The first and third are found; the second could not be looked for today.
+  answer(desk, ...ids.slice(0, 3));
   desk.done = [];
-  desk.jobs([heldJob(ids[0], 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK' })]);
-  const row = desk.state.list[0];
-  assert.equal(row.failure, undefined);
-  assert.equal(row.jobId, undefined);
-  assert.equal(row.ahead, undefined);
-  assert.equal(row.soughtAt, desk.now);
-  // The phone could not be asked at all for another: the same.
-  desk.send({ type: 'askFailed', id: ids[1], code: 'ERR_DOWNLOAD_QUEUE_FULL', hold: true });
-  assert.equal(desk.state.list[1].failure, undefined);
-  // (The rest are answered the same way, so that nothing is left under way to wait behind.)
-  while (desk.state.seeking.size) desk.send({ type: 'askFailed', id: [...desk.state.seeking][0], code: 'ERR_TEST', hold: true });
+  desk.jobs([heldJob(ids[0], 'found'), heldJob(ids[1], 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK', video: TO_FIND }), heldJob(ids[2], 'found')]);
+  assert.deepEqual(seen(desk), [ids[0], ids[2]]);
+  // The songs kept ready are the first two on the screen, and they only have to be let go: found already.
+  assert.deepEqual(desk.asks().map((ask) => [ask.id, ask.front, ask.hold]), [[ids[0], false, false], [ids[2], false, false]]);
+  for (const key of [ids[0], ids[2]]) {
+    desk.send({ type: 'asked', id: key, jobId: `job-${key}` });
+    desk.send({ type: 'track', id: key, jobId: `job-${key}`, track: track(`job-${key}`) });
+  }
   desk.done = [];
-  desk.later(DAY - 1);
-  assert.ok(!desk.seeks().some((ask) => ask.id === ids[0] || ask.id === ids[1]));
-  desk.later(1);
-  assert.ok(desk.seeks().some((ask) => ask.id === ids[0]));
-  // Tapped meanwhile it is looked for then, as a tap always was.
-  const other = seeking({ ready: 0 });
-  other.open();
-  const [x] = other.ids();
-  answer(other, x);
-  other.jobs([heldJob(x, 'cancelled')]);
-  assert.equal(other.state.list[0].failure, undefined, 'not a download somebody stopped');
-  assert.deepEqual(other.asks(other.send({ type: 'play', id: x })).map((ask) => ask.front), [true]);
+  // Played through, it goes from the first to the third. The second is not there to go to.
+  desk.send({ type: 'play', id: ids[0] });
+  assert.deepEqual(desk.of('play')[0].tracks.map((t) => t.id), [`discover:job-${ids[0]}`, `discover:job-${ids[2]}`]);
+  assert.ok(!desk.asks().some((ask) => ask.id === ids[1]));
 });
 
 test('a song that leaves the list has its held search stopped, and so has every song of a list that is replaced', () => {
@@ -1178,47 +1227,76 @@ test('a song that leaves the list has its held search stopped, and so has every 
   desk.open();
   const ids = desk.ids();
   answer(desk, ...ids.slice(0, 3));
-  desk.jobs([heldJob(ids[0], 'found'), heldJob(ids[1], 'queued'), heldJob(ids[2], 'finding')]);
+  const queue = [heldJob(ids[0], 'found'), heldJob(ids[1], 'queued', { video: TO_FIND }), heldJob(ids[2], 'finding', { video: TO_FIND })];
+  desk.jobs(queue);
   desk.done = [];
   desk.send({ type: 'exclude', id: ids[0] });
   assert.deepEqual(desk.of('cancel').map((e) => e.jobId), [`job-${ids[0]}`]);
   assert.ok(desk.state.retired.includes(`job-${ids[0]}`));
-  desk.jobs([heldJob(ids[0], 'cancelled'), heldJob(ids[1], 'queued'), heldJob(ids[2], 'finding')]);
-  desk.done = [];
-  desk.send({ type: 'refresh' });
-  desk.send({ type: 'built', refresh: true, pool: desk.state.pool });
-  assert.deepEqual(desk.of('cancel').map((e) => e.jobId).sort(), [`job-${ids[1]}`, `job-${ids[2]}`].sort());
 });
 
-test('a new list in the making is looked for ahead too, after the one on show', () => {
-  const desk = seeking({ ready: 1 }, 60);
-  desk.open();
-  const ids = desk.ids();
-  // The whole of the list on show is found.
-  desk.send({ type: 'asked', id: ids[0], jobId: `job-${ids[0]}` });
-  answer(desk, ...ids.slice(1));
-  desk.jobs([job(ids[0], 'queued'), ...ids.slice(1).map((key) => heldJob(key, 'found'))]);
-  desk.send({ type: 'refresh' });
-  desk.done = [];
-  desk.send({ type: 'built', refresh: true, pool: desk.state.pool });
-  const staged = desk.state.staged!.items.map((item) => item.id);
-  // Its first song is wanted ready; the three after it are looked for.
-  assert.deepEqual(desk.asks().map((ask) => ask.id), [staged[0]]);
-  assert.deepEqual(desk.seeks().map((ask) => ask.id), staged.slice(1, 4));
-});
-
-test('on mobile data the songs kept ready wait for Wi-Fi and the looking ahead goes on; with no connection neither does', () => {
+test('on mobile data the songs kept ready wait for Wi-Fi and the looking goes on; with no connection, or the queue paused, it does not', () => {
   const desk = seeking({ ready: 2, wifiOnly: true });
   const effects = desk.open(MOBILE);
-  assert.equal(desk.asks(effects).length, 0);
-  assert.equal(desk.state.held, 'wifi');
-  // The rows the window would have taken are looked for as well: a tap on them is allowed mobile data.
   assert.deepEqual(desk.seeks(effects).map((ask) => [ask.id, ask.wifiOnly]), desk.ids().slice(0, 3).map((key) => [key, false]));
+  findAll(desk);
+  // Every song is on the screen; the two that would be kept ready are held for Wi-Fi, and a tap fetches on what there is.
+  assert.equal(seen(desk).length, 10);
+  assert.equal(desk.asks().length, 0);
+  assert.equal(desk.state.held, 'wifi');
   const offline = seeking({ ready: 2 });
   assert.equal(offline.seeks(offline.open({ connected: false, wifi: false })).length, 0);
   const paused = seeking({ ready: 0 });
   paused.jobs([], true);
   assert.equal(paused.seeks(paused.send({ type: 'maintain', network: WIFI, away: NOBODY, hidden: NOBODY })).length, 0);
+});
+
+test('with no connection the songs already on the screen stay, and the rest wait unseen to be looked for when it is back', () => {
+  const desk = seeking({ ready: 0 });
+  desk.open();
+  const ids = desk.ids();
+  answer(desk, ...ids.slice(0, 3));
+  const jobs = ids.slice(0, 3).map((key) => heldJob(key, 'found'));
+  desk.jobs(jobs);
+  assert.deepEqual(seen(desk), ids.slice(0, 3));
+  // Three more were asked for as those came in. The connection goes before they are looked for.
+  const pending = [...desk.state.seeking];
+  answer(desk, ...pending);
+  desk.send({ type: 'network', network: { connected: false, wifi: false } });
+  desk.jobs([...jobs, ...pending.map((key) => heldJob(key, 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK', video: TO_FIND }))]);
+  desk.done = [];
+  desk.later(60_000);
+  assert.deepEqual(seen(desk), ids.slice(0, 3));
+  assert.equal(desk.seeks().length, 0);
+  assert.equal(desk.ids().length, 10);
+  // Back: the songs that had not been looked for yet are, at once. The ones that failed for want of it wait for tomorrow —
+  const back = desk.send({ type: 'network', network: WIFI });
+  assert.equal(desk.seeks(back).length, 3);
+  assert.ok(desk.seeks(back).every((ask) => !pending.includes(ask.id)));
+  // — or for somebody to ask, which forgets that they failed.
+  desk.send({ type: 'findMore' });
+  assert.ok(desk.state.list.every((item) => item.soughtAt == null));
+});
+
+test('a list kept by a version from before songs were confirmed: what is ready or found stays, and the rest become unseen and are confirmed in order', () => {
+  const desk = new Desk({ ready: 0 }, 0, false);
+  desk.ahead = true;
+  const songs = Array.from({ length: 6 }, (_, n) => song(n));
+  const stored: Item[] = songs.map((one) => ({ id: one.recordingMbid, song: one, addedAt: 1 }));
+  stored[1] = { ...stored[1], jobId: `job-${stored[1].id}`, track: track(`job-${stored[1].id}`) };
+  stored[3] = { ...stored[3], jobId: `job-${stored[3].id}`, ahead: 'found' };
+  stored[4] = { ...stored[4], jobId: `job-${stored[4].id}`, failure: { code: 'ERR_YOUTUBE_NETWORK', at: 1, job: `job-${stored[4].id}` } };
+  desk.state = initial({ ...EMPTY, list: stored, pool: songs, refreshedAt: desk.now, attemptAt: desk.now },
+    { ...DEFAULT_SETTINGS, count: 6, ready: 0 });
+  const effects = desk.open(WIFI, [job(stored[1].id, 'done'), heldJob(stored[3].id, 'found'), job(stored[4].id, 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK' })]);
+  // The three the phone can vouch for are on the screen, in the order they were in. Nothing has been taken off the list.
+  assert.deepEqual(seen(desk), [stored[1].id, stored[3].id, stored[4].id]);
+  assert.equal(desk.ids().length, 6);
+  assert.equal(desk.of('away').length, 0);
+  // The other three are looked for, in their order, and join below as each is found.
+  assert.deepEqual(desk.seeks(effects).map((ask) => ask.id), [stored[0].id, stored[2].id, stored[5].id]);
+  findAll(desk, [job(stored[1].id, 'done'), heldJob(stored[3].id, 'found'), job(stored[4].id, 'failed', { errorCode: 'ERR_YOUTUBE_NETWORK' })]);
+  assert.deepEqual(seen(desk), [stored[1].id, stored[3].id, stored[4].id, stored[0].id, stored[2].id, stored[5].id]);
 });
 
 test('a song with a job of any kind is not looked for ahead: ready, being fetched, failed, or tapped', () => {
@@ -1232,9 +1310,121 @@ test('a song with a job of any kind is not looked for ahead: ready, being fetche
   desk.ahead = true;
   desk.done = [];
   desk.later(DAY * 2);
-  const sought = desk.seeks().map((ask) => ask.id);
-  assert.ok(sought.length > 0);
-  for (const key of ids.slice(0, 3)) assert.ok(!sought.includes(key), key);
+  assert.equal(desk.seeks().length, 0);
+});
+
+/* A new list, and when it is worth showing. */
+
+test('a refresh keeps the old list up until the new one has songs that are confirmed, and never swaps it for an empty screen', () => {
+  const desk = seeking({ ready: 0 });
+  desk.open();
+  const jobs = findAll(desk);
+  const old = seen(desk);
+  assert.equal(old.length, 10);
+  desk.send({ type: 'refresh' });
+  desk.done = [];
+  desk.send({ type: 'built', refresh: true, pool: desk.state.pool });
+  const staged = () => desk.state.staged!.items.map((item) => item.id);
+  const chosen = staged();
+  // Chosen is not confirmed. Nothing is fetched ahead, and still the old list stays: there is nothing to show in its place.
+  assert.deepEqual(seen(desk), old);
+  assert.deepEqual(stagedProgress(desk.state), { ready: 0, target: 5 });
+  assert.deepEqual(desk.seeks().map((ask) => ask.id), chosen.slice(0, 3));
+  // Pressed again with nothing confirmed, it is not shown either; nor when the wait is up.
+  desk.send({ type: 'refresh' });
+  desk.later(STAGE_WAIT_MS + 1);
+  assert.deepEqual(seen(desk), old);
+  assert.ok(desk.state.staged);
+  // Four confirmed is not five.
+  answer(desk, ...chosen.slice(0, 3));
+  let queue = [...jobs, ...chosen.slice(0, 3).map((key) => heldJob(key, 'found'))];
+  desk.state = { ...desk.state, staged: { ...desk.state.staged!, since: desk.now } };
+  desk.jobs(queue);
+  answer(desk, chosen[3]);
+  queue = [...queue, heldJob(chosen[3], 'found')];
+  desk.jobs(queue);
+  assert.deepEqual(stagedProgress(desk.state), { ready: 4, target: 5 });
+  assert.deepEqual(seen(desk), old);
+  // The fifth: the new list, as far as it is confirmed, and the rest of it filling in below.
+  answer(desk, chosen[4]);
+  desk.done = [];
+  desk.jobs([...queue, heldJob(chosen[4], 'found')]);
+  assert.equal(desk.state.staged, null);
+  assert.deepEqual(seen(desk), chosen.slice(0, 5));
+  assert.equal(desk.ids().length, 10);
+  // The old songs are put away as never played; the old list's held jobs are stopped.
+  assert.equal(desk.of('away').filter((e) => e.reason === 'unplayed').length, 10);
+  assert.equal(desk.of('cancel').length, 10);
+});
+
+test('a new list that is slow to confirm is shown after the wait with what it has, and one pressed for again is shown at once', () => {
+  const waited = seeking({ ready: 0 });
+  waited.open();
+  findAll(waited);
+  waited.send({ type: 'refresh' });
+  waited.send({ type: 'built', refresh: true, pool: waited.state.pool });
+  const chosen = waited.state.staged!.items.map((item) => item.id);
+  answer(waited, chosen[0]);
+  waited.jobs([...waited.state.jobs, heldJob(chosen[0], 'found')]);
+  assert.ok(waited.state.staged);
+  waited.later(STAGE_WAIT_MS);
+  assert.equal(waited.state.staged, null);
+  assert.deepEqual(seen(waited), [chosen[0]]);
+
+  const pressed = seeking({ ready: 0 });
+  pressed.open();
+  findAll(pressed);
+  pressed.send({ type: 'refresh' });
+  pressed.send({ type: 'built', refresh: true, pool: pressed.state.pool });
+  const other = pressed.state.staged!.items.map((item) => item.id);
+  answer(pressed, other[0]);
+  pressed.jobs([...pressed.state.jobs, heldJob(other[0], 'found')]);
+  pressed.send({ type: 'refresh' });
+  assert.deepEqual(seen(pressed), [other[0]]);
+});
+
+test('with songs kept ready, the new list is worth showing when the first of its confirmed songs have their files', () => {
+  const desk = seeking({ ready: 2 });
+  desk.open();
+  let jobs = findAll(desk);
+  const old = seen(desk);
+  desk.send({ type: 'refresh' });
+  desk.done = [];
+  desk.send({ type: 'built', refresh: true, pool: desk.state.pool });
+  const chosen = desk.state.staged!.items.map((item) => item.id);
+  assert.deepEqual(stagedProgress(desk.state), { ready: 0, target: 2 });
+  // Looked for first. Found, the first two are what is kept ready, and are fetched.
+  answer(desk, ...chosen.slice(0, 3));
+  jobs = [...jobs, ...chosen.slice(0, 3).map((key) => heldJob(key, 'found'))];
+  desk.done = [];
+  desk.jobs(jobs);
+  assert.deepEqual(desk.asks().map((ask) => ask.id), chosen.slice(0, 2));
+  assert.deepEqual(seen(desk), old);
+  for (const key of chosen.slice(0, 2)) {
+    desk.send({ type: 'asked', id: key, jobId: `job-${key}` });
+    desk.send({ type: 'track', id: key, jobId: `job-${key}`, track: track(`job-${key}`) });
+  }
+  assert.equal(desk.state.staged, null);
+  assert.deepEqual(seen(desk).slice(0, 3), chosen.slice(0, 3));
+});
+
+test('a new list of which nothing can be confirmed is given up, the old one stays, and why is said', () => {
+  const desk = seeking({ ready: 0 }, 12);
+  desk.open();
+  findAll(desk);
+  const old = seen(desk);
+  desk.send({ type: 'refresh' });
+  // Two songs are all the pool has beyond the list, and the list was two long when it was asked.
+  desk.state = { ...desk.state, list: desk.state.list.slice(0, 2), settings: { ...desk.state.settings, count: 2 } };
+  desk.send({ type: 'built', refresh: true, pool: desk.state.pool.filter((one) => !old.slice(2).includes(one.recordingMbid)) });
+  const chosen = desk.state.staged!.items.map((item) => item.id);
+  assert.equal(chosen.length, 2);
+  answer(desk, ...chosen);
+  desk.jobs([...desk.state.jobs, ...chosen.map((key) => heldJob(key, 'failed', { errorCode: 'ERR_DOWNLOAD_NO_MATCH', video: TO_FIND }))]);
+  // Neither has a recording. There is no new list, and the old one is what is on the screen.
+  assert.equal(desk.state.staged, null);
+  assert.deepEqual(seen(desk), old.slice(0, 2));
+  assert.equal(desk.problem(), 'exhausted');
 });
 
 test('the phone saying a song is stored starts it, and the queue catching up afterwards changes nothing', () => {

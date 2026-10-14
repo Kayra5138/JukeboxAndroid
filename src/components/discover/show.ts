@@ -66,7 +66,6 @@ export function durationLabel(seconds: number | null | undefined): string {
  */
 function failureLine(entry: DiscoverEntryView, t: Strings): string {
   const said = t.discover.row;
-  if (entry.state === 'noMatch') return said.noMatch;
   if (entry.state === 'waitingWifi') return said.waitingWifi;
   return entry.failure?.code === NEEDS_BUILD ? said.needsBuild : said.failed;
 }
@@ -111,10 +110,6 @@ export function rowShows(entry: DiscoverEntryView, t: Strings = strings()): RowS
       break;
     case 'waitingWifi':
       shows.mark = 'queued';
-      shows.line = failureLine(entry, t);
-      shows.tone = 'muted';
-      break;
-    case 'noMatch':
       shows.line = failureLine(entry, t);
       shows.tone = 'muted';
       break;
@@ -197,7 +192,7 @@ export function watchRow(
   t: Strings = strings()
 ): { watch: RowWatch; say: string | null } {
   const busy = now.state === 'waiting' || now.state === 'finding' || now.state === 'fetching';
-  const failed = now.state === 'failed' || now.state === 'noMatch';
+  const failed = now.state === 'failed';
   let tapped = now.willPlay || (!!before?.tapped && !(busy && !now.willPlay));
   let say: string | null = null;
   if (before?.tapped) {
@@ -269,7 +264,7 @@ export function problemAction(problem: DiscoverProblem, status: DiscoverStatus):
  * where the list would be, in full and with room, and not here as well.
  */
 export function statusLine(status: DiscoverStatus): StatusLine {
-  if (status.problem && status.count - status.vacancies > 0) {
+  if (status.problem && status.shown > 0) {
     return { kind: 'problem', text: status.problem.text, action: problemAction(status.problem, status) };
   }
   if (status.building) {
@@ -279,6 +274,15 @@ export function statusLine(status: DiscoverStatus): StatusLine {
   if (status.preparing) {
     const { ready, target } = status.preparing;
     return { kind: 'preparing', text: status.preparing.text, fraction: target ? Math.min(ready / target, 1) : 0 };
+  }
+  /*
+    The list filling in, song by song as each is confirmed: the same line a
+    build has, and its bar, because to whoever is watching it is the same
+    thing still going on — the list being put together.
+  */
+  if (status.filling) {
+    const { known, total } = status.filling;
+    return { kind: 'building', text: status.filling.text, fraction: total ? Math.min(known / total, 1) : null };
   }
   if (status.waiting) return { kind: 'waiting', text: status.waiting.text };
   return { kind: 'none' };
@@ -290,7 +294,7 @@ export type ListFoot = 'none' | 'finding' | 'findMore';
 /** A short list is being filled, or can be asked to be. A whole one has nothing under it. */
 export function listFoot(status: DiscoverStatus, shown: number): ListFoot {
   if (shown === 0 || status.vacancies <= 0) return 'none';
-  return status.building ? 'finding' : 'findMore';
+  return status.building || status.filling ? 'finding' : 'findMore';
 }
 
 /**
@@ -304,8 +308,18 @@ export type EmptyShows =
   | { kind: 'none' };
 
 export function emptyShows(status: DiscoverStatus): EmptyShows {
+  /*
+    Songs are chosen and being confirmed, and none has been yet: that is a
+    list on its way, drawn as one, and not "there is no list". Said before
+    any problem, since whatever went wrong the songs are coming.
+  */
+  if (status.filling) return { kind: 'skeleton' };
   if (status.problem) return { kind: 'problem', text: status.problem.text, action: problemAction(status.problem, status) };
   if (status.building || status.preparing) return { kind: 'skeleton' };
+  // Chosen, and not able to be confirmed now. Why, and for the one a press can mend, the press.
+  if (status.unconfirmed > 0 && status.waiting && status.waiting.reason !== 'wifi') {
+    return { kind: 'problem', text: status.waiting.text, action: status.waiting.reason === 'later' ? 'findMore' : null };
+  }
   return { kind: 'none' };
 }
 

@@ -46,11 +46,14 @@ import {
  * What each of them answered, asked by hand on 13 October 2026
  * ---------------------------------------------------------------------------
  *
- * GET /search/artist?q=AURORA&limit=3
+ * GET /search/artist?q=AURORA&limit=10
  *   { "data": [ { "id": 7699874, "name": "AURORA", "nb_fan": 560226, … }, … ] }
  *   The best match for the words first, which is not always the artist:
- *   `妖精帝國` found a namesake with 51 fans. Believed only where the name is
- *   the same name.
+ *   `妖精帝國` found a namesake with 51 fans, and `Second` found two bands of
+ *   exactly that name, a Spanish one with ten thousand followers and a
+ *   Turkish one with a hundred and twenty. Ten are asked for so that every
+ *   artist of the name is seen; which of them is meant is `identity.ts`'s to
+ *   say, from the songs somebody has.
  *
  * GET /artist/7699874/related?limit=20
  *   { "data": [ { "id": …, "name": "Paris Paloma", "nb_fan": 41234 }, … ] }
@@ -193,7 +196,7 @@ export function readTracks(body: unknown): DeezerTrack[] {
 
 /** The artists a search for a name comes back with, best match first. Whether one is the artist is the caller's to say. */
 export async function searchArtists(name: string, signal?: AbortSignal): Promise<DeezerArtist[]> {
-  return readArtists(await ask<unknown>(`/search/artist?q=${encodeURIComponent(name)}&limit=3`, signal));
+  return readArtists(await ask<unknown>(`/search/artist?q=${encodeURIComponent(name)}&limit=10`, signal));
 }
 
 /** Who the catalogue files beside an artist, nearest first. */

@@ -163,7 +163,7 @@ async function ask(effect: Extract<Effect, { kind: 'ask' }>): Promise<void> {
     if (front) await ensureNotificationPermission();
     const video = {
       id: '', url: '', title: song.title, channel: song.artist, thumbnail: null, duration: song.durationSec ?? null,
-      find: { query: findQuery(song.artist, song.title), artist: song.artist, title: song.title, durationSec: song.durationSec ?? null },
+      find: { query: findQuery(song.artist, song.title), artist: song.artist, title: song.title, durationSec: song.durationSec ?? null, loose: true },
       discoveryTitle: song.title, discoveryArtist: song.artist, discoveryAlbum: song.release, discoverCover: song.coverUrl,
       discoverAutomatic: !front, discoverWifiOnly: effect.wifiOnly,
     };

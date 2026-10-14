@@ -2,6 +2,7 @@ import { Image } from './Picture';
 import { StyleSheet, View } from 'react-native';
 
 import { effectsOf, makeStyles, useColours, withAlpha } from '../lib/theme/index';
+import { glassOf } from '../lib/theme/Veil';
 
 /**
  * The cover of what is playing, out of focus, as the page the player is
@@ -28,7 +29,7 @@ export function CoverPage({ uri }: { uri: string | null | undefined }) {
   const styles = useStyles();
   if (!uri || !effectsOf(c)?.coverWash) return null;
   return (
-    <View pointerEvents="none" style={styles.page}>
+    <View pointerEvents="none" style={glassOf(c) > 0 ? [styles.page, styles.thin] : styles.page}>
       <Image source={{ uri }} blurRadius={25} contentFit="cover" transition={500} style={styles.picture} />
       <View style={styles.wash} />
     </View>
@@ -38,6 +39,12 @@ export function CoverPage({ uri }: { uri: string | null | undefined }) {
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
     page: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden' },
+    /*
+      Where the player is glass over the app, the cover is a tint in that
+      glass and not a page in front of it: half there, so that what the
+      player was opened over still shows through the colour of the record.
+    */
+    thin: { opacity: 0.5 },
     // No colour of the theme's on the picture itself: one given a theme
     // colour loses what it was showing when the theme changes.
     picture: { width: '25%', height: '25%', transformOrigin: 'top left', transform: [{ scale: 4 }] },

@@ -399,6 +399,8 @@ export default function PlaylistScreen() {
       */}
       <View style={[styles.upright, { paddingLeft: insets.left, paddingRight: insets.right }]}>
         <QueueList
+          // On a plate, where screens are glass: the page's own body, with what it was opened over round it.
+          plate
           queue={tracks}
           // Nothing in a list is "the playing one"; the mark column stays empty.
           currentIndex={-1}

@@ -45,6 +45,11 @@ export type FindRequest = {
   title: string;
   /** How long the recording is, where that is known: the surest check that a video is the same one. */
   durationSec: number | null;
+  /**
+   * For a song known to exist: take the likeliest video where none can be shown to be it.
+   * See `chooseVideo`. Left out, a video has to be shown to be the song.
+   */
+  loose?: boolean;
 };
 
 export type YouTubePlaylist = Omit<YouTubeVideo, 'kind'> & { kind: 'playlist' };

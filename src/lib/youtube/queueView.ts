@@ -169,8 +169,20 @@ export function tallyOf(all: readonly DownloadJob[]): Tally {
  */
 export const RUN_GRACE_MS = 2 * 60_000;
 
-/** How long a run that has ended is still what "the downloads" means. */
+/**
+ * How long a run that has ended with something failed in it is still what
+ * "the downloads" means, if nobody looks: long enough to be noticed by
+ * somebody who was doing something else.
+ */
 export const RUN_LINGER_MS = 5 * 60_000;
+
+/**
+ * And how long one that ended well is: long enough to be seen to have
+ * finished. It was the five minutes too, and with Discover fetching a song
+ * of its own every so often that came to a button that never left, saying
+ * "all finished" to whoever pressed it and staying where it was.
+ */
+export const DONE_LINGER_MS = 8_000;
 
 /**
  * The furthest back one of Discover's own is taken to have been running.
@@ -201,9 +213,11 @@ export type Batch = {
   total: number;
   /** When the run ended, or null while it is going on and when there is none. */
   endedAt: number | null;
+  /** When a run that has ended stops being spoken of, if nothing else happens first. Null with `endedAt`. */
+  goesAt: number | null;
 };
 
-const NO_BATCH: Batch = { current: null, underWay: 0, waiting: 0, done: 0, failed: 0, unseen: 0, total: 0, endedAt: null };
+const NO_BATCH: Batch = { current: null, underWay: 0, waiting: 0, done: 0, failed: 0, unseen: 0, total: 0, endedAt: null, goesAt: null };
 
 /**
  * The run of the queue the floating button speaks of: every job asked for
@@ -213,9 +227,11 @@ const NO_BATCH: Batch = { current: null, underWay: 0, waiting: 0, done: 0, faile
  * without end while it has not. Jobs whose times overlap, or that are no
  * more than `RUN_GRACE_MS` apart, are one run. The run in question is the
  * last one: the one holding whatever is not finished, where anything is not,
- * and otherwise the one that ended last — and that one only for
- * `RUN_LINGER_MS` after it ended, after which there is no run and nothing
- * to say.
+ * and otherwise the one that ended last — and that one only for a while
+ * after it ended, after which there is no run and nothing to say. A while
+ * is seconds where it ended well, minutes where something in it failed that
+ * nobody has looked at, and no time at all once it has been looked at since
+ * it ended: a button with nothing left to do or to say goes.
  *
  * Three kinds of job are counted differently, each because the plain rule
  * would tell a lie about it:
@@ -264,7 +280,7 @@ export function batchOf(all: readonly DownloadJob[], now: number, lookedAt = -In
   }
 
   const going = until === Infinity;
-  if (!going && until < now - RUN_LINGER_MS) return NO_BATCH;
+  if (!going && (until < now - RUN_LINGER_MS || lookedAt >= until)) return NO_BATCH;
 
   const batch: Batch = { ...NO_BATCH, total: run.length, endedAt: going ? null : until };
   // In the phone's order and not by when each was asked for, so that the one
@@ -282,6 +298,10 @@ export function batchOf(all: readonly DownloadJob[], now: number, lookedAt = -In
     }
     // A file removed since was fetched all the same.
     else if (job.status === 'done' || job.status === 'missing') batch.done += 1;
+  }
+  if (!going) {
+    batch.goesAt = until + (batch.unseen > 0 ? RUN_LINGER_MS : DONE_LINGER_MS);
+    if (batch.goesAt < now) return NO_BATCH;
   }
   return batch;
 }

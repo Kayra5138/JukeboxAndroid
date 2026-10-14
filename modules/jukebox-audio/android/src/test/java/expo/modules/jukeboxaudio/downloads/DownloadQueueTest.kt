@@ -532,12 +532,12 @@ class DownloadQueueTest {
     assertEquals(asked, taken())
     queue.complete(asked, "1")
     assertNull(claimed())
-    now += DownloadQueue.FIND_GAP_MS
-    // A few seconds after the download, not three quarters of a minute.
+    now += DownloadQueue.FIND_BURST_GAP_MS
+    // A moment after the download, not three quarters of a minute.
     assertEquals(a, claimed())
     queue.resolveFind(a, video(2), here)
     assertNull(claimed())
-    now += DownloadQueue.FIND_GAP_MS - 1
+    now += DownloadQueue.FIND_BURST_GAP_MS - 1
     assertNull(claimed())
     now += 1
     assertEquals(b, claimed())
@@ -547,8 +547,43 @@ class DownloadQueueTest {
     assertEquals("failed", status(b))
     assertEquals("ERR_DOWNLOAD_NO_MATCH", job(b).getString("errorCode"))
     assertEquals(ended, queue.lastEnded)
-    now += DownloadQueue.FIND_GAP_MS
+    now += DownloadQueue.FIND_BURST_GAP_MS
     assertEquals(c, claimed())
+  }
+
+  @Test fun theFirstFewSearchesAheadGoCloseTogetherAndTheRestKeepTheLongerGap() {
+    val keys = (0 until 9).map { "%08d-0000-0000-0000-000000000000".format(it) }
+    val jobs = keys.mapIndexed { n, key -> held("Song $n", key) }
+    muchLater()
+    // Each search takes two seconds. Five of them a second apart, start to start three seconds.
+    val began = now
+    for (n in 0 until DownloadQueue.FIND_BURST) {
+      assertEquals(jobs[n], claimed())
+      now += 2_000
+      queue.resolveFind(jobs[n], video(n + 1), here)
+      assertNull(claimed())
+      now += DownloadQueue.FIND_BURST_GAP_MS
+    }
+    assertEquals(DownloadQueue.FIND_BURST * 3_000L, now - began)
+    // The sixth is not to be had a second after the fifth, nor until the longer gap is up.
+    assertNull(claimed())
+    now += DownloadQueue.FIND_GAP_MS - DownloadQueue.FIND_BURST_GAP_MS - 1
+    assertNull(claimed())
+    now += 1
+    assertEquals(jobs[5], claimed())
+    now += 2_000
+    queue.resolveFind(jobs[5], video(6), here)
+    now += DownloadQueue.FIND_BURST_GAP_MS
+    assertNull(claimed())
+    now += DownloadQueue.FIND_GAP_MS
+    assertEquals(jobs[6], claimed())
+    queue.resolveFind(jobs[6], video(7), here)
+    // Left alone for a minute, the allowance is back.
+    now += DownloadQueue.FIND_BURST_WINDOW_MS
+    assertEquals(jobs[7], claimed())
+    queue.resolveFind(jobs[7], video(8), here)
+    now += DownloadQueue.FIND_BURST_GAP_MS
+    assertEquals(jobs[8], claimed())
   }
 
   @Test fun nothingIsBroughtUpOrKeptUpForASearchMadeAhead() {

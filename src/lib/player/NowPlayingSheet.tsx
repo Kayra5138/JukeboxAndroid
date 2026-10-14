@@ -7,9 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Animated, StyleSheet, useWindowDimensions } from 'react-native';
+import { Animated, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { PlayerSheet } from '../../components/PlayerSheet';
+import { useColours } from '../theme/index';
+import { underGlass } from '../theme/Veil';
 import { useCoveredByRoute } from './overlayRoutes';
 import { motionReduced } from '../ui/motion';
 
@@ -32,6 +34,7 @@ export function useOpenPlayer(): () => void {
 export function NowPlayingHost({ children }: { children: ReactNode }) {
   const { height } = useWindowDimensions();
   const covered = useCoveredByRoute();
+  const glass = underGlass(useColours());
   const [mounted, setMounted] = useState(false);
   const rise = useRef(new Animated.Value(0)).current;
 
@@ -69,7 +72,17 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
 
   return (
     <OpenContext value={open}>
-      {children}
+      {/*
+        Everything the player is opened over. In a theme of glass it goes out
+        of focus for as long as the player is up, and shows through it. A
+        view of its own at all times, and never folded away: given a filter
+        only when it needed one it would be put in then, by taking every
+        screen out of the window and handing it over, and a dialog that is
+        taken out of its window is dismissed.
+      */}
+      <View collapsable={false} style={mounted && !covered ? [styles.under, glass] : styles.under}>
+        {children}
+      </View>
       {mounted ? (
         <Animated.View
           /*
@@ -90,4 +103,4 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({ hidden: { display: 'none' } });
+const styles = StyleSheet.create({ hidden: { display: 'none' }, under: { flex: 1 } });

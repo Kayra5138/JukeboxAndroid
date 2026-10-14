@@ -36,6 +36,70 @@ import { createStore } from '../ui/store.ts';
 /** Android drew nothing out of focus before 12; there, a veil is not drawn and the scrim does more. */
 const CAN_BLUR = Platform.OS !== 'android' || Number(Platform.Version) >= 31;
 
+/**
+ * How far, in pixels, what a page of glass is opened over goes out of focus,
+ * or nought where the theme is not glass or the phone cannot do it.
+ *
+ * For a screen pushed over another, which until now hid the one below
+ * entirely: see the root layout, where one screen is tried this way.
+ */
+export function glassOf(c: Palette): number {
+  return CAN_BLUR ? veilOf(c) : 0;
+}
+
+/**
+ * How much of the page's own colour is washed over what shows through a
+ * whole screen of glass, so that what is written on it can be read; and how
+ * far out of focus what is below it is put.
+ *
+ * The first try used a sheet's blur under a wash of six tenths, and over a
+ * screen that is dark cards on a dark page that left one even colour: it was
+ * glass over nothing that could be seen. What is below has to keep its
+ * shapes to be there at all. These two numbers are the whole of how a
+ * screen of glass looks, wherever one is: a pushed screen, the player, a
+ * record opened from the rack.
+ */
+const WASH = 0.3;
+const OUT_OF_FOCUS = 7;
+
+const WASHES = new WeakMap<Palette, ViewStyle>();
+
+/** What a whole screen of glass has for a page: the wash, and nothing else of its own. */
+export function glassPage(c: Palette): ViewStyle {
+  let made = WASHES.get(c);
+  if (!made) {
+    made = { backgroundColor: withAlpha(c.bg, WASH) };
+    WASHES.set(c, made);
+  }
+  return made;
+}
+
+/** The style that puts what a screen of glass is over out of focus, or null where the theme is not glass. */
+export function underGlass(c: Palette): ViewStyle | null {
+  return glassOf(c) > 0 ? veils(Math.min(glassOf(c), OUT_OF_FOCUS)) : null;
+}
+
+/** How much of its light what is under a screen of glass keeps, where it is also set back. */
+const SET_BACK = 0.72;
+
+const BACKS = new Map<number, ViewStyle>();
+
+/**
+ * The same, and set back as well: out of focus and with some of its light
+ * taken, which is how a thing further off looks. For a screen that is to
+ * read as standing in front of the one below and not merely over it.
+ */
+export function setBack(c: Palette): ViewStyle | null {
+  if (glassOf(c) <= 0) return null;
+  const radius = Math.min(glassOf(c), OUT_OF_FOCUS);
+  let made = BACKS.get(radius);
+  if (!made) {
+    made = { filter: [{ blur: radius }, { brightness: SET_BACK }] };
+    BACKS.set(radius, made);
+  }
+  return made;
+}
+
 /** How many sheets in windows of their own are open. */
 const open = createStore(0);
 

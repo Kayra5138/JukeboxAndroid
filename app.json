@@ -2,7 +2,7 @@
   "expo": {
     "name": "Jukebox",
     "slug": "jukebox",
-    "version": "0.33.0",
+    "version": "0.33.1",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "jukebox",
@@ -10,7 +10,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "Kayra5138.Jukebox",
-      "versionCode": 106,
+      "versionCode": 107,
       "adaptiveIcon": {
         "backgroundColor": "#32334E",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

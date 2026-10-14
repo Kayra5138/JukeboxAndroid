@@ -335,6 +335,11 @@ export type Seed = {
   /** How hard it pulls, from nought to one. */
   weight: number;
   source: SeedSource;
+  /**
+   * Titles somebody has under this name, the most played first: what says
+   * which artist of the name is meant. Put on by whoever knows the library.
+   */
+  titles?: string[];
 };
 
 export type SeedInput = {

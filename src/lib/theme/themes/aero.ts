@@ -68,7 +68,7 @@ export const aero: Theme = {
       ],
       sheen: 'linear-gradient(180deg, #ffffff59 0px, #ffffff14 22px, #ffffff00 23px)',
       shadow: 'inset 0 1px 0 0 #ffffffe6',
-      veil: 16,
+      veil: 8,
       coverWash: 0.8,
     }
   ),

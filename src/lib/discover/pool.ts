@@ -10,6 +10,7 @@ import {
   type Recording,
   type TaggedRecording,
 } from './listenbrainz.ts';
+import { artistBySongs, evidence, namesakes, NAMESAKES_LOOKED_AT } from './identity.ts';
 import { filedNear, listenedNear, sharePlaces, together } from './nearness.ts';
 import { tagFit, type Popularity } from './policy.ts';
 import type { Candidate } from './rank.ts';
@@ -66,8 +67,12 @@ import type { Why } from './why.ts';
 
 /** The questions. Each may fail, and a failure is one answer missing and not the build. */
 export type Sources = {
-  /** An artist's catalogue id by name, or null where the catalogue has nobody of that name. */
-  resolve(name: string, signal?: AbortSignal): Promise<string | null>;
+  /**
+   * An artist's catalogue id, by their name and the titles somebody has under
+   * it — or null where the catalogue has nobody of that name, or has several
+   * and nothing to say which is meant. See `identity.ts`.
+   */
+  resolve(name: string, titles: readonly string[], signal?: AbortSignal): Promise<string | null>;
   /** Who is played in the same sittings as an artist, with how often. */
   similar(mbid: string, signal?: AbortSignal): Promise<Candidate[]>;
   /** How many people play each of these artists. */
@@ -166,6 +171,8 @@ export type BuildReport = {
   /** Songs looked at, and how many were another take, too short or long, owned, or shut out. */
   considered: number;
   dropped: { take: number; length: number; owned: number; out: number; unknown: number };
+  /** Artists started from that could not be told from others of their name, and so led nowhere. */
+  unresolved?: string[];
   /** Which witnesses answered at all. */
   heard?: { listened: boolean; filed: boolean };
   /** Artists whose songs came from each place, and those that had none to offer. */
@@ -268,7 +275,16 @@ export function popularityTilt(popularity: Popularity, place: number): number {
   return 1;
 }
 
-/** One of several artists a search by name came back with is the artist only if nothing else could be. */
+/**
+ * One of several artists a search by name came back with is the artist only
+ * if nothing else could be.
+ *
+ * For a neighbour, which ListenBrainz named and somebody has no songs by:
+ * there is nothing to check the answer against but how well known each of
+ * the name is, and a neighbour is one of thirty. Never for an artist somebody
+ * plays — that is settled by their songs, further down, and a wrong answer
+ * there is a quarter of the list.
+ */
 export function sameArtist(found: DeezerArtist[], name: string): DeezerArtist | null {
   const wanted = foldForMatch(name);
   const same = found
@@ -423,7 +439,7 @@ export async function gatherPool(
   // find that out from the first three. Each one's neighbours are asked for
   // on the other host as soon as its id is known.
   for (const seed of input.seeds) {
-    const mbid = (await attempt('ids', () => sources.resolve(seed.name, signal), { proves: false })) ?? null;
+    const mbid = (await attempt('ids', () => sources.resolve(seed.name, seed.titles ?? [], signal), { proves: false })) ?? null;
     const key = mbid ?? `name:${foldForMatch(seed.name)}`;
     // Two spellings of one artist are one neighbourhood, asked about once.
     if (seen.has(key)) continue;
@@ -443,23 +459,45 @@ export async function gatherPool(
   const about = known.length ? ((await attempt('listens', () => sources.facts(known, signal))) ?? new Map()) : new Map();
   let nearDone = 0;
   let finds = 0;
-  const inShop = async (
-    name: string,
-    mbid: string | null,
-    facts: Map<string, ArtistFacts>,
-    counted = true
-  ): Promise<DeezerArtist | null> => {
+  /** Where Deezer keeps a neighbour: by MusicBrainz's link, or else by a search for the name, for only so many of them. */
+  const inShop = async (name: string, mbid: string | null, facts: Map<string, ArtistFacts>): Promise<DeezerArtist | null> => {
     const id = mbid ? facts.get(mbid)?.deezerId : null;
     if (id != null) return { id, name, fans: null };
-    // An artist somebody plays is always worth a search. A neighbour is one of many, and only so many are searched for.
-    if (counted && finds++ >= FINDS) return null;
+    if (finds++ >= FINDS) return null;
     return sameArtist((await attempt('shop', () => sources.find(name, signal))) ?? [], name);
+  };
+  /**
+   * Where Deezer keeps an artist somebody plays.
+   *
+   * By MusicBrainz's link where the artist is known there: that id was
+   * settled by somebody's songs or by being the only one of its name, and
+   * the link is the catalogue's own. Otherwise by the name — and a name is
+   * believed only where one artist has it. Where several do, each one's most
+   * played are asked for and the artist is whichever has somebody's songs
+   * among them; none of them having any, or nothing to check with, is nobody.
+   * The winner's songs are the same question that is asked for it later, so
+   * what this costs is the losers': two requests at the most.
+   */
+  const seedShop = async (start: Start): Promise<DeezerArtist | null> => {
+    const id = start.mbid ? about.get(start.mbid)?.deezerId : null;
+    if (id != null) return { id, name: start.seed.name, fans: null };
+    const same = namesakes((await attempt('shop', () => sources.find(start.seed.name, signal))) ?? [], start.seed.name);
+    if (same.length <= 1) return same[0] ?? null;
+    const proof = evidence(start.seed.titles ?? [], start.seed.name, Infinity);
+    if (!proof.length) return null;
+    const looked = await Promise.all(
+      same.slice(0, NAMESAKES_LOOKED_AT).map(async (artist) => ({
+        artist,
+        tracks: (await attempt('shop', () => sources.top(artist.id, SHOP_MORE, signal))) ?? [],
+      }))
+    );
+    return artistBySongs(looked, proof);
   };
   for (const start of starts) {
     start.tags = (start.mbid ? about.get(start.mbid)?.tags : null) ?? [];
     asking.push(
       (async () => {
-        start.shop = await inShop(start.seed.name, start.mbid, about, false);
+        start.shop = await seedShop(start);
         const shop = start.shop;
         if (shop) start.filed = (await attempt('shop', () => sources.related(shop.id, signal))) ?? [];
         hooks.onStep?.({ done: ++nearDone, total: starts.length, artist: start.seed.name, phase: 'near' });
@@ -467,6 +505,8 @@ export async function gatherPool(
     );
   }
   await Promise.all(asking);
+  // Known to neither catalogue, or not to be told from others of the name: it leads nowhere, and is said to have.
+  report.unresolved = starts.filter((start) => !start.mbid && !start.shop).map((start) => start.seed.name);
 
   const everybody = [...new Set(starts.flatMap((start) => start.listened.map((row) => row.mbid)))];
   const users = everybody.length
@@ -601,14 +641,15 @@ export async function gatherPool(
    * are named together at the end. True where there is, or may yet be, a song.
    */
   const songsOf = async (
-    artist: { name: string; mbid: string | null; shop: DeezerArtist | null },
+    artist: { name: string; mbid: string | null; shop: DeezerArtist | null; settled?: boolean },
     familiar: boolean,
     put: (offers: Offer[]) => void,
     sift: (offers: Offer[]) => Offer[] = (offers) => offers,
     most = familiar ? SHOP_MORE : SHOP_FIRST
   ): Promise<boolean> => {
     let shop = artist.shop;
-    if (!shop && open('shop')) shop = artist.shop = await inShop(artist.name, artist.mbid, more);
+    // A neighbour may still be looked for by name. An artist somebody plays was settled above, and is not asked about again here.
+    if (!shop && !artist.settled && open('shop')) shop = artist.shop = await inShop(artist.name, artist.mbid, more);
     if (shop && open('shop')) {
       const at = shop;
       const tracks = await attempt('shop', () => sources.top(at.id, most, signal));
@@ -643,7 +684,8 @@ export async function gatherPool(
   type Found = { offers: Offer[]; make: (offer: Offer) => Gathered };
   const found: Found[] = [];
   const total =
-    plan.reduce((sum, line) => sum + Math.min(line.want, line.queue.length), 0) + starts.length;
+    plan.reduce((sum, line) => sum + Math.min(line.want, line.queue.length), 0) +
+    starts.filter((start) => start.mbid || start.shop).length;
   let songsDone = 0;
   const stepped = (name: string) =>
     hooks.onStep?.({ done: Math.min(++songsDone, total), total, artist: name, phase: 'songs' });
@@ -674,7 +716,9 @@ export async function gatherPool(
   for (const start of starts) {
     const standing = standingOf(input.standings, start.seed.name);
     if (standing.out || blocked(start)) continue;
-    const artist = { name: start.seed.name, mbid: start.mbid, shop: start.shop };
+    // Nobody could say which artist of the name this is: none of them is offered as "more from" it.
+    if (!start.mbid && !start.shop) continue;
+    const artist = { name: start.seed.name, mbid: start.mbid, shop: start.shop, settled: true };
     fetching.push(
       (async () => {
         await songsOf(artist, true, (offers) =>

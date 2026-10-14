@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
+import { glassOf, glassPage } from '../lib/theme/Veil';
 import { Image } from './Picture';
 import { useFocusEffect } from 'expo-router';
 import { Animated, BackHandler, Easing, StyleSheet, Text, View } from 'react-native';
@@ -284,6 +285,8 @@ export function AlbumListing({
       */}
       <Animated.View style={[styles.page, { opacity: listed }]}>
         <QueueList
+          // On a plate where screens are glass, as the record's own page has them.
+          plate
           queue={album.tracks}
           // Nothing in a list is "the playing one"; the mark column stays empty.
           currentIndex={-1}
@@ -362,7 +365,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     A page of its own and not the tabs' seen through: it is laid over the
     library's heading and the rack, and has to hide them.
   */
-  page: { flex: 1, ...page(c) },
+  // Or, where screens are glass, the wash every other one has, over a heading and a rack put out of focus by the library.
+  page: { flex: 1, ...(glassOf(c) > 0 ? glassPage(c) : page(c)) },
   // The rack's own sleeve, to the corner and the colour behind the picture.
   sleeve: {
     position: 'absolute',

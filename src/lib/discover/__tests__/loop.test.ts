@@ -169,6 +169,11 @@ test('Discover writes its list when the list changes, its pool when the catalogu
   assert.deepEqual(written(), ['list', 'pool']);
 
   const a = loop.state().list[0].id;
+  const video = { id: 'v', url: '', title: '', channel: '', thumbnail: null, duration: null };
+  // Its video is found, which is what puts it on the screen to be tapped: a change to the list, and written once.
+  loop.dispatch({ type: 'jobs', paused: false, jobs: [{ id: 'job-a', discoverKey: a, status: 'found', hold: true, progress: 0,
+    trackId: null, error: null, described: false, format: 'original', folder: 'Music', video }] });
+  assert.deepEqual(written(), ['list']);
   loop.dispatch({ type: 'play', id: a });
   // Tapped: the row is a person's now, which is part of the list. The pool is not touched again.
   assert.deepEqual(written(), ['list']);

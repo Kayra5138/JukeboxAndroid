@@ -44,7 +44,6 @@ export const discover: Strings['discover'] = {
     failed: 'İndirilemedi · yeniden denemek için dokun',
     needsBuild: 'Güncel sürüm gerekiyor',
     waitingWifi: 'Wi-Fi bekleniyor · indirmek için dokun',
-    noMatch: 'Kayıt bulunamadı',
     percent: (percent) => `%${format.number(percent)}`,
     gettingReady: 'İndiriliyor',
     hint: 'Şarkıyı çalar; gerekirse önce indirir',
@@ -131,13 +130,14 @@ export const discover: Strings['discover'] = {
     preview: (doing) => `Ön dinleme çalıyor. ${doing}`,
     willKeep: (doing) => `${doing} Hazır olunca Kütüphane’ye kaydedilecek.`,
     keeping: 'Kütüphane’ye kaydediliyor…',
-    noMatch: 'Bu şarkının bir kaydı bulunamadı. Yerini başka bir şarkı alıyor.',
     waitingWifi: 'Wi-Fi bekleniyor · şimdi indirmek için dokun',
   },
 
   failure: {
     generic: 'Bu indirme tamamlanamadı.',
     fileMissing: 'Dosya artık telefonda değil.',
+    noRecording: 'Bu şarkının bir kaydı bulunamadı.',
+    notASong: 'Bu şarkı için bulunan video canlı bir yayın ya da şarkı olamayacak kadar uzun.',
     stopped: 'İndirme durduruldu.',
     needsBuild: 'Keşfet şarkılarını indirmek için güncel sürümü yükle.',
     retry: (reason) => `${reason} Yeniden denemek için dokun.`,
@@ -145,10 +145,14 @@ export const discover: Strings['discover'] = {
 
   status: {
     building: 'Şarkılar aranıyor…',
+    filling: (known, total) => `Şarkılar bulunuyor · ${format.number(known)}/${format.number(total)}`,
+    findingOffline: 'Bağlantı yok. Listenin kalanı bağlantı gelince aranacak.',
+    findingPaused: 'İndirmeler duraklatıldı. Sürdürürsen listenin kalanı aranır.',
+    findingLater: 'Bazı şarkılar şu an kontrol edilemedi. Keşfet onları daha sonra yeniden dener.',
     buildingArtists: (done, total) =>
       `Şarkılar aranıyor · ${format.number(done)}/${format.number(total)} sanatçı`,
     preparing: (ready, target) =>
-      `Yeni liste yolda · ${format.number(target)} şarkıdan ${format.number(ready)} tanesi hazır. Şimdi görmek için yeniden Yenile’ye dokun.`,
+      `Yeni liste yolda · ${format.number(target)} şarkıdan ${format.number(ready)} tanesi hazır.${ready > 0 ? ' Şimdi görmek için yeniden Yenile’ye dokun.' : ''}`,
     offline: 'Bağlantı yok. Listen korundu; bağlantı gelince yeni şarkılar aranacak.',
     offlineEmpty: 'Bağlantı yok. Bağlantı gelince Keşfet listeni hazırlayacak.',
     noLibrary: 'Kütüphanene biraz müzik ekle; Keşfet’in bir çıkış noktası olsun.',

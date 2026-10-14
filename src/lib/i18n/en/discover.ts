@@ -50,7 +50,6 @@ export const discover = {
     failed: 'Could not download · tap to retry',
     needsBuild: 'Needs the updated app',
     waitingWifi: 'Waiting for Wi-Fi · tap to download',
-    noMatch: 'No recording found',
     percent: (percent: number) => `${format.number(percent)}%`,
     /** For a screen reader, which is told a song is being fetched and not each percent of it. */
     gettingReady: 'Being downloaded',
@@ -148,7 +147,6 @@ export const discover = {
     preview: (doing: string) => `Playing a preview. ${doing}`,
     willKeep: (doing: string) => `${doing} Saved to Library when ready.`,
     keeping: 'Saving to Library…',
-    noMatch: 'No recording of this was found. Another song is taking its place.',
     waitingWifi: 'Waiting for Wi-Fi · tap to download now',
   },
 
@@ -156,6 +154,9 @@ export const discover = {
   failure: {
     generic: 'This download could not finish.',
     fileMissing: 'The file is no longer on the phone.',
+    /** For a song that was on the screen and then turned out not to be fetchable after all. Rare: a song is only shown once its video is found. */
+    noRecording: 'No recording of this could be found.',
+    notASong: 'The video found for this is a live stream, or far too long to be the song.',
     stopped: 'The download was stopped.',
     needsBuild: 'Install the updated APK to download Discover songs.',
     retry: (reason: string) => `${reason} Tap to retry.`,
@@ -164,10 +165,15 @@ export const discover = {
   /** What is so of the list as a whole. One of these at a time, over the list. */
   status: {
     building: 'Looking for songs…',
+    /** While the songs that were chosen are confirmed one by one. A song is shown once it is known to be there. */
+    filling: (known: number, total: number) => `Finding songs · ${format.number(known)} of ${format.number(total)}`,
+    findingOffline: 'No connection. The rest of the list is looked for when there is one.',
+    findingPaused: 'Downloads are paused. Resume them and the rest of the list is looked for.',
+    findingLater: 'Some songs could not be checked just now. Discover tries them again later.',
     buildingArtists: (done: number, total: number) =>
       `Looking for songs · ${format.number(done)} of ${format.number(total)} artists`,
     preparing: (ready: number, target: number) =>
-      `A new list is on its way · ${format.number(ready)} of ${format.number(target)} songs ready. Refresh again to see it now.`,
+      `A new list is on its way · ${format.number(ready)} of ${format.number(target)} songs ready.${ready > 0 ? ' Refresh again to see it now.' : ''}`,
     offline: 'No connection. Your list is kept; new songs are looked for when there is one.',
     offlineEmpty: 'No connection. Discover makes your list when there is one.',
     noLibrary: 'Add some music to your library, and Discover has something to go on.',

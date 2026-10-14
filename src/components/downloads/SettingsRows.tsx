@@ -2,6 +2,7 @@ import { Link } from 'expo-router';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Pressable } from '../Pressable';
+import { CategoryRow } from '../settings/rows';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, switchColours, useColours, usePressed } from '../../lib/theme/index';
 import { setDownloadsButtonWanted, useDownloadsButtonWanted } from '../../lib/ui/downloadsButton';
@@ -11,16 +12,17 @@ import { downloads } from '../../lib/youtube/native';
 import { tallyOf } from '../../lib/youtube/queueView';
 
 /**
- * The rows Settings has about downloads: the way into their screen, which
- * says beside its name how the queue stands, the switch for the button that
- * floats over the app, and the switch for the look the app makes by itself
- * for a newer yt-dlp — which says under it what that look sends, and is not
- * there on a build of the phone's side that cannot make it.
+ * The rows Settings has about downloads and about Discover, whose songs are
+ * downloads too: the way into the downloads' screen, which says beside its
+ * name how the queue stands, the switch for the button that floats over the
+ * app, the way into Discover's settings, and the switch for the look the app
+ * makes by itself for a newer yt-dlp — which says under it what that look
+ * sends, and is not there on a build of the phone's side that cannot make it.
  *
- * Here and not written into Settings because of that first row. The queue
+ * Here and not written into the page because of that first row. The queue
  * is read again every second while anything is being fetched, and whatever
- * listens to it is drawn again each time: this is three rows, and Settings is
- * the longest screen in the app.
+ * listens to it is drawn again each time: this is four rows, and the page
+ * they are on need not be drawn with them.
  *
  * The styles are Settings' own rows over again, as the themes' screen has
  * them too, so that these are not told from their neighbours.
@@ -68,6 +70,21 @@ export function DownloadsSettings() {
         </View>
         <Text style={styles.muted}>{t.settings.downloads.button.note}</Text>
       </View>
+      <View style={styles.rule} />
+      {/*
+        A way in and not the settings themselves, which are a card as long as
+        a page: laid out here they would put the switch below them out of
+        sight. It is the screen the gear over Discover's list opens.
+      */}
+      <Link href="/discover-settings" asChild>
+        <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
+          <View style={styles.line}>
+            <Text style={styles.title}>{t.discover.settings.heading}</Text>
+            <Text style={styles.chevron}>›</Text>
+          </View>
+          <Text style={styles.muted}>{t.settings.discover.note}</Text>
+        </Pressable>
+      </Link>
       {downloads?.extractorLatestAsync ? (
         <>
           <View style={styles.rule} />
@@ -86,6 +103,28 @@ export function DownloadsSettings() {
         </>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The row on the Settings tab that opens the page those rows are on.
+ *
+ * It says how the queue stands when there is anything in it, as the row for
+ * the downloads does, and what the page holds when there is not. By itself
+ * for the reason above: the tab is not to be drawn again each second for it.
+ */
+export function DownloadsCategory() {
+  const { all, paused } = useDownloads();
+  const t = useT();
+  const tally = tallyOf(all);
+  const state = t.downloads.short(tally.underWay, tally.waiting, paused);
+  return (
+    <CategoryRow
+      href="/settings-downloads"
+      title={t.settings.sections.downloads}
+      note={t.settings.categories.downloads}
+      value={state || undefined}
+    />
   );
 }
 

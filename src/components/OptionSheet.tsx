@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from './Pressable';
 
@@ -22,6 +23,7 @@ export function OptionSheet<Value extends string>({
   chosen,
   onChoose,
   onClose,
+  picture,
 }: {
   visible: boolean;
   heading: string;
@@ -31,6 +33,13 @@ export function OptionSheet<Value extends string>({
   chosen: Value;
   onChoose: (value: Value) => void;
   onClose: () => void;
+  /**
+   * What to show in place of the list of names, for a choice that is better
+   * seen than read: the themes, each as it looks. Whatever it is does its own
+   * choosing and closing; the names are then only what a screen reader would
+   * have been given, and are not drawn.
+   */
+  picture?: ReactNode;
 }) {
   const t = useT();
   const styles = useStyles();
@@ -44,8 +53,8 @@ export function OptionSheet<Value extends string>({
             backdrop behind it. */}
         <Pressable style={styles.sheet} onPress={() => {}}>
           <Text style={styles.heading}>{heading}</Text>
-          <ScrollView style={styles.list}>
-            {options.map((option) => {
+          <ScrollView style={styles.list} contentContainerStyle={picture ? styles.pictured : undefined}>
+            {picture ?? options.map((option) => {
               const on = option.value === chosen;
               return (
                 <Pressable
@@ -99,6 +108,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   heading: { color: c.text, fontSize: 15, fontWeight: '600', paddingHorizontal: 18 },
   list: { flexGrow: 0 },
+  pictured: { paddingHorizontal: 18 },
   option: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -306,6 +306,18 @@ export function LyricsIcon({ size = 20, color: asked }: { size?: number; color?:
   );
 }
 
+/** A heart, in outline, or filled where it has been pressed. */
+export function HeartIcon({ size = 20, color: asked, full = false }: { size?: number; color?: string; full?: boolean }) {
+  const color = useInk(asked);
+  return (
+    <VectorIcon
+      source={full ? require('../../assets/icons/heart-full.svg') : require('../../assets/icons/heart.svg')}
+      size={size}
+      color={color}
+    />
+  );
+}
+
 /** Two writing systems: language translation, rather than a web/globe symbol. */
 export function TranslateIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
   const color = useInk(asked);

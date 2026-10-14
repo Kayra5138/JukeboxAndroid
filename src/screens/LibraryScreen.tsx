@@ -21,6 +21,7 @@ import { SearchField } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { underGlass } from '../lib/theme/Veil';
 import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
@@ -223,6 +224,7 @@ export default function LibraryScreen() {
   const landscape = useLandscape();
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
+  const glass = underGlass(c);
   const [note, setNote] = useState<string | null>(null);
 
   // Restored in an effect rather than in the first render: opening the
@@ -1076,7 +1078,9 @@ export default function LibraryScreen() {
           something nobody can see.
         */}
         <View
-          style={styles.upright}
+          // Out of focus under an open record, where screens are glass.
+          collapsable={false}
+          style={opened && glass ? [styles.upright, glass] : styles.upright}
           pointerEvents={opened ? 'none' : 'auto'}
           importantForAccessibility={opened ? 'no-hide-descendants' : 'auto'}
           accessibilityElementsHidden={opened != null}>

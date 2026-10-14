@@ -107,6 +107,17 @@ class Outside(
  *     as work to wait after, either, or each one would put off Discover's
  *     next download by the long quiet again.
  *
+ *     The first few go faster. A song of Discover's is shown only once its
+ *     video is found, so the time these searches take is the time until
+ *     there is a list to look at, and what matters most of that is the time
+ *     until there is anything on the screen at all. So [FIND_BURST] of them
+ *     in any minute may follow each other a second apart — five rows in a
+ *     quarter of a minute — and the rest keep the longer gap. Five searches
+ *     in fifteen seconds is what somebody typing quickly does; twenty would
+ *     be a machine, and is what the longer gap is for. The minute slides,
+ *     so the allowance comes back only when the searching has been slow or
+ *     still for a while, and a long list never gets a second run of it.
+ *
  *     Nothing is brought up or kept up for it. No worker, no notification,
  *     no wake lock: it is looked for while JavaScript happens to be there
  *     asking, and waits when it is not. When somebody taps a song, a held
@@ -133,6 +144,14 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     const val COOL_DOWN_MS = 45_000L
     /** How long after any work, and after each other, the searches made ahead for held jobs are spaced. Rule 10. */
     const val FIND_GAP_MS = 5_000L
+    /**
+     * The first few of them after a quiet spell go closer together: rule 10.
+     * [FIND_BURST] searches in any [FIND_BURST_WINDOW_MS] may follow each
+     * other at [FIND_BURST_GAP_MS]; past that it is [FIND_GAP_MS] again.
+     */
+    const val FIND_BURST = 5
+    const val FIND_BURST_GAP_MS = 1_000L
+    const val FIND_BURST_WINDOW_MS = 60_000L
     /** How long since JavaScript last asked for a name before it is taken not to be there. */
     const val FINDER_PATIENCE_MS = 10_000L
     /** How long a job may be marked as being looked for with no search to show for it. */
@@ -157,6 +176,23 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   /** When a search for a held job last ended. Not kept: a new process starts with one search early, which costs nothing. */
   var lastSought = 0L
     private set
+  /** When each of the last few ended, for the allowance of [FIND_BURST]. Not kept either. */
+  private val soughtLately = ArrayDeque<Long>()
+
+  /** A search for a held job has ended, however it ended. */
+  private fun sought() {
+    lastSought = clock()
+    soughtLately.addLast(lastSought)
+    while (soughtLately.size > FIND_BURST) soughtLately.removeFirst()
+  }
+
+  /** How long the next search made ahead has to leave after the last, and after any other work: rule 10. */
+  private fun findGap(): Long {
+    val now = clock()
+    // Only the ones within the last minute count, and none from a clock that has since been put back.
+    val lately = soughtLately.count { it <= now && now - it < FIND_BURST_WINDOW_MS }
+    return if (lately < FIND_BURST) FIND_BURST_GAP_MS else FIND_GAP_MS
+  }
 
   /** Set by anything that changed a job in a way worth keeping, and cleared by whoever writes them down. */
   var changed = false
@@ -505,7 +541,8 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     // Rule 10: the searches made ahead do not sit out the long quiet, only a short one.
     val ahead = waiting.filter { it.hold && it.toFind }
     if (ahead.isEmpty()) return Turn.Cooling(COOL_DOWN_MS - quiet)
-    return if (quiet < FIND_GAP_MS) Turn.Cooling(FIND_GAP_MS - quiet) else due(ahead)
+    val gap = findGap()
+    return if (quiet < gap) Turn.Cooling(gap - quiet) else due(ahead)
   }
 
   /** Whether [line] has a name in it that a worker should stay up for: one that will become a download. A held one will not. */
@@ -572,7 +609,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
       val first = (turn(outside) as? Turn.Of)?.jobs?.first() ?: return null
       if (!first.toFind) return null
       // Rule 10: searches made ahead keep a little apart from each other.
-      if (first.hold && since(lastSought) < FIND_GAP_MS) return null
+      if (first.hold && since(lastSought) < findGap()) return null
       if (barred(first, outside)) continue
       begun(first)
       first.put("status", "finding").put("touched", clock())
@@ -598,7 +635,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     job.put("status", "queued")
     rejoin(job)
     finderSeen = clock()
-    if (job.hold) lastSought = clock() else ended()
+    if (job.hold) sought() else ended()
     changed = true
   }
 
@@ -606,7 +643,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   fun failFind(id: String, failed: Failed) {
     val job = find(id)?.takeIf { it.status == "finding" } ?: return
     finderSeen = clock()
-    if (job.hold) lastSought = clock()
+    if (job.hold) sought()
     again(job, failed)
   }
 
@@ -630,7 +667,7 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     val job = find(id)?.takeIf { it.status == "finding" } ?: return
     finderSeen = clock()
     val held = job.hold
-    if (held) lastSought = clock()
+    if (held) sought()
     // A search made ahead is not work to wait after: rule 10.
     if (found == null) return end(job, "failed", Failed(Failure.NO_MATCH), worked = !held)
     val videoId = found.optString("id")

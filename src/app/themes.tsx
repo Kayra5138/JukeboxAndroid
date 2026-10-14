@@ -178,6 +178,18 @@ export default function ThemesScreen() {
           if (choosing) chooseSystemTheme(choosing, theme);
         }}
         onClose={() => setChoosing(null)}
+        // As they look and not as they are called, the same as where a theme is chosen for itself.
+        picture={
+          choosing ? (
+            <ThemePicker
+              marked={[pair[choosing]]}
+              onPick={(theme) => {
+                if (theme !== 'system') chooseSystemTheme(choosing, theme);
+                setChoosing(null);
+              }}
+            />
+          ) : undefined
+        }
       />
     </View>
   );

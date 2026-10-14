@@ -6,11 +6,11 @@ import { makeStyles, scene } from '../lib/theme/index';
 
 /**
  * Discover's settings on a screen of their own, opened from the gear over
- * the list.
+ * the list and from a row in Settings.
  *
- * They are in Settings too, a long way down it, and that was the only way to
- * them: to keep five songs ready in place of three meant leaving the list,
- * finding the card and coming back. It is the same card in both places.
+ * They were a card in Settings once, a long way down it, and that was the
+ * only way to them: to keep five songs ready in place of three meant leaving
+ * the list, finding the card and coming back.
  */
 export default function DiscoverSettingsScreen() {
   const insets = useSafeAreaInsets();

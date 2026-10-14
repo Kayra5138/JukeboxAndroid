@@ -15,6 +15,7 @@ import {
   namesOf,
   queueOf,
   RUN_GRACE_MS,
+  DONE_LINGER_MS,
   RUN_LINGER_MS,
   sameJob,
   sourceOf,
@@ -148,19 +149,45 @@ test('jobs that adjoin within the grace are one run, and beyond it two', () => {
   const first = job('a', 'done', { createdAt: NOW - 10 * MIN, finishedAt: NOW - 8 * MIN });
   const near = job('b', 'done', { createdAt: NOW - 8 * MIN + RUN_GRACE_MS, finishedAt: NOW - MIN });
   const far = job('b', 'done', { createdAt: NOW - 8 * MIN + RUN_GRACE_MS + 1, finishedAt: NOW - MIN });
-  assert.equal(batchOf([first, near], NOW).done, 2);
-  assert.equal(batchOf([first, far], NOW).done, 1);
+  // A moment after the last of them ended, while a run that ended well is still spoken of.
+  const soon = NOW - MIN + 1_000;
+  assert.equal(batchOf([first, near], soon).done, 2);
+  assert.equal(batchOf([first, far], soon).done, 1);
 });
 
-test('a run that has ended is spoken of for a few minutes and then not', () => {
+test('a run that ended well is spoken of for some seconds and then not', () => {
   const all = [
     job('a', 'done', { createdAt: NOW - 20 * MIN, finishedAt: NOW - 19 * MIN }),
     job('b', 'cancelled', { createdAt: NOW - 20 * MIN, finishedAt: NOW - 18 * MIN }),
   ];
   const ended = NOW - 18 * MIN;
-  const fresh = batchOf(all, ended + RUN_LINGER_MS);
-  assert.deepEqual({ done: fresh.done, total: fresh.total, endedAt: fresh.endedAt, current: fresh.current }, { done: 1, total: 2, endedAt: ended, current: null });
+  const fresh = batchOf(all, ended + DONE_LINGER_MS);
+  assert.deepEqual(
+    { done: fresh.done, total: fresh.total, endedAt: fresh.endedAt, goesAt: fresh.goesAt, current: fresh.current },
+    { done: 1, total: 2, endedAt: ended, goesAt: ended + DONE_LINGER_MS, current: null }
+  );
+  assert.equal(batchOf(all, ended + DONE_LINGER_MS + 1).total, 0);
+});
+
+test('one with a failure nobody has looked at is spoken of for minutes, and not at all once it has been looked at', () => {
+  const all = [
+    job('a', 'done', { createdAt: NOW - 20 * MIN, finishedAt: NOW - 19 * MIN }),
+    job('b', 'failed', { createdAt: NOW - 20 * MIN, finishedAt: NOW - 18 * MIN }),
+  ];
+  const ended = NOW - 18 * MIN;
+  assert.equal(batchOf(all, ended + RUN_LINGER_MS).total, 2);
+  assert.equal(batchOf(all, ended + RUN_LINGER_MS).goesAt, ended + RUN_LINGER_MS);
   assert.equal(batchOf(all, ended + RUN_LINGER_MS + 1).total, 0);
+  // Looked at after it ended: nothing left to do or to say, so it goes at once.
+  assert.equal(batchOf(all, ended + 1_000, ended + 500).total, 0);
+  // Looked at while it was still going is not having seen how it ended.
+  assert.equal(batchOf(all, ended + 1_000, ended - 500).total, 2);
+});
+
+test('a run still going is spoken of however long ago it was looked at', () => {
+  const all = [job('a', 'downloading', { createdAt: NOW - MIN })];
+  assert.equal(batchOf(all, NOW, NOW).total, 1);
+  assert.equal(batchOf(all, NOW, NOW).goesAt, null);
 });
 
 test('a job with no times counts while it is going and not once it is finished', () => {
@@ -175,7 +202,7 @@ test('what has been cleared is no longer counted', () => {
     job('a', 'done', { createdAt: NOW - 3 * MIN, finishedAt: NOW - 2 * MIN, cleared: true }),
     job('b', 'done', { createdAt: NOW - 3 * MIN, finishedAt: NOW - MIN }),
   ];
-  assert.equal(batchOf(all, NOW).done, 1);
+  assert.equal(batchOf(all, NOW - MIN + 1_000).done, 1);
 });
 
 test('one of Discover’s own that has waited for days does not join those days into a run', () => {
@@ -286,7 +313,8 @@ test('only a job waiting for its second try is said to be', () => {
 test('a failure that has been looked at is counted and is not news', () => {
   const all = [
     job('a', 'failed', { createdAt: NOW - 3 * MIN, finishedAt: NOW - 2 * MIN }),
-    job('b', 'done', { createdAt: NOW - 2 * MIN, finishedAt: NOW - MIN }),
+    // Still being fetched, so the run is going on and is spoken of whoever has looked.
+    job('b', 'downloading', { createdAt: NOW - 2 * MIN }),
   ];
   assert.deepEqual(pick(batchOf(all, NOW)), { failed: 1, unseen: 1 });
   assert.deepEqual(pick(batchOf(all, NOW, NOW - 3 * MIN)), { failed: 1, unseen: 1 });

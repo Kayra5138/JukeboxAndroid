@@ -110,6 +110,13 @@ export type Item = {
   ahead?: 'seeking' | 'found';
   /** When looking for it ahead last came to nothing for a reason that may pass. Not tried again that day. */
   soughtAt?: number;
+  /**
+   * It is known to be fetchable — its video has been found, or its file is
+   * here — and so it is on the screen: see WHAT IS SHOWN, by `reveal`. Once
+   * so, always so, for as long as it is on the list. A song without this is
+   * in the list and in nobody's sight.
+   */
+  seen?: true;
 };
 
 export type Live = {
@@ -293,8 +300,18 @@ export type Effect =
   | { kind: 'build'; refresh: boolean }
   | { kind: 'network' };
 
-/** How long a row says no recording was found before the next song has its place. */
-export const NO_MATCH_SHOWN_MS = 4_000;
+/**
+ * How long a row says no recording was found before the next song has its
+ * place: not at all.
+ *
+ * It said so for four seconds, in red, on a song the list itself had offered
+ * a moment before, and what it said was nearly always untrue: the song was
+ * there and the search had not known it for what it was. The search is
+ * looser now (see `chooseVideo`), and where it still comes back with nothing
+ * the song gives up its place without a word, as one looked for ahead of a
+ * tap always has.
+ */
+export const NO_MATCH_SHOWN_MS = 0;
 /** How long an exclusion can be taken back, and how long any other notice stands. */
 export const UNDO_MS = 10_000;
 export const NOTICE_MS = 6_000;
@@ -594,7 +611,8 @@ export function wanted(s: State, now: number): Item[] {
     const taken: Item[] = [];
     for (const item of items) {
       if (taken.length >= count) break;
-      if (gone(item)) continue;
+      // Only songs that are on the screen. One not yet confirmed is looked for first, and taken up here when it is found.
+      if (gone(item) || !item.seen) continue;
       if (!item.track && !s.live.has(item.id) && item.failure && LASTING.has(item.failure.code)) continue;
       taken.push(item);
     }
@@ -611,11 +629,33 @@ export function wanted(s: State, now: number): Item[] {
   return rows.filter(askable);
 }
 
-/** How far a new list has got: how many of the songs it is waited for are ready, out of how many. */
+/** How many confirmed songs a new list has to have before it is worth showing in the old one's place, where none are fetched ahead. */
+export const STAGE_SHOWS = 5;
+
+/** The songs of [items] that are on the screen, or would be: the confirmed ones, in their order. */
+export function seenOf(items: readonly Item[]): Item[] {
+  return items.filter((item) => item.seen && !gone(item));
+}
+
+/**
+ * How far a new list has got towards being worth showing.
+ *
+ * A list is worth showing for the songs in it that are known to be there,
+ * not for the ones that were chosen. So what is counted is confirmed songs:
+ * where songs are kept ready, the first so-many of them with their files in,
+ * as before; where none are, the first [STAGE_SHOWS] confirmed and nothing
+ * more — never fewer than one, and no more than the list could ever have.
+ */
 export function stagedProgress(s: State): { ready: number; target: number } | null {
   if (!s.staged) return null;
-  const first = s.staged.items.filter((item) => !gone(item)).slice(0, Math.max(s.settings.ready, 0));
-  return { ready: first.filter((item) => item.track).length, target: first.length };
+  const all = s.staged.items.filter((item) => !gone(item));
+  const seen = seenOf(all);
+  if (s.settings.ready > 0) {
+    const target = Math.max(1, Math.min(s.settings.ready, all.length));
+    return { ready: seen.slice(0, target).filter((item) => item.track).length, target };
+  }
+  const target = Math.max(1, Math.min(STAGE_SHOWS, all.length));
+  return { ready: Math.min(seen.length, target), target };
 }
 
 /**
@@ -645,11 +685,13 @@ function swap(d: Draft): void {
   const carried = d.s.list.filter((item) => !gone(item) && (item.keep || d.s.keeping.has(item.id)));
   for (const item of d.s.list) {
     if (carried.includes(item)) continue;
-    if (!gone(item)) putAway(d, item.song, item.heardAt ? 'played' : 'unplayed');
+    // Only what was ever on the screen is put away. A song that was never confirmed was never offered.
+    if (!gone(item) && item.seen) putAway(d, item.song, item.heardAt ? 'played' : 'unplayed');
     release(d, item);
   }
   set(d, {
-    list: [...staged.items, ...carried],
+    // What is confirmed of the new list first, in its order, so that what follows joins at the end: see `reveal`.
+    list: [...seenOf(staged.items), ...carried, ...staged.items.filter((item) => !item.seen)],
     staged: null,
     refreshedAt: d.now,
     undo: null,
@@ -661,6 +703,71 @@ function swap(d: Draft): void {
 /** The rows that are songs, as against rows saying a song could not be found. */
 function shown(items: readonly Item[]): Item[] {
   return items.filter((item) => !gone(item));
+}
+
+/** Puts one song on the screen now, after every song already there. See WHAT IS SHOWN. */
+function show(d: Draft, id: string): void {
+  const place = (items: readonly Item[]): readonly Item[] => {
+    const item = items.find((other) => other.id === id);
+    if (!item || item.seen) return items;
+    const rest = items.filter((other) => other !== item);
+    const after = rest.reduce((last, other, at) => (other.seen ? at : last), -1);
+    return [...rest.slice(0, after + 1), { ...item, seen: true as const }, ...rest.slice(after + 1)];
+  };
+  const list = place(d.s.list);
+  if (list !== d.s.list) return set(d, { list });
+  if (!d.s.staged) return;
+  const items = place(d.s.staged.items);
+  if (items !== d.s.staged.items) set(d, { staged: { ...d.s.staged, items } });
+}
+
+/**
+ * WHAT IS SHOWN.
+ *
+ * A song is on the screen only once it is known that it can be fetched: its
+ * video has been found, or its file is here. Until then it is in the list —
+ * chosen, in its place, being looked for — and drawn nowhere, counted
+ * nowhere, and reachable by nothing a person can do. The list used to show
+ * every song the moment it was chosen and find out afterwards which of them
+ * YouTube had; the ones it had not were a row that turned red, or vanished,
+ * under whoever was reading it. A row that would have done that now never
+ * comes.
+ *
+ * So a new list fills in, a song at a time, as each is confirmed. And since
+ * the promise of this screen is that no row moves under a finger, a song is
+ * given its place when it is first seen and not before: AFTER every song
+ * already on the screen. The songs are looked for in the order of the list,
+ * one at a time, so that is nearly always where it stood anyway. Where it
+ * is not — the third was looked for again a day later, after the fourth and
+ * fifth had been found — it is the unseen song that moves, which nobody was
+ * looking at. What is on the screen only ever grows at the end.
+ */
+function reveal(d: Draft): void {
+  const arrange = (items: readonly Item[]): readonly Item[] => {
+    if (!items.some((item) => !item.seen && !gone(item) && (item.track || item.ahead === 'found'))) return items;
+    const seen: Item[] = [];
+    const fresh: Item[] = [];
+    const unseen: Item[] = [];
+    for (const item of items) {
+      if (item.seen) seen.push(item);
+      else if (!gone(item) && (item.track || item.ahead === 'found')) fresh.push({ ...item, seen: true });
+      else unseen.push(item);
+    }
+    return [...seen, ...fresh, ...unseen];
+  };
+  const list = arrange(d.s.list);
+  if (list !== d.s.list) set(d, { list });
+  if (d.s.staged) {
+    const items = arrange(d.s.staged.items);
+    if (items !== d.s.staged.items) set(d, { staged: { ...d.s.staged, items } });
+  }
+}
+
+/** Whether a song nobody can see yet may still come to be seen without anybody doing anything: it is being looked for, or will be today. */
+export function confirmable(s: State, item: Item, now: number): boolean {
+  if (item.seen || gone(item)) return false;
+  if (item.jobId || s.seeking.has(item.id) || s.live.has(item.id)) return true;
+  return item.soughtAt == null || now - item.soughtAt >= DAY || now < item.soughtAt;
 }
 
 /**
@@ -686,13 +793,29 @@ function settle(d: Draft): void {
 
   fill(d);
 
-  // The new list is shown once its first few songs are in, or it has been waited for long enough.
+  reveal(d);
+
+  /*
+    The new list is shown once it is worth showing, or it has been waited
+    for long enough — and in neither case with nothing in it. A list is
+    worth showing for its confirmed songs: with none yet, the old one stays
+    up however long that has been, because an empty screen in place of a
+    list of songs is the one thing a refresh must not do. It is given up
+    only when it has no song left that could still be confirmed.
+  */
   if (d.s.staged) {
     const progress = stagedProgress(d.s)!;
+    const some = seenOf(d.s.staged.items).length > 0;
     const waited = now - d.s.staged.since >= STAGE_WAIT_MS;
-    // None of nothing is not "all of them": a list whose every row has gone is waited out and then given up, not shown.
-    const ready = progress.target > 0 && progress.ready >= progress.target;
-    if (d.s.settings.ready <= 0 || ready || waited || d.s.held) swap(d);
+    // With the songs kept ready held for want of Wi-Fi there are no files to wait for: confirmed is as far as it gets.
+    const enough = progress.ready >= progress.target ||
+      (d.s.held != null && seenOf(d.s.staged.items).length >= Math.min(STAGE_SHOWS, shown(d.s.staged.items).length));
+    if (some && (enough || waited)) swap(d);
+    else if (!shown(d.s.staged.items).length) swap(d);
+    else if (!some && waited && !d.s.staged.items.some((item) => confirmable(d.s, item, now))) {
+      for (const item of d.s.staged.items) release(d, item);
+      set(d, { staged: null, problem: { code: 'exhausted', at: now }, fruitlessAt: now });
+    }
   }
 
   for (const item of d.s.list) {
@@ -888,7 +1011,7 @@ function keepReady(d: Draft): void {
 
 /** Whether a song is one to look for ahead: nothing has been done about it, and nothing is being. */
 function seekable(s: State, item: Item, now: number): boolean {
-  if (gone(item) || item.track || item.jobId || item.failure || item.ahead || item.asked || item.keep) return false;
+  if (item.seen || gone(item) || item.track || item.jobId || item.failure || item.ahead || item.asked || item.keep) return false;
   if (s.live.has(item.id) || s.seeking.has(item.id) || beingStopped(s, item.id)) return false;
   return item.soughtAt == null || now - item.soughtAt >= DAY || now < item.soughtAt;
 }
@@ -925,6 +1048,11 @@ function findAhead(d: Draft): void {
     if (under >= FIND_AHEAD_AT_ONCE) return;
     if (!seekable(d.s, item, d.now)) continue;
     set(d, { seeking: added(d.s.seeking, item.id) });
+    // Being looked for again: that it came to nothing before is no longer what is so of it.
+    if (item.soughtAt != null) {
+      const { soughtAt: _sought, ...rest } = item;
+      replace(d, rest);
+    }
     d.fx.push({ kind: 'ask', id: item.id, song: item.song, front: false, wifiOnly: false, hold: true });
     under += 1;
   }
@@ -947,9 +1075,11 @@ function heldJob(d: Draft, item: Item, job: DownloadJob): Item {
     case 'found':
       return item.ahead === 'found' ? item : { ...item, ahead: 'found' };
     case 'failed':
-      if (job.errorCode === NO_MATCH_CODE || job.errorCode === NOT_A_SONG) {
+      if ((job.errorCode === NO_MATCH_CODE || job.errorCode === NOT_A_SONG) && !item.seen) {
         putAway(d, item.song, 'unmatched');
-        return { ...item, failure: { code: job.errorCode, at: d.now, job: job.id }, goneAt: d.now };
+        // No longer being looked for: its job is over, and there is nothing of it to stop.
+        const { ahead: _ahead, ...rest } = item;
+        return { ...rest, failure: { code: job.errorCode, at: d.now, job: job.id }, goneAt: d.now };
       }
     // Any other failure goes the way of one that was stopped.
     // falls through
@@ -1037,6 +1167,8 @@ function readJobs(d: Draft, jobs: readonly DownloadJob[], paused: boolean): void
       item = heldJob(d, item, job);
       if (item !== before) replace(d, item);
       setLive(d, item.id, undefined);
+      // Found: on the screen from now, in its turn among the songs this reading has to show.
+      if (item.ahead === 'found' && !item.seen && !gone(item)) show(d, item.id);
       continue;
     }
     // Let go since it was last read: an ordinary download from here on.
@@ -1046,6 +1178,8 @@ function readJobs(d: Draft, jobs: readonly DownloadJob[], paused: boolean): void
     }
     // Its file is here already, told of by the phone ahead of the queue's own record of it.
     const have = item.track?.id === `discover:${job.id}`;
+    // Past the search: its video is known, whatever becomes of the fetching. That is a song that can be shown.
+    const found = !job.video.find && !!job.video.id;
 
     let live: Live | undefined;
     switch (job.status) {
@@ -1098,7 +1232,7 @@ function readJobs(d: Draft, jobs: readonly DownloadJob[], paused: boolean): void
         break;
       }
       case 'failed':
-        if (item.failure?.job !== job.id) item = failed(d, item, job);
+        if (item.failure?.job !== job.id) item = failed(d, item, job, found);
         break;
     }
     // Under way again, so whatever it failed of before is over.
@@ -1107,7 +1241,9 @@ function readJobs(d: Draft, jobs: readonly DownloadJob[], paused: boolean): void
       item = rest;
     }
     if (item !== before) replace(d, item);
-    setLive(d, item.id, live);
+    // Not for a song still being looked for and not yet seen: there is no row for it to be said on.
+    setLive(d, item.id, item.seen || found ? live : undefined);
+    if (found && !item.seen && !gone(item) && itemOf(d.s, item.id)) show(d, item.id);
   }
 }
 
@@ -1126,7 +1262,7 @@ function isLive(job: DownloadJob): boolean {
  * either, and is tried again when there is some. Anything else stays on its
  * row, to be tapped or taken off.
  */
-function failed(d: Draft, item: Item, job: DownloadJob): Item {
+function failed(d: Draft, item: Item, job: DownloadJob, found: boolean): Item {
   const code = job.errorCode ?? UNSORTED;
   const failure: ItemFailure = { code, at: d.now, job: job.id };
   if (code === UNSORTED) failure.detail = job.error;
@@ -1138,10 +1274,36 @@ function failed(d: Draft, item: Item, job: DownloadJob): Item {
     could answer.
   */
   if (code === WAITING_WIFI) set(d, { network: { connected: d.s.network?.connected ?? true, wifi: false } });
-  // A video that turned out to be a live stream, or hours long, is no recording of the song either, and goes the same way.
-  if (code !== NO_MATCH_CODE && code !== NOT_A_SONG) return { ...item, failure };
-  putAway(d, item.song, 'unmatched');
-  return { ...item, failure, goneAt: d.now + NO_MATCH_SHOWN_MS };
+  /*
+    A song on the screen that fails stays on the screen and says so, whatever
+    it failed of. That includes the two failures that mean "this is not a
+    recording of the song after all" — its video turned out to be a live
+    stream, or was looked for again and not found — which used to take the
+    row away: somebody tapped it, and a row that disappears under a tap is
+    worse than one that says it could not be fetched.
+  */
+  if (item.seen || found) return { ...item, failure };
+  // Nobody has seen it. With no recording it gives its place up, unseen, and the next song is looked for in its stead.
+  if (code === NO_MATCH_CODE || code === NOT_A_SONG) {
+    putAway(d, item.song, 'unmatched');
+    return { ...item, failure, goneAt: d.now + NO_MATCH_SHOWN_MS };
+  }
+  // Failed while it was still being looked for, for a reason that may pass: forgotten until tomorrow, as a search ahead is.
+  retire(d, job.id);
+  const { jobId: _job, jobAt: _at, ahead: _ahead, asked: _asked, ...rest } = item;
+  return { ...rest, soughtAt: d.now };
+}
+
+/** Forgets that looking for the unseen songs came to nothing earlier today, so that they are looked for again now. Answers whether there were any. */
+function seekAgain(d: Draft): boolean {
+  let any = false;
+  for (const item of everyItem(d.s)) {
+    if (item.seen || item.soughtAt == null) continue;
+    const { soughtAt: _sought, ...rest } = item;
+    replace(d, rest);
+    any = true;
+  }
+  return any;
 }
 
 /** Whether the catalogue may be asked now, and if not, what stands in the way. */
@@ -1309,7 +1471,8 @@ function take(d: Draft, event: Event): void {
     case 'play': {
       const at = s.list.findIndex((item) => item.id === event.id);
       const item = s.list[at];
-      if (!item || gone(item)) return;
+      // Nor a song that is not on the screen: there is no row to have tapped.
+      if (!item || gone(item) || !item.seen) return;
       // Ready: sound, and nothing asked of anybody first.
       if (item.track) return start(d, at);
       /*
@@ -1340,7 +1503,7 @@ function take(d: Draft, event: Event): void {
 
     case 'keep': {
       const item = s.list.find((other) => other.id === event.id);
-      if (!item || gone(item) || item.keep) return;
+      if (!item || gone(item) || !item.seen || item.keep) return;
       replace(d, { ...item, keep: true });
       if (!item.track) ask(d, itemOf(d.s, item.id)!, true);
       return;
@@ -1370,7 +1533,7 @@ function take(d: Draft, event: Event): void {
     case 'exclude': {
       const index = s.list.findIndex((item) => item.id === event.id);
       const item = s.list[index];
-      if (!item || gone(item)) return;
+      if (!item || gone(item) || !item.seen) return;
       putAway(d, item.song, 'blocked');
       if (event.artist) {
         d.fx.push({ kind: 'hideArtist', song: item.song });
@@ -1429,12 +1592,22 @@ function take(d: Draft, event: Event): void {
       return;
 
     case 'refresh':
-      // Pressed again while the new list is being got ready: it is wanted now, as far as it has got.
-      if (s.staged) return swap(d);
+      // Pressed again while the new list is being got ready: it is wanted now, as far as it has got — if it has got anywhere.
+      if (s.staged) {
+        seekAgain(d);
+        if (seenOf(s.staged.items).length) swap(d);
+        return;
+      }
       if (mayBuild(d, true)) build(d, s.list.length > 0);
       return;
 
     case 'findMore':
+      /*
+        Songs that are chosen and could not be confirmed are the first thing
+        "find more" means: they are looked for again now, and the catalogue
+        is only asked where the list is short of songs to look for.
+      */
+      if (seekAgain(d) && shown(d.s.list).length >= d.s.settings.count) return;
       if (mayBuild(d, true)) build(d, false);
       return;
 

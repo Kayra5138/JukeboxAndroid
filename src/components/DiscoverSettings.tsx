@@ -37,9 +37,10 @@ type BlockedArtist = ReturnType<typeof blockedArtists>[number];
  * how many songs are fetched ahead and over what, which end of an artist's
  * songs to lean to, and who and what has been turned away.
  *
- * One card, drawn in two places: among the rest in Settings, under a
- * heading, and by itself on the screen the gear over the list opens, where
- * the screen's own title is the heading.
+ * One card, by itself on a screen of its own, where the screen's title is
+ * the heading: the gear over the list opens it, and so does a row in
+ * Settings. It can still be drawn under a heading among other cards, as it
+ * was when it stood in Settings itself.
  *
  * Every choice takes at once and nothing here waits for it. Only the task
  * that runs with no screen has to be told, and that is the one thing on the
