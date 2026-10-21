@@ -205,7 +205,9 @@ export const styles = StyleSheet.create({
   small: { color: MUTED, fontSize: 13, lineHeight: 18 },
   waiting: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, backgroundColor: DIM },
+  chip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999, borderWidth: 0, backgroundColor: DIM },
+  // A chip's plate and the mark of the chosen one, where chips are a choice (see `Segmented`).
+  chipPlate: { backgroundColor: DIM },
   chipOn: { backgroundColor: TEXT },
   chipLabel: { color: TEXT, fontSize: 14 },
   chipLabelOn: { color: BACK, fontWeight: '600' },

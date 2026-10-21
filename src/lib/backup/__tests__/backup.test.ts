@@ -68,6 +68,8 @@ const details = (track: string, status: string, fetched: number, extra: Row = {}
   track_number: null,
   disc_number: null,
   cover_searched_at: null,
+  album_artist: null,
+  cover_removed_at: null,
   ...extra,
 });
 const tag = (track: string, name: string, position: number, source = 'lookup'): Row => ({

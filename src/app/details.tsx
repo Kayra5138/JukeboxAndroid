@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { Pressable } from '../components/Pressable';
+import { Segmented } from '../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GeneralTab } from '../components/details/GeneralTab';
@@ -78,7 +79,7 @@ export default function DetailsScreen() {
     return (
       <View style={[styles.screen, styles.centered]}>
         <Text style={styles.gone}>{gone === true ? t.details.screen.missing : gone}</Text>
-        <Pressable android_ripple={pressed} style={styles.button} onPress={() => router.back()}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => router.back()}>
           <Text style={styles.buttonLabel}>{t.details.screen.goBack}</Text>
         </Pressable>
       </View>
@@ -106,21 +107,13 @@ export default function DetailsScreen() {
         </Text>
       </View>
 
-      <View style={styles.tabs} accessibilityRole="tablist">
-        {TABS.map((key) => (
-          <Pressable
-            android_ripple={pressed}
-            key={key}
-            style={[styles.tab, tab === key && styles.tabOn]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === key }}
-            onPress={() => setTab(key)}>
-            <Text style={tab === key ? styles.tabLabelOn : styles.tabLabel}>
-              {t.details.screen.tabs[key]}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      <Segmented
+        role="tab"
+        style={styles.tabs}
+        options={TABS.map((key) => ({ value: key, label: t.details.screen.tabs[key] }))}
+        value={tab}
+        onChange={setTab}
+      />
 
       {/*
         All three stay mounted and the two not chosen are hidden. Unmounting
@@ -150,19 +143,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   heading: { paddingHorizontal: 20, paddingTop: 14, gap: 3 },
   title: { color: c.text, fontSize: 17, fontWeight: '600' },
   artist: { color: c.textMuted, fontSize: 13 },
-  tabs: {
-    flexDirection: 'row',
-    marginHorizontal: 20,
-    marginTop: 14,
-    backgroundColor: c.surface,
-    borderRadius: 10,
-    padding: 3,
-    ...outlined(c),
-  },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 8 },
-  tabOn: { backgroundColor: c.primary },
-  tabLabel: { color: c.textSecondary, fontSize: 14 },
-  tabLabelOn: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
+  tabs: { marginHorizontal: 20, marginTop: 14 },
   pane: { flex: 1 },
   hidden: { display: 'none' },
 }));

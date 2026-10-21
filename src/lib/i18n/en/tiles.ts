@@ -20,6 +20,18 @@ export const tiles = {
     offset: (ms: number) => `${ms} ms`,
     start: 'Play from the top',
     starting: 'Starting…',
+    /**
+     * Shown over the setup while a screen reader is on. The game is a matter
+     * of tapping in time, and a screen reader takes the first tap of every
+     * touch for itself.
+     */
+    screenReader:
+      'This game is played by tapping in time with the music, and TalkBack takes those taps for itself. Pause TalkBack to play.',
+  },
+
+  /** The figure at the top while a run is going, as a screen reader says it. */
+  hud: {
+    score: (points: number) => `Score ${points}`,
   },
 
   pause: {

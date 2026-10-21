@@ -354,8 +354,9 @@ tasks.named('preBuild').configure { dependsOn(buildMp3Decoder) }
   tree pins (utfcpp's v4.2.0). It is headers and nothing else.
 
   Built for 64-bit ARM alone, like everything native here, as a static library
-  with only MP3 and FLAC in it, and linked into one small library of the app's
-  own. zlib is left on because an ID3v2 frame may be compressed and TagLib
+  with only MP3 and FLAC in it for writing -- and Ogg, MP4 and APE besides, only
+  ever read, for the words a song carries -- and linked into one small library
+  of the app's own. zlib is left on because an ID3v2 frame may be compressed and TagLib
   cannot carry what it cannot open; on Android that is the system's libz.so
   and costs the APK nothing.
 

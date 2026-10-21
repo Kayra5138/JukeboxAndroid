@@ -60,7 +60,21 @@ class TagCheckTest {
     val wanted = Wanted.from(mapOf("title" to "  Song ", "artist" to "  ", "year" to 0.0, "track" to 4.0, "disc" to null))
     assertEquals(Wanted(title = "Song", track = 4), wanted)
     assertTrue(Wanted.from(emptyMap()).empty)
-    assertEquals(listOf("Song", null, null, null, null, "4", null), wanted.fields().toList())
+    assertEquals(listOf("Song", null, null, null, null, "4", null, null), wanted.fields().toList())
+  }
+
+  @Test
+  fun `the album artist goes last, and is held to what was asked like any other field`() {
+    val wanted = Wanted.from(mapOf("albumArtist" to " Queen "))
+    assertEquals(Wanted(albumArtist = "Queen"), wanted)
+    assertEquals("Queen", wanted.fields().last())
+
+    val before = report()
+    assertNull(verify(before, report("albumArtist" to "Queen"), wanted, setOf("albumArtist"), null))
+    val wrong = verify(before, report("albumArtist" to "Quen"), wanted, setOf("albumArtist"), null)
+    assertEquals(R.string.jukebox_tags_field_wrong, wrong!!.id)
+    // Not asked, so it has to read as it did.
+    assertNotNull(verify(report("albumArtist" to "ABBA"), report(), Wanted(), emptySet(), null))
   }
 
   @Test

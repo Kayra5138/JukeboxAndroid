@@ -10,6 +10,29 @@ import java.security.MessageDigest
 
 /** Permanent application artwork, independent of the image view's evictable cache. */
 object AlbumArtwork {
+  /**
+   * Keeps the picture found inside a song's file, as one of the app's own
+   * covers, and answers where the kept copy is.
+   *
+   * What [MediaStoreLibrary.embeddedArtwork] hands back is a copy in the
+   * cache, which the system may clear and which is retired whenever the file
+   * changes; a cover given to the other tracks of the record has to outlive
+   * both. So it is copied into the artwork folder the way a picked picture
+   * is, named after its bytes: the twelve tracks of one record carrying the
+   * same picture come to one file however many of them are kept.
+   *
+   * Only a copy out of that cache is taken. Anything else is refused, so that
+   * this cannot be used to read whatever else the app can reach.
+   */
+  fun keep(context: Context, source: String): String {
+    val file = File(Uri.parse(source).path ?: throw Told(R.string.jukebox_picture_not_opened))
+    val cache = File(context.cacheDir, "artwork")
+    if (!file.canonicalPath.startsWith(cache.canonicalPath + File.separator) || !file.isFile) {
+      throw Told(R.string.jukebox_picture_not_opened)
+    }
+    return ImagePicker.adopt(context, Uri.fromFile(file).toString())
+  }
+
   fun download(context: Context, source: String): String {
     val directory = File(context.filesDir, "album-artwork").apply { mkdirs() }
     val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray())

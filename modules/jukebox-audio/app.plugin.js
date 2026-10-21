@@ -73,6 +73,15 @@ function withWindowBehindTheSplash(config) {
  */
 const MINIFY = 'android.enableMinifyInReleaseBuilds';
 
+/**
+ * Memory for the build, which the template's two gigabytes no longer cover:
+ * putting the APK together, at some 97 MB with the downloader, the
+ * translation engine and the tag library in it, ran out of heap and failed
+ * at `packageRelease`.
+ */
+const JVM_ARGS = 'org.gradle.jvmargs';
+const JVM_ARGS_VALUE = '-Xmx4096m -XX:MaxMetaspaceSize=1024m';
+
 module.exports = function withJukeboxMinSdk(config) {
   config = withWindowBehindTheSplash(config);
   config = withAndroidManifest(config, (mod) => {
@@ -85,14 +94,15 @@ module.exports = function withJukeboxMinSdk(config) {
         (item) =>
           !(
             item.type === 'property' &&
-            [KEY, 'expo.useLegacyPackaging', 'reactNativeArchitectures', MINIFY].includes(item.key)
+            [KEY, 'expo.useLegacyPackaging', 'reactNativeArchitectures', MINIFY, JVM_ARGS].includes(item.key)
           )
       )
       .concat(
         { type: 'property', key: KEY, value: MIN_SDK },
         { type: 'property', key: 'expo.useLegacyPackaging', value: 'true' },
         { type: 'property', key: 'reactNativeArchitectures', value: ARCHITECTURES },
-        { type: 'property', key: MINIFY, value: 'true' }
+        { type: 'property', key: MINIFY, value: 'true' },
+        { type: 'property', key: JVM_ARGS, value: JVM_ARGS_VALUE }
       );
     return mod;
   });

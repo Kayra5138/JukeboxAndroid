@@ -29,10 +29,18 @@ export type Artist = {
   name: string;
   /** Everything they are credited on, by title. */
   tracks: EnrichedTrack[];
-  /** The records those tracks belong to, holding only the tracks that are theirs. */
+  /**
+   * The records those tracks belong to: the whole of each record they are
+   * the album artist of, and of any other only the tracks that are theirs.
+   */
   albums: Album[];
   /** A track to borrow a cover from, or null where there is nothing to borrow. */
   cover: EnrichedTrack | null;
+  /**
+   * The tracks whose one cover stands for them, by the rule a record's cover
+   * is chosen by (`useAlbumArtwork`): their first record's, or else their own.
+   */
+  sleeve: EnrichedTrack[];
 };
 
 /**
@@ -47,6 +55,8 @@ const NOTHING_PLAYED: ReadonlyMap<string, number> = new Map();
 
 type Gathering = {
   tracks: EnrichedTrack[];
+  /** The ids of those tracks, so that one filed twice over is filed once. */
+  ids: Set<string>;
   /** Each spelling met, and how many tracks use it. */
   spellings: Map<string, number>;
 };
@@ -73,6 +83,12 @@ type Gathering = {
  * in the language of [t]. Only its name: the key it is kept under is
  * {@link UNKNOWN_ARTIST} whatever is spoken, so a screen opened with it finds
  * it again after the language has changed.
+ *
+ * A record's album artist is a credit too. Whoever a record is by has the
+ * whole record under their name, every track of it, songs on it that do not
+ * name them included: somebody looking for a band's album finds it on the
+ * band's page and not cut down to the songs that happen to say so. A
+ * compilation's "Various Artists" is nobody, and files nothing.
  */
 export function artistsOf(
   tracks: readonly EnrichedTrack[],
@@ -84,9 +100,11 @@ export function artistsOf(
   const file = (key: string, name: string, track: EnrichedTrack) => {
     let group = groups.get(key);
     if (!group) {
-      group = { tracks: [], spellings: new Map() };
+      group = { tracks: [], ids: new Set(), spellings: new Map() };
       groups.set(key, group);
     }
+    if (group.ids.has(track.id)) return;
+    group.ids.add(track.id);
     group.tracks.push(track);
     group.spellings.set(name, (group.spellings.get(name) ?? 0) + 1);
   };
@@ -104,6 +122,20 @@ export function artistsOf(
     if (counted.size === 0) file(UNKNOWN_ARTIST, t.common.unknownArtist, track);
   }
 
+  // Records once, for the whole library: which record a track is on depends
+  // on the rest of the library, so it cannot be asked of one artist's share.
+  const records = albumsOf(tracks);
+  const recordOf = new Map<string, Album>();
+  for (const album of records) {
+    for (const track of album.tracks) recordOf.set(track.id, album);
+    if (!album.albumArtist || album.compilation) continue;
+    for (const name of namesOn({ artist: album.albumArtist })) {
+      const key = foldForMatch(name);
+      if (!key) continue;
+      for (const track of album.tracks) file(key, name.trim(), track);
+    }
+  }
+
   const artists: Artist[] = [];
   for (const [key, group] of groups) {
     let name = '';
@@ -116,7 +148,22 @@ export function artistsOf(
       }
     }
 
-    const albums = sortAlbums(albumsOf(group.tracks), 'name', NOTHING_PLAYED);
+    // Each record they are on, whole where every track of it is theirs and
+    // otherwise only their part — keyed as the record is, so that what a
+    // sleeve opens is the whole record all the same.
+    const theirs: Album[] = [];
+    const met = new Set<Album>();
+    for (const track of group.tracks) {
+      const album = recordOf.get(track.id);
+      if (!album || met.has(album)) continue;
+      met.add(album);
+      theirs.push(
+        album.tracks.every((entry) => group.ids.has(entry.id))
+          ? album
+          : { ...album, tracks: album.tracks.filter((entry) => group.ids.has(entry.id)) }
+      );
+    }
+    const albums = sortAlbums(theirs, 'name', NOTHING_PLAYED);
     const ordered = sortTracks(group.tracks, 'name', NOTHING_PLAYED);
     artists.push({
       key,
@@ -126,6 +173,7 @@ export function artistsOf(
       // A record's sleeve where they have one: it is the nearest thing to a
       // picture of them that the library holds without going to ask for one.
       cover: albums[0]?.tracks[0] ?? ordered[0] ?? null,
+      sleeve: albums[0]?.tracks ?? ordered,
     });
   }
 

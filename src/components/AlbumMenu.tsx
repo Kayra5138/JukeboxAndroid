@@ -5,10 +5,10 @@ import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
-export type AlbumAction = 'select' | 'rest';
+export type AlbumAction = 'select' | 'rest' | 'lookUp' | 'cover';
 
 /** In the order the sheet shows them; `library.albumActions` says what each is. */
-const ACTIONS: readonly AlbumAction[] = ['select', 'rest'];
+const ACTIONS: readonly AlbumAction[] = ['select', 'rest', 'lookUp', 'cover'];
 
 /** For the rack, which has no boxes to tick and so nothing for "Select" to start. */
 export const WITHOUT_SELECT: readonly AlbumAction[] = ['select'];
@@ -42,12 +42,14 @@ export function AlbumMenu({
   useWindowVeil(album !== null);
   return (
     <Modal visible={album !== null} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      {/* Not a stop for a screen reader, which would otherwise read the whole
+          heading as one button that closes the menu. The back gesture closes it. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {album ? (
           // Bounded and scrolling, as the track's is, for a screen on its side.
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
             <View style={styles.header}>
-              <Text style={styles.title} numberOfLines={2}>
+              <Text accessibilityRole="header" style={styles.title} numberOfLines={2}>
                 {album.name}
               </Text>
               <Text style={styles.detail} numberOfLines={1}>
@@ -57,6 +59,7 @@ export function AlbumMenu({
 
             {ACTIONS.filter((action) => !hidden?.includes(action)).map((action) => (
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 key={action}
                 style={styles.action}

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import { HeartButton } from './Heart';
 import { useHeartWanted } from '../lib/ui/heartWanted';
+import { useListButtonWanted } from '../lib/ui/listButton';
 import { Image } from './Picture';
 import { useRouter } from 'expo-router';
 import {
+  AccessibilityInfo,
   Animated,
   BackHandler,
   PanResponder,
@@ -19,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   JumpIcon,
   LyricsIcon,
+  ListAddIcon,
   NextIcon,
   PauseIcon,
   PlayIcon,
@@ -29,10 +32,13 @@ import {
   TranslateIcon,
 } from './Icons';
 import { PlayerSettings } from './PlayerSettings';
+import { PlayerTip } from './welcome/PlayerTip';
 import { useT } from '../lib/i18n/index';
 import { useCoveredByRoute } from '../lib/player/overlayRoutes';
 import { LyricsView } from './LyricsView';
+import { AutoplayDivider } from './AutoplayDivider';
 import { QueueList } from './QueueList';
+import { barGlass, barsLaidOver, topGlass } from './UnderBars';
 import { CoverPage } from './CoverPage';
 import { glassOf, glassPage } from '../lib/theme/Veil';
 import { PlayerDiscoverSide, PlayerDiscoverUndo } from './discover/PlayingActions';
@@ -43,6 +49,7 @@ import { foldForMatch } from '../lib/metadata/text';
 import { useLyrics } from '../lib/lyrics/useLyrics';
 import { jumpTo, stepFrom } from '../lib/player/jump';
 import { readSetting, SETTINGS } from '../lib/db/index';
+import { motionReduced } from '../lib/ui/motion';
 import { useTrackArtwork } from '../lib/media/artwork';
 import {
   usePlayerActions,
@@ -55,12 +62,16 @@ import { Behind } from '../lib/theme/Veil';
 
 /*
   How far outside its picture a transport button can still be pressed, which
-  brings the smallest of them up to 44 either way without moving anything.
-  Kept under half the gap between two of them, so no two reach for the same
-  spot.
+  brings the smallest of them up to 48 either way without moving anything:
+  the size Android asks a thing to be touched by. Kept under half the gap
+  between two of them, so no two reach for the same spot — which sideways,
+  where the gap is ten, holds them to forty-six across.
 */
-const CONTROL_SLOP = { top: 2, bottom: 2 };
-const CONTROL_SLOP_WIDE = { top: 6, bottom: 6, left: 4, right: 4 };
+const CONTROL_SLOP = { top: 4, bottom: 4, left: 2, right: 2 };
+const CONTROL_SLOP_WIDE = { top: 8, bottom: 8, left: 5, right: 5 };
+
+/** The two points that take the round buttons under the transport from 44 to 48. */
+const MODE_SLOP = 2;
 
 const clamp = (value: number) => Math.min(Math.max(value, 0), 1);
 
@@ -72,6 +83,16 @@ function formatTime(seconds: number): string {
 
 /** How often the time under the finger is redrawn while scrubbing. */
 const LABEL_INTERVAL_MS = 100;
+
+/*
+  The bar is drawn three points thick in a strip twenty-odd tall, and that
+  strip was all a finger had to land on. Reaching further above and below
+  makes it a finger's height to aim at without moving anything on screen.
+*/
+const SCRUB_SLOP = { top: 13, bottom: 13 };
+
+/** What a screen reader may ask of the bar: a step on and a step back. */
+const ADJUST = [{ name: 'increment' }, { name: 'decrement' }];
 
 /**
  * The progress bar, and the way to move through a track.
@@ -89,13 +110,17 @@ const LABEL_INTERVAL_MS = 100;
 function Scrubber({
   positionSec,
   durationSec,
+  step,
   onSeek,
 }: {
   positionSec: number;
   durationSec: number;
+  /** How far one swipe of a screen reader moves, in seconds: the player's own jump. */
+  step: number;
   onSeek: (seconds: number) => void;
 }) {
   const styles = useStyles();
+  const t = useT();
   const [width, setWidth] = useState(0);
   /** The time under the finger, or null when nobody is scrubbing. */
   const [scrubbed, setScrubbed] = useState<number | null>(null);
@@ -212,11 +237,44 @@ function Scrubber({
     outputRange: [-width, 0],
   });
 
+  /*
+    For a screen reader the bar is one control that says where the track has
+    got to and moves by a step when swiped, since a finger dragging along it
+    is the one thing such a reader cannot do.
+
+    What it says is rounded down to five seconds. The position arrives four
+    times a second, and a value that changed every time would be read out
+    again and again for as long as the bar had the reader's attention.
+  */
+  const heard = scrubbed ?? Math.floor(positionSec / 5) * 5;
+  const stepTo = (direction: 1 | -1) => {
+    if (durationSec <= 0) return;
+    const seconds = Math.min(Math.max(positionSec + direction * step, 0), durationSec);
+    settling.current = { seconds, since: Date.now() };
+    filled.setValue(clamp(seconds / durationSec));
+    onSeek(seconds);
+  };
+
   return (
     <View>
       <View
         style={styles.scrubHitArea}
+        hitSlop={SCRUB_SLOP}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={t.player.sheet.position}
+        accessibilityValue={{
+          min: 0,
+          max: Math.max(0, Math.round(durationSec)),
+          now: Math.min(Math.round(heard), Math.max(0, Math.round(durationSec))),
+          text: t.player.sheet.positionValue(formatTime(heard), formatTime(durationSec)),
+        }}
+        accessibilityActions={ADJUST}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'increment') stepTo(1);
+          else if (event.nativeEvent.actionName === 'decrement') stepTo(-1);
+        }}
         {...panResponder.panHandlers}>
         <View style={styles.scrubTrack}>
           <Animated.View
@@ -224,7 +282,8 @@ function Scrubber({
           />
         </View>
       </View>
-      <View style={styles.times}>
+      {/* Said by the bar itself to a screen reader; see above. */}
+      <View style={styles.times} importantForAccessibility="no-hide-descendants">
         <Text style={styles.time}>{formatTime(scrubbed ?? positionSec)}</Text>
         <Text style={styles.time}>{formatTime(durationSec)}</Text>
       </View>
@@ -244,15 +303,24 @@ function Scrubber({
 function LiveScrubber({
   live,
   fileDurationSec,
+  step,
   onSeek,
 }: {
   live: boolean;
+  step: number;
   /** The file's own length, until the player reports one: it cannot before the track is prepared. */
   fileDurationSec: number;
   onSeek: (seconds: number) => void;
 }) {
   const { positionSec, durationSec } = usePlayerPosition(live);
-  return <Scrubber positionSec={positionSec} durationSec={durationSec || fileDurationSec} onSeek={onSeek} />;
+  return (
+    <Scrubber
+      positionSec={positionSec}
+      durationSec={durationSec || fileDurationSec}
+      step={step}
+      onSeek={onSeek}
+    />
+  );
 }
 
 function LiveLyrics({ live, ...rest }: { live: boolean } & Omit<ComponentProps<typeof LyricsView>, 'positionSec'>) {
@@ -268,6 +336,9 @@ function LiveLyrics({ live, ...rest }: { live: boolean } & Omit<ComponentProps<t
  * the navigation transition had finished. As a layer above the same tree, the
  * library is genuinely behind it and shows through the moment the drag starts.
  */
+/** How long what the list picker did stays said over the player's buttons. */
+const ADDED_FOR_MS = 2600;
+
 export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const t = useT();
@@ -276,9 +347,20 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const c = useColours();
   /** One colour, lit or not: the whole of what these buttons say about state. */
   const heart = useHeartWanted();
+  /**
+   * What the list picker did, said for a moment over the row of buttons:
+   * the player has no line of its own for news, and a list gaining a song
+   * otherwise happens without a word.
+   */
+  const [added, setAdded] = useState<string | null>(null);
+  useEffect(() => {
+    if (!added) return;
+    const timer = setTimeout(() => setAdded(null), ADDED_FOR_MS);
+    return () => clearTimeout(timer);
+  }, [added]);
   const ON = c.text;
   const OFF = c.textDisabled;
-  const { current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error } =
+  const { current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error, autoFrom } =
     usePlayerState();
   const {
     toggle,
@@ -292,6 +374,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     setPitch,
     moveInQueue,
     removeFromQueue,
+    removePicked,
   } = usePlayerActions();
   const artwork = useTrackArtwork(current);
   const { width, height } = useWindowDimensions();
@@ -346,6 +429,17 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const [sideBox, setSideBox] = useState(0);
 
   /*
+    How tall the queue's handle, and sideways its heading, came out: in a
+    theme of glass the open list runs on under them (see `UnderBars`), and
+    starts this far down so that its first row is clear of them at rest.
+    Measured, since both grow with the size of writing. Nought, and never
+    measured, in any other theme.
+  */
+  const queueOver = barsLaidOver(c);
+  const [handleHeight, setHandleHeight] = useState(0);
+  const [headingHeight, setHeadingHeight] = useState(0);
+
+  /*
     Forgotten the moment the screen turns. What was measured describes the
     layout it was measured in, and carrying it across is how the artwork came
     out at its upright size on a screen half as tall.
@@ -357,6 +451,12 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const toggleQueue = useCallback(
     (next: boolean) => {
       setExpanded(next);
+      // Straight there where the decoration is to hold still: the queue opening
+      // is news enough without being shown arriving.
+      if (motionReduced()) {
+        grow.setValue(next ? 1 : 0);
+        return;
+      }
       Animated.timing(grow, {
         toValue: next ? 1 : 0,
         duration: 220,
@@ -400,7 +500,14 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         },
         onPanResponderRelease: (_event, gesture) => {
           // Far enough, or thrown hard enough, counts as putting it away.
-          if (gesture.dy > 120 || gesture.vy > 0.9) {
+          // The drag itself followed the finger, which is not decoration; what
+          // happens after the finger lets go is, and holds still if asked to.
+          const still = motionReduced();
+          if ((gesture.dy > 120 || gesture.vy > 0.9) && still) {
+            onClose();
+          } else if (still) {
+            slide.setValue(0);
+          } else if (gesture.dy > 120 || gesture.vy > 0.9) {
             Animated.timing(slide, {
               toValue: height,
               duration: 180,
@@ -411,7 +518,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           }
         },
         onPanResponderTerminate: () => {
-          Animated.spring(slide, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+          if (motionReduced()) slide.setValue(0);
+          else Animated.spring(slide, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
         },
       }),
     [height, onClose, slide]
@@ -451,9 +559,26 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     The entries that go to another screen close the player first, for the
     reason the album's name under the title does.
   */
-  const menu = useTrackMenu({ beforeLeaving: onClose });
+  const menu = useTrackMenu({ beforeLeaving: onClose, onAdded: setAdded });
+  /** Whether the add-to-list button is wanted: Settings → Player. */
+  const listButton = useListButtonWanted();
 
   const onSeek = useCallback((seconds: number) => void seekTo(seconds), [seekTo]);
+
+  /*
+    A screen reader's attention is taken to the name of what is playing as the
+    player opens. It is drawn over the library rather than navigated to, so
+    nothing else would move it: the reader would be left on the bar it was
+    opened from, which is now underneath, and the first swipe would go nowhere
+    anybody could see. Asked for once the player has had time to rise.
+  */
+  const titleRef = useRef<Text>(null);
+  useEffect(() => {
+    const later = setTimeout(() => {
+      if (titleRef.current) AccessibilityInfo.sendAccessibilityEvent(titleRef.current, 'focus');
+    }, 450);
+    return () => clearTimeout(later);
+  }, []);
 
   /*
     Read once, as the player opens. It is a setting rather than a state, and
@@ -547,8 +672,37 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     : grow.interpolate({ inputRange: [0, 0.6], outputRange: [1, 0] });
   const queueHeight = grow.interpolate({ inputRange: [0, 1], outputRange: [0, queueRoom] });
 
-  const queueList = (
+  /*
+    The open queue in a theme of glass, upright: the box it scrolls in is
+    pulled up behind the handle by the handle's height and made that much
+    taller, so the rows pass under it, and the room it takes in the page is
+    what it always was — the space above, which the queue's room is measured
+    from, does not move by a pixel. Shut, that strip behind the handle is all
+    there is of the box, holding whichever rows sit just above the playing
+    one; they are let in only as it opens, since behind the handle while it is
+    shut are the rows of the shut list, which runs on under it from above.
+  */
+  const under = queueOver && handleHeight > 0;
+  const openBox = under
+    ? {
+        height: Animated.add(queueHeight, handleHeight),
+        marginTop: -handleHeight,
+        // Over the first part of its opening, read off the height it is given.
+        opacity: queueHeight.interpolate({
+          inputRange: [0, Math.max(1, queueRoom * 0.15)],
+          outputRange: [0, 1],
+          extrapolate: 'clamp',
+        }),
+      }
+    : { height: queueHeight };
+  // Sideways the heading is laid over the queue only, never over the words,
+  // which are drawn to a height of their own and know nothing of a heading.
+  const headingOver = queueOver && !showLyrics;
+
+  const queueListWith = (inset: number, foot = 0) => (
     <QueueList
+      inset={inset}
+      foot={foot}
       queue={queue}
       currentIndex={currentIndex}
       onSelect={(index) => void skipToIndex(index)}
@@ -558,8 +712,44 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         const track = queue[index];
         if (track) menu.open(track);
       }}
+      divider={
+        autoFrom >= 0 && autoFrom < queue.length
+          ? {
+              at: autoFrom,
+              element: (
+                <AutoplayDivider
+                  ids={queue.slice(autoFrom).map((track) => track.id)}
+                  onRemove={() => void removePicked()}
+                />
+              ),
+            }
+          : undefined
+      }
     />
   );
+  /*
+    Shut, the list sits above the handle, and in a theme of glass runs on
+    under it the way the open one does, from the other side: its box reaches
+    the handle's height further down than the room it is given, behind the
+    handle, and keeps that much clear at its foot so that its last row can
+    still be scrolled above it. Nothing is laid over its top.
+
+    The clip is what moves, never the list's box, which is only ever the
+    room plus the handle: what of it shows below the room is `shutReach`,
+    the whole strip at rest and nothing while the open list still shows
+    there, the one given up as the other comes, over the same part of the
+    closing. Without that the rows of both lists would be read through the
+    handle at once as it shut. Opening, the shut list is gone at the first
+    frame, as it always was.
+  */
+  const queueList = queueListWith(0, under ? handleHeight : 0);
+  const shutReach = under
+    ? queueHeight.interpolate({
+        inputRange: [0, Math.max(1, queueRoom * 0.15)],
+        outputRange: [handleHeight, 0],
+        extrapolate: 'clamp',
+      })
+    : 0;
 
   const settings = (
     <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch}
@@ -670,7 +860,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         <View style={styles.titleRow}>
         <PlayerDiscoverSide trackId={current.id} side="keep" small={landscape} />
         <View style={styles.titles}>
-          <Text style={[styles.title, landscape && styles.titleWide]} numberOfLines={1}>
+          <Text ref={titleRef} style={[styles.title, landscape && styles.titleWide]} numberOfLines={1}>
             {current.title}
           </Text>
           <Text style={[styles.artist, landscape && styles.artistWide]} numberOfLines={1}>
@@ -707,7 +897,11 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
                   accessibilityRole="link"
                   onPress={() => {
                     onClose();
-                    router.push({ pathname: '/playlist', params: { album: albumKey(album) } });
+                    // With the track, which says which record of the name it is on.
+                    router.push({
+                      pathname: '/playlist',
+                      params: current ? { album: albumKey(album), track: current.id } : { album: albumKey(album) },
+                    });
                   }}>
                   {album}
                 </Text>
@@ -720,7 +914,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
         {error ? <Text style={styles.error}>{error.message}</Text> : null}
 
-        <LiveScrubber live={!covered} fileDurationSec={current.durationSec} onSeek={onSeek} />
+        <LiveScrubber live={!covered} fileDurationSec={current.durationSec} step={step} onSeek={onSeek} />
 
         <View style={[styles.transport, landscape && styles.transportWide]}>
           <Pressable
@@ -780,6 +974,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             android_ripple={pressed}
             style={[styles.mode, shuffled && styles.modeOn]}
             accessibilityRole="button"
+            hitSlop={MODE_SLOP}
             accessibilityLabel={t.player.sheet.shuffleQueue}
             accessibilityState={{ selected: shuffled }}
             onPress={() => void shuffleQueue()}>
@@ -789,6 +984,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             android_ripple={pressed}
             style={[styles.mode, repeat !== 'off' && styles.modeOn]}
             accessibilityRole="button"
+            hitSlop={MODE_SLOP}
             accessibilityLabel={t.player.sheet.repeat[repeat]}
             accessibilityState={{ selected: repeat !== 'off' }}
             onPress={() => void cycleRepeat()}>
@@ -802,6 +998,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             android_ripple={pressed}
             style={styles.mode}
             accessibilityRole="button"
+            hitSlop={MODE_SLOP}
             accessibilityLabel={t.player.sheet.playbackSettings}
             accessibilityState={{ expanded: playbackOpen }}
             onPress={() => setPlaybackOpen(true)}>
@@ -811,6 +1008,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             android_ripple={pressed}
             style={[styles.mode, showLyrics && styles.modeOn]}
             accessibilityRole="button"
+            hitSlop={MODE_SLOP}
             accessibilityLabel={t.player.sheet.lyrics}
             accessibilityState={{ selected: showLyrics }}
             onPress={() => setShowLyrics(!showLyrics)}>
@@ -822,15 +1020,35 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               android_ripple={pressed}
               style={[styles.mode, showTranslation && styles.modeOn]}
               accessibilityRole="button"
+              hitSlop={MODE_SLOP}
               accessibilityLabel={t.player.sheet.translateLyrics}
               accessibilityState={{ selected: showTranslation }}
               onPress={() => setShowTranslation(!showTranslation)}>
               <TranslateIcon size={modeIcon} color={showTranslation ? ON : OFF} />
             </Pressable>
           ) : null}
-          {heart ? <HeartButton key={current?.id ?? 'none'} size={modeIcon} on={c.accent} off={OFF} style={styles.mode} /> : null}
+          {/* The song playing into a list in two taps, not through its menu. */}
+          {listButton && current ? (
+            <Pressable
+              android_ripple={pressed}
+              style={styles.mode}
+              accessibilityRole="button"
+              hitSlop={MODE_SLOP}
+              accessibilityLabel={t.library.menu.addToPlaylist.label}
+              onPress={() => menu.addToList([current.id])}>
+              <ListAddIcon size={modeIcon} color={OFF} />
+            </Pressable>
+          ) : null}
+          {heart ? <HeartButton key={current?.id ?? 'none'} size={modeIcon} on={c.accent} off={OFF} style={styles.mode} hitSlop={MODE_SLOP} /> : null}
           {/* For the ten seconds a song just excluded can be had back, and otherwise not there. */}
           <PlayerDiscoverUndo />
+          {added ? (
+            <View style={styles.added} pointerEvents="none">
+              <Text style={styles.addedText} accessibilityLiveRegion="polite" numberOfLines={2}>
+                {added}
+              </Text>
+            </View>
+          ) : null}
         </View>
       </View>
   );
@@ -874,7 +1092,16 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           <View
             style={styles.playerHalf}>{playerColumn}</View>
           <View style={styles.queueHalf}>
-            <Text style={[styles.queueLabel, styles.queueHeading]}>
+            <Text
+              style={[styles.queueLabel, styles.queueHeading, headingOver && topGlass(c)]}
+              onLayout={
+                headingOver
+                  ? (event) => {
+                      const measured = Math.round(event.nativeEvent.layout.height * 10) / 10;
+                      setHeadingHeight((before) => (before === measured ? before : measured));
+                    }
+                  : undefined
+              }>
               {t.format.upper(showLyrics ? t.player.sheet.lyrics : t.player.sheet.upNext(queue.length))}
             </Text>
             {/*
@@ -902,11 +1129,12 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
                   translated={showTranslation}
                 />
               ) : (
-                queueList
+                queueListWith(headingOver ? headingHeight : 0)
               )}
             </View>
           </View>
         </Behind>
+        <PlayerTip />
         {settings}
         {menu.element}
       </Animated.View>
@@ -921,7 +1149,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
       {/* Holds the queue at the bottom of the screen until it is pulled up. */}
       <View
-        style={styles.gap}
+        // In a theme of glass the shut list's box reaches down behind the handle, and is clipped by its own.
+        style={[styles.gap, queueOver && styles.gapOver]}
         onLayout={(event) => {
           if (measuredFor.current === height) return;
           measuredFor.current = height;
@@ -937,11 +1166,38 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           dragging, and polling the player twice a second to stay current. One
           list in two sizes cannot drift from itself.
         */}
-        {!expanded && <View style={StyleSheet.absoluteFill}>{queueList}</View>}
+        {!expanded &&
+          (queueOver ? (
+            /*
+              Two boxes, so that the list's own is not resized by what
+              shows of it: the outer is the clip, reaching `shutReach` below
+              the room; the inner is the list, reaching a handle's height
+              below it whatever the clip does. Both are the room exactly
+              until the handle has been measured.
+            */
+            <Animated.View style={[styles.shutClip, { bottom: Animated.multiply(shutReach, -1) }]}>
+              <Animated.View
+                style={[styles.shutList, { bottom: Animated.subtract(shutReach, under ? handleHeight : 0) }]}>
+                {queueList}
+              </Animated.View>
+            </Animated.View>
+          ) : (
+            <View style={StyleSheet.absoluteFill}>{queueList}</View>
+          ))}
       </View>
 
       <View style={[styles.queue, { paddingBottom: insets.bottom }]}>
-        <View style={styles.queueHandle} {...queueHandle.panHandlers}>
+        <View
+          style={[styles.queueHandle, queueOver && styles.queueHandleOver, barGlass(c)]}
+          onLayout={
+            queueOver
+              ? (event) => {
+                  const measured = Math.round(event.nativeEvent.layout.height * 10) / 10;
+                  setHandleHeight((before) => (before === measured ? before : measured));
+                }
+              : undefined
+          }
+          {...queueHandle.panHandlers}>
           <Pressable
             android_ripple={pressed}
             onPress={() => toggleQueue(!expanded)}
@@ -953,9 +1209,11 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           </Pressable>
         </View>
 
-        <Animated.View style={{ height: queueHeight }}>{queueList}</Animated.View>
+        <Animated.View style={openBox}>{queueListWith(under ? handleHeight : 0)}</Animated.View>
       </View>
       </Behind>
+      {/* Under the two sheets, which cover it while either is up. */}
+      <PlayerTip />
       {settings}
       {menu.element}
     </Animated.View>
@@ -1052,6 +1310,18 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     justifyContent: 'center',
   },
 
+  /** Over the row of buttons, under them, for as long as it is said. */
+  added: { position: 'absolute', top: '100%', left: 0, right: 0, alignItems: 'center', marginTop: 6, zIndex: 2 },
+  addedText: {
+    color: c.text,
+    fontSize: 13,
+    backgroundColor: c.surfaceRaised,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    overflow: 'hidden',
+    ...outlined(c),
+  },
   options: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1077,8 +1347,13 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   modeOn: outlined(c, c.accent),
 
   gap: { flex: 1, overflow: 'hidden' },
+  gapOver: { overflow: 'visible' },
+  shutClip: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
+  shutList: { position: 'absolute', top: 0, left: 0, right: 0 },
   queue: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
   queueHandle: { alignItems: 'center' },
+  // Drawn over the open list, which comes after it and is pulled up under it.
+  queueHandleOver: { zIndex: 1 },
   queueHandleHit: {
     alignItems: 'center',
     paddingTop: 10,

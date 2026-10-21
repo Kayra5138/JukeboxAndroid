@@ -155,8 +155,9 @@ export const discover: Strings['discover'] = {
       `Yeni liste yolda · ${format.number(target)} şarkıdan ${format.number(ready)} tanesi hazır.${ready > 0 ? ' Şimdi görmek için yeniden Yenile’ye dokun.' : ''}`,
     offline: 'Bağlantı yok. Listen korundu; bağlantı gelince yeni şarkılar aranacak.',
     offlineEmpty: 'Bağlantı yok. Bağlantı gelince Keşfet listeni hazırlayacak.',
-    noLibrary: 'Kütüphanene biraz müzik ekle; Keşfet’in bir çıkış noktası olsun.',
-    noTaste: 'Biraz müzik ekle ya da birkaç şarkı dinle; Keşfet’in bir çıkış noktası olsun.',
+    noLibrary: 'Keşfet bu telefondaki müzikten yola çıkar, ama henüz hiç müzik bulamadı.',
+    noTaste:
+      'Şarkıların kime ait olduğu yazmıyor, bu yüzden Keşfet’in yola çıkacağı bir sanatçı yok. Bilgilerini Ayarlar → Kütüphane → Etiketler’den bulabilirsin.',
     unreachable: 'Önerilere ulaşılamadı. Listen korundu; lütfen daha sonra yeniden dene.',
     unreachableEmpty: 'Önerilere ulaşılamadı. Lütfen daha sonra yeniden dene.',
     exhausted: 'Henüz yeterince yeni şarkı yok. Listen olduğu gibi korundu.',
@@ -176,12 +177,12 @@ export const discover: Strings['discover'] = {
     restored: (title) => `${title} listeye geri alındı.`,
     refreshed: 'İşte yeni listen.',
     keepFailed: (title) => `${title} Kütüphane’ye kaydedilemedi. Lütfen yeniden dene.`,
+    wrongFile: (title) => `${title} için indirilen dosya başka bir şarkıymış. Kaydetmek için doğrusu aranıyor.`,
     undo: 'Geri al',
   },
 
   engine: {
-    needsTaste:
-      'Keşfet’in zevkini tanıyabilmesi için biraz müzik ekle ya da birkaç şarkı dinle.',
+    needsTaste: 'Keşfet’in yola çıkacağı ne bir sanatçı ne de bir etiket var.',
     nothingFetched:
       'Öneri alınamadı. Şimdiki Keşfet listen korundu; lütfen daha sonra yeniden dene.',
   },

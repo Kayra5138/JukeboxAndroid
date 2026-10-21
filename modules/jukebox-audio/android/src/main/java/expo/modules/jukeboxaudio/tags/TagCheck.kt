@@ -57,11 +57,13 @@ internal data class Wanted(
   val genre: String? = null,
   val year: Int? = null,
   val track: Int? = null,
-  val disc: Int? = null
+  val disc: Int? = null,
+  /** Whoever the record is by. Last, so that the seven before it keep their places. */
+  val albumArtist: String? = null
 ) {
   /** In the order the native side reads them. */
   fun fields(): Array<String?> =
-    arrayOf(title, artist, album, genre, year?.toString(), track?.toString(), disc?.toString())
+    arrayOf(title, artist, album, genre, year?.toString(), track?.toString(), disc?.toString(), albumArtist)
 
   val empty get() = fields().all { it == null }
 
@@ -76,7 +78,7 @@ internal data class Wanted(
       fun number(key: String) = (map[key] as? Number)?.toInt()?.takeIf { it > 0 }
       return Wanted(
         text("title"), text("artist"), text("album"), text("genre"),
-        number("year"), number("track"), number("disc")
+        number("year"), number("track"), number("disc"), text("albumArtist")
       )
     }
   }
@@ -95,6 +97,8 @@ internal data class TagReport(
   val title: String,
   val artist: String,
   val album: String,
+  /** Empty where the file names nobody, and where it was read by a native side from before the field. */
+  val albumArtist: String,
   val genre: String,
   val year: Int,
   val track: Int,
@@ -131,6 +135,7 @@ internal data class TagReport(
         title = text("title"),
         artist = text("artist"),
         album = text("album"),
+        albumArtist = single["albumArtist"] ?: "",
         genre = text("genre"),
         year = number("year"),
         track = number("track"),
@@ -204,6 +209,7 @@ internal fun verify(
     held("title", wanted.title, before.title, after.title) to R.string.jukebox_tags_field_title,
     held("artist", wanted.artist, before.artist, after.artist) to R.string.jukebox_tags_field_artist,
     held("album", wanted.album, before.album, after.album) to R.string.jukebox_tags_field_album,
+    held("albumArtist", wanted.albumArtist, before.albumArtist, after.albumArtist) to R.string.jukebox_tags_field_album_artist,
     held("genre", wanted.genre, before.genre, after.genre) to R.string.jukebox_tags_field_genre,
     held("year", wanted.year, before.year, after.year) to R.string.jukebox_tags_field_year,
     held("track", wanted.track, before.track, after.track) to R.string.jukebox_tags_field_track,

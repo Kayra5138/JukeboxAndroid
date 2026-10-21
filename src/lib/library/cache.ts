@@ -11,8 +11,14 @@ import type { Track } from '../types.ts';
  * Bumped whenever the shape below changes, or a track gains a field. What was
  * written under another number is not converted. It is a copy of something the
  * device will say again within the second, so it is dropped and made afresh.
+ *
+ * Two since a track has carried its album artist. A library written down
+ * before that would come back with every record's artist unknown, and the
+ * records grouped by name alone for the moment until the device answered —
+ * a flicker of merged albums splitting apart, which is worse than the one
+ * start that opens on a spinner instead.
  */
-export const CACHE_VERSION = 1;
+export const CACHE_VERSION = 2;
 
 /**
  * The fields of a track, in the order they are written.
@@ -34,6 +40,7 @@ const FIELDS = [
   'folder',
   'addedAt',
   'size',
+  'albumArtist',
 ] as const satisfies readonly (keyof Track)[];
 
 type Kept = { v: number; root: string; fields: readonly string[]; rows: unknown[][] };
@@ -50,6 +57,7 @@ const CHECKS: Record<(typeof FIELDS)[number], (value: unknown) => boolean> = {
   title: text,
   artist: textOrNone,
   album: textOrNone,
+  albumArtist: textOrNone,
   artworkUri: textOrNone,
   durationSec: (value) => typeof value === 'number' && Number.isFinite(value),
   trackNumber: numberOrNone,

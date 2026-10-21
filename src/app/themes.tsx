@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useUnderBars } from '../components/UnderBars';
 import { OptionSheet } from '../components/OptionSheet';
 import { Pressable } from '../components/Pressable';
 import { useT } from '../lib/i18n/index';
@@ -45,6 +46,8 @@ export default function ThemesScreen() {
   const styles = useStyles();
   const pressed = usePressed();
   const insets = useSafeAreaInsets();
+  // How far the screen's bar of glass is over the top of what scrolls; nought in any other theme.
+  const under = useUnderBars();
   const shuffle = useThemeShuffle();
   const [drawOpen, setDrawOpen] = useState(false);
   const said = t.settings.theme.shuffle;
@@ -65,7 +68,12 @@ export default function ThemesScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingLeft: 20 + insets.left, paddingRight: 20 + insets.right, paddingBottom: 32 + insets.bottom },
+          {
+            paddingTop: 12 + under.top,
+            paddingLeft: 20 + insets.left,
+            paddingRight: 20 + insets.right,
+            paddingBottom: 32 + insets.bottom,
+          },
         ]}>
         <View style={styles.card}>
           <View style={styles.row}>
@@ -90,7 +98,7 @@ export default function ThemesScreen() {
                     <Text style={styles.valueText} numberOfLines={1}>
                       {named(pair[mode])}
                     </Text>
-                    <Text style={styles.chevron}>›</Text>
+                    <Text style={styles.chevron} importantForAccessibility="no">›</Text>
                   </View>
                 </View>
               </Pressable>
@@ -108,7 +116,7 @@ export default function ThemesScreen() {
             <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
               <View style={styles.line}>
                 <Text style={styles.title}>{t.settings.customTheme.open}</Text>
-                <Text style={styles.chevron}>›</Text>
+                <Text style={styles.chevron} importantForAccessibility="no">›</Text>
               </View>
               <Text style={styles.muted}>{t.settings.customTheme.openNote}</Text>
             </Pressable>
@@ -126,7 +134,7 @@ export default function ThemesScreen() {
               <Text style={styles.title}>{said.title}</Text>
               <View style={styles.value}>
                 <Text style={styles.valueText}>{shuffle.on ? said.on : t.common.off}</Text>
-                <Text style={styles.chevron}>{drawOpen ? '⌄' : '›'}</Text>
+                <Text style={styles.chevron} importantForAccessibility="no">{drawOpen ? '⌄' : '›'}</Text>
               </View>
             </View>
           </Pressable>
@@ -150,7 +158,7 @@ export default function ThemesScreen() {
                   does nothing.
                 */}
                 {shuffle.on && shuffle.pool.length === 0 ? (
-                  <Text accessibilityRole="alert" style={styles.warning}>
+                  <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.warning}>
                     {said.empty}
                   </Text>
                 ) : null}

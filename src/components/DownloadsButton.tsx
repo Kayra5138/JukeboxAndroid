@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'expo-router';
 import { Animated, BackHandler, Easing, Keyboard, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { usePlayerState } from '../lib/player/PlayerProvider';
 import { laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { useSheetOpen } from '../lib/theme/Veil';
 import { downloadsLookedAt, useDownloadsButtonWanted } from '../lib/ui/downloadsButton';
+import { announce } from '../lib/ui/announce';
 import { useLandscape } from '../lib/ui/layout';
 import { motionReduced } from '../lib/ui/motion';
 import { useDownloads } from '../lib/youtube/DownloadsProvider';
@@ -66,6 +67,29 @@ function Watching() {
     place. So it steps aside for any sheet at all.
   */
   const sheet = useSheetOpen();
+
+  /*
+    Said aloud when a run of downloads comes to an end, with how it went. The
+    button's ring and its tick say so to the eye, wherever it is; a screen
+    reader's user would otherwise only find out by going to look. Here and not
+    in the button itself, which is made afresh on each screen and steps aside
+    for the keyboard, and would miss the moment or say it twice.
+  */
+  const t = useT();
+  const left = batch.underWay + batch.waiting;
+  const hadLeft = useRef(left);
+  useEffect(() => {
+    if (hadLeft.current > 0 && left === 0 && batch.total > 0) {
+      const said = t.downloads.button;
+      announce(
+        [said.allDone, said.done(batch.done), batch.failed > 0 ? said.failed(batch.failed) : null]
+          .filter(Boolean)
+          .join(', ')
+      );
+    }
+    hadLeft.current = left;
+  }, [left, batch.done, batch.failed, batch.total, t]);
+
   if (batch.total === 0 || typing || sheet || NOT_HERE.has(pathname)) return null;
   // Made afresh for each screen, so that a bubble left open on one is not
   // found open on the next.
@@ -175,7 +199,7 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
                 router.push('/downloads');
               }}>
               <Text style={styles.openLabel}>{said.open}</Text>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
             </Pressable>
           </View>
         </>
@@ -185,7 +209,11 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
         <Pressable
           android_ripple={pressed}
           accessibilityRole="button"
-          accessibilityLabel={said.label(state)}
+          // With what failed, where anything did: the badge's exclamation mark
+          // is the only other place that says so.
+          accessibilityLabel={said.label(
+            [state, batch.failed > 0 ? said.failed(batch.failed) : null].filter(Boolean).join(', ')
+          )}
           accessibilityState={{ expanded: open }}
           style={styles.button}
           onPress={() => setOpen(!open)}>
@@ -193,7 +221,8 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
           <DownloadIcon size={22} color={c.text} arrow={drift} />
         </Pressable>
         {badge ? (
-          <View style={styles.badge} pointerEvents="none">
+          // Already in what the button is called, for a screen reader.
+          <View style={styles.badge} pointerEvents="none" importantForAccessibility="no-hide-descendants">
             <Text
               allowFontScaling={false}
               style={finished ? (alarmed ? styles.badgeBad : styles.badgeGood) : styles.badgeText}>

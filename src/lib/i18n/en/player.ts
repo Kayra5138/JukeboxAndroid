@@ -21,10 +21,34 @@ export const player = {
     translateLyrics: 'Translate the lyrics',
     /** The heading over the queue, with how many tracks are in it. */
     upNext: (count: number) => `Up next · ${format.number(count)}`,
+    /** What a screen reader calls the progress bar. */
+    position: 'Playback position',
+    /** Where the bar has got to, said aloud: [position] and [duration] are `1:23` and `3:45`. */
+    positionValue: (position: string, duration: string) => `${position} of ${duration}`,
   },
   queue: {
     /** [title] is the track's. */
     remove: (title: string) => `Remove ${title}`,
+    /** Said aloud once a screen reader has moved a row: where it now stands, `3` of `12`. */
+    movedTo: (position: number, count: number) =>
+      `Now ${format.number(position)} of ${format.number(count)}`,
+    /** The heading over the songs picked to keep the music going, by what they turned out to be; see `AutoplayDivider`. */
+    auto: {
+      library: 'Similar songs · picked for you',
+      fresh: 'New songs · from Discover',
+      mixed: 'Similar and new · picked for you',
+      /** The button beside it, and what a screen reader calls it and adds. */
+      remove: 'Remove',
+      removeLabel: 'Remove the songs picked for you',
+      removeHint: 'No more are added to this queue until you play something else.',
+      /** One line under the heading, where new songs were wanted and the library stood in for them. */
+      notes: {
+        offline: 'No connection, so these are from your library.',
+        wifi: 'Discover is waiting for Wi-Fi, so these are from your library.',
+        unavailable: 'New songs need the YouTube downloader, so these are from your library.',
+        waiting: 'New songs are still downloading; your library fills in meanwhile.',
+      },
+    },
   },
   /** The sheet behind the gear; see `PlayerSettings`. */
   settings: {

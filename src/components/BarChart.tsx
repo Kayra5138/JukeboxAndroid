@@ -11,9 +11,13 @@ import {
 import { useT, type Strings } from '../lib/i18n/index';
 import { columnHolding, type Bucket } from '../lib/stats/period';
 import { makeStyles, withAlpha } from '../lib/theme/index';
+import { motionReduced } from '../lib/ui/motion';
 
 /** How tall the bars are, before the labels underneath. */
 const PLOT_HEIGHT = 132;
+
+/** What a screen reader may ask of the chart: the next column and the one before. */
+const ADJUST = [{ name: 'increment' }, { name: 'decrement' }];
 
 /** A column with something in it is never invisible, however small its share. */
 const MIN_VISIBLE = 0.025;
@@ -49,6 +53,7 @@ export function BarChart({
   accent,
   format,
   now,
+  label,
 }: {
   buckets: Bucket[];
   /** One per bucket, in the same order. */
@@ -59,6 +64,8 @@ export function BarChart({
   format: (value: number) => string;
   /** The moment being lived through, so its column can be marked. */
   now: number;
+  /** What the chart measures, for a screen reader to call it by. */
+  label: string;
 }) {
   const t = useT();
   const styles = useStyles();
@@ -117,6 +124,11 @@ export function BarChart({
   }
 
   useEffect(() => {
+    // Where the decoration holds still the bars are simply drawn at their height.
+    if (motionReduced()) {
+      grown.current.forEach((value, index) => value.setValue(share(values[index] ?? 0, max)));
+      return;
+    }
     Animated.parallel(
       grown.current.map((value, index) =>
         Animated.timing(value, {
@@ -161,6 +173,19 @@ export function BarChart({
   const readout = buckets[shown];
 
   /*
+    For a screen reader the chart is one control: it says the column being
+    read and its figure, and a swipe up or down moves to the next column or
+    the one before, as dragging a finger across it does. Left as it was, it
+    was a row of thirty-odd buttons with nothing to say, and the figures could
+    not be heard at all.
+  */
+  const stepColumn = (by: 1 | -1) => {
+    const next = Math.min(Math.max(shown + by, 0), buckets.length - 1);
+    const bucket = buckets[next];
+    if (bucket) setPinned(bucket.start);
+  };
+
+  /*
     Which columns get a label.
 
     Thinned by what actually fits rather than by a fixed every-nth rule: the
@@ -194,7 +219,9 @@ export function BarChart({
 
   return (
     <View>
-      <View style={styles.readout}>
+      {/* Said by the chart itself to a screen reader, which would otherwise
+          hear the same figure twice; so are the labels under the columns. */}
+      <View style={styles.readout} importantForAccessibility="no-hide-descendants">
         <Text style={styles.readoutValue}>{format(values[shown] ?? 0)}</Text>
         <Text style={styles.readoutLabel} numberOfLines={1}>
           {readout ? longLabel(readout, t) : ''}
@@ -204,6 +231,17 @@ export function BarChart({
       <View
         ref={plot}
         style={styles.plot}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityValue={{
+          text: readout ? `${longLabel(readout, t)}: ${format(values[shown] ?? 0)}` : '',
+        }}
+        accessibilityActions={ADJUST}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'increment') stepColumn(1);
+          else if (event.nativeEvent.actionName === 'decrement') stepColumn(-1);
+        }}
         onLayout={(event) => {
           setWidth(event.nativeEvent.layout.width);
           // Where it sits in the window, which its own layout does not say:
@@ -218,6 +256,8 @@ export function BarChart({
           <Pressable
             key={bucket.start}
             style={styles.column}
+            // The chart is the control a screen reader stops on; see above.
+            accessible={false}
             // The bars are thin; without this a tap has to land inside a strip
             // a few pixels wide and as short as the bar happens to be.
             hitSlop={{ top: 14, bottom: 14 }}
@@ -250,7 +290,7 @@ export function BarChart({
         ))}
       </View>
 
-      <View style={styles.labels} pointerEvents="none">
+      <View style={styles.labels} pointerEvents="none" importantForAccessibility="no-hide-descendants">
         {labelled.map((index) => (
           <Text
             key={buckets[index].start}

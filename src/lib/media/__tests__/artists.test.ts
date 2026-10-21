@@ -216,6 +216,29 @@ describe('artistsOf', () => {
     assert.equal(artists[1].cover?.id, '3');
   });
 
+  it('lists the whole of a record under whoever it is by, songs that do not name them included', () => {
+    const artists = artistsOf(
+      [
+        song('1', { title: 'A', artist: 'DJ Khaled', album: 'Grateful', albumArtist: 'DJ Khaled' }),
+        song('2', { title: 'B', artist: 'Rihanna', album: 'Grateful', albumArtist: 'DJ Khaled' }),
+        song('3', { title: 'C', artist: 'Singer', album: 'Moana', albumArtist: 'Disney' }),
+        song('4', { title: 'D', artist: 'One', album: 'Now', albumArtist: 'Various Artists' }),
+      ],
+      namesOn
+    );
+    const byName = new Map(artists.map((artist) => [artist.name, artist]));
+
+    assert.deepEqual(ids(byName.get('DJ Khaled')!.albums[0]!.tracks), ['1', '2']);
+    assert.deepEqual(ids(byName.get('DJ Khaled')!.tracks), ['1', '2']);
+    // Her part of it, and the record is still the whole record when opened.
+    assert.deepEqual(ids(byName.get('Rihanna')!.albums[0]!.tracks), ['2']);
+    assert.equal(byName.get('Rihanna')!.albums[0]!.key, byName.get('DJ Khaled')!.albums[0]!.key);
+    // Somebody who sings on none of it still has the record they made.
+    assert.deepEqual(byName.get('Disney')!.albums.map((album) => album.name), ['Moana']);
+    // A compilation is nobody's.
+    assert.equal(byName.has('Various Artists'), false);
+  });
+
   it('has nothing to say about an empty library', () => {
     assert.deepEqual(artistsOf([], namesOn), []);
   });

@@ -8,6 +8,7 @@ const FIELD_NAMES: Record<string, string> = {
   title: 'başlık',
   artist: 'sanatçı',
   album: 'albüm',
+  albumArtist: 'albüm sanatçısı',
   genre: 'tür',
   year: 'yıl',
   track: 'parça numarası',
@@ -36,6 +37,7 @@ export const details: Strings['details'] = {
       title: 'Başlık',
       artist: 'Sanatçı',
       album: 'Albüm',
+      albumArtist: 'Albüm sanatçısı',
       year: 'Çıkış yılı',
       trackNumber: 'Parça numarası',
       discNumber: 'Disk numarası',
@@ -113,6 +115,9 @@ export const details: Strings['details'] = {
   editor: {
     label: 'Etiketler',
     add: 'Etiket ekle',
+    moveUp: (tag) => `${tag} etiketini yukarı taşı`,
+    moveDown: (tag) => `${tag} etiketini aşağı taşı`,
+    remove: (tag) => `${tag} etiketini kaldır`,
   },
 
   tagPrompt: {
@@ -152,6 +157,8 @@ export const details: Strings['details'] = {
     reset: 'Sıfırla',
     offsetHeading: 'Sözler ne kadar kayık?',
     offsetPlaceholder: 'Saniye, ör. 1,5 ya da -0,75',
+    typeOffset: 'Kesin kaydırmayı yaz',
+    wordsField: 'Şarkı sözleri',
 
     byHand: 'Elle ara',
     byHandHint:
@@ -178,9 +185,12 @@ export const details: Strings['details'] = {
     lookingUp: 'Aranıyor…',
     lookingUpProgress: (done, total) =>
       `Aranıyor… ${format.number(total)} parçadan ${format.number(done)} tanesi tamam`,
+    lookingUpAlbum: (album, done, total) =>
+      `“${album}” aranıyor… ${format.number(total)} parçadan ${format.number(done)} tanesi tamam`,
     soFar: (matched, covers) =>
       `Şimdiye kadar ${format.number(matched)} eşleşme, ${format.number(covers)} kapak`,
     stop: 'Durdur',
+    lookupChannel: 'Bilgi aramaları',
 
     selected: (count) => `${format.number(count)} seçili`,
     summary: (matched, edited, notFound, untried) =>
@@ -200,6 +210,86 @@ export const details: Strings['details'] = {
     noGenre: 'tür yok',
     noMatch: 'eşleşme bulunamadı',
     notLookedUp: 'henüz aranmadı',
+    matchedSpoken: (artist, title) => `Eşleşti: ${artist} — ${title}`,
+    manualSpoken: (artist, title) => `Elle girildi: ${artist} — ${title}`,
+  },
+
+  selection: {
+    more: 'Daha fazla…',
+    moreHint: 'Seçili parçalarla yapılabilecek her şey',
+    heading: (count) => `${format.number(count)} parça seçili`,
+    sections: { find: 'Otomatik bul', change: 'Düzenle', other: 'Diğer' },
+    actions: {
+      lookUp: {
+        label: 'Bilgileri otomatik bul',
+        hint: 'Daha önce bulunanları unutur ve kapaklar dahil yeniden arar. Senin düzenlemelerin kalır.',
+      },
+      covers: {
+        label: 'Kapakları otomatik bul',
+        hint: 'Yalnızca kapağı olmayanlara kapak arar. Başka hiçbir şey yeniden aranmaz; senin seçtiğin ya da kaldırdığın kapak olduğu gibi kalır.',
+      },
+      lyrics: {
+        label: 'Sözleri otomatik bul',
+        hint: 'Önce dosyalara ve .lrc dosyalarına, sonra LRCLIB’e bakar. Senin seçtiğin sözler kalır.',
+      },
+      edit: {
+        label: 'Bilgileri birlikte düzenle',
+        hint: 'Sanatçı, albüm sanatçısı, albüm ya da yıl; hepsine tek seferde',
+      },
+      addTag: { label: 'Etiket ekle', hint: 'Tek bir etiket, hepsine eklenir' },
+      removeTag: { label: 'Etiket kaldır', hint: 'Etiketlerinden biri, hepsinden kaldırılır' },
+      cover: { label: 'Kapak seç', hint: 'Galeriden bir resim, hepsi için' },
+      write: {
+        label: 'Dosyalara yaz',
+        hint: 'Kütüphanede görünen bilgileri dosyaların kendisine yazar. Android önce sorar.',
+      },
+      addToList: { label: 'Listeye ekle', hint: 'Listelerinden birine koyar' },
+      reset: {
+        label: 'Sıfırla',
+        hint: 'Aramaların bu parçalar için bulduklarını unutur. Senin düzenlemelerin kalır.',
+      },
+      delete: { label: 'Telefondan sil', hint: 'Dosyaları siler. Android önce sorar.' },
+    },
+    busy: 'Başka bir arama sürüyor. Bitmesini bekle ya da durdur.',
+
+    editHeading: (count) => `${format.number(count)} parçayı düzenle`,
+    editHint:
+      'Yalnızca hepsinde aynı olması gerekeni doldur. Boş bırakılan kutu her parçayı olduğu gibi bırakır; bir alanı hepsinde boşaltmak için altındaki seçeneği işaretle. Başlıklara, parça ve disk numaralarına dokunulmaz.',
+    keepEach: 'Her biri kendi değerini korur',
+    empty: 'Boş',
+    clearOn: { remove: 'Hepsinden kaldır', own: 'Dosyadaki sanatçıyı kullan' },
+    cleared: { remove: 'Hepsinden kaldırılacak', own: 'Her parçanın dosyasındaki sanatçı' },
+    edited: (count) =>
+      count === 1
+        ? 'Kaydedildi. Artık senin düzenlemen; aramalar ona dokunmaz.'
+        : `${format.number(count)} parça için kaydedildi. Artık senin düzenlemelerin; aramalar onlara dokunmaz.`,
+
+    tagAdded: (tag, count) => `“${tag}” artık ${format.number(count)} parçada.`,
+    removeTagHeading: (count) => `${format.number(count)} parçadan etiket kaldır`,
+    tagOption: (tag, count) => `${tag} · ${format.number(count)}`,
+    noTags: 'Bu parçaların hiçbirinde etiket yok.',
+    tagRemoved: (tag, count) => `“${tag}”, ${format.number(count)} parçadan kaldırıldı.`,
+
+    resetQuestion: (count) => `${format.number(count)} parça sıfırlansın mı?`,
+    resetBody:
+      'Aramaların bu parçalar için bulduğu her şey unutulur ve hiç aranmamış sayılırlar. Senin düzenlemelerin kalır. Bu geri alınamaz.',
+
+    coversProgress: (done, total) =>
+      `Kapaklar aranıyor… ${format.number(total)} parçadan ${format.number(done)} tanesi tamam`,
+    coversNone: 'Yeni kapak bulunamadı.',
+    lyricsProgress: (done, total) =>
+      `Sözler aranıyor… ${format.number(total)} parçadan ${format.number(done)} tanesi tamam`,
+    lyricsSoFar: (found) => `Şimdiye kadar ${format.number(found)} tanesi bulundu`,
+    lyricsFound: (found, wanted, had) =>
+      [
+        wanted > 0
+          ? `${format.number(wanted)} parçanın ${format.number(found)} tanesi için söz bulundu.`
+          : null,
+        had > 0 ? `${format.number(had)} tanesinde zaten vardı.` : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || 'Aranacak bir şey yok: bu parçaların sözlerini elle seçmişsin.',
+    lyricsOffline: 'LRCLIB’e ulaşılamadığı için arama durdu. Geri kalanlar daha sonra yeniden denenebilir.',
   },
 
   write: {
@@ -260,6 +350,25 @@ export const details: Strings['details'] = {
     into: 'Buraya',
     keepApart: 'Ayrı tut',
     merge: 'Birleştir',
+    bulk: {
+      mergeDelete: 'Birleştir ve ilk dosyayı sil',
+      deleteToo: 'Her çiftteki ilk dosyayı da sil',
+      deleteNote: 'Bir şey silinmeden önce Android onay ister.',
+      notDeleted: 'Dosyalar silinmedi.',
+      deleted: (count) => `${format.number(count)} dosya silindi.`,
+      choose: 'Bu çifti seç',
+      chosen: (count) => `${format.number(count)} çift seçildi`,
+      merge: (count) => `${format.number(count)} çifti birleştir`,
+      keepApart: (count) => `${format.number(count)} çifti ayrı tut`,
+      confirm: (count) =>
+        count === 1
+          ? 'Bu çift birleştirilsin mi? İlk dosyanın dinlemeleri, etiketleri, sözleri ve listelerdeki yerleri ikinciye geçer; bu geri alınamaz.'
+          : `${format.number(count)} çift birleştirilsin mi? Her birinde ilk dosyanın dinlemeleri, etiketleri, sözleri ve listelerdeki yerleri ikinciye geçer; bu geri alınamaz.`,
+      done: (done, skipped) =>
+        skipped > 0
+          ? `${format.number(done)} çift yanıtlandı; ${format.number(skipped)} tanesi başka bir yanıtla zaten çözülmüştü.`
+          : `${format.number(done)} çift yanıtlandı.`,
+    },
     unknown: 'Bilinmiyor',
     noFileName: 'Dosya adı bilinmiyor',
     holds: (side) => {

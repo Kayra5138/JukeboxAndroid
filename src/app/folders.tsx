@@ -15,6 +15,7 @@ import {
   type LibraryFolder,
 } from '../lib/media/library';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
 type Screen =
   | { kind: 'loading' }
@@ -88,7 +89,7 @@ export default function FoldersScreen() {
             ? t.library.folders.needsAccess
             : screen.message}
         </Text>
-        <Pressable android_ripple={pressed} style={styles.button} onPress={() => void load()}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void load()}>
           <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
         </Pressable>
       </View>
@@ -104,13 +105,23 @@ export default function FoldersScreen() {
     <View style={[styles.screen, sides]}>
       <Text style={styles.note}>{t.library.folders.note}</Text>
       <FlatList
+              removeClippedSubviews={CLIP_SUBVIEWS}
         data={options}
         keyExtractor={(folder) => folder.path}
         renderItem={({ item }) => {
           const selected = item.path === current;
           return (
-            <Pressable android_ripple={pressed} style={styles.row} onPress={() => choose(item.path)}>
-              <Text style={styles.radio}>{selected ? '●' : '○'}</Text>
+            <Pressable
+              android_ripple={pressed}
+              style={styles.row}
+              onPress={() => choose(item.path)}
+              // One of a set of which one is chosen, which the ring says to the
+              // eye and this to a screen reader, in place of reading the ring.
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}>
+              <Text style={styles.radio} importantForAccessibility="no">
+                {selected ? '●' : '○'}
+              </Text>
               <Text style={[styles.path, selected && styles.pathOn]} numberOfLines={1}>
                 {item.path === DEFAULT_ROOT ? t.library.folders.everything(item.path) : item.path}
               </Text>

@@ -1,0 +1,68 @@
+name: Something is wrong
+description: A crash, a button that does nothing, a song that will not play.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for taking the time. The version is the first line under "Jukebox" at the top of Settings.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.34.0
+    validations:
+      required: true
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: Pixel 7, Android 15
+    validations:
+      required: true
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where
+      options:
+        - Library and playback
+        - Player, sound, lyrics
+        - Tags and covers
+        - Lists and albums
+        - Stats
+        - Discover
+        - Search and downloads
+        - Piano Tiles
+        - Widget, notification, Android Auto
+        - Settings, themes, language
+        - Somewhere else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead. Any message the app showed, word for word, helps most.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      placeholder: |
+        1. Open …
+        2. Press …
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installed
+      options:
+        - From the Releases page, updated from an earlier version
+        - From the Releases page, first install
+        - With Obtainium
+        - Built myself
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A screenshot or screen recording can be dropped here.

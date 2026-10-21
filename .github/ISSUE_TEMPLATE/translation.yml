@@ -1,0 +1,42 @@
+name: A translation reads wrong
+description: A wrong, clumsy or cut-off line in German, Spanish, French, Italian, Portuguese, Russian, Japanese, Chinese or Turkish.
+labels: [translation]
+body:
+  - type: dropdown
+    id: language
+    attributes:
+      label: Language
+      options:
+        - Deutsch
+        - Español
+        - Français
+        - Italiano
+        - Português (Brasil)
+        - Русский
+        - 日本語
+        - 简体中文
+        - Türkçe
+        - English
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      placeholder: Settings → Sound, the second row
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: What it says now
+      description: Or a screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: better
+    attributes:
+      label: How it should read
+      description: And why, if it is not obvious, so the same fix can be made wherever the word is used.
+    validations:
+      required: true

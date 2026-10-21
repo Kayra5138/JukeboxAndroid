@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { effectsOf, makeStyles, useColours, withAlpha } from '../lib/theme/index';
 import { glassOf } from '../lib/theme/Veil';
+import { motionReduced } from '../lib/ui/motion';
 
 /**
  * The cover of what is playing, out of focus, as the page the player is
@@ -30,7 +31,8 @@ export function CoverPage({ uri }: { uri: string | null | undefined }) {
   if (!uri || !effectsOf(c)?.coverWash) return null;
   return (
     <View pointerEvents="none" style={glassOf(c) > 0 ? [styles.page, styles.thin] : styles.page}>
-      <Image source={{ uri }} blurRadius={25} contentFit="cover" transition={500} style={styles.picture} />
+      {/* Changed in place where the decoration holds still, rather than faded across. */}
+      <Image source={{ uri }} blurRadius={25} contentFit="cover" transition={motionReduced() ? 0 : 500} style={styles.picture} />
       <View style={styles.wash} />
     </View>
   );

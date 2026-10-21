@@ -42,16 +42,20 @@ const EVERY_MS = 60_000;
  * What goes across, and nothing else.
  *
  * The listens go as two columns of the dozen they have, and of the settings
- * only where the library is: the service has no use for the rest, and a copy
- * is one more place for somebody's listening to be kept.
+ * only where the library is and what is left out of it: the service has no
+ * use for the rest, and a copy is one more place for somebody's listening to
+ * be kept.
  */
 const TABLES: Record<string, string> = {
-  settings: `SELECT key, value FROM main.settings WHERE key = 'library:root'`,
+  settings: `SELECT key, value FROM main.settings WHERE key IN ('library:root', 'library:leftOut', 'library:shortest')`,
   playlists: `SELECT * FROM main.playlists`,
   playlist_tracks: `SELECT * FROM main.playlist_tracks`,
   track_tags: `SELECT track_id, tag, position FROM main.track_tags`,
   plays: `SELECT track_id, started_at FROM main.plays`,
-  track_metadata: `SELECT track_id, status, title, artist, album, track_number, artwork_url FROM main.track_metadata`,
+  track_metadata: `SELECT track_id, status, title, artist, album, album_artist, track_number, artwork_url, cover_removed_at FROM main.track_metadata`,
+  // The covers tracks with no row of their own were given by their record:
+  // the car's tiles should wear what the phone's rows do.
+  shared_covers: `SELECT track_id, artwork_url FROM main.shared_covers`,
 };
 
 /** How many rows this connection had changed when the copy was last made. */

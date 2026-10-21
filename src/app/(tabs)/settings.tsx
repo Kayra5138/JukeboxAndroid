@@ -1,15 +1,19 @@
 import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
+import { useUnderBars } from '../../components/UnderBars';
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../../components/Pressable';
 import JukeboxAudio from '../../../modules/jukebox-audio';
+import Constants from 'expo-constants';
 import { OptionSheet } from '../../components/OptionSheet';
 import { DownloadsCategory } from '../../components/downloads/SettingsRows';
 import { CategoryRow, useRows } from '../../components/settings/rows';
+import { UpdateRow } from '../../components/support/UpdateRows';
 import { chooseLanguage, LANGUAGES, useLanguage, useT } from '../../lib/i18n/index';
 import { sameSongs } from '../../lib/identity/index';
 import { useLandscape } from '../../lib/ui/layout';
+import { startOver } from '../../lib/ui/welcomeStore';
 import { makeStyles, scene, usePressed, useThemeChoice } from '../../lib/theme/index';
 import { themeOf } from '../../lib/theme/registry';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -20,8 +24,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
  * It was every setting on one page, and the longest screen in the app: what
  * was wanted was found by scrolling past everything that was not. Now the
  * tab is six categories, in the order they are gone to, and each opens a
- * page of its own holding the rows that were here. Two things are still set
- * on the tab itself: the language, first, and one switch, last.
+ * page of its own holding the rows that were here. Two things are still done
+ * on the tab itself: the language, first, and the first start again, last.
+ * Two more come and go or lead elsewhere: word of a newer version, under the
+ * version it is newer than, and the way to report a problem, near the end.
  */
 export default function SettingsScreen() {
   const t = useT();
@@ -56,7 +62,10 @@ export default function SettingsScreen() {
   const landscape = useLandscape();
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
+  // In a theme of glass the tab bar and the bar of what is playing are over the foot of this.
+  const under = useUnderBars({ player: true });
   const built = JukeboxAudio.buildTimestamp;
+  const version = Constants.expoConfig?.version;
   const date = built ? new Date(built) : null;
   const said = t.settings.categories;
 
@@ -78,7 +87,7 @@ export default function SettingsScreen() {
             <Text style={rows.value} numberOfLines={1}>
               {LANGUAGES.find((entry) => entry.id === language)?.name ?? language}
             </Text>
-            <Text style={rows.chevron}>›</Text>
+            <Text style={rows.chevron} importantForAccessibility="no">›</Text>
           </View>
         </View>
         <Text style={rows.muted}>{t.settings.language.note}</Text>
@@ -111,6 +120,31 @@ export default function SettingsScreen() {
       */}
       <DownloadsCategory />
       <CategoryRow href="/settings-data" title={t.settings.sections.data} note={said.data} />
+      {/*
+        A way to say something is wrong, from inside the app and with the
+        details somebody would otherwise be asked for. Its screen shows all of
+        what would be sent before anything is, and sends nothing itself.
+      */}
+      <CategoryRow href="/report" title={t.support.report.row.title} note={t.support.report.row.note} />
+      {/*
+        Last, being the least often wanted: the app as it was on its first
+        start, setup, offer and tips. For whoever wants the tour
+        again, put a tip away unread, or is handing the phone to somebody new.
+      */}
+      <View style={[rows.card, styles.after]}>
+        <Pressable
+          android_ripple={pressed}
+          accessibilityRole="button"
+          accessibilityHint={t.welcome.settings.note}
+          style={rows.row}
+          onPress={startOver}>
+          <View style={rows.line}>
+            <Text style={rows.title}>{t.welcome.settings.title}</Text>
+            <Text style={rows.value} numberOfLines={1}>{t.welcome.settings.again}</Text>
+          </View>
+          <Text style={rows.muted}>{t.welcome.settings.note}</Text>
+        </Pressable>
+      </View>
     </>
   );
 
@@ -121,14 +155,23 @@ export default function SettingsScreen() {
       // scroller itself is taken off how far it will scroll, and the last row stopped short of its own edge.
       contentContainerStyle={[
         styles.content,
-        { paddingTop: insets.top + 20, paddingLeft: sides.left + 20, paddingRight: sides.right + 20 },
+        {
+          paddingTop: insets.top + 20,
+          paddingLeft: sides.left + 20,
+          paddingRight: sides.right + 20,
+          paddingBottom: 24 + under.bottom,
+        },
       ]}>
       <Text style={styles.brand}>Jukebox</Text>
-      <Text style={styles.built}>
+      {/* The version first, being what an issue asks for, and a number that needs no words. */}
+      <Text style={styles.built} selectable>
+        {version ? `${version} · ` : ''}
         {date && Number.isFinite(date.getTime())
           ? t.settings.lastBuilt(t.format.dateTime(date))
           : t.settings.lastBuiltUnknown}
       </Text>
+      {/* Under the number it is news about, and only while there is a newer one. */}
+      <UpdateRow />
       {/*
         Upright it is one column of boxes, each category its own: short enough
         to be taken in, with a line or two under each name to choose by.
@@ -165,7 +208,7 @@ export default function SettingsScreen() {
     <OptionSheet
       visible={languagesOpen}
       heading={t.settings.language.title}
-      note={t.settings.language.note}
+      note={`${t.settings.language.note} ${t.welcome.language.made}`}
       options={LANGUAGES.map((entry) => ({ value: entry.id, label: entry.name }))}
       chosen={language}
       onChoose={chooseLanguage}

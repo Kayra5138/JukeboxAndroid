@@ -221,31 +221,112 @@ export function guestsNamedIn(title: string | null | undefined): string[] {
   return guests;
 }
 
-/** Words that describe the upload, not the song. */
+/**
+ * Words that describe the upload, not the song: what a video's title adds to
+ * say what kind of video it is. In the languages the uploads in a library are
+ * likely to be in, since `Clip Officiel` and `Resmi Video` say what
+ * `Official Video` says.
+ */
 const PACKAGING = new Set([
-  'official', 'video', 'audio', 'lyric', 'lyrics', 'visualizer', 'visualiser',
-  'explicit', 'hd', 'hq', '4k', 'mv', 'release',
+  'official', 'officiel', 'officielle', 'oficial', 'ufficiale', 'offiziell', 'offizielles', 'resmi',
+  'video', 'videoclip', 'clip', 'klip', 'musikvideo', 'audio', 'visualizer', 'visualiser',
+  'lyric', 'lyrics', 'letra', 'paroles', 'testo', 'sozleri', 'songtext',
+  'explicit', 'uncensored', 'clean', 'hd', 'hq', '4k', '1080p', '720p', 'mv', 'pv',
+  'release', 'premiere', 'remaster', 'remastered',
+  // The channels that put their own name in brackets on every upload.
+  'monstercat', 'ncs', 'nocopyrightsounds',
+  // Only alongside the words above: `Music Video`, `Official Music Video`.
+  'music', 'with', 'full', 'song', 'sarki', 'new',
+]);
+
+/** Of those, the ones that say "upload" on their own; the rest only count beside one of these. */
+const STRONG = new Set([
+  'official', 'officiel', 'officielle', 'oficial', 'ufficiale', 'offiziell', 'offizielles', 'resmi',
+  'video', 'videoclip', 'clip', 'klip', 'musikvideo', 'audio', 'visualizer', 'visualiser',
+  'lyric', 'lyrics', 'letra', 'paroles', 'testo', 'sozleri', 'songtext',
+  'explicit', 'uncensored', 'hd', 'hq', '4k', '1080p', '720p', 'mv', 'pv', 'release', 'premiere',
+  'remaster', 'remastered',
 ]);
 
 /**
- * A title without the brackets that are about where the file came from.
+ * Words that say the recording is another one, and stay when the rest of a
+ * note goes: `(Official Live Video)` is still the live recording.
+ */
+const RECORDING = new Set(['live', 'acoustic', 'remix', 'instrumental', 'karaoke', 'demo', 'extended', 'unplugged', 'cover']);
+
+/**
+ * What a note about the upload leaves behind: nothing, or the words in it
+ * about the recording. Null where it is not such a note at all: `(Long
+ * Version)`, `(TV Size)`, `(feat. Jay-Z)`, `(Part II)`.
+ */
+function afterNote(text: string): string | null {
+  const words = foldForMatch(text).split(' ').filter(Boolean);
+  if (!words.some((word) => STRONG.has(word))) return null;
+  const kept: string[] = [];
+  for (const word of words) {
+    if (PACKAGING.has(word) || /^\d{4}$/.test(word)) continue;
+    if (RECORDING.has(word)) kept.push(word);
+    // A word that is neither: a name, a place, an event. The note is not only
+    // about the upload, and is left whole rather than guessed at.
+    else return null;
+  }
+  return kept.join(' ');
+}
+
+/**
+ * A title with everything in brackets taken out: `The Line (from the series
+ * Arcane League of Legends)` is `The Line`. For telling whether a video is the
+ * song, where a catalogue's provenance and a video's own note are written two
+ * ways and neither is the song's name. A title that was nothing but brackets
+ * is left as it was.
+ */
+export function withoutBrackets(title: string): string {
+  const bare = title.replace(/\s*(?:\([^)]*\)|\[[^\]]*\]|【[^】]*】|（[^）]*）)/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  return bare || title;
+}
+
+/** Brackets a video's title puts notes in, ordinary and full-width. */
+const BRACKETED = /\s*(?:\(([^)]*)\)|\[([^\]]*)\]|【([^】]*)】|（([^）]*)）)/g;
+
+/**
+ * A title without what is about where the file came from.
  *
- * `(Official Video)`, `[Lyric Video]`, `(Explicit)`. A file saved from a video
- * keeps the video's name, and none of that is in any catalogue's title for the
- * song. Brackets that say something about the recording -- `(Long Version)`,
- * `(Live)`, `(Acoustic)` -- are kept, because those are a different recording
- * and the search should be for that one.
+ * `(Official Video)`, `[Lyric Video]`, `(Explicit)`, `【MV】`, and the same said
+ * after a dash or a bar — `Numb - Official Audio`, `Numb | Lyrics` — or simply
+ * at the end, `Numb Official Music Video`. A file saved from a video keeps the
+ * video's name, and none of that is in any catalogue's title for the song.
+ *
+ * What says something about the recording is kept, because that is another
+ * recording and the search should be for it: `(Long Version)`, `(Live)` and
+ * `(Acoustic)` stay, and `(Official Live Video)` becomes `(Live)`. A note with
+ * a word in it that is neither — `(Official Video – Sanremo 2021)` — is left
+ * whole: better an untidy search than a name taken for packaging.
  */
 export function withoutPackaging(title: string): string {
-  const cleaned = title
-    .replace(/\s*[([]([^)\]]*)[)\]]/g, (group: string, inside: string) =>
-      foldForMatch(inside)
-        .split(' ')
-        .some((word) => PACKAGING.has(word))
-        ? ''
-        : group
-    )
-    .replace(/\s{2,}/g, ' ')
-    .trim();
+  let cleaned = title.replace(BRACKETED, (group: string, ...inside: (string | undefined)[]) => {
+    const text = inside.slice(0, 4).find((part) => part !== undefined) ?? '';
+    const left = afterNote(text);
+    if (left === null) return group;
+    return left ? ` (${left.replace(/\b\w/g, (first) => first.toUpperCase())})` : '';
+  });
+  // The same said after a dash or a bar, as often as it is said.
+  for (;;) {
+    const tail = /^(.*\S)\s+[-|–—/]+\s+([^-|–—/]+)$/.exec(cleaned);
+    if (!tail) break;
+    const left = afterNote(tail[2]!);
+    if (left !== '') break;
+    cleaned = tail[1]!;
+  }
+  // And at the end with nothing to set it off: only a run of such words that
+  // has a strong one in it, so that a song called `Video Games` or one whose
+  // last word is `Music` keeps its name.
+  const words = cleaned.split(/\s+/);
+  let cut = words.length;
+  while (cut > 1 && PACKAGING.has(foldForMatch(words[cut - 1]!))) cut -= 1;
+  const run = words.slice(cut).map((word) => foldForMatch(word));
+  if (run.length >= 2 && run.some((word) => STRONG.has(word)) && run.some((word) => word === 'official' || word === 'resmi' || word === 'lyrics' || word === 'video')) {
+    cleaned = words.slice(0, cut).join(' ');
+  }
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\s+[-|–—/]+\s*$/, '').trim();
   return cleaned || title;
 }

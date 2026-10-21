@@ -48,3 +48,23 @@ test('the name still comes first', () => {
   const named = video('Linkin Park - Faint (Official Audio)', 'Linkin Park', 164);
   assert.equal(chooseVideo({ ...song, durationSec: 162, loose: true }, [video('Something', 'Linkin Park', 162), named]), named);
 });
+
+test('a readable title that is another song is never taken, by length or as the likeliest', () => {
+  const frozen = { title: 'Frozen', artist: 'bôa', durationSec: 228, loose: true };
+  const twilight = video('bôa - Twilight (Official Audio)', 'bôa', 228);
+  const duvet = video('bôa - Duvet', 'bôa - Topic', 230);
+  // Same artist, the same length to the second: still another song.
+  assert.equal(chooseVideo(frozen, [twilight]), null);
+  assert.equal(chooseVideo({ ...frozen, loose: false }, [twilight]), null);
+  // Nor the first of several by the artist that roughly fit.
+  assert.equal(chooseVideo(frozen, [duvet, twilight]), null);
+  // The song itself is still found by its name.
+  const real = video('bôa - Frozen (Official Audio)', 'bôa', 229);
+  assert.equal(chooseVideo(frozen, [twilight, real]), real);
+});
+
+test('the song is found by its own name when the catalogue adds a note in brackets', () => {
+  const line = { title: 'The Line (from the series Arcane League of Legends)', artist: 'Twenty One Pilots', durationSec: 211, loose: true };
+  const real = video('Twenty One Pilots - The Line (from Arcane Season 2) [Official Music Video]', 'Twenty One Pilots', 212);
+  assert.equal(chooseVideo(line, [real]), real);
+});

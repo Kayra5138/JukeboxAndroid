@@ -307,7 +307,7 @@ export function bucketsOf(
         // One letter, because twelve three-letter labels do not fit across a
         // phone. Three of them are J, and a chart read left to right from
         // January is not ambiguous for it.
-        label: MONTH_NAMES[index][0],
+        label: narrowMonth(MONTH_NAMES[index]),
         major: true,
       }));
     }
@@ -409,13 +409,23 @@ function rollingBuckets(id: PeriodId, now: number, t: Strings): Bucket[] {
         return {
           start: from,
           end: moved(range.since, { months: index + 1 }),
-          label: t.format.monthsShort[new Date(from).getMonth()][0],
+          label: narrowMonth(t.format.monthsShort[new Date(from).getMonth()]),
           major: true,
         };
       });
     case 'all':
       return [];
   }
+}
+
+/**
+ * A month in as little room as a twelfth of a phone's width: its first letter
+ * where it is spelt, `J` for June, and its number where it is counted, as it
+ * is in Japanese and Chinese — where the first character of `10月` is `1`, and
+ * the last three months of the year all read as January.
+ */
+function narrowMonth(short: string): string {
+  return /^\d/.test(short) ? short.match(/^\d+/)![0] : short[0]!;
 }
 
 function steps(count: number, make: (index: number) => Bucket): Bucket[] {

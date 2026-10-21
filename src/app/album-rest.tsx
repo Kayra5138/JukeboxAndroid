@@ -2,6 +2,7 @@ import { memo, useEffect, useState } from 'react';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnderBars } from '../components/UnderBars';
 
 import { LIST_COVER_SIZE } from '../components/ListHeading';
 import { PlaylistCover } from '../components/PlaylistCover';
@@ -14,7 +15,7 @@ import type { RestOutcome, RestTrack } from '../lib/album/rest';
 import type { Stage, YouTubeOutcome } from '../lib/album/youtube';
 import { useT } from '../lib/i18n/index';
 import type { Strings } from '../lib/i18n/index';
-import { albumsOf, type Album } from '../lib/media/albums';
+import { albumsOf, findAlbum, type Album } from '../lib/media/albums';
 import { readLibrary } from '../lib/library/index';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { useDownloadLibraryRevision, useDownloads } from '../lib/youtube/DownloadsProvider';
@@ -28,6 +29,7 @@ import {
   type DownloadJob,
   type YouTubeVideo,
 } from '../lib/youtube/types';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
 /** Where a track list is read from. */
 type Source = 'musicbrainz' | 'youtube';
@@ -126,6 +128,8 @@ export default function AlbumRestScreen() {
   const styles = useStyles();
   const pressed = usePressed();
   const insets = useSafeAreaInsets();
+  // How far the screen's bar of glass is over the top of what scrolls; nought in any other theme.
+  const under = useUnderBars();
   const revision = useDownloadLibraryRevision();
   const { jobs, enqueueFindAll, enqueueAll, cancelMany } = useDownloads();
   const said = t.library.rest;
@@ -166,7 +170,7 @@ export default function AlbumRestScreen() {
     // app's own tables, and either is noticed there without being said.
     readLibrary().then(
       (tracks) => {
-        if (live) setAlbum(albumsOf(tracks).find((entry) => entry.key === key) ?? null);
+        if (live) setAlbum(findAlbum(albumsOf(tracks), key));
       },
       () => {
         if (live) setAlbum(null);
@@ -279,7 +283,7 @@ export default function AlbumRestScreen() {
   const listed = shown && !pending && vouchedFor(shown) ? shown.id : null;
   useEffect(() => {
     if (!album || !shown || listed == null || order?.list === listed) return;
-    const own = new Set([...placedByApp(jobs, key), ...(order?.own ?? [])]);
+    const own = new Set([...placedByApp(jobs, album.key), ...(order?.own ?? [])]);
     let moves: Move[] = [];
     try {
       moves = putInOrder(shown, album.tracks, own);
@@ -291,7 +295,7 @@ export default function AlbumRestScreen() {
     }
     setOrder({ list: listed, moves, own });
     if (moves.length > 0) setPlaced((value) => value + 1);
-  }, [album, shown, listed, order, jobs, key]);
+  }, [album, shown, listed, order, jobs]);
 
   const undo = () => {
     if (!order) return;
@@ -311,6 +315,9 @@ export default function AlbumRestScreen() {
     album && shown
       ? shown.tracks.map((track) => ({
           album: album.name,
+          // Whose record the library shows it as, so that what arrives joins
+          // this record and not another of the same name.
+          albumArtist: album.albumArtist,
           title: track.title,
           // The library's spelling of whose record it is, unless this one
           // track is somebody else's.
@@ -323,7 +330,8 @@ export default function AlbumRestScreen() {
           genre,
         }))
       : [];
-  const queued = jobsForPlaces(jobs, key, places);
+  // The record's own key: the screen may have been opened with an older one.
+  const queued = jobsForPlaces(jobs, album?.key ?? key, places);
 
   const rows: Row[] =
     album && shown
@@ -368,7 +376,7 @@ export default function AlbumRestScreen() {
   */
   const unsure = shown != null && shown.covered === 0;
   const ticked = open.filter((row) => choice.get(row.slot) ?? !unsure);
-  const waiting = unsought(jobs, key);
+  const waiting = unsought(jobs, album?.key ?? key);
 
   // Reads what it changes from the state itself, so that it is the same
   // function from one reading of the downloads to the next and a row is not
@@ -513,16 +521,18 @@ export default function AlbumRestScreen() {
       <Stack.Screen options={{ title: album?.name ?? t.nav.albumRest }} />
 
       <FlatList
+              removeClippedSubviews={CLIP_SUBVIEWS}
         data={rows}
         keyExtractor={(row) => row.slot}
-        contentContainerStyle={[styles.content, edges, { paddingBottom: 24 + insets.bottom }]}
+        contentContainerStyle={[styles.content, edges, { paddingTop: 16 + under.top, paddingBottom: 24 + insets.bottom }]}
         ListHeaderComponent={
           <View style={styles.header}>
             {album ? (
               <View style={styles.identity}>
                 <PlaylistCover
                   tracks={album.tracks}
-                  chosen={album.tracks[0] ?? null}
+                  chosen={null}
+                  sleeve={album.tracks}
                   size={LIST_COVER_SIZE}
                 />
                 <View style={styles.identityText}>
@@ -566,7 +576,7 @@ export default function AlbumRestScreen() {
 
             {notice ? (
               <View style={styles.notice}>
-                <Text accessibilityRole="alert" style={styles.note}>
+                <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.note}>
                   {notice.text}
                 </Text>
                 {/* Only where asking again could be answered differently. */}
@@ -613,7 +623,7 @@ export default function AlbumRestScreen() {
                   <Text style={styles.note}>{t.search.unavailable.downloads}</Text>
                 ) : null}
                 {refused ? (
-                  <Text accessibilityRole="alert" style={styles.note}>
+                  <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.note}>
                     {refused}
                   </Text>
                 ) : null}
@@ -729,12 +739,12 @@ const RestRow = memo(function RestRow({
           onPress={() => onToggle(slot)}>
           {open ? (
             <View style={[styles.checkbox, ticked && styles.checkboxOn]}>
-              {ticked ? <Text style={styles.checkMark}>✓</Text> : null}
+              {ticked ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
             </View>
           ) : (
             <View style={styles.mark}>
               {kind === 'have' ? (
-                <Text style={styles.present}>✓</Text>
+                <Text style={styles.present} importantForAccessibility="no">✓</Text>
               ) : (
                 <ActivityIndicator size="small" color={c.textFaint} />
               )}

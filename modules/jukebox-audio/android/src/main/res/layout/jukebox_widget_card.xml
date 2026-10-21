@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Two rows of cells and more: the cover as large as the height allows, the
+  words beside it, and the whole width below for the buttons, so that five of
+  them still have a finger's room each on a widget four cells wide.
+
+  The cover's width is worked out from its height (adjustViewBounds on a
+  square picture), which is what lets it grow as the widget is pulled taller
+  without a layout for every size.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/jukebox_widget_root"
+  android:layout_width="match_parent" android:layout_height="match_parent"
+  android:background="@drawable/jukebox_widget_shape"
+  android:clipToOutline="true"
+  android:foreground="@drawable/jukebox_widget_edge">
+  <ImageView android:id="@+id/jukebox_widget_glass"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:src="@drawable/jukebox_widget_background" android:scaleType="fitXY"
+    android:importantForAccessibility="no" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:paddingStart="14dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="6dp">
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
+      android:layout_weight="1"
+      android:gravity="center_vertical"
+      android:orientation="horizontal">
+
+      <!-- A press opens the player, so a screen reader is told that; its
+           description is set from code, in the app's language. -->
+      <ImageView
+        android:id="@+id/jukebox_widget_art"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:adjustViewBounds="true"
+        android:scaleType="fitCenter"
+        android:src="@drawable/jukebox_widget_cover_placeholder" />
+
+      <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+          android:id="@+id/jukebox_widget_title"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:ellipsize="end"
+          android:maxLines="2"
+          android:text="@string/jukebox_widget_idle"
+          android:textColor="#EDEDED"
+          android:textSize="16sp" />
+
+        <TextView
+          android:id="@+id/jukebox_widget_artist"
+          android:layout_width="match_parent"
+          android:layout_height="wrap_content"
+          android:layout_marginTop="2dp"
+          android:ellipsize="end"
+          android:maxLines="1"
+          android:textColor="#D2D6DE"
+          android:textSize="13sp" />
+      </LinearLayout>
+    </LinearLayout>
+
+    <ProgressBar android:id="@+id/jukebox_widget_progress"
+      style="?android:attr/progressBarStyleHorizontal"
+      android:layout_width="match_parent" android:layout_height="3dp"
+      android:layout_marginTop="10dp"
+      android:max="1000" android:progress="0"
+      android:indeterminate="false" android:progressTint="#F2F2F2"
+      android:progressBackgroundTint="#40FFFFFF"
+      android:contentDescription="@string/jukebox_widget_progress" />
+
+    <!-- Shuffle and repeat at the ends, the way round the player has them,
+         and the three that are pressed most in the middle. -->
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="48dp"
+      android:layout_marginTop="2dp"
+      android:gravity="center_vertical"
+      android:orientation="horizontal">
+
+      <ImageButton
+        android:id="@+id/jukebox_widget_shuffle"
+        android:layout_width="0dp" android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/jukebox_widget_shuffle"
+        android:padding="13dp" android:scaleType="fitCenter"
+        android:src="@drawable/jukebox_ic_shuffle" />
+
+      <ImageButton
+        android:id="@+id/jukebox_widget_previous"
+        android:layout_width="0dp" android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/jukebox_widget_previous"
+        android:padding="12dp" android:scaleType="fitCenter"
+        android:src="@drawable/jukebox_ic_previous" />
+
+      <ImageButton
+        android:id="@+id/jukebox_widget_toggle"
+        android:layout_width="0dp" android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/jukebox_widget_toggle"
+        android:padding="9dp" android:scaleType="fitCenter"
+        android:src="@drawable/jukebox_ic_play" />
+
+      <ImageButton
+        android:id="@+id/jukebox_widget_next"
+        android:layout_width="0dp" android:layout_height="48dp"
+        android:layout_weight="1"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/jukebox_widget_next"
+        android:padding="12dp" android:scaleType="fitCenter"
+        android:src="@drawable/jukebox_ic_next" />
+
+      <!-- The ring is a picture of its own behind the button, shown while
+           repeat is on. As the button's background it would have taken the
+           place of the ripple a press shows. -->
+      <FrameLayout
+        android:layout_width="0dp" android:layout_height="48dp"
+        android:layout_weight="1">
+        <ImageView
+          android:id="@+id/jukebox_widget_repeat_ring"
+          android:layout_width="48dp" android:layout_height="48dp"
+          android:layout_gravity="center"
+          android:importantForAccessibility="no"
+          android:src="@drawable/jukebox_widget_mode_on"
+          android:visibility="gone" />
+        <ImageButton
+          android:id="@+id/jukebox_widget_repeat"
+          android:layout_width="48dp" android:layout_height="48dp"
+          android:layout_gravity="center"
+          android:background="?android:attr/selectableItemBackgroundBorderless"
+          android:contentDescription="@string/jukebox_widget_repeat_off"
+          android:padding="13dp" android:scaleType="fitCenter"
+          android:src="@drawable/jukebox_ic_repeat" />
+      </FrameLayout>
+    </LinearLayout>
+  </LinearLayout>
+</FrameLayout>

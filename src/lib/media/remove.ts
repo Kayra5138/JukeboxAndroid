@@ -41,7 +41,7 @@ function forgetEverythingAbout(trackIds: string[]): void {
   // the rows left behind belong to a track that no longer exists, and nothing
   // ever visits them again to notice.
   database.withTransactionSync(() => {
-    for (const table of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations']) {
+    for (const table of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations', 'shared_covers']) {
       database.runSync(
         `DELETE FROM ${table} WHERE track_id IN (${placeholders})`,
         ...trackIds

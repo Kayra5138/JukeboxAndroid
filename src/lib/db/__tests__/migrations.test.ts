@@ -541,6 +541,8 @@ describe('one spelling per tag', () => {
     // which is how a database from before it would have looked.
     database.exec('ALTER TABLE track_metadata DROP COLUMN cover_searched_at');
     database.exec('ALTER TABLE discover_exclusions DROP COLUMN created_at');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN album_artist');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN cover_removed_at');
     return database;
   }
 
@@ -611,6 +613,9 @@ describe('dating what was put away from Discover', () => {
     const dated = MIGRATIONS.findIndex((sql) => sql.includes('ADD COLUMN created_at') && sql.includes('discover_exclusions'));
     assert.notEqual(dated, -1, 'the migration is no longer in the history');
     database.exec('ALTER TABLE discover_exclusions DROP COLUMN created_at');
+    // And everything added after it, which runs again too.
+    database.exec('ALTER TABLE track_metadata DROP COLUMN album_artist');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN cover_removed_at');
     database.exec(`PRAGMA user_version = ${dated}`);
     database.exec(`INSERT INTO discover_exclusions (id, song_key, title, artist, reason, until_at)
       VALUES ('old', 'artist|song', 'Song', 'Artist', 'blocked', NULL)`);
@@ -622,5 +627,37 @@ describe('dating what was put away from Discover', () => {
       { id: 'new', created_at: 1234 },
       { id: 'old', created_at: null },
     ]);
+  });
+});
+
+describe('album artists, covers taken off, and covers shared by a record', () => {
+  it('adds the columns empty, and moves the covers given to tracks nobody found to where they are shown', () => {
+    const database = open();
+    migrate(database);
+    const shared = MIGRATIONS.findIndex((sql) => sql.includes('CREATE TABLE IF NOT EXISTS shared_covers'));
+    assert.notEqual(shared, -1, 'the migration is no longer in the history');
+    // As the release before left it.
+    database.exec('DROP TABLE shared_covers');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN album_artist');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN cover_removed_at');
+    database.exec(`PRAGMA user_version = ${shared}`);
+    database.exec(`INSERT INTO track_metadata (track_id, status, artwork_url, fetched_at) VALUES
+      ('missed', 'not_found', 'file:///covers/a.jpg', 5),
+      ('address', 'not_found', 'https://example.com/a.jpg', 5),
+      ('found', 'matched', 'file:///covers/b.jpg', 5)`);
+
+    assert.equal(migrate(database), MIGRATIONS.length);
+    assert.deepEqual(rows(database, 'SELECT track_id, artwork_url, shared_at FROM shared_covers'), [
+      { track_id: 'missed', artwork_url: 'file:///covers/a.jpg', shared_at: 5 },
+    ]);
+    // Nothing is taken away from the rows themselves.
+    assert.deepEqual(
+      rows(database, 'SELECT track_id, artwork_url, album_artist, cover_removed_at FROM track_metadata ORDER BY track_id'),
+      [
+        { track_id: 'address', artwork_url: 'https://example.com/a.jpg', album_artist: null, cover_removed_at: null },
+        { track_id: 'found', artwork_url: 'file:///covers/b.jpg', album_artist: null, cover_removed_at: null },
+        { track_id: 'missed', artwork_url: 'file:///covers/a.jpg', album_artist: null, cover_removed_at: null },
+      ]
+    );
   });
 });

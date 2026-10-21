@@ -1,5 +1,5 @@
-import { albumKey } from '../media/albums.ts';
-import { albumShown } from '../media/enriched.ts';
+import { albumKey, artistKey, nameOfKey } from '../media/albums.ts';
+import { albumArtistShown, albumShown } from '../media/enriched.ts';
 import { foldForMatch } from './text.ts';
 import type { TrackMetadata } from '../db/metadata.ts';
 import type { Track } from '../types.ts';
@@ -16,11 +16,14 @@ import type { Track } from '../types.ts';
  *
  * The rules, all of them on the cautious side:
  *
- *  - "The same record" is what the library means by it and nothing cleverer:
- *    the album a track is shown under, compared the way `albumKey` compares.
- *    Artists are not consulted, for the reason the album list does not consult
- *    them — a compilation names a different one on every track and is one
- *    record with one cover all the same.
+ *  - "The same record" is the album a track is shown under and the album
+ *    artist it is shown with, compared the way `albumKey` compares, which is
+ *    as far as one track can say what the library means by it. Where no album
+ *    artist is known the record is its name alone, and then a cover is still
+ *    not handed to a track whose own artist is not the one most of the
+ *    covered tracks share — Queen's `Greatest Hits` keeps its sleeve off
+ *    ABBA's — unless no artist is most of them, which is a compilation, one
+ *    record with one cover whoever sings on it.
  *  - A track that names no record has no neighbours. Tracks with no album are
  *    not an album called nothing.
  *  - Only a cover the app holds a copy of counts: one that was looked up and
@@ -60,30 +63,68 @@ export function isEmbeddedPicture(uri: string | null | undefined): boolean {
   return uri != null && uri.includes('/cache/artwork/');
 }
 
+type Row = Pick<TrackMetadata, 'status' | 'album' | 'albumArtist' | 'artist'>;
+
 /** What groups a track with the rest of its record, or null if it names none. */
 export function recordKey(
-  track: Pick<Track, 'album'>,
-  row: Pick<TrackMetadata, 'status' | 'album'> | null | undefined
+  track: Pick<Track, 'album' | 'albumArtist'>,
+  row: Pick<TrackMetadata, 'status' | 'album' | 'albumArtist'> | null | undefined
 ): string | null {
-  const key = albumKey(albumShown(track, row) ?? '');
-  return key === '' ? null : key;
+  const name = albumShown(track, row) ?? '';
+  if (name.trim() === '') return null;
+  return albumKey(name, albumArtistShown(track, row));
+}
+
+/** The artist a track is shown under, as the merge has it: an edit's first, the file's, a lookup's. */
+export function artistShown(track: Pick<Track, 'artist'>, row: Row | null | undefined): string | null {
+  if (!row || row.status === 'not_found') return track.artist;
+  return row.status === 'manual' ? (row.artist ?? track.artist) : (track.artist ?? row.artist);
+}
+
+/**
+ * The cover the app holds for a track: its row's own picture, or else the one
+ * its record gave it. A note that nothing was found has none of its own.
+ */
+export function heldCover(
+  row: Pick<TrackMetadata, 'status' | 'artworkUrl' | 'coverRemovedAt'> | null | undefined,
+  shared: string | null | undefined
+): string | null {
+  if (row && row.status !== 'not_found' && isStoredCover(row.artworkUrl)) return row.artworkUrl;
+  // Taken off by hand: whatever the record gave it is not its cover.
+  if (row?.coverRemovedAt != null) return null;
+  return isStoredCover(shared) ? shared : null;
 }
 
 /** The covers each record's tracks have, counted. */
 export type CoverIndex = {
-  /** The cover most tracks of the record have, or null when none has one. */
-  pick: (key: string) => string | null;
+  /**
+   * The cover most tracks of the record have, or null when none has one.
+   *
+   * [artist] is the artist of the track that is to wear it. For a record
+   * known only by its name it has to be the artist most of the covered
+   * tracks share, where there is one; see the rules at the top.
+   */
+  pick: (key: string, artist?: string | null) => string | null;
   /** One more track of the record has this cover. */
   add: (key: string, uri: string) => void;
+  /** Whether a track by [artist] may wear a cover of the record known by [key] at all. */
+  fits: (key: string, artist: string | null | undefined) => boolean;
 };
 
 export function coverIndex(
   tracks: Track[] = [],
-  rows: ReadonlyMap<string, TrackMetadata> = new Map()
+  rows: ReadonlyMap<string, TrackMetadata> = new Map(),
+  shared: ReadonlyMap<string, string> = new Map()
 ): CoverIndex {
   // A Map keeps the order things were put in, which is what "seen first" means
   // between two covers the same number of tracks have.
   const held = new Map<string, Map<string, number>>();
+  /**
+   * Who each record's tracks are by, counted over all of them and not only
+   * the covered ones: one covered track says nothing about whether the rest
+   * are by somebody else.
+   */
+  const by = new Map<string, { counts: Map<string, number>; total: number }>();
 
   const add = (key: string, uri: string) => {
     let covers = held.get(key);
@@ -93,14 +134,45 @@ export function coverIndex(
 
   for (const track of tracks) {
     const row = rows.get(track.id);
-    if (!isStoredCover(row?.artworkUrl)) continue;
     const key = recordKey(track, row);
-    if (key) add(key, row.artworkUrl);
+    if (!key) continue;
+
+    let artists = by.get(key);
+    if (!artists) by.set(key, (artists = { counts: new Map(), total: 0 }));
+    artists.total += 1;
+    const who = artistKey(artistShown(track, row));
+    if (who) artists.counts.set(who, (artists.counts.get(who) ?? 0) + 1);
+
+    const cover = heldCover(row, shared.get(track.id));
+    if (cover) add(key, cover);
   }
+
+  /** Whether a track by [artist] may wear a cover of the record known by [key]. */
+  const fits = (key: string, artist: string | null | undefined): boolean => {
+    // A record with an album artist is that artist's, whoever sings.
+    if (nameOfKey(key) !== key || artist === undefined) return true;
+    const artists = by.get(key);
+    if (!artists) return true;
+    let most = 0;
+    let leader = '';
+    for (const [who, count] of artists.counts) {
+      if (count > most) {
+        most = count;
+        leader = who;
+      }
+    }
+    // Nobody on more than half of them: a compilation, whose cover is
+    // everybody's. Half and half is two artists' worth of one record as far
+    // as anything here can tell, which is how the album list shows it too.
+    if (most * 2 <= artists.total) return true;
+    return artistKey(artist) === leader;
+  };
 
   return {
     add,
-    pick: (key) => {
+    fits,
+    pick: (key, artist) => {
+      if (!fits(key, artist)) return null;
       let best: string | null = null;
       let most = 0;
       for (const [uri, count] of held.get(key) ?? []) {
@@ -123,12 +195,13 @@ export function coverIndex(
 export function siblingCover(
   track: Track,
   library: Track[],
-  rows: ReadonlyMap<string, TrackMetadata>
+  rows: ReadonlyMap<string, TrackMetadata>,
+  shared: ReadonlyMap<string, string> = new Map()
 ): string | null {
   const row = rows.get(track.id);
-  if (isStoredCover(row?.artworkUrl)) return null;
+  if (heldCover(row, shared.get(track.id))) return null;
   const key = recordKey(track, row);
-  return key ? coverIndex(library, rows).pick(key) : null;
+  return key ? coverIndex(library, rows, shared).pick(key, artistShown(track, row)) : null;
 }
 
 /**

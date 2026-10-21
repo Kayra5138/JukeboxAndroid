@@ -16,6 +16,7 @@ import { rowShift } from '../../lib/player/queue';
 import { edgePull, withinScroll } from '../../lib/ui/autoScroll';
 import { dropOf, listOf, type QueueItem } from '../../lib/youtube/queueView';
 import type { DownloadJob } from '../../lib/youtube/types';
+import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
 
 type Drag = { from: number | null; to: number | null; step: number };
 
@@ -331,6 +332,7 @@ export function DownloadsList({
       onResponderTerminate={clearDrag}>
       <DragContext value={{ from, to, step: sizes.row }}>
         <FlatList
+                  removeClippedSubviews={CLIP_SUBVIEWS}
           ref={scroll}
           data={items}
           keyExtractor={(item) => item.key}

@@ -3,6 +3,7 @@ import { readArtwork } from '../db/metadata';
 import { artworkRevision, subscribeArtwork } from './artworkEvents';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
+import { isEmbeddedPicture, isStoredCover } from '../metadata/covers';
 import type { Track } from '../types.ts';
 
 /**
@@ -26,6 +27,10 @@ const found = new Map<string, string>();
 export function forgetEmbedded(trackId: string): void {
   found.delete(trackId);
   asked.delete(trackId);
+  // Any record whose sleeve was worked out with this track among it.
+  for (const key of sleeves.keys()) {
+    if (key.startsWith(`${trackId}\u001f`) || key.includes(`\u001e${trackId}\u001f`)) sleeves.delete(key);
+  }
 }
 
 /**
@@ -141,6 +146,165 @@ export function useTrackArtwork(track: Track | null): string | null {
       cancelled = true;
     };
   }, [track, revision]);
+
+  return uri;
+}
+
+/**
+ * How many of a record's tracks are opened, at most, looking for a picture in
+ * a file. A record is a dozen tracks or two; a folder or an artist handed to
+ * this can be hundreds, and the first picture is nearly always among the
+ * first few, so the rest are not worth a file each.
+ */
+const SEARCHED = 30;
+
+/**
+ * The covers of records already worked out, by the tracks they were worked
+ * out from. Only hits, for the reason {@link found} keeps only hits.
+ */
+const sleeves = new Map<string, string>();
+
+/** What a record's cover depends on: which tracks, in which order, wearing what. */
+function sleeveKey(tracks: readonly Track[]): string {
+  let key = '';
+  for (const track of tracks) key += `${track.id}\u001f${track.artworkUri ?? ''}\u001e`;
+  return key;
+}
+
+/**
+ * The cover the app holds that most of [tracks] wear, the first met between
+ * equals, or null where none of them wears one.
+ */
+function storedSleeve(tracks: readonly Track[]): string | null {
+  const counts = new Map<string, number>();
+  let best: string | null = null;
+  for (const track of tracks) {
+    const uri = track.artworkUri;
+    if (!isStoredCover(uri)) continue;
+    const count = (counts.get(uri) ?? 0) + 1;
+    counts.set(uri, count);
+    if (best == null || count > counts.get(best)!) best = uri;
+  }
+  return best;
+}
+
+/**
+ * The cover of a record, asked for outside a component: see
+ * {@link useAlbumArtwork}, which is this and a hook. [spread] is told when
+ * the picture was found in a file after one or more that had none, which is
+ * a record with a gap in it, and is handed those tracks and the one with the
+ * picture.
+ */
+export async function albumArtworkFor(
+  tracks: readonly Track[],
+  spread?: (tracks: readonly Track[]) => void
+): Promise<string | null> {
+  if (tracks.length === 0) return null;
+  const stored = storedSleeve(tracks);
+  if (stored) return stored;
+
+  const key = sleeveKey(tracks);
+  const known = sleeves.get(key);
+  if (known !== undefined) return known;
+
+  // In the record's own order, and stopping at the first: each is a file
+  // opened, unless the phone has looked into it before.
+  let thumbnail: string | null = null;
+  for (let at = 0; at < Math.min(tracks.length, SEARCHED); at += 1) {
+    const track = tracks[at]!;
+    const uri = found.get(track.id) ?? (await JukeboxAudio.getEmbeddedArtworkAsync(track.id).catch(() => null));
+    if (!uri) continue;
+    if (isEmbeddedPicture(uri)) {
+      found.set(track.id, uri);
+      sleeves.set(key, uri);
+      // The ones asked before it and found bare, and the one that answered:
+      // only their records, not every record a folder of hundreds touches.
+      if (at > 0) spread?.(tracks.slice(0, at + 1));
+      return uri;
+    }
+    // A download's thumbnail: a frame of a video, kept for last.
+    thumbnail ??= uri;
+  }
+  const last = thumbnail ?? tracks.find((track) => track.artworkUri)?.artworkUri ?? null;
+  if (last) sleeves.set(key, last);
+  return last;
+}
+
+/**
+ * Finds the covers of [records] before anything is drawing them, one at a
+ * time and in the order given, and answers with what stops it: the record
+ * {@link warmArtwork} is for a single track. For the rack, which can be
+ * thrown across the library faster than its sleeves can be asked for.
+ */
+export function warmAlbumArtwork(records: readonly (readonly Track[] | null | undefined)[]): () => void {
+  let stopped = false;
+  const run = async () => {
+    for (const tracks of records) {
+      if (stopped) return;
+      if (!tracks || tracks.length === 0 || storedSleeve(tracks) || sleeves.has(sleeveKey(tracks))) continue;
+      await albumArtworkFor(tracks);
+    }
+  };
+  run().catch(() => undefined);
+  return () => {
+    stopped = true;
+  };
+}
+
+/**
+ * The cover of a record, an artist or a folder: of anything standing for
+ * several tracks with one picture.
+ *
+ *  1. The cover the app holds that most of the tracks wear: looked up,
+ *     chosen, or given by the rest of the record.
+ *  2. Otherwise the picture inside the first file, in the tracks' own order,
+ *     that carries one. A record whose first track has none is not a record
+ *     with no cover — the first track is as often as not an intro somebody
+ *     downloaded on its own — so the others are asked in turn, and asking
+ *     stops at the first that answers. The ones before it are given that
+ *     picture to keep, so they wear it everywhere else as well
+ *     ([onGap], `media/coverSpread.ts`).
+ *  3. Otherwise a download's thumbnail, and failing that an address a lookup
+ *     gave, which are the least of covers and come last.
+ *
+ * The answer for a set of tracks is kept, so a list scrolling back over a
+ * row does not ask again.
+ */
+export function useAlbumArtwork(
+  tracks: readonly Track[] | null,
+  onGap?: (tracks: readonly Track[]) => void
+): string | null {
+  const revision = useSyncExternalStore(subscribeArtwork, artworkRevision);
+  const [uri, setUri] = useState<string | null>(() =>
+    tracks ? (storedSleeve(tracks) ?? sleeves.get(sleeveKey(tracks)) ?? null) : null
+  );
+
+  useEffect(() => {
+    if (!tracks || tracks.length === 0) {
+      setUri(null);
+      return;
+    }
+    const stored = storedSleeve(tracks);
+    if (stored) {
+      setUri(stored);
+      return;
+    }
+    const known = sleeves.get(sleeveKey(tracks));
+    // What is known is shown at once; otherwise a blank rather than another
+    // record's sleeve left over in a recycled row.
+    setUri(known ?? null);
+    if (known !== undefined) return;
+
+    let cancelled = false;
+    void albumArtworkFor(tracks, onGap).then((answer) => {
+      if (!cancelled) setUri(answer);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+    // The callback is not a reason to look again: it is only who to tell.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracks, revision]);
 
   return uri;
 }

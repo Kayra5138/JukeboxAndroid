@@ -27,12 +27,15 @@ export function HeartButton({
   on,
   off,
   style,
+  hitSlop,
 }: {
   size: number;
   /** The ink of a heart that has been pressed, and of one that has not. */
   on: string;
   off: string;
   style?: StyleProp<ViewStyle>;
+  /** How far outside itself it still takes a touch, for where it is drawn smaller than a finger. */
+  hitSlop?: number;
 }) {
   const t = useT();
   const c = useColours();
@@ -62,11 +65,16 @@ export function HeartButton({
     });
     beat.stopAnimation();
     beat.setValue(1);
-    Animated.sequence([
-      Animated.timing(beat, { toValue: 1.32, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.spring(beat, { toValue: 1, friction: 4, tension: 140, useNativeDriver: true }),
-    ]).start();
-    if (motionReduced() || (!filling && next.count < 2)) return;
+    // Held still with the rest of the decoration: the heart filling in is
+    // already the whole of what the press says.
+    const still = motionReduced();
+    if (!still) {
+      Animated.sequence([
+        Animated.timing(beat, { toValue: 1.32, duration: 90, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+        Animated.spring(beat, { toValue: 1, friction: 4, tension: 140, useNativeDriver: true }),
+      ]).start();
+    }
+    if (still || (!filling && next.count < 2)) return;
     const let_go = flightsOf(next);
     setFlights((flying) => [...flying, ...let_go].slice(-MOST_AT_ONCE));
   };
@@ -78,6 +86,7 @@ export function HeartButton({
     <Pressable
       android_ripple={ripple}
       style={style}
+      hitSlop={hitSlop}
       accessibilityRole="button"
       accessibilityLabel={t.player.sheet.heart}
       accessibilityState={{ selected: full }}
@@ -87,7 +96,9 @@ export function HeartButton({
       </Animated.View>
     </Pressable>
       {/* Beside the button and not in it: a round button cuts what it holds to its own shape. */}
-      <View pointerEvents="none" style={styles.sky}>
+      {/* Hidden from a screen reader too: each heart in flight is a line of
+          text, and a reader would otherwise stop on them as they rise. */}
+      <View pointerEvents="none" style={styles.sky} importantForAccessibility="no-hide-descendants">
         {flights.map((flight) => (
           <Rising
             key={flight.key}

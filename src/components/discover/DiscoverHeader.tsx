@@ -65,6 +65,7 @@ export function DiscoverHeader({ onAbout, onSettings }: { onAbout: () => void; o
       accessibilityRole="button"
       accessibilityLabel={said.header.about}
       style={styles.round}
+      hitSlop={ROUND_SLOP}
       onPress={onAbout}>
       <InfoIcon size={20} color={c.textMuted} />
     </Pressable>
@@ -75,6 +76,7 @@ export function DiscoverHeader({ onAbout, onSettings }: { onAbout: () => void; o
       accessibilityRole="button"
       accessibilityLabel={said.header.settings}
       style={styles.round}
+      hitSlop={ROUND_SLOP}
       onPress={onSettings}>
       <SettingsIcon size={20} color={c.textMuted} />
     </Pressable>
@@ -91,6 +93,7 @@ export function DiscoverHeader({ onAbout, onSettings }: { onAbout: () => void; o
       accessibilityState={{ disabled: building, busy: building }}
       disabled={building}
       style={[styles.refresh, building && styles.off]}
+      hitSlop={REFRESH_SLOP}
       onPress={refresh}>
       <RefreshIcon size={16} />
       <Text style={styles.refreshLabel} maxFontSizeMultiplier={1.4}>{said.panel.refresh}</Text>
@@ -151,7 +154,7 @@ function Status({ line }: { line: StatusLine }) {
       <View style={styles.statusRow}>
         {/* A shape as well as a colour: red writing alone says nothing to somebody who is not shown red. */}
         <AlertIcon size={16} color={c.danger} />
-        <Text accessibilityRole="alert" style={styles.problem} numberOfLines={2} maxFontSizeMultiplier={1.5}>
+        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.problem} numberOfLines={2} maxFontSizeMultiplier={1.5}>
           {line.text}
         </Text>
         {line.action ? (
@@ -159,6 +162,7 @@ function Status({ line }: { line: StatusLine }) {
             android_ripple={pressed}
             accessibilityRole="button"
             style={styles.statusButton}
+            hitSlop={STATUS_SLOP}
             onPress={line.action === 'findMore' ? findMore : refresh}>
             <Text style={styles.statusButtonLabel} maxFontSizeMultiplier={1.5}>
               {line.action === 'findMore' ? t.discover.header.findMore : t.common.retry}
@@ -202,7 +206,16 @@ function Status({ line }: { line: StatusLine }) {
   );
 }
 
-const DISMISS_SLOP = { top: 10, bottom: 10, left: 6, right: 10 };
+/*
+  How much further than they are drawn the header's buttons take a touch:
+  enough to make each of them the 48 a finger is owed, and never so far that
+  two of them reach for the same spot. The two round ones stand two points
+  apart, so they give only one each sideways.
+*/
+const DISMISS_SLOP = { top: 10, bottom: 10, left: 8, right: 12 };
+const ROUND_SLOP = { top: 2, bottom: 2, left: 1, right: 1 };
+const REFRESH_SLOP = { top: 6, bottom: 6 };
+const STATUS_SLOP = { top: 8, bottom: 8 };
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   header: { paddingTop: PADDING, paddingHorizontal: 16 },

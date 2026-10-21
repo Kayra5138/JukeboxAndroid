@@ -138,6 +138,25 @@ class PlayerController(
       )
     }
 
+    /*
+      The repeat mode, whoever changed it. The app changes it itself and
+      knows, but the widget's repeat button changes it from the home screen,
+      and the app would otherwise go on showing, and going round from, the
+      mode it set last.
+    */
+    override fun onRepeatModeChanged(repeatMode: Int) {
+      emit(
+        "onRepeatModeChange",
+        mapOf(
+          "repeat" to when (repeatMode) {
+            Player.REPEAT_MODE_ONE -> "one"
+            Player.REPEAT_MODE_ALL -> "all"
+            else -> "off"
+          }
+        )
+      )
+    }
+
     override fun onPlaybackStateChanged(state: Int) {
       if (state == Player.STATE_ENDED) {
         emit("onQueueEnded", emptyMap())

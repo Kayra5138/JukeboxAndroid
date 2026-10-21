@@ -2,6 +2,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'r
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useUnderBars } from '../components/UnderBars';
 import { Slider } from '../components/Fader';
 import { useT } from '../lib/i18n/index';
 import {
@@ -17,6 +18,8 @@ import { makeStyles, outlined, scene, switchColours, useColours, usePressed } fr
 
 export default function EffectsScreen() {
   const insets = useSafeAreaInsets();
+  // How far the screen's bar of glass is over the top of what scrolls; nought in any other theme.
+  const under = useUnderBars();
   // A pushed screen has the whole width of the glass, cutout and all.
   const sideways = { paddingLeft: 20 + insets.left, paddingRight: 20 + insets.right };
   const { settings, failure, change } = useAudioEffects();
@@ -43,9 +46,9 @@ export default function EffectsScreen() {
   return (
     <ScrollView
       style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }, sideways]}>
+      contentContainerStyle={[styles.content, { paddingTop: 20 + under.top, paddingBottom: insets.bottom + 32 }, sideways]}>
       {failure ? (
-        <Text accessibilityRole="alert" style={styles.bad}>
+        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
           {failure}
         </Text>
       ) : null}
@@ -56,7 +59,7 @@ export default function EffectsScreen() {
         what anybody is choosing. The two halves are independent and can both
         be on, so `Off` stands apart as the only chip that clears both.
       */}
-      <Text style={styles.section}>{t.format.upper(say.title)}</Text>
+      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.title)}</Text>
       <View style={styles.presets}>
         <Pressable
           android_ripple={pressed}
@@ -127,7 +130,7 @@ export default function EffectsScreen() {
         </View>
       )}
 
-      <Text style={styles.section}>{t.format.upper(say.stereo)}</Text>
+      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.stereo)}</Text>
       <View style={styles.card}>
         <Slider
           label={say.width}
@@ -164,6 +167,8 @@ export default function EffectsScreen() {
             <Text style={styles.muted}>{say.swap.note}</Text>
           </View>
           <Switch
+            // Named, for a screen reader, which otherwise says only "switch, off".
+            accessibilityLabel={say.swap.title}
             value={settings.swap}
             onValueChange={(on) => change({ swap: on })}
             {...switchColours(c, settings.swap)}
@@ -171,7 +176,7 @@ export default function EffectsScreen() {
         </View>
       </View>
 
-      <Text style={styles.section}>{t.format.upper(say.headphones)}</Text>
+      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.headphones)}</Text>
       <View style={styles.card}>
         <Slider
           label={say.crossfeed}
@@ -187,7 +192,7 @@ export default function EffectsScreen() {
         <Text style={styles.note}>{say.crossfeedNote}</Text>
       </View>
 
-      <Text style={styles.section}>{t.format.upper(say.rotation)}</Text>
+      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.rotation)}</Text>
       <View style={styles.card}>
         <Slider
           label={say.depth}
@@ -214,7 +219,7 @@ export default function EffectsScreen() {
         <Text style={styles.note}>{say.rotationNote}</Text>
       </View>
 
-      <Text style={styles.section}>{t.format.upper(say.level)}</Text>
+      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.level)}</Text>
       <View style={styles.card}>
         <Slider
           label={say.preamp}

@@ -1,5 +1,5 @@
 import { mergeMetadata, type EnrichedTrack } from './enriched.ts';
-import { readAllMetadata } from '../db/metadata.ts';
+import { readAllMetadata, readSharedCovers } from '../db/metadata.ts';
 import { allTags } from '../db/tags.ts';
 import type { Track } from '../types.ts';
 
@@ -15,5 +15,5 @@ export type { EnrichedTrack };
  * the part that most needed testing.
  */
 export function withMetadata(tracks: Track[]): EnrichedTrack[] {
-  return mergeMetadata(tracks, { readAllMetadata, allTags });
+  return mergeMetadata(tracks, { readAllMetadata, allTags, readSharedCovers });
 }

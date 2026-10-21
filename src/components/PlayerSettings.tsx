@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Pressable } from './Pressable';
+import { Segmented } from './Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Slider } from './Fader';
@@ -92,7 +93,14 @@ export function PlayerSettings({
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
+      {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
+          of its own, touching outside it is one of the ways out, and it has to be findable. */}
+      <Pressable
+        style={styles.backdrop}
+        accessibilityRole="button"
+        accessibilityLabel={t.common.close}
+        onPress={onClose}
+      />
       <ScrollView
         style={styles.sheet}
         contentContainerStyle={[
@@ -107,7 +115,7 @@ export function PlayerSettings({
           },
         ]}>
         <View style={styles.headingRow}>
-          <Text style={styles.heading}>{t.format.upper(t.player.settings.playback)}</Text>
+          <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.playback)}</Text>
           {/*
             Dimmed rather than taken away when there is nothing to undo. It
             lives above two controls that are dragged, and a button appearing
@@ -184,12 +192,18 @@ export function PlayerSettings({
           once, which is why `Off` is a chip of its own rather than the first of
           each list -- it is the only one that speaks for both halves.
         */}
-        <Text style={styles.heading}>{t.format.upper(t.player.settings.effects)}</Text>
+        <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.effects)}</Text>
         <View style={styles.chips}>
+          {/*
+            Off and the stereo shapes are one of a set, of which one is the
+            answer; the voices beside them are each on or off by itself, and
+            pressed again turn off. Said so to a screen reader, which would
+            otherwise hear a row of buttons that are somehow checked.
+          */}
           <Pressable
             android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityState={{ checked: isBlank(effects) }}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: isBlank(effects), disabled: !effects }}
             disabled={!effects}
             style={[
               styles.chip,
@@ -208,8 +222,8 @@ export function PlayerSettings({
               <Pressable
                 android_ripple={pressed}
                 key={preset.id}
-                accessibilityRole="button"
-                accessibilityState={{ checked: on }}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on, disabled: !effects }}
                 disabled={!effects}
                 style={[styles.chip, on && styles.chipOn, !effects && styles.chipOff]}
                 onPress={() => changeEffects(shapeOf(preset.of))}>
@@ -226,8 +240,8 @@ export function PlayerSettings({
               <Pressable
                 android_ripple={pressed}
                 key={choice.id}
-                accessibilityRole="button"
-                accessibilityState={{ checked: on }}
+                accessibilityRole="togglebutton"
+                accessibilityState={{ checked: on, disabled: !effects }}
                 disabled={!effects}
                 style={[styles.chip, on && styles.chipOn, !effects && styles.chipOff]}
                 /*
@@ -254,18 +268,18 @@ export function PlayerSettings({
           <Text style={styles.hint}>{t.sound.effects.voices[effects.voice].hint}</Text>
         ) : null}
 
-        <Pressable android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/equalizer')}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/equalizer')}>
           <Text style={styles.rowTitle}>{t.nav.equalizer}</Text>
           <Text style={styles.hint}>{t.player.settings.equalizer.note}</Text>
         </Pressable>
 
-        <Pressable android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/transitions')}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/transitions')}>
           <Text style={styles.rowTitle}>{t.nav.crossfade}</Text>
           <Text style={styles.hint}>{t.player.settings.crossfade.note}</Text>
         </Pressable>
 
         {/* Last of the rows, because it is the way out of here rather than a setting. */}
-        <Pressable android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/effects')}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/effects')}>
           <Text style={styles.rowTitle}>{t.player.settings.allEffects.title}</Text>
           <Text style={styles.hint}>{t.player.settings.allEffects.note}</Text>
         </Pressable>
@@ -297,7 +311,6 @@ function SleepTimerSection() {
   const { timer, now, supported, start, cancel } = useSleepTimer();
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const c = useColours();
   const [preferences, setPreferences] = useState(() =>
     preferencesFrom(readSetting(SETTINGS.sleepTimer))
@@ -367,57 +380,37 @@ function SleepTimerSection() {
           : (describeTimer(timer, now, t) ?? t.player.sleepTimer.about)}
       </Text>
 
-      <View style={styles.chips}>
-        {[...SLEEP_PRESETS, ...(typed === null ? [] : [typed])].map((minutes) => {
-          const on = counting === minutes;
-          return (
-            <Pressable
-              android_ripple={pressed}
-              key={minutes}
-              accessibilityRole="button"
-              accessibilityLabel={t.player.sleepTimer.pauseAfter(minutes)}
-              accessibilityState={{ selected: on, disabled: !supported }}
-              disabled={!supported}
-              style={[styles.chip, on && styles.chipOn, !supported && styles.chipOff]}
-              onPress={() => pauseAfter(minutes)}>
-              <Text style={on ? styles.chipLabelOn : styles.chipLabel}>
-                {t.common.minutes(minutes)}
-              </Text>
-            </Pressable>
-          );
-        })}
-
-        <Pressable
-          android_ripple={pressed}
-          accessibilityRole="button"
-          accessibilityLabel={t.player.sleepTimer.pauseAfterTyped}
-          accessibilityState={{ disabled: !supported }}
-          disabled={!supported}
-          style={[styles.chip, !supported && styles.chipOff]}
-          onPress={() => {
+      {/*
+        Buttons, each of which starts the timer, and the one it was started
+        from is marked: pressed again it starts afresh. Typing a time of one's
+        own is a button among them that is never the one marked; the time
+        typed then has a chip of its own, before it.
+      */}
+      <Segmented
+        role="button"
+        variant="chips"
+        disabled={!supported}
+        options={[
+          ...[...SLEEP_PRESETS, ...(typed === null ? [] : [typed])].map((minutes) => ({
+            value: `after ${minutes}`,
+            label: t.common.minutes(minutes),
+            accessibilityLabel: t.player.sleepTimer.pauseAfter(minutes),
+          })),
+          { value: 'typed', label: t.player.sleepTimer.custom, accessibilityLabel: t.player.sleepTimer.pauseAfterTyped },
+          { value: 'end', label: t.player.sleepTimer.endOfTrack, accessibilityLabel: t.player.sleepTimer.pauseAtEnd },
+        ]}
+        value={counting !== null ? `after ${counting}` : timer.kind === 'endOfTrack' ? 'end' : null}
+        onChange={(choice) => {
+          if (choice === 'typed') {
             setRefused(false);
             setAsking(true);
-          }}>
-          <Text style={styles.chipLabel}>{t.player.sleepTimer.custom}</Text>
-        </Pressable>
-
-        <Pressable
-          android_ripple={pressed}
-          accessibilityRole="button"
-          accessibilityLabel={t.player.sleepTimer.pauseAtEnd}
-          accessibilityState={{ selected: timer.kind === 'endOfTrack', disabled: !supported }}
-          disabled={!supported}
-          style={[
-            styles.chip,
-            timer.kind === 'endOfTrack' && styles.chipOn,
-            !supported && styles.chipOff,
-          ]}
-          onPress={() => void start({ kind: 'endOfTrack' })}>
-          <Text style={timer.kind === 'endOfTrack' ? styles.chipLabelOn : styles.chipLabel}>
-            {t.player.sleepTimer.endOfTrack}
-          </Text>
-        </Pressable>
-      </View>
+          } else if (choice === 'end') {
+            void start({ kind: 'endOfTrack' });
+          } else {
+            pauseAfter(Number(choice.slice('after '.length)));
+          }
+        }}
+      />
 
       <View style={styles.switchRow}>
         <View style={styles.switchWords}>

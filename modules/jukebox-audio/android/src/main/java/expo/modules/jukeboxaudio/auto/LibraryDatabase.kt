@@ -72,6 +72,35 @@ internal object LibraryDatabase {
     }
   }
 
+  /**
+   * What the library leaves out of that folder, as the phone set it: see
+   * [LibraryHiding]. Nothing left out where the copy says nothing, or cannot
+   * be read, which is how the phone reads an absent setting too.
+   */
+  fun hiding(context: Context): LibraryHiding {
+    val root = libraryRoot(context)
+    val (leftOut, shortest) = read(context, emptyList<String>() to 0) { database ->
+      database.rawQuery(
+        "SELECT key, value FROM settings WHERE key IN ('library:leftOut', 'library:shortest')", null
+      ).use { cursor ->
+        var folders = emptyList<String>()
+        var seconds = 0
+        while (cursor.moveToNext()) {
+          val value = cursor.getString(1) ?: continue
+          when (cursor.getString(0)) {
+            "library:leftOut" -> folders = runCatching {
+              val list = org.json.JSONArray(value)
+              (0 until list.length()).mapNotNull { list.optString(it, "").takeIf(String::isNotBlank) }
+            }.getOrDefault(emptyList())
+            "library:shortest" -> seconds = value.toIntOrNull() ?: 0
+          }
+        }
+        folders to seconds
+      }
+    }
+    return LibraryHiding(root, leftOut, shortest)
+  }
+
   data class Playlist(val id: Long, val name: String, val trackCount: Int)
 
   /*
@@ -163,8 +192,14 @@ internal object LibraryDatabase {
    */
   fun kept(context: Context): Map<String, Kept> =
     read(context, emptyMap()) { database ->
+      // A copy written before the album artist was carried has no such
+      // column, and asking for it would lose every correction with it.
+      val albumArtist = runCatching {
+        database.rawQuery("SELECT album_artist FROM track_metadata LIMIT 0", null).close()
+      }.isSuccess
       database.rawQuery(
         """SELECT track_id, status, title, artist, album, track_number
+                  ${if (albumArtist) ", album_artist" else ""}
            FROM track_metadata WHERE status != 'not_found'""",
         null
       ).use { cursor ->
@@ -177,13 +212,35 @@ internal object LibraryDatabase {
                 title = cursor.getString(2),
                 artist = cursor.getString(3),
                 album = cursor.getString(4),
-                position = if (cursor.isNull(5)) null else cursor.getInt(5)
+                position = if (cursor.isNull(5)) null else cursor.getInt(5),
+                albumArtist = if (albumArtist && !cursor.isNull(6)) cursor.getString(6) else null
               )
             )
           }
         }
       }
     }
+
+  /**
+   * The tracks the app keeps a cover of its own for — on their row, or given
+   * by the rest of their record — read at once for a whole shelf of records.
+   */
+  fun covered(context: Context): Set<String> = read(context, emptySet()) { database ->
+    buildSet {
+      database.rawQuery(
+        "SELECT track_id FROM track_metadata WHERE status != 'not_found' AND artwork_url LIKE 'file://%'",
+        null
+      ).use { while (it.moveToNext()) add(it.getString(0)) }
+      runCatching {
+        database.rawQuery(
+          """SELECT s.track_id FROM shared_covers s
+             WHERE NOT EXISTS (SELECT 1 FROM track_metadata m
+                               WHERE m.track_id = s.track_id AND m.cover_removed_at IS NOT NULL)""",
+          null
+        ).use { while (it.moveToNext()) add(it.getString(0)) }
+      }
+    }
+  }
 
   /**
    * The cover the app keeps for a track, as an address, or null.
@@ -195,9 +252,21 @@ internal object LibraryDatabase {
    * the phone's screens show those straight from the web, so they count.
    */
   fun cover(context: Context, trackId: String): String? = read(context, null as String?) { database ->
-    database.rawQuery(
-      "SELECT artwork_url FROM track_metadata WHERE track_id = ? AND artwork_url IS NOT NULL AND artwork_url <> ''",
+    val own = database.rawQuery(
+      """SELECT artwork_url FROM track_metadata
+         WHERE track_id = ? AND status != 'not_found' AND artwork_url IS NOT NULL AND artwork_url <> ''""",
       arrayOf(trackId)
     ).use { if (it.moveToFirst()) it.getString(0) else null }
+    if (own != null && own.startsWith("file://")) return@read own
+    // The cover the rest of its record gave it, where it has no row of its
+    // own to hold one; a copy from before those were kept has no such table.
+    val shared = runCatching {
+      database.rawQuery(
+        """SELECT artwork_url FROM shared_covers WHERE track_id = ?
+           AND NOT EXISTS (SELECT 1 FROM track_metadata WHERE track_id = ? AND cover_removed_at IS NOT NULL)""",
+        arrayOf(trackId, trackId)
+      ).use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull()
+    shared ?: own
   }
 }

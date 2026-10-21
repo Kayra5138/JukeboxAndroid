@@ -174,4 +174,18 @@ describe('artistKey', () => {
   it('keeps different artists apart', () => {
     assert.notEqual(artistKey({ artist: 'Feint' }), artistKey({ artist: 'Fein' }));
   });
+
+  it('makes every track as likely as any other to play first, whatever its artist has', () => {
+    // One artist with thirty tracks and thirty artists with one each: half the
+    // tracks are the one artist's, so half the shuffles should begin with one.
+    const items = [
+      ...Array.from({ length: 30 }, (_, n) => ({ artist: 'many', title: `m${n}` })),
+      ...Array.from({ length: 30 }, (_, n) => ({ artist: `one${n}`, title: `o${n}` })),
+    ];
+    const runs = 6000;
+    let many = 0;
+    for (let run = 0; run < runs; run += 1) if (spreadShuffle(items, by)[0]!.artist === 'many') many += 1;
+    // Laid along a line, the artist with thirty began well under one shuffle in twenty.
+    assert.ok(Math.abs(many / runs - 0.5) < 0.04, `the big artist began ${many} of ${runs}`);
+  });
 });

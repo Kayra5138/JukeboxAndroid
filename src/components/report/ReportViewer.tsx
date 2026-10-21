@@ -21,6 +21,8 @@ import { artworkFor } from '../../lib/media/artwork';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import type { ReportCard } from '../../lib/stats/report';
 import { makeStyles, outlined, page, useColours } from '../../lib/theme/index';
+import { useAnnounce } from '../../lib/ui/announce';
+import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
 
 /**
  * How much bigger the written-out card is than the one on screen.
@@ -63,6 +65,8 @@ export function ReportViewer({
   const [at, setAt] = useState(0);
   const [busy, setBusy] = useState<'save' | 'share' | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note);
   const [covers, setCovers] = useState<Covers>(() => new Map());
   const [photos, setPhotos] = useState<Photos>(() => new Map());
   const [tints, setTints] = useState<Tints>(() => new Map());
@@ -216,7 +220,13 @@ export function ReportViewer({
     <Modal visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
       <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
         <View style={styles.bar}>
-          <Pressable accessibilityRole="button" accessibilityLabel={t.common.close} onPress={onClose} style={styles.close}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.common.close}
+            onPress={onClose}
+            // Drawn at 44; this much further is the 48 a finger is owed.
+            hitSlop={2}
+            style={styles.close}>
             <Text style={styles.closeMark}>×</Text>
           </Pressable>
           <View style={styles.dots}>
@@ -229,6 +239,7 @@ export function ReportViewer({
         </View>
 
         <FlatList
+                  removeClippedSubviews={CLIP_SUBVIEWS}
           data={cards}
           horizontal
           pagingEnabled

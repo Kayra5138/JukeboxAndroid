@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- How round the widgets' corners are. Twenty, as the gradient was drawn
+     with before Android 12; from 12 the phone's own figure instead, in
+     values-v31, so the widgets match every other widget on the home screen. -->
+<resources>
+  <dimen name="jukebox_widget_radius">20dp</dimen>
+  <!-- The cover inside a card or the large widget, and the rows under it. -->
+  <dimen name="jukebox_widget_inner_radius">10dp</dimen>
+</resources>

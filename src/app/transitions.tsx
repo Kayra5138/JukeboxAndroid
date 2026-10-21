@@ -10,6 +10,7 @@ import {
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useUnderBars } from '../components/UnderBars';
 import JukeboxAudio, {
   type TransitionSettings,
   type Transitions,
@@ -42,6 +43,8 @@ const OTHERS: {
 
 export default function TransitionsScreen() {
   const insets = useSafeAreaInsets();
+  // How far the screen's bar of glass is over the top of what scrolls; nought in any other theme.
+  const under = useUnderBars();
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
@@ -133,6 +136,7 @@ export default function TransitionsScreen() {
       contentContainerStyle={[
         styles.content,
         {
+          paddingTop: 14 + under.top,
           paddingLeft: insets.left + 20,
           paddingRight: insets.right + 20,
           paddingBottom: insets.bottom + 40,
@@ -144,6 +148,8 @@ export default function TransitionsScreen() {
           <Text style={styles.hint}>{say.about}</Text>
         </View>
         <Switch
+          // Named, for a screen reader, which otherwise says only "switch, off".
+          accessibilityLabel={say.title}
           value={state.enabled}
           onValueChange={(enabled) => void commit({ enabled })}
           {...switchColours(c, state.enabled)}
@@ -151,9 +157,14 @@ export default function TransitionsScreen() {
       </View>
 
       {/* Dimmed rather than removed when off, so what was set up is still
-          there to come back to. */}
-      <View style={off ? styles.dimmed : undefined} pointerEvents={off ? 'none' : 'auto'}>
-        <Text style={styles.section}>{t.format.upper(say.betweenTracks)}</Text>
+          there to come back to. Out of a screen reader's reach while it is,
+          as it is out of a finger's: a reader would otherwise walk into
+          settings that cannot be changed and change them anyway. */}
+      <View
+        style={off ? styles.dimmed : undefined}
+        pointerEvents={off ? 'none' : 'auto'}
+        importantForAccessibility={off ? 'no-hide-descendants' : 'auto'}>
+        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.betweenTracks)}</Text>
         <Slider
           label={say.overlap}
           value={state.autoMs}
@@ -169,6 +180,10 @@ export default function TransitionsScreen() {
         <Pressable
           android_ripple={pressed}
           style={styles.toggle}
+          // A tick box, which says whether it is ticked: the box at the end is
+          // all that says so to the eye.
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: state.skipSameAlbum }}
           onPress={() => void commit({ skipSameAlbum: !state.skipSameAlbum })}>
           <View style={styles.toggleText}>
             <Text style={styles.toggleLabel}>{say.albums.title}</Text>
@@ -200,6 +215,8 @@ export default function TransitionsScreen() {
             <Pressable
               android_ripple={pressed}
               style={styles.toggle}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: state.equalPower }}
               onPress={() => void commit({ equalPower: !state.equalPower })}>
               <View style={styles.toggleText}>
                 <Text style={styles.toggleLabel}>{say.equalPower.title}</Text>
@@ -217,11 +234,17 @@ export default function TransitionsScreen() {
         sealing them behind the switch meant the only way to reset a crossfade
         you had turned off was to turn it on again first.
       */}
-      <Pressable android_ripple={pressed} style={styles.more} onPress={() => setExpanded((was) => !was)}>
+      <Pressable
+        android_ripple={pressed}
+        style={styles.more}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={() => setExpanded((was) => !was)}>
         <Text style={styles.moreLabel}>{expanded ? say.fewer : say.more}</Text>
       </Pressable>
 
       <Pressable
+        accessibilityRole="button"
         android_ripple={pressed}
         style={styles.reset}
         // The switch is left where it is. It is the feature; this belongs to

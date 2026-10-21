@@ -111,4 +111,80 @@ export const lists = {
     deleteQuestion: (name: string) => `Delete “${name}”?`,
     deleteHint: 'The list goes. The tracks stay on the phone.',
   },
+
+  /** Lists as M3U playlist files: brought in from other players, written out for them. */
+  files: {
+    /** On the lists tab, under the two buttons. */
+    importFiles: 'Import playlists…',
+    exportAll: 'Export all lists…',
+    /** On one list's page. */
+    export: 'Export…',
+    /** What a list or a file is called when nothing gives it a name. */
+    untitled: 'Imported list',
+    reading: 'Reading the playlists…',
+
+    /** When a list of the file's name is already there. */
+    conflict: {
+      heading: (name: string) => `There is already a list called “${name}”`,
+      hint: 'The playlist can take its place, keeping its cover, or come in as a list of its own.',
+      replace: 'Replace it',
+      keepBoth: (name: string) => `Add as “${name}”`,
+      skip: 'Skip this playlist',
+    },
+
+    /** What came of an import, one line per playlist picked. */
+    result: {
+      heading: 'Imported',
+      imported: (name: string, found: number, total: number) =>
+        `Imported list ${name}: ${format.number(found)} of ${format.number(total)} found`,
+      repeated: (count: number) =>
+        oneOrMany(
+          count,
+          'One track was in the playlist twice; a list holds it once.',
+          `${format.number(count)} tracks were in the playlist more than once; a list holds each once.`
+        ),
+      showMissing: (count: number) => `Show the ${format.number(count)} not found`,
+      hideMissing: 'Hide them',
+      /** Why an entry was not found. */
+      reasons: {
+        notFound: 'Nothing in the library fits',
+        ambiguous: 'More than one track fits',
+        web: 'A web address, not a file',
+      },
+      tooBig: (file: string) => `${file} is too big to be a playlist.`,
+      unreadable: (file: string) => `${file} could not be read as a playlist.`,
+      empty: (file: string) => `${file} has nothing in it.`,
+      skipped: (file: string) => `${file} was skipped.`,
+      encoding: (encoding: string) => `Read as ${encoding}`,
+      open: 'Open',
+    },
+
+    /** Choosing how the songs are named in what is written. */
+    exportSheet: {
+      heading: 'Export as a playlist',
+      headingAll: 'Export all lists',
+      phone: 'Phone paths',
+      phoneHint:
+        'Whole paths such as /storage/emulated/0/Music/…, which other players on this phone understand wherever the file is put.',
+      library: 'From the library folder',
+      libraryHint:
+        'Paths starting inside the library folder, for a computer with the same music. Put the file at the top of that folder.',
+      save: 'Save…',
+      chooseFolder: 'Choose a folder…',
+      allHint:
+        'One .m3u8 file for each of your lists, in a folder you choose. A file of the same name already there is replaced.',
+    },
+
+    saved: (name: string) => `Saved ${name} as a playlist`,
+    savedAll: (count: number, folder: string) =>
+      oneOrMany(count, `1 list saved to ${folder}`, `${format.number(count)} lists saved to ${folder}`),
+    notSaved: (names: string) => `Not saved: ${names}`,
+    leftOut: (count: number) =>
+      oneOrMany(
+        count,
+        '1 track was left out: it is not under the library folder now.',
+        `${format.number(count)} tracks were left out: they are not under the library folder now.`
+      ),
+    failed: (reason: string) => `That did not work: ${reason}`,
+  },
 };

@@ -32,12 +32,12 @@ export const settings = {
   categories: {
     look: 'The theme, albums as a rack, motion, and which views the library offers.',
     sound: 'The equalizer and effects, even loudness, crossfade, and speed and pitch.',
-    player: 'How far the jump buttons go, and the language lyrics are translated into.',
+    player: 'How far the jump buttons go, what plays when the queue runs out, and the language lyrics are translated into.',
     library: 'The folder your music is in, tags and covers, and files that may be the same song.',
     /** Beside Library's name: how many files are waiting to be called one song or two. */
     waiting: (count: number) => `${format.number(count)} to decide`,
     downloads: 'The download queue and its floating button, Discover, and keeping the YouTube downloader up to date.',
-    data: 'Back everything up or bring a backup in, and ListenBrainz (experimental).',
+    data: 'Back everything up or bring a backup in, new-version checks, and ListenBrainz (experimental).',
   },
 
   language: {
@@ -107,6 +107,35 @@ export const settings = {
   },
   /** The last row of the player's page. What it turns on is not described anywhere else, on purpose. */
   heart: { title: 'Heart', note: 'A heart on the player. It keeps nothing.' },
+  /** Settings → Player: the button on the player that adds the song playing to a list. */
+  listButton: {
+    title: 'Add-to-list button',
+    note:
+      'A button on the player that puts the song playing into one of your lists, without going through its menu.',
+  },
+  /** What plays when the queue is about to run out: Settings → Player, and the choices offered for it. */
+  autoplay: {
+    title: 'Keep playing similar songs',
+    note: 'When the queue is nearly over, songs like the ones you were listening to are added to its end.',
+    /** Under the list of choices: what holds whichever is chosen. */
+    sheetNote: 'They are added a few songs before the end, so they play on like the rest of the queue, screen locked or not. Never while repeat is on.',
+    off: {
+      label: 'Off',
+      note: 'Nothing is added. The music stops at the end of the queue.',
+    },
+    library: {
+      label: 'From your library',
+      note: 'Chosen by tags, artists and what you play together. Works offline.',
+    },
+    fresh: {
+      label: 'New songs',
+      note: 'Songs you do not have yet, found by Discover. Uses the network and downloads from YouTube like Discover, and keeps to its Wi-Fi setting.',
+    },
+    mixed: {
+      label: 'Mixed',
+      note: 'Two from your library, then one new song. The new ones use the network and YouTube downloads like Discover, and keep to its Wi-Fi setting.',
+    },
+  },
   downloads: {
     note: 'What is being downloaded, what is waiting and what has finished.',
     button: {
@@ -125,6 +154,18 @@ export const settings = {
     title: 'Hold the decoration still',
     note:
       'For a phone that drops frames. The player appears instead of rising, and the game stops lighting up around a life won or lost. The keys themselves still fall — that is the game, not decoration.',
+  },
+  /** Settings → Look: the three dots at the end of each row of tracks. */
+  moreButton: {
+    title: 'Three dots on each row',
+    note:
+      'At the end of every row of tracks, opening the same menu a long press does. Holding a row works without them too.',
+  },
+  /** Settings → Look: the tabs that can be taken off the bar. Their names are the tabs' own. */
+  tabs: {
+    title: 'Tabs',
+    searchNote: 'Discover and YouTube downloads are on this tab, and go with it.',
+    aside: 'Library and Settings are always there.',
   },
 
   views: {

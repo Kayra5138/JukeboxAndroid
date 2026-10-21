@@ -5,7 +5,28 @@
   <string name="jukebox_widget_art">Album art</string>
   <string name="jukebox_widget_previous">Previous track</string>
   <string name="jukebox_widget_toggle">Play or pause</string>
+  <!-- What the middle button is called to a screen reader: what a press will do, as its picture says. -->
+  <string name="jukebox_widget_play">Play</string>
+  <string name="jukebox_widget_pause">Pause</string>
   <string name="jukebox_widget_next">Next track</string>
   <string name="jukebox_widget_idle">Nothing playing</string>
   <string name="jukebox_widget_progress">Song progress</string>
+  <!-- The larger widgets: what the picker calls them and says of them. -->
+  <string name="jukebox_widget_card_label">Now playing</string>
+  <string name="jukebox_widget_card_description">A large cover with the controls, shuffle and repeat.</string>
+  <string name="jukebox_widget_large_label">Up next</string>
+  <string name="jukebox_widget_large_description">What is playing, the controls, and the next songs in the queue. Tap one to play it.</string>
+  <string name="jukebox_widget_shortcut_label">Shuffle</string>
+  <string name="jukebox_widget_shortcut_description">Shuffle all your music, or what you played recently, in one tap.</string>
+  <!-- The buttons the larger widgets add. Repeat is named for the mode it is in,
+       as the player's own button is; shuffling is an action, as it is there. -->
+  <string name="jukebox_widget_shuffle">Shuffle the queue</string>
+  <string name="jukebox_widget_repeat_off">Repeat</string>
+  <string name="jukebox_widget_repeat_all">Repeat all</string>
+  <string name="jukebox_widget_repeat_one">Repeat one</string>
+  <!-- Over the songs the large widget lists, and in their place when there are none. -->
+  <string name="jukebox_widget_up_next">Up next</string>
+  <string name="jukebox_widget_up_next_empty">Nothing up next</string>
+  <!-- What a screen reader says a press of the cover does. -->
+  <string name="jukebox_widget_open">Opens the player</string>
 </resources>

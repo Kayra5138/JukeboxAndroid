@@ -233,6 +233,19 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    */
   getEmbeddedArtworkAsync(trackId: string): Promise<string | null>;
   /**
+   * Which of these tracks carry a picture inside the file: true, false, or
+   * null where finding out would mean opening the file and [open] is false.
+   * What `getEmbeddedArtworkAsync` has already learned is answered without
+   * opening anything. Optional, for a build from before it.
+   */
+  embeddedPicturesAsync?(trackIds: string[], open: boolean): Promise<Record<string, boolean | null>>;
+  /**
+   * Keeps a copy of a file's own picture — an address
+   * `getEmbeddedArtworkAsync` gave — among the app's covers, named after its
+   * bytes, and answers where the copy is. Optional, for a build from before it.
+   */
+  keepArtworkAsync?(source: string): Promise<string>;
+  /**
    * Hand the whole queue to the player. Keeping it native is what gives the
    * notification working next/previous buttons and lets shuffle and repeat be
    * ExoPlayer's problem rather than ours.
@@ -345,6 +358,11 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    */
   thump?(): void;
   /**
+   * Puts a piece of text on the clipboard: the report screen's Copy.
+   * Missing from a build from before there was one.
+   */
+  copyText?(text: string): void;
+  /**
    * The equalizer and the tone controls, as they are set, in one read.
    *
    * Answers even with nothing playing: the bands are the app's own and are
@@ -446,6 +464,13 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * a build from before the app could change language has no such function.
    */
   setAppLanguage?(tag: string): void;
+  /**
+   * True once if the app was opened from the home screen widget's cover,
+   * which asks for the player; the request is used up by reading it.
+   * Optional because a build from before the larger widgets has no such
+   * function.
+   */
+  takeOpenPlayer?(): boolean;
   saveImageAsync?(path: string): Promise<string>;
   /** Saves the picture, then offers it to whatever the reader picks. */
   shareImageAsync?(path: string): Promise<void>;

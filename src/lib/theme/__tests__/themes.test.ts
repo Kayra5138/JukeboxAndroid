@@ -17,7 +17,7 @@ import {
   THEMES,
 } from '../registry.ts';
 import { outlined, outlinedClip, outlineWidth, OUTLINE_WIDTH } from '../edges.ts';
-import { castable, drawable, effectsOf, flattened, groundsOf, page, scene } from '../effects.ts';
+import { barWashOf, castable, drawable, effectsOf, flattened, groundsOf, laid, page, scene } from '../effects.ts';
 import { auroraColours } from '../themes/aurora.ts';
 import type { Palette, Theme } from '../tokens.ts';
 
@@ -239,6 +239,31 @@ function drawn(): { name: string; theme: Theme }[] {
     { name: 'material, by day', theme: resolveTheme('material', 'light', around) },
   ];
 }
+
+describe('the player that wears the cover of what is playing', () => {
+  /*
+    Covers chosen to be the worst a page could be washed over: white and black,
+    a mid grey, and the six colours a screen can show at their strongest. A
+    real cover is out of focus as well, which only ever evens it towards these.
+  */
+  const COVERS = ['#ffffff', '#000000', '#7f7f7f', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
+
+  it('can be read over a cover of any colour: every level of its writing at 4.5:1, the accent too', () => {
+    for (const theme of THEMES) {
+      const wash = effectsOf(theme.colours)?.coverWash;
+      if (!wash) continue;
+      const page = theme.colours.bg.slice(0, 7);
+      for (const cover of COVERS) {
+        // The page laid over the cover at the strength the theme washes it with.
+        const under = over(`${page}${Math.round(wash * 255).toString(16).padStart(2, '0')}`, cover);
+        for (const token of ['text', 'textSecondary', 'textMuted', 'textFaint', 'accent'] as const) {
+          const got = contrast(theme.colours[token], under);
+          assert.ok(got >= 4.5, `${theme.id}: ${token} over ${cover} is ${got.toFixed(2)}:1`);
+        }
+      }
+    }
+  });
+});
 
 describe('the edge round a surface', () => {
   it('is a token of every theme, as what is chosen and what is written on that are', () => {
@@ -577,6 +602,30 @@ describe('a theme of glass', () => {
         }
         assert.ok(contrast(colours.onAccent, colours.accent) >= 4.5, cover.join());
         assert.ok(contrast(colours.onPrimary, colours.primary) >= 4.5, cover.join());
+      }
+    }
+  });
+
+  it('washes a bar that a list scrolls under enough to read it over anything at all, and no more than that', () => {
+    const palettes = [
+      ...glassy.map((theme: Theme) => theme.colours),
+      auroraColours(['#000000', '#000000', '#000000']),
+      auroraColours(['#fff200', '#ffe000', '#ffffff']),
+      auroraColours([hsl(210, 90, 12), hsl(210, 90, 45), hsl(270, 90, 80)]),
+    ];
+    for (const colours of palettes) {
+      const wash = barWashOf(colours);
+      assert.equal(barWashOf(colours), wash, 'the same colour each time it is asked for');
+      // The page's own colour, with something of what is under it let through.
+      assert.ok(wash.startsWith(colours.bg), `${colours.bg}: ${wash}`);
+      const alpha = parseInt(wash.slice(7, 9), 16) / 255;
+      assert.ok(alpha >= 0.59 && alpha <= 0.9, `${colours.bg}: ${alpha.toFixed(2)}`);
+      for (const under of ['#000000', '#ffffff', '#808080', colours.accent.slice(0, 7)]) {
+        const ground = laid(wash, under);
+        for (const token of ['text', 'textMuted', 'textFaint'] as const) {
+          const got = contrast(colours[token], ground);
+          assert.ok(got >= 4.5, `${colours.bg}: ${token} on the bar over ${under} is ${got.toFixed(2)}:1`);
+        }
       }
     }
   });

@@ -131,16 +131,41 @@ async function saidBy(response: Response): Promise<string | null> {
   }
 }
 
+/** Runs [then] after [ms] milliseconds, and answers a way to call it off. */
+export type Scheduler = (ms: number, then: () => void) => () => void;
+
+const byTimer: Scheduler = (ms, then) => {
+  const timer = setTimeout(then, ms);
+  return () => clearTimeout(timer);
+};
+
+let scheduler: Scheduler = byTimer;
+
+/**
+ * What every wait here is kept by: the waits between requests, the
+ * minute-long back-offs and the deadline on each request.
+ *
+ * A timer, unless the app has handed over another (`metadata/background.ts`).
+ * A timer set in JavaScript does not go off while the app is behind the
+ * screen, and a lookup left running with the phone in a pocket stopped at its
+ * next wait, so the app hands over one that is also kept natively. Here,
+ * rather than in each caller, so that tests run on timers and nothing else
+ * knows the difference.
+ */
+export function scheduleWith(next: Scheduler | null): void {
+  scheduler = next ?? byTimer;
+}
+
 /** Wait, unless the caller stops first — in which case fail. */
 export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) return reject(abortError());
-    const timer = setTimeout(() => {
+    const cancel = scheduler(ms, () => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
-    }, ms);
+    });
     const onAbort = () => {
-      clearTimeout(timer);
+      cancel();
       reject(abortError());
     };
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -157,12 +182,12 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 export function pause(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve();
-    const timer = setTimeout(() => {
+    const cancel = scheduler(ms, () => {
       signal?.removeEventListener('abort', onAbort);
       resolve();
-    }, ms);
+    });
     const onAbort = () => {
-      clearTimeout(timer);
+      cancel();
       resolve();
     };
     signal?.addEventListener('abort', onAbort, { once: true });
@@ -255,10 +280,10 @@ export async function request<T>(
 ): Promise<T> {
   const controller = new AbortController();
   let timedOut = false;
-  const timer = setTimeout(() => {
+  const cancelDeadline = scheduler(REQUEST_TIMEOUT_MS, () => {
     timedOut = true;
     controller.abort();
-  }, REQUEST_TIMEOUT_MS);
+  });
   const forward = () => controller.abort();
 
   if (signal?.aborted) controller.abort();
@@ -292,7 +317,7 @@ export async function request<T>(
     // the only way "offline" ever presents itself.
     throw networkError(`${service} could not be reached`);
   } finally {
-    clearTimeout(timer);
+    cancelDeadline();
     signal?.removeEventListener('abort', forward);
   }
 }

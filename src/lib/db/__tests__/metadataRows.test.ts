@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import {
+  chooseCoversIn,
   fillCoversIn,
   markCoverSearchedIn,
   placeTracksIn,
@@ -43,7 +44,11 @@ function open() {
     const { fetched_at: _when, ...rest } = found;
     return { ...rest };
   };
-  return { target, read, whole };
+  const shared = (id: string) =>
+    (database.prepare('SELECT artwork_url FROM shared_covers WHERE track_id = ?').get(id) as
+      | { artwork_url: string }
+      | undefined)?.artwork_url;
+  return { target, read, whole, shared };
 }
 
 const entry = (trackId: string, changes: Partial<TrackMetadata> = {}): TrackMetadata => ({
@@ -94,9 +99,65 @@ describe('putting covers on rows', () => {
     assert.equal(read('typed').artwork_url, 'file:///covers/a.jpg');
   });
 
-  it('says nothing was filled for a track with no row', () => {
-    const { target } = open();
-    assert.deepEqual(fillCoversIn(target, [{ trackIds: ['nobody'], uri: 'file:///covers/a.jpg', album: null }]), []);
+  it('gives a track with no row, or only a note that nothing was found, a cover of its own apart from the rows', () => {
+    const { target, read, shared } = open();
+    saveMetadataTo(target, entry('missed', { status: 'not_found', source: null }), 1);
+
+    const filled = fillCoversIn(target, [
+      { trackIds: ['nobody', 'missed'], uri: 'file:///covers/a.jpg', album: 'Ruins' },
+    ]);
+
+    assert.deepEqual(filled, ['nobody', 'missed']);
+    assert.equal(shared('nobody'), 'file:///covers/a.jpg');
+    assert.equal(shared('missed'), 'file:///covers/a.jpg');
+    // No row is made, so the track still counts as never looked up; and the
+    // note that nothing was found is left saying exactly that.
+    assert.equal(read('nobody'), undefined);
+    assert.equal(read('missed').status, 'not_found');
+    assert.equal(read('missed').artwork_url, null);
+  });
+
+  it('never replaces a cover a track was given, and never puts a second on its row', () => {
+    const { target, read, shared } = open();
+    fillCoversIn(target, [{ trackIds: ['1'], uri: 'file:///covers/first.jpg', album: null }]);
+    saveMetadataTo(target, entry('1'), 2);
+
+    const filled = fillCoversIn(target, [{ trackIds: ['1'], uri: 'file:///covers/second.jpg', album: null }]);
+
+    assert.deepEqual(filled, []);
+    assert.equal(shared('1'), 'file:///covers/first.jpg');
+    assert.equal(read('1').artwork_url, null);
+  });
+
+  it('gives nothing to a track somebody took the cover off', () => {
+    const { target, read, shared } = open();
+    fillCoversIn(target, [{ trackIds: ['1'], uri: 'file:///covers/given.jpg', album: null }]);
+    saveMetadataTo(target, entry('1', { status: 'manual', coverRemovedAt: 9 }), 2);
+    // Taking the cover off took the given one with it.
+    assert.equal(shared('1'), undefined);
+
+    const filled = fillCoversIn(target, [{ trackIds: ['1'], uri: 'file:///covers/a.jpg', album: null }]);
+
+    assert.deepEqual(filled, []);
+    assert.equal(read('1').artwork_url, null);
+    assert.equal(shared('1'), undefined);
+  });
+});
+
+describe('a cover chosen for a whole record', () => {
+  it('replaces whatever each track wore, on its row where it has one and apart where it has none', () => {
+    const { target, read, shared } = open();
+    saveMetadataTo(target, entry('looked', { artworkUrl: 'file:///covers/single.jpg' }), 1);
+    saveMetadataTo(target, entry('removed', { status: 'manual', coverRemovedAt: 3 }), 1);
+    fillCoversIn(target, [{ trackIds: ['given'], uri: 'file:///covers/old.jpg', album: null }]);
+
+    const chosen = chooseCoversIn(target, ['looked', 'removed', 'given', 'kept'], 'file:///covers/album.jpg', 4, new Set(['kept']));
+
+    assert.deepEqual(chosen, ['looked', 'removed', 'given']);
+    assert.equal(read('looked').artwork_url, 'file:///covers/album.jpg');
+    assert.equal(read('removed').artwork_url, 'file:///covers/album.jpg');
+    assert.equal(shared('given'), 'file:///covers/album.jpg');
+    assert.equal(shared('kept'), undefined);
   });
 });
 
@@ -165,6 +226,7 @@ describe('giving tracks their places on a record', () => {
     const bare = {
       status: 'matched', source: null, title: null, artist: null, album: null, genre: null,
       year: null, artwork_url: null, disc_number: null, cover_searched_at: null,
+      album_artist: null, cover_removed_at: null,
     };
     assert.deepEqual(whole('new'), { track_id: 'new', ...bare, track_number: 3 });
     assert.deepEqual(whole('missed'), { track_id: 'missed', ...bare, track_number: 5 });

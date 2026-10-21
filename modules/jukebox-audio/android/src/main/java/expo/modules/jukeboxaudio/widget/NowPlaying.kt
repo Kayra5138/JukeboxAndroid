@@ -2,6 +2,8 @@ package expo.modules.jukeboxaudio.widget
 
 import android.content.Context
 import android.os.SystemClock
+import org.json.JSONArray
+import org.json.JSONObject
 
 /**
  * What the home screen widget draws, kept where it can be read without the app.
@@ -26,8 +28,27 @@ data class NowPlaying(
    */
   val live: Boolean,
   val positionMs: Long = 0,
-  val durationMs: Long = 0
+  val durationMs: Long = 0,
+  /**
+   * The player's repeat mode, in Media3's numbers.
+   *
+   * Kept across a restart of the phone, unlike [playing], because it is a
+   * choice somebody made rather than something happening: the service puts
+   * it back when it brings the saved queue back (see `restoreQueueIfEmpty`).
+   */
+  val repeatMode: Int = 0,
+  /** The next few songs, for the large widget to list; see [Upcoming]. */
+  val upcoming: List<Upcoming> = emptyList()
 ) {
+  /**
+   * A song further down the queue, as the large widget lists it.
+   *
+   * The index is where it stands in the queue now, and the id goes with it so
+   * that a tap on a row drawn before the queue changed cannot start some other
+   * song that has since moved into its place.
+   */
+  data class Upcoming(val index: Int, val id: String, val title: String?, val artist: String?)
+
   companion object {
     private const val STORE = "jukebox_widget"
     private const val TRACK_ID = "trackId"
@@ -38,6 +59,8 @@ data class NowPlaying(
     private const val LIVE = "live"
     private const val WRITTEN_AT = "writtenAtElapsed"
     private const val BOOTED_AT = "bootedAt"
+    private const val REPEAT = "repeatMode"
+    private const val UPCOMING = "upcoming"
 
     /** The computed boot moment drifts by a few milliseconds between reads. */
     private const val BOOT_SLACK_MS = 5_000L
@@ -79,9 +102,40 @@ data class NowPlaying(
         artworkPath = saved.getString(ARTWORK, null),
         live = sameBoot && saved.getBoolean(LIVE, false),
         positionMs = saved.getLong("positionMs", 0),
-        durationMs = saved.getLong("durationMs", 0)
+        durationMs = saved.getLong("durationMs", 0),
+        repeatMode = saved.getInt(REPEAT, 0),
+        upcoming = upcomingFrom(saved.getString(UPCOMING, null))
       )
     }
+
+    /**
+     * The repeat mode alone, from a file that has no state in it yet as well.
+     *
+     * [read] answers [EMPTY] until something has been written, and the mode is
+     * the one thing worth having even then.
+     */
+    fun repeatMode(context: Context): Int = store(context).getInt(REPEAT, 0)
+
+    private fun upcomingFrom(body: String?): List<Upcoming> = runCatching {
+      if (body.isNullOrEmpty()) return emptyList()
+      val array = JSONArray(body)
+      (0 until array.length()).mapNotNull { at ->
+        val row = array.optJSONObject(at) ?: return@mapNotNull null
+        val id = row.optString("id").takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        Upcoming(
+          index = row.optInt("index", -1).takeIf { it >= 0 } ?: return@mapNotNull null,
+          id = id,
+          title = row.optString("title").takeIf { row.has("title") && it.isNotBlank() },
+          artist = row.optString("artist").takeIf { row.has("artist") && it.isNotBlank() }
+        )
+      }
+    }.getOrDefault(emptyList())
+
+    private fun upcomingTo(rows: List<Upcoming>): String = JSONArray().apply {
+      rows.forEach { row ->
+        put(JSONObject().put("index", row.index).put("id", row.id).put("title", row.title).put("artist", row.artist))
+      }
+    }.toString()
 
     fun write(context: Context, state: NowPlaying) {
       store(context).edit()
@@ -93,6 +147,8 @@ data class NowPlaying(
         .putBoolean(LIVE, state.live)
         .putLong("positionMs", state.positionMs)
         .putLong("durationMs", state.durationMs)
+        .putInt(REPEAT, state.repeatMode)
+        .putString(UPCOMING, upcomingTo(state.upcoming))
         .putLong(WRITTEN_AT, SystemClock.elapsedRealtime())
         .putLong(BOOTED_AT, System.currentTimeMillis() - SystemClock.elapsedRealtime())
         .apply()

@@ -30,7 +30,9 @@ describe('the languages on offer', () => {
   });
 
   it('names each language in the language itself', () => {
-    assert.deepEqual(LANGUAGES.map((language) => language.name), ['English', 'Türkçe']);
+    assert.deepEqual(LANGUAGES.map((language) => language.name), [
+      'English', 'Türkçe', 'Deutsch', 'Español', 'Français', 'Italiano', 'Português (Brasil)', 'Русский', '日本語', '简体中文',
+    ]);
   });
 
   /*

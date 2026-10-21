@@ -93,4 +93,65 @@ export const lists: Strings['lists'] = {
     deleteQuestion: (name) => `“${name}” silinsin mi?`,
     deleteHint: 'Liste silinir. Parçalar telefonda kalır.',
   },
+
+  files: {
+    importFiles: 'Çalma listesi içe aktar…',
+    exportAll: 'Tüm listeleri dışa aktar…',
+    export: 'Dışa aktar…',
+    untitled: 'İçe aktarılan liste',
+    reading: 'Çalma listeleri okunuyor…',
+
+    conflict: {
+      heading: (name) => `“${name}” adında bir liste zaten var`,
+      hint: 'Çalma listesi, var olan listenin kapağını koruyarak onun yerine geçebilir ya da ayrı bir liste olarak eklenebilir.',
+      replace: 'Yerine geçsin',
+      keepBoth: (name) => `“${name}” olarak ekle`,
+      skip: 'Bu çalma listesini atla',
+    },
+
+    result: {
+      heading: 'İçe aktarıldı',
+      imported: (name, found, total) =>
+        `${name} listesi içe aktarıldı: ${format.number(total)} parçadan ${format.number(found)} tanesi bulundu`,
+      repeated: (count) =>
+        count === 1
+          ? 'Bir parça çalma listesinde iki kez geçiyordu; listede bir kez yer alır.'
+          : `${format.number(count)} parça çalma listesinde birden çok kez geçiyordu; listede her biri bir kez yer alır.`,
+      showMissing: (count) => `Bulunamayan ${format.number(count)} parçayı göster`,
+      hideMissing: 'Gizle',
+      reasons: {
+        notFound: 'Kütüphanede eşleşen bir şey yok',
+        ambiguous: 'Birden çok parça eşleşiyor',
+        web: 'Dosya değil, web adresi',
+      },
+      tooBig: (file) => `${file} bir çalma listesi olamayacak kadar büyük.`,
+      unreadable: (file) => `${file} çalma listesi olarak okunamadı.`,
+      empty: (file) => `${file} içinde hiçbir şey yok.`,
+      skipped: (file) => `${file} atlandı.`,
+      encoding: (encoding) => `${encoding} olarak okundu`,
+      open: 'Aç',
+    },
+
+    exportSheet: {
+      heading: 'Çalma listesi olarak dışa aktar',
+      headingAll: 'Tüm listeleri dışa aktar',
+      phone: 'Telefondaki yollar',
+      phoneHint:
+        '/storage/emulated/0/Music/… gibi tam yollar; dosya nereye konursa konsun bu telefondaki diğer oynatıcılar anlar.',
+      library: 'Kütüphane klasöründen',
+      libraryHint:
+        'Kütüphane klasörünün içinden başlayan yollar; aynı müziklerin bulunduğu bir bilgisayar için. Dosyayı o klasörün en üstüne koy.',
+      save: 'Kaydet…',
+      chooseFolder: 'Klasör seç…',
+      allHint:
+        'Listelerinin her biri için, seçtiğin klasöre birer .m3u8 dosyası. Aynı adda bir dosya zaten varsa üzerine yazılır.',
+    },
+
+    saved: (name) => `${name} çalma listesi olarak kaydedildi`,
+    savedAll: (count, folder) => `${format.number(count)} liste ${folder} klasörüne kaydedildi`,
+    notSaved: (names) => `Kaydedilemedi: ${names}`,
+    leftOut: (count) =>
+      `${format.number(count)} parça dışarıda kaldı: şu anda kütüphane klasörünün içinde değil.`,
+    failed: (reason) => `Yapılamadı: ${reason}`,
+  },
 };

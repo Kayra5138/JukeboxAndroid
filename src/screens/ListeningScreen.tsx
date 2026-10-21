@@ -1,8 +1,10 @@
 import { usePageSides, WithNowPlaying } from '../components/NowPlayingBar';
+import { useUnderBars } from '../components/UnderBars';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../components/Pressable';
+import { Segmented } from '../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarChart } from '../components/BarChart';
@@ -84,6 +86,8 @@ export default function StatsScreen() {
   const landscape = useLandscape();
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
+  // In a theme of glass the tab bar and the bar of what is playing are over the foot of this.
+  const under = useUnderBars({ player: true });
   const t = useT();
   const c = useColours();
   const styles = useStyles();
@@ -193,10 +197,14 @@ export default function StatsScreen() {
 
   if (!data.everListened) {
     return (
-      <View style={[styles.screen, styles.empty]}>
-        <Text style={styles.emptyTitle}>{t.stats.screen.emptyTitle}</Text>
-        <Text style={styles.emptyBody}>{t.stats.screen.emptyBody}</Text>
-      </View>
+      // With the bar of what is playing, as the full screen has it: nothing has been heard yet
+      // the first time this is opened, and the first song may well be playing as it is.
+      <WithNowPlaying style={styles.screen}>
+        <View style={[styles.fill, styles.empty]}>
+          <Text style={styles.emptyTitle}>{t.stats.screen.emptyTitle}</Text>
+          <Text style={styles.emptyBody}>{t.stats.screen.emptyBody}</Text>
+        </View>
+      </WithNowPlaying>
     );
   }
 
@@ -250,48 +258,39 @@ export default function StatsScreen() {
           paddingRight: sides.right + 20,
         },
       ]}>
-      <View style={[styles.periods, period === 'all' && styles.periodsAlone]}>
-        {PERIODS.map((entry) => (
-          <Pressable
-            android_ripple={pressed}
-            key={entry.id}
-            style={[styles.period, entry.id === period && styles.periodOn]}
-            onPress={() => choose(entry.id)}>
-            <Text style={[styles.periodLabel, entry.id === period && styles.periodLabelOn]}>
-              {t.stats.period.labels[entry.id]}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
+      {/* Tabs, to a screen reader, and the open one says so: to the eye it is
+          only the one the mark is on. */}
+      <Segmented
+        role="tab"
+        hitSlop={2}
+        style={[styles.periods, period === 'all' && styles.periodsAlone]}
+        options={PERIODS.map((entry) => ({ value: entry.id, label: t.stats.period.labels[entry.id] }))}
+        value={period}
+        onChange={choose}
+      />
 
       {/* All time is read one way, and has no second row. */}
       {period !== 'all' ? (
-        <View style={styles.readings}>
-          {WHICH.map((entry) => (
-            <Pressable
-              android_ripple={pressed}
-              key={entry}
-              accessibilityRole="button"
-              accessibilityState={{ selected: entry === which }}
-              style={[styles.reading, entry === which && styles.readingOn]}
-              onPress={() => read(entry)}>
-              <Text
-                style={[styles.readingLabel, entry === which && styles.readingLabelOn]}
-                numberOfLines={1}
-                adjustsFontSizeToFit
-                minimumFontScale={0.85}>
-                {t.stats.period.which[period][entry]}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Segmented
+          role="button"
+          variant="chips"
+          tone="quiet"
+          layout="fill"
+          wrap={false}
+          hitSlop={2}
+          style={styles.readings}
+          optionStyle={styles.reading}
+          options={WHICH.map((entry) => ({ value: entry, label: t.stats.period.which[period][entry] }))}
+          value={which}
+          onChange={read}
+        />
       ) : null}
 
       {/* Sideways the headline and the chart sit beside each other: the screen
           is half as tall, and stacking them puts the chart below the fold. */}
       <View style={landscape ? styles.wide : undefined}>
         <View style={landscape ? styles.wideSide : undefined}>
-          <Text style={styles.periodTitle}>{t.format.upper(data.title)}</Text>
+          <Text accessibilityRole="header" style={styles.periodTitle}>{t.format.upper(data.title)}</Text>
           <View style={styles.headlineRow}>
             <Text style={styles.headline}>{formatDuration(summary.totalSeconds, t)}</Text>
             {worthReporting(summary) ? (
@@ -326,9 +325,16 @@ export default function StatsScreen() {
             </Text>
           )}
 
-          <View style={styles.metrics}>
+          <View style={styles.metrics} accessibilityRole="radiogroup">
             {(['time', 'plays'] as Metric[]).map((option) => (
-              <Pressable key={option} onPress={() => setMetric(option)}>
+              <Pressable
+                key={option}
+                // One of two, of which one is chosen, which the underline says to the eye.
+                accessibilityRole="radio"
+                accessibilityState={{ checked: option === metric }}
+                hitSlop={METRIC_SLOP}
+                style={styles.metricHit}
+                onPress={() => setMetric(option)}>
                 <Text style={[styles.metric, option === metric && styles.metricOn]}>
                   {t.format.upper(option === 'time' ? t.stats.screen.time : t.stats.screen.plays)}
                 </Text>
@@ -347,6 +353,7 @@ export default function StatsScreen() {
             values={values}
             accent={c.accent}
             now={data.at}
+            label={`${metric === 'time' ? t.stats.screen.time : t.stats.screen.plays} · ${data.title}`}
             format={(value) =>
               metric === 'time' ? formatDuration(value, t) : t.stats.screen.playsCount(value)
             }
@@ -422,7 +429,7 @@ export default function StatsScreen() {
         ))}
       </View>
 
-      <View style={{ height: insets.bottom + 24 }} />
+      <View style={{ height: insets.bottom + 24 + under.bottom }} />
 
       <ReportViewer
         visible={recapOpen}
@@ -570,43 +577,24 @@ function readPeriod(): PeriodId {
   return PERIODS.some((entry) => entry.id === saved) ? (saved as PeriodId) : 'week';
 }
 
+/** The two words are short; this reaches as far as half the gap between them each side. */
+const METRIC_SLOP = { left: 8, right: 8 };
+
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
   content: { gap: 4 },
   empty: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  fill: { flex: 1 },
   emptyTitle: { color: c.text, fontSize: 16 },
   emptyBody: { color: c.textMuted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 
-  periods: {
-    flexDirection: 'row',
-    backgroundColor: c.surface,
-    borderRadius: 11,
-    padding: 3,
-    marginBottom: 10,
-    ...outlined(c),
-  },
-  period: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 9 },
-  periodOn: { backgroundColor: c.selected },
-  periodLabel: { color: c.textMuted, fontSize: 13.5 },
-  periodLabelOn: { color: c.onSelected, fontWeight: '600' },
+  periods: { marginBottom: 10 },
 
   // The second question, asked more quietly than the first: which day, which
-  // week. Chips and not another bar, so that the two rows are not mistaken
-  // for one control with ten choices.
-  readings: { flexDirection: 'row', gap: 8, marginBottom: 20 },
-  reading: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: 'center',
-    backgroundColor: c.surface,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    borderRadius: 9,
-    ...outlined(c),
-  },
-  readingOn: { backgroundColor: c.selected, ...outlined(c, c.selected) },
-  readingLabel: { color: c.textMuted, fontSize: 12.5 },
-  readingLabelOn: { color: c.onSelected, fontWeight: '600' },
+  // week. Chips and not another tray, so that the two rows are not mistaken
+  // for one control with ten choices; a finger's height, as the tray's are.
+  readings: { marginBottom: 20 },
+  reading: { minHeight: 44 },
   // All time has no second row, and keeps the room the row would have left under it.
   periodsAlone: { marginBottom: 20 },
 
@@ -633,7 +621,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   change: { fontSize: 13 },
   muted: { color: c.textMuted, fontSize: 13 },
 
-  metrics: { flexDirection: 'row', gap: 16, paddingTop: 14 },
+  // The room that was above the two is now inside them, which makes each a
+  // finger's height without moving the words.
+  metrics: { flexDirection: 'row', gap: 16 },
+  metricHit: { minHeight: 48, justifyContent: 'center' },
   metric: { color: c.textFaint, fontSize: 12.5, letterSpacing: 1 },
   // Underlined as well as coloured, so that which of the two is on can be
   // told without the colour. Not heavier: the other would shift as it changed.

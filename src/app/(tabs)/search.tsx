@@ -1,4 +1,5 @@
 import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
+import { BarsOver, topGlass, useLaidOver, useUnderBars } from '../../components/UnderBars';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiscoverPanel } from '../../components/DiscoverPanel';
 import { QueueLink } from '../../components/downloads/QueueLink';
@@ -7,13 +8,18 @@ import { Image } from '../../components/Picture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Pressable } from '../../components/Pressable';
+import { Segmented } from '../../components/Segmented';
 import { useT } from '../../lib/i18n/index';
 import { hintKey, makeStyles, outlined, scene, useColours, usePressed } from '../../lib/theme/index';
 import { useListColumns } from '../../lib/ui/layout';
 import { youtubeError } from '../../lib/youtube/errors';
+import { noteError } from '../../lib/support/errorLogStore';
 import { downloads } from '../../lib/youtube/native';
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
 import { durationLabel, isActive, jobForVideo, statusLabel, type AudioFormat, type YouTubeVideo, type YouTubeResult } from '../../lib/youtube/types';
+import { ownedVideos } from '../../lib/youtube/owned';
+import { useLibraryTracks } from '../../lib/library/useLibrary';
+import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
 
 const cache = new Map<string, { at: number; videos: YouTubeResult[] }>();
 
@@ -23,8 +29,16 @@ const lookUp = (playlist: boolean, text: string, id: string) =>
 
 export default function YouTubeScreen() {
   const { jobs, error, refresh, enqueue, enqueueBatch } = useDownloads();
+  const libraryTracks = useLibraryTracks();
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
+  /*
+    In a theme of glass the switches along the top are laid over what is
+    below them, which runs on under them, and the bars at the foot over the
+    foot of it: both lists keep clear of the two by that much.
+  */
+  const top = useLaidOver();
+  const under = useUnderBars({ player: true });
   const columns = useListColumns();
   const t = useT();
   const c = useColours();
@@ -90,7 +104,10 @@ export default function YouTubeScreen() {
       setResults(videos);
       setSearched(true);
     } catch (failure) {
-      if (searchId.current === id) setMessage(youtubeError(failure, said.failed.search, t));
+      if (searchId.current === id) {
+        setMessage(youtubeError(failure, said.failed.search, t));
+        noteError('search', failure);
+      }
     }
     // After the catch and not in a `finally`, which the React Compiler will
     // not compile a component for having. Nothing above is thrown onwards, so
@@ -119,13 +136,22 @@ export default function YouTubeScreen() {
     setAdding('playlist');
     setMessage(null);
     const name = selected[0].sourcePlaylist?.name ?? said.unnamedPlaylist;
+    // What the library has already, from a computer or an older version, is put in the list and not fetched again.
+    const here = ownedVideos(selected, libraryTracks);
+    const done = here.size > 0 ? `${said.listCreated(name)} ${said.alreadyHave(here.size)}` : said.listCreated(name);
     try {
-      await enqueueBatch(selected, format);
-      setMessage(said.listCreated(name));
+      await enqueueBatch(selected, format, here);
+      setMessage(done);
     } catch (failure) { setMessage(youtubeError(failure, said.failed.queuePlaylist, t)); }
     addingRef.current = false;
     setAdding(null);
   };
+
+  /** Which of the results the library has already, by a file no job of the queue's knows of. */
+  const owned = ownedVideos(
+    results.filter((item): item is YouTubeVideo => item.kind !== 'playlist'),
+    libraryTracks
+  );
 
   if (!downloads) return (
     <View style={styles.unavailable}>
@@ -137,25 +163,42 @@ export default function YouTubeScreen() {
   return (
     <WithNowPlaying style={styles.screen}>
     <View style={[styles.inside, { paddingTop: insets.top, paddingLeft: sides.left, paddingRight: sides.right }]}>
-      <View style={styles.modeRow}>
-        <Pressable android_ripple={pressed} accessibilityRole="tab" accessibilityState={{ selected: mode === 'discover' }}
-          style={[styles.discoverTab, mode === 'discover' && styles.segmentOn]}
+      <View
+        style={[styles.modeRow, top.laid && [styles.modeRowOver, { top: insets.top, left: sides.left, right: sides.right }]]}
+        onLayout={top.onLayout}>
+        {/*
+          A tab apart from the two beside it, standing for a screen of its own
+          rather than a way of searching: filled while it is open, and no wash
+          under the finger, like the two it stands with.
+        */}
+        <Pressable accessibilityRole="tab" accessibilityState={{ selected: mode === 'discover' }}
+          style={[styles.discoverTab, mode === 'discover' && styles.discoverOn]}
           onPress={() => { stopSearch(); setMode('discover'); }}>
-          <Text style={mode === 'discover' ? styles.segmentLabelOn : styles.segmentLabel}>{said.modes.discover}</Text>
+          <Text style={mode === 'discover' ? styles.discoverLabelOn : styles.discoverLabel}>{said.modes.discover}</Text>
         </Pressable>
         <View style={styles.downloadModes}>
           <Text style={styles.downloadHeading}>{said.modes.download}</Text>
-          <View style={styles.segmented}>
-            {(['videos', 'playlist'] as const).map(choice => <Pressable android_ripple={pressed} key={choice}
-              accessibilityRole="tab" accessibilityState={{ selected: mode === choice }} disabled={adding !== null}
-              style={[styles.segment, mode === choice && styles.segmentOn]}
-              onPress={() => { stopSearch(); setMode(choice); setResults([]); setSearched(false); setMessage(null); }}>
-              <Text style={mode === choice ? styles.segmentLabelOn : styles.segmentLabel}>{choice === 'videos' ? said.modes.videos : said.modes.playlists}</Text>
-            </Pressable>)}
-          </View>
+          {/*
+            One tray with the choices inside it, rather than a row of separate
+            pills: two pills side by side read as two buttons that happen to be
+            near each other, and one tray as one setting with two positions.
+            Without a mark while Discover is open, since neither is.
+          */}
+          <Segmented
+            role="tab"
+            options={[
+              { value: 'videos', label: said.modes.videos },
+              { value: 'playlist', label: said.modes.playlists },
+            ]}
+            value={mode === 'discover' ? null : mode}
+            disabled={adding !== null}
+            onChange={(choice) => { stopSearch(); setMode(choice); setResults([]); setSearched(false); setMessage(null); }}
+          />
         </View>
       </View>
+      <BarsOver top={top.height}>
       {mode === 'discover' ? <DiscoverPanel /> : <FlatList
+              removeClippedSubviews={CLIP_SUBVIEWS}
         data={results.slice(0, 500)}
         // Remounted when the count changes: a list will not take a new
         // numColumns in place, and turning the phone is when it changes.
@@ -164,14 +207,14 @@ export default function YouTubeScreen() {
         columnWrapperStyle={columns > 1 ? styles.resultColumns : undefined}
         keyExtractor={(video) => video.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: 20 + top.height, paddingBottom: 32 + under.bottom }]}
         ListHeaderComponent={<>
           <Text style={styles.intro}>{mode === 'playlist' ? said.intro.playlist : said.intro.videos}</Text>
           <View style={styles.searchRow}>
             <TextInput key={hintKey(c, mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos)}
               accessibilityLabel={mode === 'playlist' ? said.inputLabel.playlist : said.inputLabel.videos}
               style={styles.input} value={query} onChangeText={setQuery}
-              placeholder={mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos} placeholderTextColor={c.textDisabled}
+              placeholder={mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos} placeholderTextColor={c.textFaint}
               autoCapitalize="none" autoCorrect={false} maxLength={500}
               returnKeyType="search" onSubmitEditing={() => void search()} />
             <Pressable android_ripple={pressed} accessibilityRole="button" style={[styles.searchButton, !query.trim() && styles.searchButtonOff]}
@@ -179,21 +222,19 @@ export default function YouTubeScreen() {
               <Text style={!query.trim() ? styles.darkTextOff : styles.darkText}>{t.common.search}</Text>
             </Pressable>
           </View>
-          <View style={[styles.segmented, styles.formats]}>
-            {(['mp3', 'original'] as const).map((choice) => (
-              <Pressable android_ripple={pressed} key={choice} accessibilityRole="radio" accessibilityState={{ checked: format === choice }}
-                onPress={() => setFormat(choice)} style={[styles.segment, choice === format && styles.segmentOn]}>
-                <Text style={choice === format ? styles.segmentLabelOn : styles.segmentLabel}>{said.formats[choice]}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <Segmented
+            style={styles.formats}
+            options={(['mp3', 'original'] as const).map((choice) => ({ value: choice, label: said.formats[choice] }))}
+            value={format}
+            onChange={setFormat}
+          />
           <Text style={styles.hint}>{said.formatHint[format]}</Text>
-          {message || error ? <Text accessibilityRole="alert" style={styles.bad}>{message ?? youtubeError(error, said.failed.readReopen, t)}</Text> : null}
+          {message || error ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>{message ?? youtubeError(error, said.failed.readReopen, t)}</Text> : null}
           {searching ? <View style={styles.searching}>
             <ActivityIndicator color={c.text} /><Text style={styles.muted}>{said.searching}</Text>
             <Pressable android_ripple={pressed} accessibilityRole="button" onPress={stopSearch} style={styles.smallButton}><Text style={styles.link}>{t.common.cancel}</Text></Pressable>
           </View> : null}
-          {results.length ? <Text style={styles.section}>{t.format.upper(said.results(Math.min(results.length, 500)))}</Text> : null}
+          {results.length ? <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.results(Math.min(results.length, 500)))}</Text> : null}
           {mode === 'playlist' && results.length > 0 && results[0].kind !== 'playlist' ? <>
             <Pressable android_ripple={pressed} accessibilityRole="button" disabled={adding !== null}
               style={[styles.batch, adding !== null && styles.disabled]} onPress={() => void addPlaylist()}>
@@ -210,7 +251,9 @@ export default function YouTubeScreen() {
         renderItem={({ item }) => {
           const playlist = item.kind === 'playlist';
           const job = playlist ? undefined : jobForVideo(jobs, item.id);
-          const locked = job && (isActive(job) || job.status === 'done');
+          // In the library already, by a file that came some other way: see `owned.ts`.
+          const have = !playlist && !job && owned.has(item.id);
+          const locked = have || (job && (isActive(job) || job.status === 'done'));
           return <View style={[styles.result, columns > 1 && styles.resultShared]}>
             {item.thumbnail ? <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} contentFit="cover" /> : <View style={[styles.thumbnail, styles.thumbnailEmpty]} />}
             <View style={styles.flex}>
@@ -219,12 +262,13 @@ export default function YouTubeScreen() {
               <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={playlist ? said.openPlaylistLabel(item.title) : said.downloadLabel(item.title)}
                 disabled={!!locked || adding !== null} style={[styles.downloadButton, locked && styles.disabled]}
                 onPress={() => item.kind === 'playlist' ? void search(item.url) : void add(item)}>
-                <Text style={styles.link}>{playlist ? said.openPlaylist : adding === item.id ? said.adding : locked ? statusLabel(job, t) : said.download[format]}</Text>
+                <Text style={styles.link}>{playlist ? said.openPlaylist : adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : said.download[format]}</Text>
               </Pressable>
             </View>
           </View>;
         }}
       />}
+      </BarsOver>
     </View>
     </WithNowPlaying>
   );
@@ -232,7 +276,8 @@ export default function YouTubeScreen() {
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   modeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
-  discoverTab: { paddingHorizontal: 16, minHeight: 48, justifyContent: 'center', borderRadius: 12, ...outlined(c) },
+  // Laid over the list in a theme of glass, with a little more room above its edge.
+  modeRowOver: { ...topGlass(c), paddingBottom: 10 },
   downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: 5 },
   downloadHeading: { color: c.textFaint, fontSize: 10, textAlign: 'center', letterSpacing: 1 },
   screen: { flex: 1, ...scene(c) },
@@ -258,18 +303,12 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   darkTextOff: { color: c.textDisabled, fontWeight: '600' },
   darkText: { color: c.onPrimary, fontWeight: '600' },
   disabled: { opacity: 0.45 },
-  /*
-    One track with the choices inside it, rather than a row of separate pills.
-    Two pills side by side read as two buttons that happen to be near each
-    other; a single track reads as one setting with two positions, which is
-    what both of these are.
-  */
-  segmented: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 12, padding: 4, gap: 4, ...outlined(c) },
   formats: { marginTop: 14 },
-  segment: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 9, paddingVertical: 10, minHeight: 40 },
-  segmentOn: { backgroundColor: c.selected },
-  segmentLabel: { color: c.textMuted, fontSize: 13.5, fontWeight: '500' },
-  segmentLabelOn: { color: c.onSelected, fontSize: 13.5, fontWeight: '600' },
+  // As tall as the tray beside it, whose chosen fill this is when Discover is open.
+  discoverTab: { paddingHorizontal: 16, minHeight: 50, justifyContent: 'center', borderRadius: 12, ...outlined(c) },
+  discoverOn: { backgroundColor: c.selected },
+  discoverLabel: { color: c.textMuted, fontSize: 13.5 },
+  discoverLabelOn: { color: c.onSelected, fontSize: 13.5, fontWeight: '600' },
   batch: { backgroundColor: c.surface, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center', marginTop: 4, ...outlined(c) },
   batchLabel: { color: c.text, fontSize: 13.5, fontWeight: '600' },
   searching: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16 },

@@ -2,8 +2,16 @@ import { deleteDatabaseSync, openDatabaseSync, type SQLiteDatabase } from 'expo-
 
 import { db } from '../db/index.ts';
 import type { EnrichedTrack } from '../media/enriched.ts';
-import { ensureAudioPermission, libraryRoot, libraryStamp, scanUnder } from '../media/library.ts';
+import {
+  ensureAudioPermission,
+  libraryHiding,
+  libraryRoot,
+  libraryStamp,
+  scanUnder,
+} from '../media/library.ts';
 import { withMetadata } from '../media/merge.ts';
+import { knowNamesFrom } from '../support/errorLogStore.ts';
+import { welcomePassed } from '../ui/welcomeStore.ts';
 import { watchOverlay } from './overlay.ts';
 import { createLibraryStore, type LibraryState } from './store.ts';
 
@@ -77,10 +85,20 @@ const KEEP_AFTER_MS = 1500;
 let countWrites: (() => number) | null = null;
 
 const store = createLibraryStore({
-  permitted: ensureAudioPermission,
+  /*
+    Not until the first start's setup is put away: the dialog asking for
+    the music would come up over it, in whatever language the phone speaks,
+    before anybody had said which one the app is to. Somebody updating, who
+    is shown the newer screens of it, gave the permission long ago.
+  */
+  permitted: async () => {
+    await welcomePassed();
+    return ensureAudioPermission();
+  },
   root: libraryRoot,
   scan: scanUnder,
   stamp: libraryStamp,
+  hiding: libraryHiding,
   merge: withMetadata,
   // A throw from here is caught by the store, and read as "cannot say".
   overlay: () => (countWrites ??= watchOverlay(db()))(),
@@ -102,6 +120,23 @@ const store = createLibraryStore({
 });
 
 export const libraryState = (): LibraryState => store.state();
+
+/*
+  The names in the library, for the error log to take out of what it writes
+  down (rule 0 of `support/scrub.ts`): a failure's message can carry a song's
+  name set off by nothing, and these are the names it would be.
+*/
+knowNamesFrom(() => {
+  const now = store.state();
+  if (now.kind !== 'library') return [];
+  const names: string[] = [];
+  for (const track of now.tracks) {
+    for (const name of [track.title, track.artist, track.album, track.albumArtist, track.filename, track.filename?.replace(/\.[^.]+$/, '')]) {
+      if (name) names.push(name);
+    }
+  }
+  return names;
+});
 export const subscribeLibrary = (listener: () => void): (() => void) => store.subscribe(listener);
 
 /**
@@ -129,6 +164,18 @@ export function refreshLibrary(force = false): Promise<void> {
  */
 export function libraryFilesChanged(): void {
   void store.refresh(true);
+}
+
+/**
+ * Says what the library leaves out has been changed: a folder switched off or
+ * back on, or the shortest a file may be.
+ *
+ * A look, not a forced one. The device need not be read again for it, since
+ * the library keeps the whole folder and leaves out as it shows; the look
+ * finds the rule changed, and the screens are told.
+ */
+export function libraryHidingChanged(): void {
+  void store.refresh();
 }
 
 /**

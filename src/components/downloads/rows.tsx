@@ -273,7 +273,7 @@ export const WaitingRow = memo(
             // The row's own actions say how it is moved without a finger.
             accessible={false}
             style={styles.gripButton}>
-            <Text style={styles.grip}>≡</Text>
+            <Text style={styles.grip} importantForAccessibility="no">≡</Text>
           </Pressable>
         ) : null}
       </View>

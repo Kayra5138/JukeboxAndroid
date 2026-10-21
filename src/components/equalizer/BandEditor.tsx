@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../Pressable';
+import { Segmented } from '../Segmented';
 
 import { Slider } from '../Fader';
 import {
@@ -17,7 +18,7 @@ import {
   type BandType,
 } from '../../lib/equalizer/bands';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, outlineWidth, usePressed } from '../../lib/theme/index';
+import { makeStyles, outlined, usePressed } from '../../lib/theme/index';
 
 const TYPES: BandType[] = ['peak', 'lowShelf', 'highShelf'];
 
@@ -104,28 +105,22 @@ export function BandEditor({
           {db}
         </Text>
         {/* The app's one chevron, stood on end: down for more, up for less. */}
-        <Text style={[styles.chevron, open ? styles.chevronUp : styles.chevronDown]}>›</Text>
+        <Text style={[styles.chevron, open ? styles.chevronUp : styles.chevronDown]} importantForAccessibility="no">›</Text>
       </Pressable>
 
       {open ? (
         <View style={styles.body}>
-          <View style={styles.kinds} accessibilityRole="radiogroup">
-            {TYPES.map((type) => {
-              const on = band.type === type;
-              return (
-                <Pressable
-                  android_ripple={pressed}
-                  key={type}
-                  style={[styles.chip, on && styles.chipOn]}
-                  onPress={() => onSettle({ type })}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: on }}
-                  accessibilityLabel={say.kind(number, say.types[type])}>
-                  <Text style={on ? styles.chipLabelOn : styles.chipLabel}>{say.types[type]}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Segmented
+            variant="outline"
+            size="compact"
+            options={TYPES.map((type) => ({
+              value: type,
+              label: say.types[type],
+              accessibilityLabel: say.kind(number, say.types[type]),
+            }))}
+            value={band.type}
+            onChange={(type) => onSettle({ type })}
+          />
 
           <Slider
             label={say.frequency}
@@ -246,21 +241,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   chevronUp: { transform: [{ rotate: '-90deg' }] },
 
   body: { paddingHorizontal: 12, paddingBottom: 14, gap: 16 },
-  kinds: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 13,
-    paddingVertical: 8,
-    borderRadius: 16,
-    // The edge is the chip: there is no fill until it is on. So it is as wide
-    // as an outline where a theme draws those, on or off, and nothing moves.
-    borderWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
-    borderColor: c.borderStrong,
-  },
-  // Ringed in the accent itself where there are outlines, since the fill is
-  // the accent held back and is not far from the card it is on.
-  chipOn: { backgroundColor: c.accentMuted, borderColor: c.accentMuted, ...outlined(c, c.accent) },
-  chipLabel: { color: c.textSecondary, fontSize: 13 },
-  chipLabelOn: { color: c.text, fontSize: 13, fontWeight: '600' },
   hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
 
   exact: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },

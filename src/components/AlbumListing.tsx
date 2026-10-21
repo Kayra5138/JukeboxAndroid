@@ -5,6 +5,7 @@ import { useFocusEffect } from 'expo-router';
 import { Animated, BackHandler, Easing, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AlbumTools } from './AlbumTools';
 import type { Sleeve } from './CoverFlow';
 import { LIST_COVER_SIZE, ListHeading } from './ListHeading';
 import { PlaylistCover } from './PlaylistCover';
@@ -12,7 +13,7 @@ import { Pressable } from './Pressable';
 import { QueueList } from './QueueList';
 import { useT } from '../lib/i18n/index';
 import type { Album } from '../lib/media/albums';
-import { useTrackArtwork } from '../lib/media/artwork';
+import { useAlbumArtwork } from '../lib/media/artwork';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { shuffled } from '../lib/media/shuffle';
 import { makeStyles, page } from '../lib/theme/index';
@@ -60,6 +61,7 @@ export function AlbumListing({
   sleeve,
   sleeveNow,
   top,
+  bottom = 0,
   onPlay,
   onLongPress,
   onFindRest,
@@ -76,6 +78,8 @@ export function AlbumListing({
   sleeveNow: (then: (sleeve: Sleeve | null) => void) => void;
   /** How much of the top is under the clock, for the heading to keep clear of. */
   top: number;
+  /** How much of the foot is under the bars of glass, for the last row to be scrolled clear of. */
+  bottom?: number;
   onPlay: (tracks: EnrichedTrack[], index: number) => void;
   /**
    * A row held down. The menu it opens is the library's, drawn by the library
@@ -94,7 +98,8 @@ export function AlbumListing({
   const insets = useSafeAreaInsets();
   const t = useT();
   const styles = useStyles();
-  const artwork = useTrackArtwork(album.tracks[0] ?? null);
+  // The sleeve in flight, which has to be the very picture the rack showed.
+  const artwork = useAlbumArtwork(album.tracks);
 
   /*
     Read once, as the record opens. The switch is on a screen this one is not,
@@ -313,7 +318,8 @@ export function AlbumListing({
                     style={{ opacity: flying ? landed : 1 }}>
                     <PlaylistCover
                       tracks={album.tracks}
-                      chosen={album.tracks[0] ?? null}
+                      chosen={null}
+                      sleeve={album.tracks}
                       size={LIST_COVER_SIZE}
                     />
                   </Animated.View>
@@ -325,19 +331,23 @@ export function AlbumListing({
                 // Shuffled here rather than by the player's shuffle, so the
                 // queue itself is in the new order.
                 onShuffle={() => onPlay(shuffled(album.tracks), 0)}>
-                {onFindRest ? (
-                  // Quiet, under the two buttons: where the record's own page
-                  // keeps the things that are not playing it.
-                  <View style={styles.links}>
-                    <Pressable onPress={() => onFindRest(album.key)}>
+                {/* Quiet, under the two buttons: where the record's own page
+                    keeps the things that are not playing it. */}
+                <View style={styles.links}>
+                  {onFindRest ? (
+                    <Pressable
+                      style={styles.linkHit}
+                      accessibilityRole="button"
+                      onPress={() => onFindRest(album.key)}>
                       <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
                     </Pressable>
-                  </View>
-                ) : null}
+                  ) : null}
+                  <AlbumTools album={album} />
+                </View>
               </ListHeading>
             </View>
           }
-          footer={<View style={{ paddingBottom: insets.bottom + 32 }} />}
+          footer={<View style={{ paddingBottom: insets.bottom + 32 + bottom }} />}
         />
       </Animated.View>
 
@@ -378,6 +388,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   art: { width: '100%', height: '100%' },
   // As the record's own page draws them.
-  links: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, paddingTop: 16 },
+  // As the record's own page has them: a finger's height each, the room that
+  // was above them now inside the first row, so they sit where they did.
+  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
+  linkHit: { minHeight: 48, justifyContent: 'center' },
   link: { color: c.accent, fontSize: 13.5 },
 }));

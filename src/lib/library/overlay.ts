@@ -3,7 +3,7 @@
  *
  * A track on screen is the file as the media store describes it with the
  * app's own knowledge laid over it: a looked-up record and year, a typed
- * correction, a cover, its place on the record, its tags. All of that is two
+ * correction, a cover, its place on the record, its tags. All of that is three
  * tables, and they are written from a great many places — a lookup, an edit, a
  * download being filed, a record being put in order, a backup coming in, a
  * song's history moving to a new file — some of them long after the screen
@@ -28,7 +28,7 @@ export type OverlayDb = {
 };
 
 /** The tables a track's shown details are read from: see `media/merge.ts`. */
-const WATCHED = ['track_metadata', 'track_tags'] as const;
+const WATCHED = ['track_metadata', 'track_tags', 'shared_covers'] as const;
 const WRITES = ['INSERT', 'UPDATE', 'DELETE'] as const;
 
 const COUNT = 'library_overlay_writes';

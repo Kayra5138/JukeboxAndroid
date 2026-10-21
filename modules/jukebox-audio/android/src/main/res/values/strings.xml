@@ -54,6 +54,8 @@
 
   <!-- A track with no title and no file name, and the equalizer carried over from the phone's own. -->
   <string name="jukebox_unknown_title">Unknown</string>
+  <!-- Under a song in the car whose artist nobody knows, where nothing at all looked like a fault. -->
+  <string name="jukebox_unknown_artist">Unknown artist</string>
   <string name="jukebox_equalizer_carried">Phone equalizer</string>
 
   <!-- Searching YouTube and downloading from it. Each of these has a code as
@@ -138,6 +140,7 @@
   <string name="jukebox_tags_field_title">title</string>
   <string name="jukebox_tags_field_artist">artist</string>
   <string name="jukebox_tags_field_album">album</string>
+  <string name="jukebox_tags_field_album_artist">album artist</string>
   <string name="jukebox_tags_field_genre">genre</string>
   <string name="jukebox_tags_field_year">year</string>
   <string name="jukebox_tags_field_track">track number</string>

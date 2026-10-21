@@ -1,8 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BUILD_AGAIN_MS, BUILD_EVERY_MS, EMPTY, FILE_MISSING, NO_MATCH_SHOWN_MS, RETRY_AFTER_MS, STAGE_WAIT_MS, STOPPED, UNDO_MS,
-  confirmable, initial, itemOf, reduce, seenOf, stagedProgress, wakeAt, wanted,
+  BUILD_AGAIN_MS, BUILD_EVERY_MS, CALLED_ROOM, EMPTY, FILE_MISSING, GRACE_MS, NO_MATCH_SHOWN_MS, RETRY_AFTER_MS, STAGE_WAIT_MS, STOPPED, UNDO_MS,
+  confirmable, initial, itemOf, playable, reduce, seenOf, stagedProgress, wakeAt, wanted,
   type Effect, type Event, type Item, type Song, type State,
 } from '../core.ts';
 import { DAY, DEFAULT_SETTINGS, songKey, type DiscoverSettings } from '../policy.ts';
@@ -443,6 +443,115 @@ test('a song that could not be kept stays on the list and says so', () => {
   desk.send({ type: 'keep', id: id(a) });
   desk.send({ type: 'keepFailed', id: id(a), code: 'ERR_DOWNLOAD_NOT_HERE' });
   assert.ok(desk.item(a));
+  assert.equal(desk.item(a).keep, undefined);
+  assert.equal(desk.state.notice?.kind, 'keepFailed');
+});
+
+/*
+  Keeping a song whose file is another song: `bôa – Twilight` fetched as
+  `Frozen`, before the mending when the app comes to the front got to it.
+*/
+
+/** A finished job for song [n] whose video, by its title, is another song. */
+const wrongJob = (n: number, jobId = `job-${id(n)}`) => job(id(n), 'done', {
+  id: jobId, trackId: `discover:${jobId}`,
+  video: {
+    id: `video-${jobId}`, url: '', title: `Artist ${n} - Twilight`, channel: `Artist ${n}`, thumbnail: null, duration: 200,
+    discoveryTitle: `Song ${n}`, discoveryArtist: `Artist ${n}`,
+  },
+});
+
+/** Song [n] ready, from [found]: the phone answering, the queue read, the file handed over. */
+function readyWith(desk: Desk, n: number, found: DownloadJob): void {
+  desk.send({ type: 'asked', id: id(n), jobId: found.id });
+  desk.jobs([...desk.state.jobs.filter((other) => other.discoverKey !== id(n)), found]);
+  desk.send({ type: 'track', id: id(n), jobId: found.id, track: track(found.id) });
+}
+
+test('a song whose file is another song is not kept: the file is let go, the song fetched again and kept then', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a] = first(desk, 1);
+  readyWith(desk, a, wrongJob(a));
+  desk.done = [];
+  desk.send({ type: 'keep', id: id(a) });
+  assert.equal(desk.of('keep').length, 0);
+  assert.deepEqual(desk.of('mend').map((e) => [e.id, e.jobId]), [[id(a), `job-${id(a)}`]]);
+  assert.equal(desk.state.notice?.kind, 'wrongFile');
+  assert.equal(desk.state.notice?.id, id(a));
+  assert.equal(desk.item(a).keep, true);
+  // Asked to be let go once, however many readings of the queue go by before the phone answers.
+  desk.send({ type: 'tick' });
+  desk.jobs([...desk.state.jobs]);
+  assert.equal(desk.of('mend').length, 1);
+  assert.equal(desk.of('keep').length, 0);
+
+  // Gone: the song is asked for again at once, at the front, still to be kept.
+  desk.done = [];
+  desk.send({ type: 'mended', id: id(a), jobId: `job-${id(a)}`, removed: true });
+  assert.equal(desk.item(a).track, undefined);
+  assert.deepEqual(desk.asks().map((e) => [e.id, e.front]), [[id(a), true]]);
+  assert.equal(desk.item(a).keep, true);
+
+  // The right file this time, and it is kept.
+  desk.done = [];
+  readyWith(desk, a, job(id(a), 'done', { id: 'job-again' }));
+  assert.deepEqual(desk.of('keep').map((e) => e.jobId), ['job-again']);
+  assert.equal(desk.of('mend').length, 0);
+});
+
+test('every way of keeping goes through the same check: a keep pressed while the file was still coming is not kept either', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a] = first(desk, 1);
+  desk.send({ type: 'keep', id: id(a) });
+  desk.done = [];
+  readyWith(desk, a, wrongJob(a));
+  assert.equal(desk.of('keep').length, 0);
+  assert.equal(desk.of('mend').length, 1);
+});
+
+test('the wrong file that is playing is let go when the player has moved on, and the song is asked for when its job is gone', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a] = first(desk, 1);
+  readyWith(desk, a, wrongJob(a));
+  const playing = `discover:job-${id(a)}`;
+  desk.send({ type: 'player', currentId: playing, queue: [playing, '7'], playing: true });
+  desk.done = [];
+  desk.send({ type: 'keep', id: id(a) });
+  // Said at once, and nothing cut off: the file is not let go while it is heard.
+  assert.equal(desk.state.notice?.kind, 'wrongFile');
+  assert.equal(desk.of('mend').length, 0);
+  assert.equal(desk.of('keep').length, 0);
+  desk.send({ type: 'player', currentId: '7', queue: [playing, '7'], playing: true });
+  assert.equal(desk.of('mend').length, 1);
+
+  // The phone would not let it go after all. Nothing is asked of it again, here or at every reading.
+  desk.send({ type: 'mended', id: id(a), jobId: `job-${id(a)}`, removed: false });
+  desk.send({ type: 'tick' });
+  assert.equal(desk.of('mend').length, 1);
+  assert.equal(desk.item(a).jobId, `job-${id(a)}`);
+
+  // The mending when the app comes to the front took it: read as gone, the song is asked for again.
+  desk.done = [];
+  desk.now += GRACE_MS + 1;
+  desk.jobs(desk.state.jobs.filter((other) => other.discoverKey !== id(a)));
+  assert.deepEqual(desk.asks().map((e) => [e.id, e.front]), [[id(a), true]]);
+  assert.equal(desk.item(a).keep, true);
+});
+
+test('a song whose second file is another song as well is not looked for a third time, and is not kept', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a] = first(desk, 1);
+  readyWith(desk, a, wrongJob(a));
+  desk.send({ type: 'keep', id: id(a) });
+  desk.send({ type: 'mended', id: id(a), jobId: `job-${id(a)}`, removed: true });
+  desk.done = [];
+  readyWith(desk, a, wrongJob(a, 'job-again'));
+  assert.equal(desk.of('keep').length, 0);
+  assert.equal(desk.of('mend').length, 0);
   assert.equal(desk.item(a).keep, undefined);
   assert.equal(desk.state.notice?.kind, 'keepFailed');
 });
@@ -1658,4 +1767,179 @@ test('a preview is nothing that is written down', () => {
   desk.send({ type: 'previewed', id: a, state: 'ended' });
   assert.equal(desk.state.list, list);
   assert.equal(desk.state.list[0].heardAt, undefined);
+});
+
+test('finding no music holds nothing up, and the next look asks again at once', () => {
+  // A new install: the first look is made as the app opens, before it may read the music, and finds none.
+  const desk = new Desk({ ready: 0 }, 0, false);
+  assert.equal(desk.of('build', desk.open()).length, 1);
+  desk.send({ type: 'buildFailed', code: 'noLibrary' });
+  assert.equal(desk.problem(), 'noLibrary');
+  assert.equal(desk.state.fruitlessAt, 0);
+  // A minute later the library has been read, and looking over the list is a new asking.
+  desk.now += 60_000;
+  assert.equal(desk.of('build', desk.open()).length, 1);
+
+  // Whereas a library with nothing in it to go on is the same answer all day.
+  desk.send({ type: 'buildFailed', code: 'noTaste' });
+  desk.now += 60_000;
+  assert.equal(desk.of('build', desk.open()).length, 0);
+});
+
+/* ------------------------------------------------------------------------ */
+/* The player's similar songs.                                              */
+/* ------------------------------------------------------------------------ */
+
+/** A song of the pool that is not on the list, as a number. */
+function unlisted(desk: Desk, skip = 0): number {
+  const listed = new Set(desk.ids());
+  return Array.from({ length: 60 }, (_, n) => n).filter((n) => !listed.has(id(n)))[skip]!;
+}
+
+test('a song the player asks for is fetched as Discover\'s own, though no songs are kept ready', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a] = first(desk, 1);
+  desk.done = [];
+  desk.send({ type: 'call', songs: [song(a)] });
+  assert.deepEqual(desk.asks().map((ask) => [ask.id, ask.front, ask.wifiOnly]), [[id(a), false, true]]);
+  assert.ok(desk.state.called.has(id(a)));
+  assert.ok(wanted(desk.state, desk.now).length === 0, 'asked for, and so no longer waiting to be');
+});
+
+test('a song still in the pool is brought onto the end of the list for the player, and fetched', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const n = unlisted(desk);
+  const before = desk.ids();
+  desk.done = [];
+  desk.send({ type: 'call', songs: [song(n)] });
+  assert.deepEqual(desk.ids(), [...before, id(n)]);
+  assert.equal(desk.item(n).called, true);
+  assert.deepEqual(desk.asks().map((ask) => ask.id), [id(n)]);
+});
+
+test('the songs the player asks for wait for Wi-Fi where Discover\'s songs do', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open(MOBILE);
+  desk.done = [];
+  desk.send({ type: 'call', songs: [song(first(desk, 1)[0]!)] });
+  assert.equal(desk.asks().length, 0);
+  assert.equal(desk.state.held, 'wifi');
+  assert.equal(desk.asks(desk.send({ type: 'network', network: WIFI })).length, 1);
+});
+
+test('songs put away, or by an artist nobody wants, are never brought on', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const n = unlisted(desk);
+  const m = unlisted(desk, 1);
+  desk.state = { ...desk.state, away: new Set([id(n)]), hidden: new Set([song(m).artistMbid]) };
+  desk.send({ type: 'call', songs: [song(n), song(m)] });
+  assert.ok(!desk.ids().includes(id(n)) && !desk.ids().includes(id(m)));
+  assert.equal(desk.state.called.size, 0);
+});
+
+test('Discover does not go on with its list from a file the player put on', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a, b] = first(desk, 2);
+  desk.ready(a, b);
+  const fileA = `discover:job-${id(a)}`;
+  desk.send({ type: 'lend', trackIds: [fileA] });
+  desk.done = [];
+  desk.send({ type: 'player', currentId: fileA, queue: ['7', fileA], playing: true });
+  assert.equal(desk.of('append').length, 0);
+  // Heard all the same, as any song of the list is.
+  assert.ok(desk.item(a).heardAt);
+
+  // Played from the list, the same file is Discover's own again, and the list goes on from it.
+  desk.send({ type: 'play', id: id(a) });
+  assert.ok(!desk.state.lent.has(fileA));
+});
+
+test('the songs brought on for the player give their places up once heard, when the list has run its room', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const extra = Array.from({ length: CALLED_ROOM }, (_, k) => unlisted(desk, k));
+  desk.send({ type: 'call', songs: extra.map((n) => song(n)) });
+  assert.equal(desk.state.list.length, desk.state.settings.count + CALLED_ROOM);
+  // The first of them is fetched and heard, and the player moves on past it.
+  const [heard] = extra;
+  desk.ready(heard!);
+  const file = `discover:job-${id(heard!)}`;
+  desk.send({ type: 'player', currentId: file, queue: [file], playing: true });
+  desk.send({ type: 'player', currentId: '9', queue: ['9'], playing: true });
+  desk.done = [];
+  const next = unlisted(desk, 0);
+  desk.send({ type: 'call', songs: [song(next)] });
+  assert.ok(!desk.ids().includes(id(heard!)));
+  assert.ok(desk.ids().includes(id(next)));
+  assert.deepEqual(desk.of('away').map((effect) => [effect.song.recordingMbid, effect.reason]), [[id(heard!), 'played']]);
+});
+
+test('a song still in the queue keeps its place however full the list is', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const extra = Array.from({ length: CALLED_ROOM }, (_, k) => unlisted(desk, k));
+  desk.send({ type: 'call', songs: extra.map((n) => song(n)) });
+  const [heard] = extra;
+  desk.ready(heard!);
+  const file = `discover:job-${id(heard!)}`;
+  desk.send({ type: 'player', currentId: file, queue: [file, '9'], playing: true });
+  desk.send({ type: 'call', songs: [song(unlisted(desk, 0))] });
+  assert.ok(desk.ids().includes(id(heard!)));
+  assert.equal(desk.state.list.length, desk.state.settings.count + CALLED_ROOM);
+});
+
+test('songs gathered for the player join the pool, without what is there or put away', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const had = desk.state.pool.length;
+  const fresh = { ...song(100), recordingMbid: 'recording-new' };
+  // The same song by another recording's id is the same song.
+  const again = { ...song(1), recordingMbid: 'recording-other-take' };
+  const away = { ...song(101), recordingMbid: 'recording-away' };
+  desk.state = { ...desk.state, away: new Set([...desk.state.away, 'recording-away']) };
+  desk.send({ type: 'grown', pool: [fresh, again, away] });
+  assert.deepEqual(desk.state.pool.slice(had).map((one) => one.recordingMbid), ['recording-new']);
+  // Not into a pool that is being made again: that one will be the whole of it.
+  desk.state = { ...desk.state, building: { refresh: true, done: 0, total: null, label: '' } };
+  const pool = desk.state.pool;
+  desk.send({ type: 'grown', pool: [{ ...song(102), recordingMbid: 'recording-later' }] });
+  assert.equal(desk.state.pool, pool);
+});
+
+test('a song that can no longer be had is not playable; one with its file always is', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open();
+  const [a, b, c] = first(desk, 3);
+  desk.ready(a);
+  assert.ok(playable(desk.item(a)));
+  // A failure that may pass leaves it playable; one that will not, not.
+  for (const [n, code, can] of [[b, 'ERR_DOWNLOAD_FAILED', true], [c, 'ERR_YOUTUBE_UNAVAILABLE', false]] as const) {
+    desk.send({ type: 'play', id: id(n) });
+    desk.send({ type: 'asked', id: id(n), jobId: `job-${id(n)}` });
+    desk.jobs([...desk.state.jobs.filter((other) => other.discoverKey !== id(n)), job(id(n), 'failed', { errorCode: code })]);
+    assert.equal(desk.item(n).failure?.code, code);
+    assert.equal(playable(desk.item(n)), can);
+  }
+});
+
+test('a song brought on for the player that nobody saw and nothing was started for makes way first', () => {
+  const desk = new Desk({ ready: 0 });
+  desk.open(MOBILE);
+  // Held for Wi-Fi, so nothing is fetched; and nothing is found ahead, so nothing is seen.
+  desk.ahead = true;
+  const extra = Array.from({ length: CALLED_ROOM }, (_, k) => unlisted(desk, k));
+  desk.send({ type: 'call', songs: extra.map((n) => song(n)) });
+  for (const effect of desk.seeks()) desk.send({ type: 'askFailed', id: effect.id, code: 'ERR_TEST', hold: true });
+  assert.equal(desk.state.list.length, desk.state.settings.count + CALLED_ROOM);
+  const next = unlisted(desk, 0);
+  desk.done = [];
+  desk.send({ type: 'call', songs: [song(next)] });
+  assert.ok(desk.ids().includes(id(next)));
+  assert.ok(!desk.ids().includes(id(extra[0]!)));
+  // Never seen, so never offered: nothing is put away for it.
+  assert.equal(desk.of('away').length, 0);
 });

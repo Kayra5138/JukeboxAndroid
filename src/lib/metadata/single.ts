@@ -31,6 +31,8 @@ export type FoundGeneral = {
   title: string | null;
   artist: string | null;
   album: string | null;
+  /** Whoever the record in `album` is by, as Apple names it. */
+  albumArtist: string | null;
   year: number | null;
   trackNumber: number | null;
   discNumber: number | null;
@@ -96,6 +98,7 @@ export async function lookUpGeneral(
     title: musicbrainz?.title ?? itunes?.title ?? null,
     artist: musicbrainz?.artist ?? itunes?.artist ?? null,
     album: itunes?.album ?? null,
+    albumArtist: itunes?.albumArtist ?? null,
     // MusicBrainz dates the recording; Apple dates the release it is selling,
     // which for a reissue is decades late.
     year: musicbrainz?.year ?? itunes?.year ?? null,

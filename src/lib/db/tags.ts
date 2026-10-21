@@ -194,3 +194,42 @@ export function addTagToTracks(trackIds: string[], tag: string): void {
     }
   });
 }
+
+/**
+ * Takes one tag off several tracks, whoever put it there.
+ *
+ * The bulk counterpart of the cross beside a tag on the details screen,
+ * which takes a tag off whatever its source. One a lookup found can be found
+ * again by the next lookup, as it can after that cross; one somebody typed is
+ * gone for good, which is what was asked.
+ *
+ * The positions left behind are not closed up. Order is all they say, and a
+ * gap says nothing.
+ */
+export function removeTagFromTracks(trackIds: string[], tag: string): void {
+  const cleaned = asTag(tag);
+  if (cleaned == null || trackIds.length === 0) return;
+  const database = db();
+  database.withTransactionSync(() => {
+    for (const trackId of trackIds) {
+      database.runSync('DELETE FROM track_tags WHERE track_id = ? AND tag = ?', trackId, cleaned);
+    }
+  });
+}
+
+/**
+ * The tags carried by any of [trackIds], and by how many of them, most
+ * common first: what there is to take off a run of tracks.
+ */
+export function tagsAmong(trackIds: string[]): TagCount[] {
+  if (trackIds.length === 0) return [];
+  const wanted = new Set(trackIds);
+  const counts = new Map<string, number>();
+  for (const [trackId, tags] of allTags()) {
+    if (!wanted.has(trackId)) continue;
+    for (const { tag } of tags) counts.set(tag, (counts.get(tag) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([tag, trackCount]) => ({ tag, trackCount }))
+    .sort((a, b) => b.trackCount - a.trackCount || a.tag.localeCompare(b.tag));
+}

@@ -200,6 +200,49 @@ export function addToPlaylist(id: number, trackIds: string[], at: number): numbe
   return added;
 }
 
+/**
+ * Puts [trackIds] in place of everything the list held, in that order, for
+ * a playlist file brought in over a list of the same name.
+ *
+ * The list stays the same list -- its id, its name, a picture chosen for it
+ * -- and only what is in it changes. A list that followed a tag stops
+ * following it: what the file holds is an order somebody chose, which is the
+ * one thing a tag list cannot be. A cover chosen from a track the list no
+ * longer holds is let go, as taking that track off by hand would.
+ *
+ * Each track once, as everywhere else: the caller has already taken out the
+ * repeats, and a repeat that got this far is ignored rather than refused.
+ */
+export function setPlaylistTracks(id: number, trackIds: string[], at: number): void {
+  const database = db();
+  database.withTransactionSync(() => {
+    database.runSync(`DELETE FROM playlist_tracks WHERE playlist_id = ?`, id);
+    trackIds.forEach((trackId, position) => {
+      database.runSync(
+        `INSERT OR IGNORE INTO playlist_tracks (playlist_id, track_id, position, added_at)
+         VALUES (?, ?, ?, ?)`,
+        id,
+        trackId,
+        position,
+        Math.round(at)
+      );
+    });
+    renumber(id);
+    database.runSync(
+      `UPDATE playlists
+       SET tag = NULL,
+           updated_at = ?,
+           cover_track_id = CASE
+             WHEN cover_track_id IN (SELECT track_id FROM playlist_tracks WHERE playlist_id = ?)
+             THEN cover_track_id ELSE NULL END
+       WHERE id = ?`,
+      Math.round(at),
+      id,
+      id
+    );
+  });
+}
+
 export function removeFromPlaylist(id: number, trackId: string, at: number): void {
   const database = db();
   database.withTransactionSync(() => {

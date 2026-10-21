@@ -51,7 +51,7 @@ export function DownloadsSettings() {
                   {state}
                 </Text>
               ) : null}
-              <Text style={styles.chevron}>›</Text>
+              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
             </View>
           </View>
           <Text style={styles.muted}>{t.settings.downloads.note}</Text>
@@ -80,7 +80,7 @@ export function DownloadsSettings() {
         <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.discover.settings.heading}</Text>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
           </View>
           <Text style={styles.muted}>{t.settings.discover.note}</Text>
         </Pressable>

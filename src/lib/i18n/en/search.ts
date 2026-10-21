@@ -1,4 +1,5 @@
 import { format } from './format.ts';
+import { oneOrMany } from '../write.ts';
 
 /** The search tab. */
 export const search = {
@@ -61,6 +62,11 @@ export const search = {
   listedHint:
     'Already downloaded or queued tracks are skipped. Private, deleted and live videos may be unavailable.',
   listCreated: (name: string) => `List created: ${name}. Downloaded tracks will appear in Lists.`,
+  /** On a result the library has a file of already, from a computer or an older version. */
+  inLibrary: 'In your library',
+  /** After a playlist is added: how many of it were not fetched, being here already. */
+  alreadyHave: (count: number) =>
+    oneOrMany(count, '1 song was already in your library and was not downloaded again.', `${format.number(count)} songs were already in your library and were not downloaded again.`),
   unnamedPlaylist: 'YouTube playlist',
 
   /** A download's state and what it is being saved as. */

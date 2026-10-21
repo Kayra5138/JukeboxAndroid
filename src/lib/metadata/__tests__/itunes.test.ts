@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { lookupTrack } from '../itunes.ts';
+import { lookupTrack, searchAlbumCover } from '../itunes.ts';
 import { stubFetch, track, withoutWaiting } from './support.ts';
 
 const entry = (collectionName: string, picture: string) => ({
@@ -49,5 +49,38 @@ describe('itunes lookupTrack', () => {
 
     assert.equal(bare?.album, 'Akuma no Ko - Single');
     assert.equal(elsewhere?.album, 'Akuma no Ko - Single');
+  });
+});
+
+describe('itunes searchAlbumCover', () => {
+  const record = (collectionName: string, artistName: string, picture: string, trackCount = 12) => ({
+    collectionName,
+    artistName,
+    trackCount,
+    artworkUrl100: `https://is1-ssl.mzstatic.com/${picture}/100x100bb.jpg`,
+  });
+
+  it('takes the record of that name by that artist, the exact name first', async () => {
+    stubFetch(() => ({
+      body: {
+        results: [
+          record('Greatest Hits', 'ABBA', 'abba'),
+          record('Greatest Hits (Remastered)', 'Queen', 'remaster'),
+          record('Greatest Hits', 'Queen', 'queen'),
+        ],
+      },
+    }));
+    const found = await withoutWaiting(() => searchAlbumCover('Greatest Hits', 'Queen', 17));
+    assert.equal(found, 'https://is1-ssl.mzstatic.com/queen/600x600bb.jpg');
+  });
+
+  it('takes any artist for a compilation, and nothing for a record of another name', async () => {
+    stubFetch(() => ({ body: { results: [record('Now 50', 'Various Artists', 'now')] } }));
+    assert.equal(
+      await withoutWaiting(() => searchAlbumCover('Now 50', 'Çeşitli Sanatçılar', 40)),
+      'https://is1-ssl.mzstatic.com/now/600x600bb.jpg'
+    );
+    stubFetch(() => ({ body: { results: [record('Now 51', 'Various Artists', 'now')] } }));
+    assert.equal(await withoutWaiting(() => searchAlbumCover('Now 50', 'Various Artists', 40)), null);
   });
 });

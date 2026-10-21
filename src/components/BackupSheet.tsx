@@ -73,7 +73,8 @@ export function BackupSheet({
       statusBarTranslucent
       navigationBarTranslucent
       onRequestClose={leave}>
-      <Pressable style={styles.backdrop} onPress={leave} />
+      {/* Not a stop for a screen reader: Cancel and the back gesture are the ways out. */}
+      <Pressable style={styles.backdrop} onPress={leave} accessible={false} />
       <ScrollView
         style={styles.sheet}
         contentContainerStyle={[
@@ -82,7 +83,7 @@ export function BackupSheet({
         ]}>
         {finished ? (
           <>
-            <Text style={styles.heading}>{said.imported}</Text>
+            <Text accessibilityRole="header" style={styles.heading}>{said.imported}</Text>
             <Text style={styles.text}>{said.importedBody}</Text>
             <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onRestart}>
               <Text style={styles.primaryLabel}>{said.restart}</Text>
@@ -90,7 +91,7 @@ export function BackupSheet({
           </>
         ) : (
           <>
-            <Text style={styles.heading}>{said.question}</Text>
+            <Text accessibilityRole="header" style={styles.heading}>{said.question}</Text>
             <Text style={styles.text}>
               {said.made(
                 backup.exportedAt > 0 ? formatDateTime(new Date(backup.exportedAt), t) : null,
@@ -115,7 +116,7 @@ export function BackupSheet({
             </Text>
 
             {failure ? (
-              <Text accessibilityRole="alert" style={styles.failure}>
+              <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.failure}>
                 {failure}
               </Text>
             ) : null}

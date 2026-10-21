@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The row widget, roughly. For the widget picker on Android 10 and 11, which shows a
+     picture where 12 and later draw the layout itself (previewLayout). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="320dp" android:height="70dp"
+  android:viewportWidth="320" android:viewportHeight="70">
+  <path android:fillColor="#FF2A303B" android:pathData="M20,0h280a20,20 0 0 1 20,20v30a20,20 0 0 1 -20,20h-280a20,20 0 0 1 -20,-20v-30a20,20 0 0 1 20,-20z" />
+  <path android:fillColor="#40FFFFFF" android:pathData="M18,15h28a6,6 0 0 1 6,6v28a6,6 0 0 1 -6,6h-28a6,6 0 0 1 -6,-6v-28a6,6 0 0 1 6,-6z" />
+  <path android:fillColor="#E6EDEDED" android:pathData="M68,25h102a4,4 0 0 1 4,4v0a4,4 0 0 1 -4,4h-102a4,4 0 0 1 -4,-4v-0a4,4 0 0 1 4,-4z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M67,39h64a3,3 0 0 1 3,3v0a3,3 0 0 1 -3,3h-64a3,3 0 0 1 -3,-3v-0a3,3 0 0 1 3,-3z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M205.0,28.0h2.52v14h-2.52zM219.0,28.0v14L209.2,35z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M242.8,26.0L259.9,35L242.8,44.0z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M281.0,28.0L290.8,35L281.0,42.0zM292.48,28.0h2.52v14h-2.52z" />
+  <path android:fillColor="#40FFFFFF" android:pathData="M17.5,62h285.0a1.5,1.5 0 0 1 1.5,1.5v0.0a1.5,1.5 0 0 1 -1.5,1.5h-285.0a1.5,1.5 0 0 1 -1.5,-1.5v-0.0a1.5,1.5 0 0 1 1.5,-1.5z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M17.5,62h107.0a1.5,1.5 0 0 1 1.5,1.5v0.0a1.5,1.5 0 0 1 -1.5,1.5h-107.0a1.5,1.5 0 0 1 -1.5,-1.5v-0.0a1.5,1.5 0 0 1 1.5,-1.5z" />
+</vector>

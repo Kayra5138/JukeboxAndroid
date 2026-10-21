@@ -113,3 +113,16 @@ describe('searchNamed', () => {
     assert.deepEqual(searchNamed(artists, 'nirvana', nameOf), []);
   });
 });
+
+it('a track with no artist is found by the words it is drawn with', () => {
+  const tracks = [
+    { title: 'One', artist: null, album: null, tags: [] },
+    { title: 'Two', artist: 'Bilinmeyen Grup', album: null, tags: [] },
+  ] as unknown as Parameters<typeof search>[0];
+  const unknown = ['Bilinmeyen sanatçı', 'Unknown artist'];
+  assert.deepEqual(search(tracks, 'bilinmeyen san', unknown).tracks.map((t) => t.title), ['One']);
+  assert.deepEqual(search(tracks, 'unknown', unknown).tracks.map((t) => t.title), ['One']);
+  // A named artist is found by its own name, not by the words for none.
+  assert.deepEqual(search(tracks, 'bilinmeyen', unknown).tracks.map((t) => t.title), ['One', 'Two']);
+  assert.deepEqual(search(tracks, 'unknown').tracks, []);
+});

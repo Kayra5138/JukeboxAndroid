@@ -60,6 +60,7 @@ export function ListEmpty() {
         <Pressable
           android_ripple={pressed}
           accessibilityRole="button"
+          hitSlop={4}
           style={styles.button}
           onPress={action === 'findMore' ? findMore : refresh}>
           <Text style={styles.buttonLabel}>{shows.kind === 'problem' ? t.common.retry : t.discover.panel.refresh}</Text>
@@ -98,7 +99,13 @@ export function ListFoot() {
       <Text style={[styles.footText, styles.grow]} numberOfLines={2}>
         {t.discover.empty.short(status.vacancies)}
       </Text>
-      <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.button} onPress={findMore}>
+      <Pressable
+        android_ripple={pressed}
+        accessibilityRole="button"
+        // Drawn 40 tall; this much further is the 48 a finger is owed.
+        hitSlop={4}
+        style={styles.button}
+        onPress={findMore}>
         <Text style={styles.buttonLabel}>{t.discover.header.findMore}</Text>
       </Pressable>
     </View>

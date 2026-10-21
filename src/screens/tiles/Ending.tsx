@@ -11,6 +11,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { useT } from '../../lib/i18n/index';
 import { accuracyOf, pointsOf, type Score } from '../../lib/tiles/game';
+import { inkOnFace } from '../../lib/tiles/shade';
+import { announce } from '../../lib/ui/announce';
 import {
   LOST_WAIT_MS,
   RISE_MS,
@@ -98,6 +100,23 @@ export function Ending({
         : end === 'won'
           ? said.toTheEnd
           : null;
+  const figures = said.figures(
+    score.hit,
+    score.total,
+    score.bonus,
+    score.best,
+    Math.round(accuracyOf(score) * 100)
+  );
+
+  /*
+    The whole of the page said aloud once it has arrived, for somebody who
+    cannot see it rise: how the run went, why it ended, the score and the
+    figures under it. Nothing else moves a screen reader's attention to it.
+  */
+  const spoken = [heading, why, t.tiles.hud.score(pointsOf(score)), figures].filter(Boolean).join('. ');
+  useEffect(() => {
+    if (armed) announce(spoken);
+  }, [armed, spoken]);
 
   return (
     <Animated.View
@@ -118,24 +137,17 @@ export function Ending({
         style={StyleSheet.absoluteFill}
       />
       <Animated.View style={[styles.endingBody, rise]}>
-        <Text style={styles.title}>{heading}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{heading}</Text>
         {why ? <Text style={styles.why}>{why}</Text> : null}
         <Text style={styles.big}>{pointsOf(score)}</Text>
-        <Text style={styles.note}>
-          {said.figures(
-            score.hit,
-            score.total,
-            score.bonus,
-            score.best,
-            Math.round(accuracyOf(score) * 100)
-          )}
-        </Text>
+        <Text style={styles.note}>{figures}</Text>
         <Pressable
           accessibilityRole="button"
           disabled={!armed}
           style={[styles.go, { backgroundColor: colour }]}
           onPress={onAgain}>
-          <Text style={styles.goLabel}>{said.again}</Text>
+          {/* In whichever of white and black can be read on the record's colour. */}
+          <Text style={[styles.goLabel, { color: inkOnFace(colour) }]}>{said.again}</Text>
         </Pressable>
       </Animated.View>
     </Animated.View>

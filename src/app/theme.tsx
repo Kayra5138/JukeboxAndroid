@@ -71,7 +71,7 @@ export default function CustomThemeScreen() {
 
   const picture = (
     <View style={styles.picture}>
-      <Text style={styles.section}>{t.format.upper(say.preview)}</Text>
+      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.preview)}</Text>
       <ThemePreview colours={made.colours} />
     </View>
   );
@@ -112,7 +112,7 @@ export default function CustomThemeScreen() {
                     <Text style={styles.title}>{say[role]}</Text>
                     <Text style={styles.code}>{picked ?? say.automatic}</Text>
                   </View>
-                  <Text style={[styles.chevron, expanded && styles.chevronOpen]}>›</Text>
+                  <Text style={[styles.chevron, expanded && styles.chevronOpen]} importantForAccessibility="no">›</Text>
                 </Pressable>
 
                 {picked !== null && picked !== shown ? (

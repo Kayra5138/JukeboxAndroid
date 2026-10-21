@@ -90,6 +90,44 @@ export function mergeSongs(from: string, to: string): void {
   memory.pairs = null;
 }
 
+/**
+ * The same answer to many pairs at once, one pair at a time, and how it went.
+ *
+ * Each is asked again before it is answered: joining one pair can settle
+ * another — the same old file asked about against two new ones — and a pair
+ * no longer in question is passed over rather than answered twice. A pair
+ * that cannot be written stops nothing; each write is all or nothing, so it
+ * has changed nothing, and the rest are still answered.
+ */
+export function answerPairs(
+  pairs: readonly Suggestion[],
+  join: boolean
+): { done: number; skipped: number; failed: string | null; joined: string[] } {
+  /** The first file of each pair joined, whose history has gone to the second. */
+  const joined: string[] = [];
+  let done = 0;
+  let skipped = 0;
+  let failed: string | null = null;
+  const key = (pair: { from: { id: string }; to: { id: string } }) => `${pair.from.id}\u0000${pair.to.id}`;
+  for (const pair of pairs) {
+    const open = new Set(sameSongs().map(key));
+    if (!open.has(key(pair))) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      if (join) {
+        mergeSongs(pair.from.id, pair.to.id);
+        joined.push(pair.from.id);
+      } else keepApart(pair.from.id, pair.to.id);
+      done += 1;
+    } catch (error) {
+      failed ??= String(error);
+    }
+  }
+  return { done, skipped, failed, joined };
+}
+
 /** Remembers that the two are different songs, so that nobody is asked again. */
 export function keepApart(from: string, to: string): void {
   const database = open();

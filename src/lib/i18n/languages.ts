@@ -1,5 +1,13 @@
 import { en, type Strings } from './en/index.ts';
 import { tr } from './tr/index.ts';
+import { de } from './de/index.ts';
+import { es } from './es/index.ts';
+import { fr } from './fr/index.ts';
+import { it } from './it/index.ts';
+import { ja } from './ja/index.ts';
+import { ptBR } from './pt-BR/index.ts';
+import { ru } from './ru/index.ts';
+import { zhHans } from './zh-Hans/index.ts';
 import { createStore } from '../ui/store.ts';
 
 export type { Strings } from './en/index.ts';
@@ -22,6 +30,14 @@ export type { Strings } from './en/index.ts';
 export const LANGUAGES = [
   { id: 'en', name: 'English', strings: en },
   { id: 'tr', name: 'Türkçe', strings: tr },
+  { id: 'de', name: 'Deutsch', strings: de },
+  { id: 'es', name: 'Español', strings: es },
+  { id: 'fr', name: 'Français', strings: fr },
+  { id: 'it', name: 'Italiano', strings: it },
+  { id: 'pt-BR', name: 'Português (Brasil)', strings: ptBR },
+  { id: 'ru', name: 'Русский', strings: ru },
+  { id: 'ja', name: '日本語', strings: ja },
+  { id: 'zh-Hans', name: '简体中文', strings: zhHans },
 ] as const satisfies readonly { id: string; name: string; strings: Strings }[];
 
 export type Language = (typeof LANGUAGES)[number]['id'];

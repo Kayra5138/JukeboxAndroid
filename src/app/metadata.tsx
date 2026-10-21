@@ -8,28 +8,41 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { topGlass, useLaidOver } from '../components/UnderBars';
 
 import {
-  forgetMetadata,
   metadataSummary,
   readAllMetadata,
   readMetadata,
   type TrackMetadata,
 } from '../lib/db/metadata';
 import { SearchField } from '../components/SearchField';
+import { useSelectionActions } from '../components/SelectionActions';
+import { useTrackMenu } from '../components/useTrackMenu';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
-import { enrichLibrary, type EnrichProgress } from '../lib/metadata/enrich';
+import {
+  bulkLookupRunning,
+  onBulkSaved,
+  startBulkLookup,
+  stopBulkLookup,
+  useBulkLookup,
+} from '../lib/metadata/bulk';
+import { describeOutcome } from '../lib/metadata/outcome';
 import { foldForMatch } from '../lib/metadata/text';
 import { ensureAudioPermission, scanLibrary } from '../lib/media/library';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { Behind } from '../lib/theme/Veil';
+import { useAnnounce } from '../lib/ui/announce';
 import type { Track } from '../lib/types';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
 type Row = { track: Track; metadata: TrackMetadata | undefined };
 
@@ -53,8 +66,14 @@ function rowMatches(row: Row, folded: string): boolean {
   ).includes(folded);
 }
 
-/** Rows are a fixed height so a finger position can be turned into an index. */
-const ROW_HEIGHT = 78;
+/**
+ * Rows are all one height so a finger position can be turned into an index:
+ * 78 at the ordinary size of writing, and taller as the writing is turned up.
+ * The three lines of a row take some forty-seven points of it and grow with
+ * the writing; at 78 whatever the setting, the third line was cut from about
+ * one and a half times the size.
+ */
+const rowHeightFor = (fontScale: number) => Math.round(31 + 47 * Math.min(Math.max(fontScale, 1), 2));
 
 /** Drags that begin over the checkboxes select; anywhere else scrolls. */
 const CHECKBOX_COLUMN = 52;
@@ -69,30 +88,43 @@ const CHECKBOX_COLUMN = 52;
  */
 const SHOW_RESULTS_EVERY_MS = 300;
 
-const SERVICE_NAMES = { musicbrainz: 'MusicBrainz', apple: 'Apple' } as const;
-
 const keyOf = (row: Row) => row.track.id;
 
-const layoutOf = (_data: unknown, index: number) => ({
-  length: ROW_HEIGHT,
-  offset: ROW_HEIGHT * index,
-  index,
-});
-
 export default function MetadataScreen() {
+  const { fontScale } = useWindowDimensions();
+  const rowHeight = rowHeightFor(fontScale);
+  // For the gesture's handlers, which are made once.
+  const rowHeightRef = useRef(rowHeight);
+  rowHeightRef.current = rowHeight;
   const [rows, setRows] = useState<Row[] | null>(null);
   const [summary, setSummary] = useState(() => metadataSummary());
-  const [progress, setProgress] = useState<EnrichProgress | null>(null);
-  /** How the last run ended, when that is worth saying. Cleared by the next one. */
-  const [outcome, setOutcome] = useState<string | null>(null);
+  /*
+    The run is the app's and not this screen's (`metadata/bulk.ts`): the
+    library's offer to a newcomer starts the same one, and either way it
+    carries on behind whatever screen is open. This shows it, and stops it.
+  */
+  const bulk = useBulkLookup();
+  const progress = bulk.progress;
+  const running = progress !== null;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
-  const abortRef = useRef<AbortController | null>(null);
+  /** What the last thing done to the selection came to, until the next. */
+  const [note, setNote] = useState<string | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press in a sheet.
+  useAnnounce(note);
   const router = useRouter();
   // Sideways the cutout sits beside the screen, and a routed screen gets no
   // horizontal inset from the navigator.
   const insets = useSafeAreaInsets();
   const sides = { paddingLeft: insets.left, paddingRight: insets.right };
+  /*
+    In a theme of glass what is over the list — the counts, the buttons, the
+    search — is laid over it, and the list runs on under it and is seen
+    through it, beginning this far down what it scrolls.
+  */
+  const top = useLaidOver();
+  const topRoom = useRef(0);
+  topRoom.current = top.height;
   const t = useT();
   const c = useColours();
   const styles = useStyles();
@@ -135,7 +167,60 @@ export default function MetadataScreen() {
     setSummary(metadataSummary());
   }, []);
 
-  useEffect(() => () => abortRef.current?.abort(), []);
+  /*
+    Results are shown as they are written rather than when the run ends, and
+    only the rows they belong to are touched: every other row keeps the object
+    it had, so the list has nothing to draw again for it. Reading the whole
+    library afresh, which is what the end of the run does, is too much to do
+    every few seconds under somebody's finger.
+
+    Listened for for as long as the screen is open, whoever began the run.
+  */
+  useEffect(() => {
+    const touched = new Set<string>();
+    let showing: ReturnType<typeof setTimeout> | null = null;
+    const show = () => {
+      showing = null;
+      const ids = new Set(touched);
+      touched.clear();
+      setRows((current) =>
+        current
+          ? current.map((row) =>
+              ids.has(row.track.id)
+                ? { track: row.track, metadata: readMetadata(row.track.id) ?? undefined }
+                : row
+            )
+          : current
+      );
+    };
+    const stop = onBulkSaved((ids) => {
+      for (const id of ids) touched.add(id);
+      if (showing == null) showing = setTimeout(show, SHOW_RESULTS_EVERY_MS);
+    });
+    return () => {
+      stop();
+      if (showing) clearTimeout(showing);
+    };
+  }, []);
+
+  /*
+    However a run ended — here, from Stop, or on its own behind another screen
+    — the whole list is read again, once. A run already over when the screen
+    opens is nothing to react to: the focus has just read everything.
+
+    The selection is kept. It used to be let go of here, when a lookup was
+    all there was to do with one; now the same tracks are as likely to want
+    their lyrics or their covers next, and choosing them again is the work
+    the selection was made to save.
+  */
+  const wasRunning = useRef(running);
+  useEffect(() => {
+    const ended = wasRunning.current && !running;
+    wasRunning.current = running;
+    if (running) setNote(null);
+    if (!ended) return;
+    void refresh();
+  }, [running, refresh]);
 
   // Re-read on focus so an edit made on the other screen shows up on return.
   useFocusEffect(
@@ -154,8 +239,8 @@ export default function MetadataScreen() {
   }, []);
 
   const indexAtY = useCallback((pageY: number) => {
-    const y = pageY - listTop.current + scrollOffset.current;
-    const index = Math.floor(y / ROW_HEIGHT);
+    const y = pageY - listTop.current + scrollOffset.current - topRoom.current;
+    const index = Math.floor(y / rowHeightRef.current);
     return Math.min(Math.max(index, 0), rowsRef.current.length - 1);
   }, []);
 
@@ -227,98 +312,49 @@ export default function MetadataScreen() {
 
   const run = useCallback(
     async (subset?: Track[]) => {
-      /*
-        One at a time. Two runs share the module-level clock the rate limiting
-        is measured against, so a second one started while the first is still
-        going doubles the request rate against both services — and only the
-        second is reachable from Stop, because it has overwritten the first's
-        controller and left that loop running with nothing to call it off.
-      */
-      if (abortRef.current) return;
+      // One at a time: see `metadata/bulk.ts`, which turns a second away.
+      if (bulkLookupRunning()) return;
       const tracks = subset ?? rowsRef.current.map((row) => row.track);
       if (tracks.length === 0) return;
-      const controller = new AbortController();
-      abortRef.current = controller;
-      setOutcome(null);
-      /*
-        Started without a total. Only the enrichment knows how many of these
-        have not been tried before, and seeding this with all of them made the
-        count read "1 of 5000" until the first real progress arrived and turned
-        it into "1 of 37".
-      */
-      setProgress({ done: 0, total: 0, matched: 0, covers: 0, throttled: false });
-
-      /*
-        Results are shown as they are written rather than when the run ends,
-        and only the rows they belong to are touched: every other row keeps the
-        object it had, so the list has nothing to draw again for it. Reading
-        the whole library afresh, which is what the end of the run does, is too
-        much to do every few seconds under somebody's finger.
-      */
-      const touched = new Set<string>();
-      let showing: ReturnType<typeof setTimeout> | null = null;
-      const show = () => {
-        showing = null;
-        const ids = new Set(touched);
-        touched.clear();
-        setRows((current) =>
-          current
-            ? current.map((row) =>
-                ids.has(row.track.id)
-                  ? { track: row.track, metadata: readMetadata(row.track.id) ?? undefined }
-                  : row
-              )
-            : current
-        );
-      };
-      const onSaved = (ids: string[]) => {
-        for (const id of ids) touched.add(id);
-        if (showing == null) showing = setTimeout(show, SHOW_RESULTS_EVERY_MS);
-      };
-
-      try {
-        const result = await enrichLibrary(tracks, setProgress, controller.signal, {
-          library: rows?.map((row) => row.track),
-          onSaved,
-        });
-        if (result.coversSaved) setOutcome(said.coversSaved(result.coversSaved));
-        if (result.stopped === 'offline') {
-          setOutcome(said.stoppedOffline(result.matched));
-        } else if (result.unreachable) {
-          setOutcome(said.serviceUnreachable(SERVICE_NAMES[result.unreachable]));
-        }
-      } catch (error) {
-        // Enrichment is documented never to reject, but a press handler is the
-        // wrong place to find out that changed.
-        setOutcome(error instanceof Error ? error.message : said.stoppedUnexpectedly);
-      }
-      // Nothing above throws again, so this is reached however the run ended.
-      if (showing) clearTimeout(showing);
-      abortRef.current = null;
-      setProgress(null);
-      setSelected(new Set());
-      await refresh();
+      // The selection is let go of and the list read again when the run ends,
+      // by the effect above that watches for it, wherever the run began.
+      await startBulkLookup(tracks, rows?.map((row) => row.track));
     },
-    [refresh, said, rows]
+    [rows]
   );
 
-  const resetSelected = useCallback(async () => {
-    forgetMetadata([...selected]);
-    setSelected(new Set());
-    await refresh();
-  }, [selected, refresh]);
+  /** How the last run ended, when that is worth saying. Cleared by the next one. */
+  const outcome = useMemo(
+    () => (bulk.last ? describeOutcome(bulk.kind, bulk.last, t) : null),
+    [bulk.kind, bulk.last, t]
+  );
 
-  const lookUpSelected = useCallback(async () => {
-    // Checked here as well as in `run`, because forgetting first and then being
-    // turned away would throw the results of a previous lookup out for nothing.
-    if (abortRef.current) return;
-    const chosen = rowsRef.current
-      .filter((row) => selected.has(row.track.id))
-      .map((row) => row.track);
-    // Forget first, so tracks already tried are retried rather than skipped.
-    forgetMetadata(chosen.map((track) => track.id));
-    await run(chosen);
-  }, [selected, run]);
+  /*
+    The list picker and the eraser are the track menu's, so that a list added
+    to and a file erased here are added to and erased as everywhere else —
+    the queue included. The menu itself is never opened from this screen.
+  */
+  const menu = useTrackMenu({
+    onChanged: () => void refresh(),
+    onAdded: setNote,
+  });
+
+  /*
+    Everything else that can be done to the selection (`SelectionActions`).
+    After an edit the same tracks stay chosen, so that one thing can follow
+    another; after a reset or a delete there is nothing left to act on.
+  */
+  const chosenIds = useMemo(() => [...selected], [selected]);
+  const actions = useSelectionActions({
+    trackIds: chosenIds,
+    addToList: menu.addToList,
+    erase: menu.erase,
+    onChanged: (how) => {
+      if (how === 'cleared') setSelected(new Set());
+      void refresh();
+    },
+    onSaid: setNote,
+  });
 
   /*
     Held between renders, so that a list which is only being counted over —
@@ -330,6 +366,8 @@ export default function MetadataScreen() {
     ({ item }: { item: Row }) => (
       <MetadataRow
         row={item}
+        height={rowHeight}
+        selecting={selecting}
         checked={selected.has(item.track.id)}
         onPress={() =>
           selecting
@@ -339,7 +377,7 @@ export default function MetadataScreen() {
         onLongPress={() => toggle(item.track.id)}
       />
     ),
-    [selected, selecting, toggle, router]
+    [rowHeight, selected, selecting, toggle, router]
   );
 
   if (!rows) {
@@ -365,27 +403,38 @@ export default function MetadataScreen() {
 
   return (
     <View style={[styles.screen, sides]}>
-      <View style={styles.header}>
+      <Behind veiled={menu.veiled} style={styles.fill}>
+      <View style={[styles.header, top.laid && styles.headerOver]} onLayout={top.onLayout}>
         {progress ? (
           <View style={styles.stack}>
             <Text style={styles.body}>
               {progress.offline
                 ? said.nothingAnswered
-                : progress.total === 0
-                  ? said.lookingUp
-                  : said.lookingUpProgress(progress.done, progress.total)}
+                : bulk.album != null
+                  ? said.lookingUpAlbum(bulk.album.name, progress.done, progress.total)
+                  : progress.total === 0
+                    ? said.lookingUp
+                    : bulk.kind === 'covers'
+                      ? t.details.selection.coversProgress(progress.done, progress.total)
+                      : bulk.kind === 'lyrics'
+                        ? t.details.selection.lyricsProgress(progress.done, progress.total)
+                        : said.lookingUpProgress(progress.done, progress.total)}
             </Text>
-            <Text style={styles.muted}>{said.soFar(progress.matched, progress.covers)}</Text>
+            <Text style={styles.muted}>
+              {bulk.kind === 'lyrics'
+                ? t.details.selection.lyricsSoFar(progress.matched)
+                : said.soFar(progress.matched, progress.covers)}
+            </Text>
             {/* Beside the count and not instead of it: one service is being
                 left alone for a minute while the other is still being asked. */}
             {progress.throttled ? <Text style={styles.muted}>{said.rateLimited}</Text> : null}
-            <Pressable android_ripple={pressed} style={styles.button} onPress={() => abortRef.current?.abort()}>
+            <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={stopBulkLookup}>
               <Text style={styles.buttonLabel}>{said.stop}</Text>
             </Pressable>
           </View>
         ) : (
           <View style={styles.stack}>
-            {outcome ? <Text style={styles.outcome}>{outcome}</Text> : null}
+            {note ?? outcome ? <Text style={styles.outcome}>{note ?? outcome}</Text> : null}
             <Text style={styles.muted}>
               {selected.size > 0
                 ? said.selected(selected.size)
@@ -394,19 +443,40 @@ export default function MetadataScreen() {
             <View style={styles.actions}>
               {selected.size > 0 ? (
                 <>
-                  <Pressable android_ripple={pressed} style={styles.button} onPress={() => void lookUpSelected()}>
+                  {/* The two most asked for, as buttons of their own; the rest,
+                      these two included, are a press away under More. */}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityHint={t.details.selection.actions.lookUp.hint}
+                    android_ripple={pressed}
+                    style={styles.button}
+                    onPress={() => actions.run('lookUp')}>
                     <Text style={styles.buttonLabel}>{t.details.lookUp}</Text>
                   </Pressable>
-                  <Pressable android_ripple={pressed} style={styles.button} onPress={() => void resetSelected()}>
-                    <Text style={styles.buttonLabel}>{said.reset}</Text>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityHint={t.details.selection.actions.edit.hint}
+                    android_ripple={pressed}
+                    style={styles.button}
+                    onPress={() => actions.run('edit')}>
+                    <Text style={styles.buttonLabel}>{t.common.edit}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityHint={t.details.selection.moreHint}
+                    android_ripple={pressed}
+                    style={styles.button}
+                    onPress={actions.open}>
+                    <Text style={styles.buttonLabel}>{t.details.selection.more}</Text>
                   </Pressable>
                 </>
               ) : (
-                <Pressable android_ripple={pressed} style={styles.button} onPress={() => void run()}>
+                <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void run()}>
                   <Text style={styles.buttonLabel}>{said.lookUpMissing}</Text>
                 </Pressable>
               )}
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={styles.button}
                 onPress={() =>
@@ -438,14 +508,19 @@ export default function MetadataScreen() {
         }
         {...panResponder.panHandlers}>
         <FlatList
+                  removeClippedSubviews={CLIP_SUBVIEWS}
           data={visible}
           keyExtractor={keyOf}
           onScroll={onScroll}
           scrollEventThrottle={16}
-          getItemLayout={layoutOf}
+          contentContainerStyle={top.height > 0 ? { paddingTop: top.height } : undefined}
+          getItemLayout={(_data, index) => ({ length: rowHeight, offset: top.height + rowHeight * index, index })}
           renderItem={renderRow}
         />
       </View>
+      </Behind>
+      {menu.element}
+      {actions.element}
     </View>
   );
 }
@@ -456,11 +531,16 @@ export default function MetadataScreen() {
  */
 function MetadataRow({
   row: { track, metadata },
+  height,
+  selecting,
   checked,
   onPress,
   onLongPress,
 }: {
   row: Row;
+  height: number;
+  /** Whether rows are being ticked, when a tap ticks rather than opens. */
+  selecting: boolean;
   checked: boolean;
   onPress: () => void;
   onLongPress: () => void;
@@ -471,10 +551,25 @@ function MetadataRow({
   const pressed = usePressed();
 
   return (
-    <Pressable android_ripple={pressed} style={styles.row} onPress={onPress} onLongPress={onLongPress}>
+    <Pressable
+      android_ripple={pressed}
+      style={[styles.row, { height }]}
+      onPress={onPress}
+      onLongPress={onLongPress}
+      /*
+        A tick box while rows are being ticked, saying whether it is: the
+        square is all that says so to the eye. Otherwise a tap opens the track,
+        and ticking is the hold, which a screen reader is offered by name.
+      */
+      accessibilityRole={selecting ? 'checkbox' : 'button'}
+      accessibilityState={selecting ? { checked } : undefined}
+      accessibilityActions={selecting ? undefined : [{ name: 'longpress', label: t.library.albumActions.select.label }]}
+      onAccessibilityAction={(event) => {
+        if (event.nativeEvent.actionName === 'longpress') onLongPress();
+      }}>
       <View style={styles.checkColumn}>
         <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-          {checked ? <Text style={styles.checkMark}>✓</Text> : null}
+          {checked ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
         </View>
       </View>
       {artwork ? (
@@ -490,7 +585,12 @@ function MetadataRow({
           <>
             <Text
               style={metadata.status === 'manual' ? styles.manual : styles.matched}
-              numberOfLines={1}>
+              numberOfLines={1}
+              accessibilityLabel={
+                metadata.status === 'manual'
+                  ? t.details.library.manualSpoken(metadata.artist ?? '', metadata.title ?? '')
+                  : t.details.library.matchedSpoken(metadata.artist ?? '', metadata.title ?? '')
+              }>
               → {metadata.artist} — {metadata.title}
             </Text>
             <Text style={styles.detail} numberOfLines={1}>
@@ -511,18 +611,20 @@ function MetadataRow({
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
   centered: { alignItems: 'center', justifyContent: 'center' },
+  fill: { flex: 1 },
   listWrapper: { flex: 1 },
   header: {
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,
   },
+  // Over the list in a theme of glass; nothing at all in any other.
+  headerOver: topGlass(c),
   stack: { gap: 10 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: ROW_HEIGHT,
     paddingRight: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,

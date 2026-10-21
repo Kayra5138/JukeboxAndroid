@@ -154,7 +154,7 @@ export default function DownloadsScreen() {
         </View>
       ) : null}
       {trouble ? (
-        <Text accessibilityRole="alert" style={styles.bad}>
+        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
           {trouble}
         </Text>
       ) : null}

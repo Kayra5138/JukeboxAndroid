@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stands in for a cover in the card and the large widget. Given a size,
+     because the card works the cover's width out from its height and the
+     proportions of what is in it, and a drawable with no size of its own has
+     no proportions: it would come out no wide at all. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:width="96dp" android:height="96dp">
+    <shape android:shape="rectangle">
+      <solid android:color="#26FFFFFF" />
+      <corners android:radius="@dimen/jukebox_widget_inner_radius" />
+    </shape>
+  </item>
+  <item android:width="40dp" android:height="40dp" android:gravity="center"
+    android:drawable="@drawable/jukebox_ic_note" />
+</layer-list>

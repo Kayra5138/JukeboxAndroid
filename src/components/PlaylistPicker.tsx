@@ -4,6 +4,7 @@ import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { TextPrompt } from './TextPrompt';
+import { useUnderBars } from './UnderBars';
 import {
   addToPlaylist,
   createPlaylist,
@@ -36,6 +37,12 @@ export function PlaylistPicker({
   onAdded: (message: string) => void;
 }) {
   const insets = useSafeAreaInsets();
+  /*
+    On a tab in a theme of glass the tab bar is laid over the foot of the
+    screen, and this is laid over the screen: it stands on the bar, where it
+    always stood, and not under it.
+  */
+  const under = useUnderBars();
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
@@ -73,13 +80,21 @@ export function PlaylistPicker({
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Pressable style={styles.backdrop} onPress={onClose} />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
-        <Text style={styles.heading}>{t.format.upper(t.lists.picker.heading(trackIds.length))}</Text>
+      {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
+          of its own, touching outside it is one of the ways out, and it has to be findable. */}
+      <Pressable
+        style={styles.backdrop}
+        accessibilityRole="button"
+        accessibilityLabel={t.common.close}
+        onPress={onClose}
+      />
+      <View style={[styles.sheet, { bottom: under.bottom, paddingBottom: insets.bottom + 18 }]}>
+        <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.lists.picker.heading(trackIds.length))}</Text>
 
         <ScrollView style={styles.scroll}>
           {lists.map((list) => (
             <Pressable
+              accessibilityRole="button"
               android_ripple={pressed}
               key={list.id}
               style={styles.row}
@@ -95,7 +110,7 @@ export function PlaylistPicker({
           ) : null}
         </ScrollView>
 
-        <Pressable android_ripple={pressed} style={styles.create} onPress={() => setNaming(true)}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.create} onPress={() => setNaming(true)}>
           <Text style={styles.createLabel}>{t.lists.picker.newList}</Text>
         </Pressable>
       </View>

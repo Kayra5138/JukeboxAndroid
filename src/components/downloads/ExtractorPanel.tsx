@@ -105,7 +105,7 @@ export function ExtractorPanel() {
         </View>
       ) : null}
       {reason ? (
-        <Text accessibilityRole="alert" style={styles.bad}>
+        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
           {reason}
         </Text>
       ) : null}

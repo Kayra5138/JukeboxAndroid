@@ -62,8 +62,8 @@ class JukeboxTagsModule : Module() {
     }
 
     /**
-     * Writes one track. [details] holds any of title, artist, album, genre,
-     * year, track and disc, and `cover` as the `file://` address of a picture
+     * Writes one track. [details] holds any of title, artist, album,
+     * albumArtist, genre, year, track and disc, and `cover` as the `file://` address of a picture
      * the app has saved. See [TagWriter.write] for what comes back.
      *
      * On the IO dispatcher and not Expo's queue, which is one thread shared

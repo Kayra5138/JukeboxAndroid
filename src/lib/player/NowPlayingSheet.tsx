@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { Animated, StyleSheet, useWindowDimensions, View } from 'react-native';
 
+import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { PlayerSheet } from '../../components/PlayerSheet';
 import { useColours } from '../theme/index';
 import { underGlass } from '../theme/Veil';
@@ -40,6 +41,18 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
 
   const open = useCallback(() => setMounted(true), []);
   const close = useCallback(() => setMounted(false), []);
+
+  /*
+    The home screen widget's cover opens the player. An app that press
+    started asks once, as it comes up, whether that is why it was opened; one
+    that was already running is told. The question is optional, because a
+    build from before the larger widgets cannot be asked it.
+  */
+  useEffect(() => {
+    if (JukeboxAudio.takeOpenPlayer?.()) open();
+    const asked = JukeboxAudio.addListener('onOpenPlayer', open);
+    return () => asked.remove();
+  }, [open]);
 
   /*
     Read through a ref so that only opening the player triggers the entrance.
@@ -80,7 +93,16 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
         screen out of the window and handing it over, and a dialog that is
         taken out of its window is dismissed.
       */}
-      <View collapsable={false} style={mounted && !covered ? [styles.under, glass] : styles.under}>
+      {/*
+        And out of a screen reader's reach while the player is up, for the
+        same reason a sheet's screen is (see `Behind`): the player is drawn in
+        the same window as the library, and a swipe past its last button
+        otherwise walked on through every row of the list it is covering.
+      */}
+      <View
+        collapsable={false}
+        style={mounted && !covered ? [styles.under, glass] : styles.under}
+        importantForAccessibility={mounted && !covered ? 'no-hide-descendants' : 'auto'}>
         {children}
       </View>
       {mounted ? (

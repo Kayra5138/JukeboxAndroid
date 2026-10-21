@@ -189,7 +189,7 @@ export function ColourEditor({
           onChangeText={type}
           onEndEditing={finish}
           placeholder={HEX_HINT}
-          placeholderTextColor={c.textDisabled}
+          placeholderTextColor={c.textFaint}
           accessibilityLabel={say.hex}
           autoCapitalize="none"
           autoCorrect={false}

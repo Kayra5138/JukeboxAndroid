@@ -332,3 +332,29 @@ describe('listening by credit, as listening by artist', () => {
     ]);
   });
 });
+
+describe('a new install, with little or nothing played', () => {
+  const none = new Map();
+  const library = Array.from({ length: 30 }, (_, index) => ({ name: `Shelf ${index}`, tracks: 60 - index }));
+  const base = { recent: [], kept: [], allTime: [], library, standings: none, limit: 6, edition: 1 };
+
+  it('starts from the library alone when nothing has been played', () => {
+    const seeds = chooseSeeds(base);
+    assert.equal(seeds.length, 6);
+    assert.ok(seeds.every((seed) => seed.source === 'library'));
+    // The artists with the most tracks are the anchors; the rest are drawn.
+    assert.deepEqual(seeds.slice(0, 3).map((seed) => seed.name), ['Shelf 0', 'Shelf 1', 'Shelf 2']);
+  });
+
+  it('puts what little was played first, and makes up the rest from the library', () => {
+    const seeds = chooseSeeds({ ...base, recent: [{ name: 'First Song', score: 30 }] });
+    assert.equal(seeds[0]!.name, 'First Song');
+    assert.equal(seeds[0]!.source, 'recent');
+    assert.ok(seeds.slice(1).every((seed) => seed.source === 'library'));
+  });
+
+  it('leaves the library out once there is listening enough', () => {
+    const recent = Array.from({ length: 12 }, (_, index) => ({ name: `Played ${index}`, score: 100 - index }));
+    assert.ok(!chooseSeeds({ ...base, recent }).some((seed) => seed.source === 'library'));
+  });
+});

@@ -1,7 +1,8 @@
 import { strict as assert } from 'node:assert';
 import { describe, it } from 'node:test';
 
-import { keyShades, laneShades, lift } from '../shade.ts';
+import { contrast } from '../../theme/colour.ts';
+import { inkOnFace, keyShades, laneShades, lift } from '../shade.ts';
 
 const rgb = (hex: string) => [
   parseInt(hex.slice(1, 3), 16),
@@ -96,5 +97,24 @@ describe('one palette per column', () => {
     for (let lane = 0; lane < 4; lane++) {
       for (const c of laneShades([], lane, 4)) assert.match(c, /^#[0-9a-f]{6}$/);
     }
+  });
+});
+
+describe('the words written on a key', () => {
+  it('can be read at 4.5:1 on a face of any colour a sleeve might give', () => {
+    for (let r = 0; r <= 255; r += 51) {
+      for (let g = 0; g <= 255; g += 51) {
+        for (let b = 0; b <= 255; b += 51) {
+          const face = `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+          const got = contrast(inkOnFace(face), face);
+          assert.ok(got >= 4.5, `${inkOnFace(face)} on ${face} is ${got.toFixed(2)}:1`);
+        }
+      }
+    }
+  });
+
+  it('stays white where white can be read, as the rest of the game is written', () => {
+    assert.equal(inkOnFace('#3a2a8c'), '#ffffff');
+    assert.equal(inkOnFace('#f5e663'), '#000000');
   });
 });

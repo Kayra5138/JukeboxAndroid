@@ -41,6 +41,8 @@ import expo.modules.jukeboxaudio.transitions.TransitionStore
 import expo.modules.jukeboxaudio.transitions.WindDown
 import expo.modules.jukeboxaudio.widget.JukeboxWidget
 import expo.modules.jukeboxaudio.widget.NowPlaying
+import expo.modules.jukeboxaudio.widget.WidgetCommands
+import expo.modules.jukeboxaudio.widget.WidgetShape
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicReference
 
@@ -264,9 +266,12 @@ class PlaybackService : MediaLibraryService() {
         widgetHandler.removeCallbacks(placeTick)
         if (player.isPlaying) widgetHandler.postDelayed(placeTick, PLACE_EVERY_MS)
       }
+      // The repeat mode as well, which the larger widgets draw, and which
+      // decides whether the queue they list runs round to the start again.
       if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
           Player.EVENT_POSITION_DISCONTINUITY, Player.EVENT_TIMELINE_CHANGED,
-          Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_MEDIA_METADATA_CHANGED)) publish()
+          Player.EVENT_PLAYBACK_STATE_CHANGED, Player.EVENT_MEDIA_METADATA_CHANGED,
+          Player.EVENT_REPEAT_MODE_CHANGED, Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) publish()
     }
   }
 
@@ -318,6 +323,8 @@ class PlaybackService : MediaLibraryService() {
     val player = mediaSession?.player ?: return
     val metadata = player.mediaMetadata
     val trackId = player.currentMediaItem?.mediaId
+    val before = NowPlaying.read(this)
+    val loaded = player.mediaItemCount > 0
 
     val state = NowPlaying(
       trackId = trackId,
@@ -326,12 +333,20 @@ class PlaybackService : MediaLibraryService() {
       playing = player.isPlaying,
       // Carried over so the cover does not blink away and back on every
       // pause while the same track is loaded.
-      artworkPath = NowPlaying.read(this)
+      artworkPath = before
         .takeIf { it.trackId == trackId }
         ?.artworkPath,
       live = true,
       positionMs = player.currentPosition.coerceAtLeast(0),
-      durationMs = player.duration.coerceAtLeast(0)
+      durationMs = player.duration.coerceAtLeast(0),
+      /*
+        Not taken from a player that holds nothing. That is the player this
+        service starts with, before the saved queue is put back, and its
+        repeat mode is only the default: written down, it would overwrite the
+        one chosen, just before restoreQueueIfEmpty reads it back.
+      */
+      repeatMode = if (loaded) player.repeatMode else NowPlaying.repeatMode(this),
+      upcoming = upcoming(player)
     )
 
     NowPlaying.write(this, state)
@@ -343,6 +358,31 @@ class PlaybackService : MediaLibraryService() {
       resolveArtwork(trackId, metadata.artworkUri)
     }
   }
+
+  /**
+   * The next few songs, for the large widget to list.
+   *
+   * As many as the widget can ever show, so that the widget, which decides
+   * how many it has room for, never has to ask for more. A queue item's
+   * title is the one the app gave it, the file's name where the file has no
+   * title; nothing better is known here, and the app shows the same.
+   */
+  private fun upcoming(player: Player): List<NowPlaying.Upcoming> =
+    WidgetShape.nextIndices(
+      count = player.mediaItemCount,
+      current = player.currentMediaItemIndex,
+      repeatAll = player.repeatMode == Player.REPEAT_MODE_ALL,
+      limit = WidgetShape.MOST_ROWS
+    ).map { index ->
+      val item = player.getMediaItemAt(index)
+      val metadata = item.mediaMetadata
+      NowPlaying.Upcoming(
+        index = index,
+        id = item.mediaId,
+        title = metadata.title?.toString() ?: metadata.extras?.getString("jukebox.filename"),
+        artist = metadata.artist?.toString()
+      )
+    }
 
   /**
    * Finds a cover for the widget, in the order the app's own screens do: the
@@ -890,13 +930,115 @@ class PlaybackService : MediaLibraryService() {
       if (restoreQueueIfEmpty() && key != KeyEvent.KEYCODE_MEDIA_PAUSE) {
         mediaSession?.player?.playWhenReady = true
       }
-      // Not pushed back by a second press: the clock Android is running
-      // started at the first.
-      if (!widgetHandler.hasCallbacks(foregroundOwed)) {
-        widgetHandler.postDelayed(foregroundOwed, FOREGROUND_OWED_AFTER_MS)
-      }
+      oweForeground()
+    }
+    if (intent?.action in WidgetCommands.ALL) {
+      runCatching { widgetCommand(intent!!) }
+        .onFailure { android.util.Log.w("JukeboxPlayback", "widget command failed", it) }
+      // Started in the foreground like a key, and owing the same.
+      oweForeground()
     }
     return super.onStartCommand(intent, flags, startId)
+  }
+
+  private fun oweForeground() {
+    // Not pushed back by a second press: the clock Android is running
+    // started at the first.
+    if (!widgetHandler.hasCallbacks(foregroundOwed)) {
+      widgetHandler.postDelayed(foregroundOwed, FOREGROUND_OWED_AFTER_MS)
+    }
+  }
+
+  /**
+   * What the larger widgets and the shortcut tile ask for; see [WidgetCommands].
+   *
+   * Each puts the saved queue back first where the player is empty, as a key
+   * does, so that a press after the app was closed acts on the queue the
+   * widget is showing rather than on nothing. Only jumping to a song and
+   * starting a shuffle play; shuffling the queue and changing the repeat mode
+   * are not asking to hear anything, and leave a paused player paused.
+   */
+  private fun widgetCommand(intent: Intent) {
+    val player = mediaSession?.player ?: return
+    when (intent.action) {
+      WidgetCommands.SHUFFLE_QUEUE -> {
+        restoreQueueIfEmpty()
+        shuffleQueue(player)
+      }
+      WidgetCommands.REPEAT -> {
+        restoreQueueIfEmpty()
+        val mode = intent.getIntExtra(WidgetCommands.EXTRA_MODE, -1)
+        if (mode in setOf(Player.REPEAT_MODE_OFF, Player.REPEAT_MODE_ONE, Player.REPEAT_MODE_ALL)) {
+          player.repeatMode = mode
+        }
+      }
+      WidgetCommands.JUMP -> {
+        restoreQueueIfEmpty()
+        val id = intent.getStringExtra(WidgetCommands.EXTRA_ID) ?: return
+        val asked = intent.getIntExtra(WidgetCommands.EXTRA_INDEX, -1)
+        /*
+          The row named a song as well as a place. Where the queue has changed
+          since it was drawn the place may hold some other song now, and the
+          one that was pressed is looked for instead; gone altogether, the
+          press does nothing rather than play something nobody chose.
+        */
+        val index = if (asked in 0 until player.mediaItemCount && player.getMediaItemAt(asked).mediaId == id) asked
+          else (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == id } ?: return
+        player.seekTo(index, 0L)
+        player.playWhenReady = true
+      }
+      WidgetCommands.SHELF -> {
+        val shelf = intent.getStringExtra(WidgetCommands.EXTRA_SHELF)
+          ?.takeIf { it == BrowseTree.SHUFFLE || it == BrowseTree.SHUFFLE_RECENT } ?: return
+        /*
+          The library is read off the playback thread, as covers are: it is the
+          whole of it, from the app's database. The few hundred milliseconds
+          that can take are well inside the time the foreground start allows,
+          and foregroundOwed pays it anyway if they are not.
+        */
+        artworkReader.execute {
+          val (items, index) = runCatching { BrowseTree.resolve(this, shelf) }
+            .getOrElse { emptyList<MediaItem>() to 0 }
+          if (items.isEmpty()) return@execute
+          val queued = items.map(BrowseTree::queued)
+          widgetHandler.post {
+            val target = mediaSession?.player ?: return@post
+            // Not the app's doing, so the app is told to read the queue again,
+            // as it is when a car chooses something.
+            QueueReplaced.mark()
+            target.setMediaItems(queued, index, 0L)
+            target.prepare()
+            target.playWhenReady = true
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Shuffles the queue as the player's button does, keeping the song that
+   * is playing where it is and playing on.
+   *
+   * The same moves as `PlayerController.shuffleQueue`, without the order the
+   * app works out so that one artist does not come round twice in a row:
+   * that is JavaScript's judgement, and no JavaScript need be running for a
+   * widget to be pressed. A plain shuffle is what is left, as it is there
+   * when nobody asks for an order.
+   *
+   * The app has not seen this queue, so it is marked as replaced and the app
+   * reads it back, as it does for a car's.
+   */
+  private fun shuffleQueue(player: Player) {
+    val count = player.mediaItemCount
+    val current = player.currentMediaItemIndex
+    if (count < 3 || current !in 0 until count) return
+    val rest = (0 until count).filter { it != current }.map { player.getMediaItemAt(it) }.shuffled()
+    QueueReplaced.mark()
+    // After the current item, then before it — in that order, so the second
+    // removal is the only one that shifts the index being kept.
+    if (current + 1 < count) player.removeMediaItems(current + 1, count)
+    if (current > 0) player.removeMediaItems(0, current)
+    player.addMediaItems(rest)
   }
 
   /**
@@ -961,6 +1103,13 @@ class PlaybackService : MediaLibraryService() {
     val saved = QueueStore.load(this) ?: return false
     QueueReplaced.mark()
     player.setMediaItems(saved.items, saved.index, saved.positionMs)
+    /*
+      The repeat mode with it. A fresh player repeats nothing, and the app
+      sets the chosen mode only when it is opened; a queue put back by a
+      press on the widget with repeat-one chosen would otherwise play on past
+      the song it was meant to be repeating.
+    */
+    player.repeatMode = NowPlaying.repeatMode(this)
     player.prepare()
     return true
   }

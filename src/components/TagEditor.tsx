@@ -90,12 +90,26 @@ export function TagEditor({
           <Text style={styles.tag} numberOfLines={1}>
             {entry.tag}
           </Text>
-          <Pressable android_ripple={pressed} style={styles.action} onPress={() => move(index, -1)} disabled={index === 0}>
+          {/*
+            Named with the tag, for a screen reader, which would otherwise say
+            "up arrow" and "multiplication sign" and leave which tag to guess.
+          */}
+          <Pressable
+            android_ripple={pressed}
+            style={styles.action}
+            hitSlop={ACTION_SLOP}
+            accessibilityRole="button"
+            accessibilityLabel={t.details.editor.moveUp(entry.tag)}
+            onPress={() => move(index, -1)}
+            disabled={index === 0}>
             <Text style={index === 0 ? styles.actionOff : styles.actionLabel}>↑</Text>
           </Pressable>
           <Pressable
             android_ripple={pressed}
             style={styles.action}
+            hitSlop={ACTION_SLOP}
+            accessibilityRole="button"
+            accessibilityLabel={t.details.editor.moveDown(entry.tag)}
             onPress={() => move(index, 1)}
             disabled={index === tags.length - 1}>
             <Text style={index === tags.length - 1 ? styles.actionOff : styles.actionLabel}>↓</Text>
@@ -103,6 +117,9 @@ export function TagEditor({
           <Pressable
             android_ripple={pressed}
             style={styles.action}
+            hitSlop={ACTION_SLOP}
+            accessibilityRole="button"
+            accessibilityLabel={t.details.editor.remove(entry.tag)}
             onPress={() => onChange(tags.filter((candidate) => candidate.tag !== entry.tag))}>
             <Text style={styles.actionLabel}>×</Text>
           </Pressable>
@@ -111,11 +128,14 @@ export function TagEditor({
 
       <TextField
         style={styles.input}
+        // Named for a screen reader as well as hinted: the hint is gone the
+        // moment anything is typed, and the box would be only "edit box".
+        accessibilityLabel={t.details.editor.add}
         value={draft}
         onChangeText={onDraft}
         onSubmitEditing={() => add(draft)}
         placeholder={t.details.editor.add}
-        placeholderTextColor={c.textDisabled}
+        placeholderTextColor={c.textFaint}
         autoCapitalize="none"
         autoCorrect={false}
         returnKeyType="done"
@@ -124,7 +144,7 @@ export function TagEditor({
       {offered.length > 0 ? (
         <View style={styles.suggestions}>
           {offered.map((tag) => (
-            <Pressable android_ripple={pressed} key={tag} style={styles.suggestion} onPress={() => add(tag)}>
+            <Pressable accessibilityRole="button" android_ripple={pressed} key={tag} style={styles.suggestion} onPress={() => add(tag)}>
               <Text style={styles.suggestionLabel}>{tag}</Text>
             </Pressable>
           ))}
@@ -133,6 +153,13 @@ export function TagEditor({
     </View>
   );
 }
+
+/*
+  The arrows and the cross are a glyph and a little padding each. This takes
+  them to a finger's height; sideways they stand six apart and can reach only
+  half of that each, or two would answer the same touch.
+*/
+const ACTION_SLOP = { top: 9, bottom: 9, left: 3, right: 3 };
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   container: { gap: 8 },

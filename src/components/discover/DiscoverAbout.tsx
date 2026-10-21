@@ -26,6 +26,8 @@ export function DiscoverAbout({ visible, onClose }: { visible: boolean; onClose:
           {said.heading}
         </Text>
         <Text style={styles.text}>{said.what}</Text>
+        {/* Why a new install, with nothing played, has a list at all. */}
+        <Text style={styles.text}>{t.welcome.discoverEarly}</Text>
         <Text style={styles.text}>{said.source}</Text>
         {/* Each button beside what it does, drawn as it is on a row. */}
         <View style={styles.pair}>

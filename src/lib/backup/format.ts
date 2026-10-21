@@ -75,6 +75,10 @@ export const TABLES = {
     // Absent from a backup made before it existed, which reads as never
     // searched: the cover is looked for once more and that is all.
     cover_searched_at: 'I',
+    // Both absent from a backup made before they existed: a record whose
+    // artist nobody had said, and no cover taken off by hand.
+    album_artist: 'T',
+    cover_removed_at: 'I',
   },
   track_tags: { track_id: 'T!', tag: 'T!', position: 'I!', source: 'T!' },
   track_lyrics: {
@@ -132,21 +136,52 @@ const DEFAULTS: Partial<Record<TableName, Row>> = {
  * token and would arrive on another phone as a switch that is on and does
  * nothing. It is ignored on the way in for the same reason it is left out on
  * the way out: a file is not what decides where somebody's listens are sent.
+ *
+ * The last two are this phone's own log of what went wrong and what it last
+ * heard of a newer version (see `support/`): brought to another phone, a
+ * bug report from there would describe failures that never happened on it.
+ * The switch for asking about new versions is a preference, and travels.
  */
 export function carried(key: string): boolean {
-  return key !== 'library:root' && !key.startsWith('youtube:') && !key.startsWith('listenbrainz:');
+  return (
+    key !== 'library:root' &&
+    !key.startsWith('youtube:') &&
+    !key.startsWith('listenbrainz:') &&
+    !PHONE_SUPPORT_KEYS.includes(key)
+  );
 }
+
+/**
+ * `SETTINGS.errorLog`, `SETTINGS.updateKnown`, `SETTINGS.lyricsFolders`,
+ * `SETTINGS.autoplayQueued` and `SETTINGS.setupSeen`, spelt out — the third
+ * being folders this phone granted, the fourth a note about this phone's
+ * queue, and the fifth which screens of the first start this phone has shown,
+ * all meaningless on another (a phone a backup is brought to has shown its own
+ * setup, or is about to): this file is read by tests that cannot open the
+ * database.
+ */
+const PHONE_SUPPORT_KEYS: readonly string[] = [
+  'support:errors',
+  'support:updateKnown',
+  'lyrics:folders',
+  'player:autoplay:queued',
+  'ui:setup',
+  // Keyed by this phone's file and job ids, which mean nothing on another.
+  'library:rightDownloads',
+  'discover:wrongMended',
+];
 
 /**
  * Settings a backup that replaces everything still leaves alone.
  *
  * Replacing clears what the backup did not carry, on the grounds that it was
- * this phone's version of something being replaced. These two are not that.
+ * this phone's version of something being replaced. These are not that.
  * Where the music is kept is a fact about this phone, and so is the account it
- * was connected to: bringing in a history is not asking to be signed out.
+ * was connected to: bringing in a history is not asking to be signed out. So
+ * are its log of failures and what it last heard of a new version.
  */
 export function staysThroughReplace(key: string): boolean {
-  return key === 'library:root' || key.startsWith('listenbrainz:');
+  return key === 'library:root' || key.startsWith('listenbrainz:') || PHONE_SUPPORT_KEYS.includes(key);
 }
 
 /** Enough about a song to find it again somewhere its id means nothing. */

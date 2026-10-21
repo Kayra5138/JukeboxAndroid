@@ -14,6 +14,7 @@ import { saveCredit } from '../../lib/db/credits';
 import { listeningFor, type TrackListening } from '../../lib/db/history';
 import {
   forgetMetadata,
+  readArtwork,
   readMetadata,
   saveMetadata,
   type TrackMetadata,
@@ -24,32 +25,24 @@ import { formatDateTime } from '../../lib/format/date';
 import { useT, type Strings } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
 import { artworkChanged } from '../../lib/media/artworkEvents';
+import { spreadCovers } from '../../lib/media/coverSpread';
 import { recordCover } from '../../lib/media/siblingCover';
 import type { EnrichedTrack } from '../../lib/media/enriched';
+import { fieldsOf, manualEntry, type Fields } from '../../lib/metadata/edit';
+import { isStoredCover } from '../../lib/metadata/covers';
 import { isAbortError } from '../../lib/metadata/http';
+import { noteError } from '../../lib/support/errorLogStore';
 import { usePlayerState } from '../../lib/player/PlayerProvider';
-import {
-  lookUpGeneral,
-  numberComplaint,
-  typedPlace,
-  typedYear,
-} from '../../lib/metadata/single';
+import { lookUpGeneral, numberComplaint } from '../../lib/metadata/single';
 import { makeStyles, useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
 import { useShared } from './styles';
-
-type Fields = {
-  title: string;
-  artist: string;
-  album: string;
-  year: string;
-  trackNumber: string;
-  discNumber: string;
-};
+import { useAnnounce } from '../../lib/ui/announce';
 
 const FIELDS: { key: keyof Fields; number?: 'year' | 'place' }[] = [
   { key: 'title' },
   { key: 'artist' },
+  { key: 'albumArtist' },
   { key: 'album' },
   { key: 'year', number: 'year' },
   { key: 'trackNumber', number: 'place' },
@@ -90,20 +83,6 @@ function cameFrom(stored: TrackMetadata | null, t: Strings): string {
   if (stored.status === 'manual') return from.yourEdit;
   if (stored.status === 'not_found') return from.notFound;
   return stored.source === 'itunes' ? 'Apple' : stored.source === 'musicbrainz' ? 'MusicBrainz' : (stored.source ?? from.lookup);
-}
-
-/** What is known of the track, with the file's own word where nothing better is. */
-function fieldsOf(track: Track, stored: TrackMetadata | null): Fields {
-  const known = stored && stored.status !== 'not_found' ? stored : null;
-  const place = known?.trackNumber ?? track.trackNumber;
-  return {
-    title: known?.title ?? track.title,
-    artist: known?.artist ?? track.artist ?? '',
-    album: known?.album ?? track.album ?? '',
-    year: known?.year ? String(known.year) : '',
-    trackNumber: place != null ? String(place) : '',
-    discNumber: known?.discNumber != null ? String(known.discNumber) : '',
-  };
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -147,11 +126,15 @@ export function GeneralTab({
   const [stored, setStored] = useState<TrackMetadata | null>(null);
   const [fields, setFields] = useState<Fields>(() => fieldsOf(track, null));
   const [cover, setCover] = useState<Cover>({ kind: 'kept' });
+  /** The cover the app holds for the track: its row's own, or one its record gave it. */
+  const [held, setHeld] = useState<string | null>(null);
   /** The file's own picture, for showing what removing the cover would leave. */
   const [embedded, setEmbedded] = useState<string | null>(null);
   const [listening, setListening] = useState<TrackListening | null>(null);
   const [looking, setLooking] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note?.text);
   const [writing, setWriting] = useState(false);
   /** What became of the last Write to file, kept apart from what Save says. */
   const [fileNote, setFileNote] = useState<{ text: string; bad?: boolean } | null>(null);
@@ -171,6 +154,7 @@ export function GeneralTab({
   const reset = useCallback(() => {
     const row = readMetadata(track.id);
     setStored(row);
+    setHeld(readArtwork(track.id));
     setFields(fieldsOf(track, row));
     setCover({ kind: 'kept' });
   }, [track]);
@@ -200,11 +184,12 @@ export function GeneralTab({
 
   const shown =
     cover.kind === 'chosen' ? cover.uri : cover.kind === 'removed' ? embedded : current;
-  // Only a cover of the app's own can be taken off. The picture inside the
-  // file is the file's, and taking one out of a file is not something this
-  // app does.
+  // Only a cover of the app's own can be taken off — its row's, or one the
+  // rest of the record gave it. The picture inside the file is the file's,
+  // and taking one out of a file is not something this app does.
   const removable =
-    cover.kind === 'chosen' || (cover.kind === 'kept' && Boolean(stored?.artworkUrl));
+    cover.kind === 'chosen' ||
+    (cover.kind === 'kept' && (Boolean(stored?.artworkUrl) || isStoredCover(held)));
 
   const complaints = FIELDS.map((field) =>
     field.number ? numberComplaint(fields[field.key], field.number, t) : null
@@ -230,7 +215,7 @@ export function GeneralTab({
   // A cover of the app's own on this track, saved or about to be.
   const hasCover =
     cover.kind === 'chosen' ||
-    (cover.kind === 'kept' && Boolean(stored?.artworkUrl?.startsWith('file://')));
+    (cover.kind === 'kept' && (isStoredCover(stored?.artworkUrl) || isStoredCover(held)));
 
   const lookUp = useCallback(async () => {
     search.current?.abort();
@@ -262,6 +247,9 @@ export function GeneralTab({
       setFields((before) => ({
         title: found.title ?? before.title,
         artist: found.artist ?? before.artist,
+        // The album artist goes with the album it is the artist of: a record
+        // found is found with its artist, and one not found leaves both.
+        albumArtist: found.album ? (found.albumArtist ?? before.albumArtist) : before.albumArtist,
         album: found.album ?? before.album,
         year: found.year != null ? String(found.year) : before.year,
         trackNumber: found.trackNumber != null ? String(found.trackNumber) : before.trackNumber,
@@ -282,7 +270,13 @@ export function GeneralTab({
       */
       let withCover = false;
       const album = found.album ?? (fields.album.trim() || null);
-      const shared = hasCover ? null : await recordCover(album, track.id).catch(() => null);
+      const albumArtist = found.album
+        ? (found.albumArtist ?? (fields.albumArtist.trim() || null))
+        : fields.albumArtist.trim() || null;
+      const artist = found.artist ?? (fields.artist.trim() || null);
+      const shared = hasCover
+        ? null
+        : await recordCover(album, albumArtist, artist, track.id).catch(() => null);
       if (controller.signal.aborted) return;
       if (shared) {
         setCover({ kind: 'chosen', uri: shared });
@@ -302,38 +296,37 @@ export function GeneralTab({
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
       setNote({ text: t.details.searchFailed, bad: true });
+      noteError('lookup', error);
     } finally {
       if (!controller.signal.aborted) setLooking(false);
     }
-  }, [track, fields.title, fields.artist, fields.album, hasCover, t, said]);
+  }, [track, fields.title, fields.artist, fields.album, fields.albumArtist, hasCover, t, said]);
 
   const save = useCallback(() => {
     if (!valid) return;
     const kept = readMetadata(track.id);
     saveMetadata({
-      trackId: track.id,
-      status: 'manual',
-      source: 'manual',
-      title: fields.title.trim() || track.title,
-      artist: fields.artist.trim() || null,
-      album: fields.album.trim() || null,
       // The tags have a tab of their own and are not this one's to change. The
       // genre is the first of them, so it is read rather than carried over.
-      genre: tagsFor(track.id)[0]?.tag ?? kept?.genre ?? null,
-      year: typedYear(fields.year),
-      trackNumber: typedPlace(fields.trackNumber),
-      discNumber: typedPlace(fields.discNumber),
+      ...manualEntry(track, kept, fields, tagsFor(track.id)[0]?.tag ?? null),
       artworkUrl:
         cover.kind === 'chosen'
           ? cover.uri
           : cover.kind === 'removed'
             ? null
             : (kept?.artworkUrl ?? null),
+      // Taken off on purpose, so nothing hands it back from the rest of the
+      // record; chosen again, and that is over.
+      coverRemovedAt:
+        cover.kind === 'removed' ? Date.now() : cover.kind === 'chosen' ? null : (kept?.coverRemovedAt ?? null),
     });
     artworkChanged();
     reset();
     setNote({ text: t.common.saved });
     onChanged();
+    // A cover chosen goes to the tracks of the record that have none, and a
+    // track moved onto a record by its name takes the record's.
+    void spreadCovers({ trackIds: [track.id] });
   }, [valid, track, fields, cover, reset, onChanged, t]);
 
   const discard = useCallback(() => {
@@ -344,6 +337,8 @@ export function GeneralTab({
     reset();
     setNote({ text: said.editGone });
     onChanged();
+    // Back on the record the file names, which may have a cover for it.
+    void spreadCovers({ trackIds: [track.id] });
   }, [track.id, reset, onChanged, said]);
 
   // Anything typed or chosen and not yet saved. What goes into the file is
@@ -385,7 +380,7 @@ export function GeneralTab({
   return (
     <FormScroll contentContainerStyle={shared.content}>
       <View style={styles.coverRow}>
-        <Pressable onPress={() => void pick()} accessibilityLabel={said.chooseCoverLabel}>
+        <Pressable accessibilityRole="button" onPress={() => void pick()} accessibilityLabel={said.chooseCoverLabel}>
           {shown ? (
             <Image source={{ uri: shown }} style={styles.cover} contentFit="cover" />
           ) : (
@@ -395,16 +390,16 @@ export function GeneralTab({
           )}
         </Pressable>
         <View style={styles.coverActions}>
-          <Pressable android_ripple={pressed} style={shared.button} onPress={() => void pick()}>
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={shared.button} onPress={() => void pick()}>
             <Text style={shared.buttonLabel}>{said.chooseFromGallery}</Text>
           </Pressable>
           {removable ? (
-            <Pressable android_ripple={pressed} style={shared.button} onPress={() => setCover({ kind: 'removed' })}>
+            <Pressable accessibilityRole="button" android_ripple={pressed} style={shared.button} onPress={() => setCover({ kind: 'removed' })}>
               <Text style={shared.buttonLabel}>{said.removeCover}</Text>
             </Pressable>
           ) : null}
           {cover.kind !== 'kept' ? (
-            <Pressable onPress={() => setCover({ kind: 'kept' })}>
+            <Pressable accessibilityRole="button" onPress={() => setCover({ kind: 'kept' })}>
               <Text style={shared.link}>{said.keepCover}</Text>
             </Pressable>
           ) : null}
@@ -412,6 +407,7 @@ export function GeneralTab({
       </View>
 
       <Pressable
+        accessibilityRole="button"
         android_ripple={pressed}
         style={[shared.action, looking && shared.actionOff]}
         disabled={looking}
@@ -429,6 +425,9 @@ export function GeneralTab({
           <Text style={shared.label}>{t.format.upper(said.fields[field.key])}</Text>
           <TextField
             style={shared.input}
+            // The name over the box is a line of its own to the eye; a screen
+            // reader on the box would otherwise say only what is in it.
+            accessibilityLabel={said.fields[field.key]}
             value={fields[field.key]}
             onChangeText={(value) => set(field.key, value)}
             keyboardType={field.number ? 'number-pad' : 'default'}
@@ -443,6 +442,7 @@ export function GeneralTab({
 
       <View style={shared.actions}>
         <Pressable
+          accessibilityRole="button"
           android_ripple={pressed}
           style={[shared.action, shared.actionWide, !valid && shared.actionOff]}
           disabled={!valid}
@@ -450,7 +450,7 @@ export function GeneralTab({
           <Text style={shared.actionLabel}>{t.common.save}</Text>
         </Pressable>
         {stored?.status === 'manual' ? (
-          <Pressable android_ripple={pressed} style={shared.button} onPress={discard}>
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={shared.button} onPress={discard}>
             <Text style={shared.buttonLabel}>{said.discard}</Text>
           </Pressable>
         ) : null}

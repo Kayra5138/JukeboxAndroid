@@ -7,7 +7,10 @@
       "expo.modules.jukeboxaudio.JukeboxAudioModule",
       "expo.modules.jukeboxaudio.downloads.JukeboxDownloadsModule",
       "expo.modules.jukeboxaudio.translate.JukeboxTranslateModule",
-      "expo.modules.jukeboxaudio.tags.JukeboxTagsModule"
+      "expo.modules.jukeboxaudio.tags.JukeboxTagsModule",
+      "expo.modules.jukeboxaudio.lyrics.JukeboxLyricsModule",
+      "expo.modules.jukeboxaudio.lists.JukeboxListsModule",
+      "expo.modules.jukeboxaudio.work.JukeboxWorkModule"
     ]
   }
 }

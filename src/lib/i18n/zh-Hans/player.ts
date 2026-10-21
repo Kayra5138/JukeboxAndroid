@@ -1,0 +1,78 @@
+import { format } from './format.ts';
+import type { Strings } from '../en/index.ts';
+
+export const player: Strings['player'] = {
+  bar: {
+    opensPlayer: '打开播放器',
+  },
+  sheet: {
+    nothingPlaying: '暂无播放',
+    heart: '爱心',
+    repeat: { off: '循环播放', all: '列表循环', one: '单曲循环' },
+    back: (seconds) => `后退 ${seconds} 秒`,
+    forward: (seconds) => `前进 ${seconds} 秒`,
+    shuffleQueue: '随机打乱播放队列',
+    playbackSettings: '播放设置',
+    lyrics: '歌词',
+    translateLyrics: '翻译歌词',
+    upNext: (count) => `待播 · ${format.number(count)}`,
+    position: '播放进度',
+    positionValue: (position, duration) => `${position}，共 ${duration}`,
+  },
+  queue: {
+    remove: (title) => `移除“${title}”`,
+    movedTo: (position, count) => `现在是第 ${format.number(position)} 首，共 ${format.number(count)} 首`,
+    auto: {
+      library: '相似歌曲 · 为你挑选',
+      fresh: '新歌 · 来自“发现”',
+      mixed: '相似歌曲和新歌 · 为你挑选',
+      remove: '移除',
+      removeLabel: '移除为你挑选的歌曲',
+      removeHint: '在你播放其他内容之前，不会再向此播放队列添加歌曲。',
+      notes: {
+        offline: '没有网络连接，因此这些来自音乐库。',
+        wifi: '“发现”正在等待 Wi-Fi，因此这些来自音乐库。',
+        unavailable: '新歌需要 YouTube 下载器，因此这些来自音乐库。',
+        waiting: '新歌仍在下载，在此期间先播放音乐库中的歌曲。',
+      },
+    },
+  },
+  settings: {
+    playback: '播放',
+    backToNormal: '恢复正常速度和音调',
+    normal: '正常',
+    speed: '速度',
+    pitch: '音调',
+    pitchHint: '以半音为单位升高或降低，播放速度仍保持上方的设置。',
+    effects: '音效',
+    equalizer: { note: '频段、低音和响度' },
+    crossfade: { note: '一首歌如何过渡到下一首' },
+    allEffects: { title: '全部音效', note: '宽度、交叉馈送、旋转和电平' },
+  },
+  sleepTimer: {
+    title: '睡眠定时',
+    cancel: '取消睡眠定时',
+    unsupported: '请安装新版应用以使用睡眠定时。',
+    about: '一段时间后暂停音乐。最后半分钟音量会逐渐降低。',
+    pauseAfter: (minutes) => `${minutes} 分钟后暂停`,
+    pauseAfterTyped: '自定义分钟数后暂停',
+    custom: '自定义…',
+    pauseAtEnd: '播完这首后暂停',
+    endOfTrack: '播完本首',
+    finish: {
+      title: '播完当前歌曲',
+      note: '时间到了以后，等这首歌播完再停，而不是淡出。',
+      label: '睡眠定时结束时播完当前歌曲',
+    },
+    refused: (most) => `请输入 1 到 ${most} 之间的整数（分钟）`,
+    howMany: '多少分钟后暂停？',
+    minutes: '分钟',
+    start: '开始',
+  },
+  sleep: {
+    endOfTrack: '播完本首后暂停',
+    thenToTheEnd: (time) => `剩余 ${time}，之后播完本首`,
+    fadingOut: (time) => `正在淡出，剩余 ${time}`,
+    pausesIn: (time) => `${time} 后暂停`,
+  },
+};

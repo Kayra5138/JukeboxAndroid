@@ -8,10 +8,12 @@ import { saveGenre } from '../../lib/db/metadata';
 import { useT } from '../../lib/i18n/index';
 import { saveManualTags, tagCounts, tagsFor, type TagEdit } from '../../lib/db/tags';
 import { isAbortError } from '../../lib/metadata/http';
+import { noteError } from '../../lib/support/errorLogStore';
 import { lookUpTags, withLookupTags } from '../../lib/metadata/single';
 import { useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
 import { useShared } from './styles';
+import { useAnnounce } from '../../lib/ui/announce';
 
 const SOURCE_NAMES = { musicbrainz: 'MusicBrainz', itunes: 'Apple' } as const;
 
@@ -42,6 +44,8 @@ export function TagsTab({
   const [known, setKnown] = useState<string[]>([]);
   const [looking, setLooking] = useState(false);
   const [note, setNote] = useState<{ text: string; bad?: boolean } | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note?.text);
   const search = useRef<AbortController | null>(null);
   const t = useT();
   const c = useColours();
@@ -78,6 +82,7 @@ export function TagsTab({
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
       setNote({ text: t.details.searchFailed, bad: true });
+      noteError('lookup', error);
     } finally {
       if (!controller.signal.aborted) setLooking(false);
     }
@@ -97,6 +102,7 @@ export function TagsTab({
   return (
     <FormScroll contentContainerStyle={shared.content}>
       <Pressable
+        accessibilityRole="button"
         android_ripple={pressed}
         style={[shared.action, looking && shared.actionOff]}
         disabled={looking}
@@ -120,7 +126,7 @@ export function TagsTab({
       {note ? <Text style={note.bad ? shared.noteBad : shared.note}>{note.text}</Text> : null}
 
       <View style={shared.actions}>
-        <Pressable android_ripple={pressed} style={[shared.action, shared.actionWide]} onPress={save}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={[shared.action, shared.actionWide]} onPress={save}>
           <Text style={shared.actionLabel}>{t.common.save}</Text>
         </Pressable>
       </View>

@@ -20,18 +20,24 @@ import {
 import {
   clearLyrics,
   readLyrics,
+  writeLocalLyrics,
   writeLyrics,
   writeLyricsOffset,
   writeManualLyrics,
   type StoredLyrics,
 } from '../../lib/db/lyrics';
+import { readLocalLyrics } from '../../lib/lyrics/device';
 import { isAbortError } from '../../lib/metadata/http';
 import { bareTitle } from '../../lib/metadata/text';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
+import { useAnnounce } from '../../lib/ui/announce';
 
 /** One nudge of the timings, in milliseconds. */
 const STEP_MS = 250;
+
+/** The figure of the shift is a line of text; this makes it a finger's height to press. */
+const OFFSET_SLOP = { top: 12, bottom: 12 };
 
 function seconds(value: number | null): string {
   if (value == null || value <= 0) return '—';
@@ -60,6 +66,8 @@ export function LyricsTab({ track }: { track: Track }) {
   const [results, setResults] = useState<LyricsCandidate[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note);
   const [typingOffset, setTypingOffset] = useState(false);
   /** The stored words as they are being edited. */
   const [edited, setEdited] = useState('');
@@ -95,22 +103,30 @@ export function LyricsTab({ track }: { track: Track }) {
   }, [storedText]);
 
   // Seeded with what the track calls itself, since that is what is being
-  // looked for; the point of typing is to be able to change it.
-  useEffect(() => {
+  // looked for; the point of typing is to be able to change it. Done while
+  // drawing, once for each track, rather than in an effect that would have to
+  // pretend not to read the title: a title corrected on another tab must not
+  // throw away what is being typed here.
+  const [seededFor, setSeededFor] = useState<string | null>(null);
+  if (seededFor !== trackId) {
+    setSeededFor(trackId);
     setQuery([track.artist, bareTitle(track.title, track.artist)].filter(Boolean).join(' '));
     setResults(null);
     setNote(null);
+  }
+
+  useEffect(() => {
     refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId]);
+  }, [refresh]);
 
   /**
    * The automatic search, asked for by hand.
    *
-   * The same one a play runs, strict about length and all, and here it is
-   * allowed to replace words somebody chose: pressing the button is asking
-   * for exactly that. Finding nothing leaves what is stored alone, though. A
-   * miss is no reason to throw away the words there are.
+   * The same one a play runs — the song's file and a .lrc beside it first,
+   * then LRCLIB, strict about length and all — and here it is allowed to
+   * replace words somebody chose: pressing the button is asking for exactly
+   * that. Finding nothing leaves what is stored alone, though. A miss is no
+   * reason to throw away the words there are.
    */
   const lookUp = useCallback(async () => {
     lookup.current?.abort();
@@ -118,34 +134,51 @@ export function LyricsTab({ track }: { track: Track }) {
     lookup.current = controller;
     setLookingUp(true);
     setNote(null);
-    try {
-      const found = await fetchLyrics(
-        {
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          durationSec: track.durationSec,
-        },
-        controller.signal
-      );
-      if (controller.signal.aborted) return;
-      if (!found) {
-        setNote(said.nothingMatched);
-        return;
+    // Everything that can fail is caught inside, so that what follows it runs
+    // whatever happened, as a `finally` would; the compiler does not take one.
+    const attempt = async () => {
+      try {
+        const local = await readLocalLyrics(trackId);
+        if (controller.signal.aborted) return;
+        if (local) {
+          // Cleared first, as for a lookup: a shift and translations made for
+          // other words do not belong to these.
+          clearLyrics(trackId);
+          writeLocalLyrics(trackId, local, Date.now());
+          setResults(null);
+          setNote(t.lyrics.found[local.source]);
+          refresh();
+          return;
+        }
+
+        const found = await fetchLyrics(
+          {
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            durationSec: track.durationSec,
+          },
+          controller.signal
+        );
+        if (controller.signal.aborted) return;
+        if (!found) {
+          setNote(said.nothingMatched);
+          return;
+        }
+        // Cleared first: the old row takes its shift and its translations with
+        // it, and neither belongs to the words that are replacing it.
+        clearLyrics(trackId);
+        writeLyrics(trackId, found, Date.now());
+        setResults(null);
+        setNote(said.foundAndSaved);
+        refresh();
+      } catch (error) {
+        if (controller.signal.aborted || isAbortError(error)) return;
+        setNote(t.details.searchFailed);
       }
-      // Cleared first: the old row takes its shift and its translations with
-      // it, and neither belongs to the words that are replacing it.
-      clearLyrics(trackId);
-      writeLyrics(trackId, found, Date.now());
-      setResults(null);
-      setNote(said.foundAndSaved);
-      refresh();
-    } catch (error) {
-      if (controller.signal.aborted || isAbortError(error)) return;
-      setNote(t.details.searchFailed);
-    } finally {
-      if (!controller.signal.aborted) setLookingUp(false);
-    }
+    };
+    await attempt();
+    if (!controller.signal.aborted) setLookingUp(false);
   }, [track, trackId, refresh, t, said]);
 
   const saveEdited = useCallback(() => {
@@ -170,14 +203,16 @@ export function LyricsTab({ track }: { track: Track }) {
     setNote(null);
     try {
       const found = await findLyricsCandidates(query, controller.signal);
-      if (controller.signal.aborted) return;
-      setResults(found);
-      if (found.length === 0) setNote(said.nothingCameBack);
+      if (!controller.signal.aborted) {
+        setResults(found);
+        if (found.length === 0) setNote(said.nothingCameBack);
+      }
     } catch {
       if (!controller.signal.aborted) setNote(t.details.searchFailed);
-    } finally {
-      if (!controller.signal.aborted) setSearching(false);
     }
+    // After the try rather than in a `finally`, which the compiler does not
+    // take; nothing above it can throw past the catch.
+    if (!controller.signal.aborted) setSearching(false);
   }, [query, t, said]);
 
   const choose = useCallback(
@@ -243,6 +278,7 @@ export function LyricsTab({ track }: { track: Track }) {
     <View style={styles.screen}>
       <FormScroll contentContainerStyle={styles.content}>
         <Pressable
+          accessibilityRole="button"
           android_ripple={pressed}
           style={[styles.action, lookingUp && styles.actionOff]}
           disabled={lookingUp}
@@ -260,13 +296,15 @@ export function LyricsTab({ track }: { track: Track }) {
         <Text style={[styles.section, styles.sectionFirst]}>{t.format.upper(said.stored)}</Text>
         <Text style={styles.body}>
           {stored
-            ? said.kept(Boolean(stored.synced), stored.source === 'manual', timed)
+            ? stored.source === 'file' || stored.source === 'lrc'
+              ? t.lyrics.stored(Boolean(stored.synced), stored.source, timed)
+              : said.kept(Boolean(stored.synced), stored.source === 'manual', timed)
             : said.none}
         </Text>
         {stored?.source === 'manual' ? (
           // The only way back. A hand-made choice is deliberately left alone by
           // every lookup, so without this a wrong correction would be permanent.
-          <Pressable android_ripple={pressed} style={styles.revert} onPress={revert}>
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.revert} onPress={revert}>
             <Text style={styles.revertLabel}>{said.forget}</Text>
           </Pressable>
         ) : null}
@@ -275,6 +313,7 @@ export function LyricsTab({ track }: { track: Track }) {
           <>
             <TextField
               style={[styles.input, styles.words]}
+              accessibilityLabel={said.wordsField}
               value={edited}
               onChangeText={setEdited}
               multiline
@@ -287,6 +326,7 @@ export function LyricsTab({ track }: { track: Track }) {
               autoCorrect={false}
             />
             <Pressable
+              accessibilityRole="button"
               android_ripple={pressed}
               style={[
                 styles.action,
@@ -304,22 +344,27 @@ export function LyricsTab({ track }: { track: Track }) {
 
         {timed > 0 ? (
           <>
-            <Text style={styles.section}>{t.format.upper(said.timing)}</Text>
+            <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.timing)}</Text>
             <Text style={styles.hint}>{said.timingHint}</Text>
             <View style={styles.row}>
-              <Pressable android_ripple={pressed} style={styles.step} onPress={() => nudge(-STEP_MS)}>
+              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(-STEP_MS)}>
                 <Text style={styles.stepLabel}>{said.earlier(STEP_MS / 1000)}</Text>
               </Pressable>
               {/* Nudging is for finding it; typing is for when you already
                   know. Four seconds out is sixteen taps otherwise. */}
-              <Pressable onPress={() => setTypingOffset(true)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityHint={said.typeOffset}
+                // A finger's height to aim at, though it is drawn as a figure.
+                hitSlop={OFFSET_SLOP}
+                onPress={() => setTypingOffset(true)}>
                 <Text style={styles.offset}>{formatOffset(offset, t)}</Text>
               </Pressable>
-              <Pressable android_ripple={pressed} style={styles.step} onPress={() => nudge(STEP_MS)}>
+              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(STEP_MS)}>
                 <Text style={styles.stepLabel}>{said.later(STEP_MS / 1000)}</Text>
               </Pressable>
               {offset !== 0 ? (
-                <Pressable android_ripple={pressed} style={styles.step} onPress={() => nudge(-offset)}>
+                <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(-offset)}>
                   <Text style={styles.stepLabel}>{said.reset}</Text>
                 </Pressable>
               ) : null}
@@ -327,20 +372,24 @@ export function LyricsTab({ track }: { track: Track }) {
           </>
         ) : null}
 
-        <Text style={styles.section}>{t.format.upper(said.byHand)}</Text>
+        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.byHand)}</Text>
         <Text style={styles.hint}>{said.byHandHint}</Text>
         <TextField
           style={styles.input}
+          // Named for what the box is for; the hint says what to put in it,
+          // and is gone once anything is typed.
+          accessibilityLabel={said.byHand}
           value={query}
           onChangeText={setQuery}
           placeholder={said.queryPlaceholder}
-          placeholderTextColor={c.textDisabled}
+          placeholderTextColor={c.textFaint}
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
           onSubmitEditing={() => void runSearch()}
         />
         <Pressable
+          accessibilityRole="button"
           android_ripple={pressed}
           style={[styles.action, (!query.trim() || searching) && styles.actionOff]}
           disabled={!query.trim() || searching}
@@ -354,6 +403,7 @@ export function LyricsTab({ track }: { track: Track }) {
 
         {results?.map((candidate) => (
           <Pressable
+            accessibilityRole="button"
             android_ripple={pressed}
             key={candidate.id}
             style={styles.candidate}
@@ -374,19 +424,22 @@ export function LyricsTab({ track }: { track: Track }) {
           </Pressable>
         ))}
 
-        <Text style={styles.section}>{t.format.upper(said.paste)}</Text>
+        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.paste)}</Text>
         <Text style={styles.hint}>{said.pasteHint}</Text>
         <TextField
           style={[styles.input, styles.paste]}
+          // The hint is a sample of a timestamp, which read aloud is noise.
+          accessibilityLabel={said.paste}
           value={pasted}
           onChangeText={setPasted}
           placeholder="[00:12.34] …"
-          placeholderTextColor={c.textDisabled}
+          placeholderTextColor={c.textFaint}
           multiline
           autoCapitalize="none"
           autoCorrect={false}
         />
         <Pressable
+          accessibilityRole="button"
           android_ripple={pressed}
           style={[styles.action, !pasted.trim() && styles.actionOff]}
           disabled={!pasted.trim()}

@@ -1,9 +1,12 @@
+import { readSetting, SETTINGS, writeSetting } from '../db/index';
 import { saveLookupTags } from '../db/tags';
 import { strings } from '../i18n/index';
-import { ensureNotificationPermission, libraryRoot, scanLibrary } from '../media/library';
+import { ensureNotificationPermission, hasAudioPermission, libraryHiding, libraryRoot, scanEverything } from '../media/library';
+import { shownTracks } from '../library/hiding';
 import { withMetadata } from '../media/merge';
 import { mergeSongs } from '../identity/index';
-import { libraryFilesChanged } from '../library/index';
+import { libraryFilesChanged, libraryState, subscribeLibrary } from '../library/index';
+import { noteError } from '../support/errorLogStore';
 import { carried } from '../youtube/carried';
 import { failureCode } from '../youtube/errors';
 import { findUntil, queueChanged } from '../youtube/finder';
@@ -13,9 +16,10 @@ import { jobsNow, readerPresent, watchJobs, type QueueReading } from '../youtube
 import type { Track } from '../types';
 import { buildPool } from './catalogue';
 import {
-  KEEP_FAILED, NEEDS_BUILD, UNSORTED, initial, itemOf, reduce, unwritten, wakeAt, wanted,
-  type Effect, type Event, type ProblemCode, type Song, type State,
+  BUILD_EVERY_MS, KEEP_FAILED, NEEDS_BUILD, UNSORTED, initial, itemOf, playable, reduce, unwritten, wakeAt, wanted,
+  type Effect, type Event, type Network, type ProblemCode, type Song, type State,
 } from './core';
+import { isAbortError } from '../metadata/http';
 import { searchTracks, trackById } from './deezer';
 import { confirmed, problemOf } from './fault';
 import { isPreviewAddress, pickPreview, previewQuery, shopTrackOf } from './preview';
@@ -25,6 +29,7 @@ import { blockArtist, blockedArtistIds, blockedArtists, unblockArtist } from './
 import {
   blockedSongs, exclude, exclusions, readDiscoverSettings, readKept, saveDiscoverSettings, saveList, savePool, unblock,
 } from './store';
+import { wrongFinds } from './verify';
 import { findQuery } from './video';
 import { viewCache, viewOf, type DiscoverEntryView, type DiscoverView } from './view';
 
@@ -298,10 +303,18 @@ async function build(refresh: boolean): Promise<void> {
     controller.abort();
   }, BUILD_MS);
   try {
-    // A permission refused must not pass for an empty library: this throws, and is said as a failure.
     // Under the same deadline as the rest: a scan that never comes back would otherwise leave Discover
     // "looking for songs" until the app was closed, with refresh refused for as long.
-    const library = withMetadata(await within(scanLibrary(), controller.signal));
+    // Without leave to read audio the media store answers with no rows, exactly as for an empty folder, and
+    // is not asked: on a new install this look is made while the question of leave is still on the screen.
+    // Either way there is no music to start from yet, which holds nothing up (see `SAME_AGAIN` in `core.ts`),
+    // and the library arriving asks again (`watchLibrary`).
+    const permitted = await within(hasAudioPermission(), controller.signal);
+    // Taste is read from the library as it is shown, so a folder of voice notes switched off is not
+    // somebody's favourite artist; but what is owned is everything under the folder, so a song left out
+    // of the library for being short is not offered to be downloaded again.
+    const everything = permitted ? withMetadata(await within(scanEverything(), controller.signal)) : [];
+    const library = shownTracks(everything, libraryHiding());
     if (!library.length) {
       dispatch({ type: 'buildFailed', code: 'noLibrary' });
       return;
@@ -316,10 +329,13 @@ async function build(refresh: boolean): Promise<void> {
       dispatch({ type: 'buildProgress', label, done: step.done, total: step.total });
     const pool: Song[] = await buildPool(library, Date.now(), said, controller.signal, strings(), { onStep });
     // What is already owned is not recommended, by whichever of its spellings it is owned under.
-    const owned = new Set(library.map(songKey));
+    const owned = new Set(everything.map(songKey));
     dispatch({ type: 'built', refresh, pool: pool.filter((song) => !owned.has(songKey(song))) });
   } catch (error) {
-    dispatch({ type: 'buildFailed', code: await fault(error, timedOut) });
+    const code = await fault(error, timedOut);
+    // Its reason first, and what was thrown after, scrubbed: for the report screen.
+    noteError('discover', error, code);
+    dispatch({ type: 'buildFailed', code });
   } finally {
     clearTimeout(stop);
   }
@@ -330,6 +346,118 @@ async function clean(ids: readonly string[]): Promise<void> {
   // What the player has queued is named as well, though the phone looks at its own record of the queue too.
   const removed = await downloads.cleanDiscoverAsync([...ids], [...boot().player.queue]);
   if (removed.length) dispatch({ type: 'cleaned', removed });
+}
+
+/** How many of the songs let go for having the wrong file are remembered: far more than a list ever holds. */
+const MENDED_KEPT = 500;
+
+function readMended(): string[] {
+  try {
+    const said: unknown = JSON.parse(readSetting(SETTINGS.discoverWrongMended) ?? '[]');
+    return Array.isArray(said) ? said.filter((key): key is string => typeof key === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Lets go of Discover's own files that are another song, so that the song is
+ * looked for again under the chooser as it is now.
+ *
+ * Before the chooser was made strict a video could be taken for a song on its
+ * length from the artist's channel, and the file was given the song's name:
+ * `bôa – Twilight`, played as `Frozen`. Those files are still Discover's own
+ * — in its private folder, in nobody's library — and nobody has to be asked
+ * about them: they are taken away, with their jobs, and the queue being read
+ * again does the rest. A song whose job is gone has no file and no job, and
+ * is asked for again like any other the next time it is wanted (`readJobs` in
+ * `core.ts`), when its video is chosen by the rules that would not have taken
+ * Twilight. A song found and held, not fetched, goes the same way.
+ *
+ * The phone keeps a file the player has in its queue, whatever it is asked;
+ * such a one is let go the next time this is run, after it has been played
+ * past. That is the only way it is tried again. A song is let go once: one
+ * whose file is found wrong a second time is put away as having no recording
+ * to be found, rather than looked for over and over. The chooser cannot give
+ * a song such a file now (see `verify.ts`), so that should never happen; it
+ * is here so that it cannot go round for ever if it does.
+ */
+async function mendWrongFinds(): Promise<void> {
+  if (!downloads) return;
+  /*
+    Not one being put in the library this moment: that is somebody's file
+    now, and the copying would find its source gone. One pressed keep on and
+    not yet being copied is let go like the rest: the core does not keep a
+    file that is another song, and asks for the song again once its job is
+    gone (see `mendBeforeKeeping` in `core.ts`).
+  */
+  const wrong = wrongFinds(boot().jobs).filter((job) => !boot().keeping.has(job.discoverKey!));
+  if (!wrong.length) return;
+  const before = new Set(readMended());
+  // Put away here, and dropped by the looking-over that follows, which reads what is put away afresh.
+  for (const job of wrong) {
+    const key = job.discoverKey!;
+    if (!before.has(key)) continue;
+    const song = itemOf(boot(), key)?.song;
+    if (!song) continue;
+    exclude(song, 'unmatched');
+  }
+  await letGo(wrong);
+}
+
+/**
+ * Takes away Discover's files that are another song, with their jobs, and
+ * remembers their songs as let go once: what `mendWrongFinds` does with
+ * every such file, and what keeping a song does with its own (see `mend`).
+ * Answers the jobs the phone took away.
+ */
+async function letGo(wrong: readonly DownloadJob[]): Promise<string[]> {
+  const native = downloads;
+  if (!native || !wrong.length) return [];
+  const mended = readMended();
+  const before = new Set(mended);
+  /*
+    The phone will not delete a file that is in the queue, and a wrong one
+    left there plays again the next time it comes round — tapped, it went on
+    being Twilight under Frozen's name. So each is taken out of the queue
+    first, wherever it is, unless it is the one playing: that one is left to
+    finish and mended on the next look.
+  */
+  const playing = boot().player.currentId;
+  for (const job of wrong) {
+    if (!job.trackId || job.trackId === playing || !boot().player.queue.includes(job.trackId)) continue;
+    await port?.remove(job.trackId).catch(console.warn);
+  }
+  const queue = boot().player.queue.filter((id) => id === playing || !wrong.some((job) => job.trackId === id));
+  const removed = await native.cleanDiscoverAsync(wrong.map((job) => job.id), queue);
+  if (removed.length) {
+    const gone = new Set(removed);
+    for (const job of wrong) if (gone.has(job.id) && !before.has(job.discoverKey!)) mended.push(job.discoverKey!);
+    try {
+      writeSetting(SETTINGS.discoverWrongMended, JSON.stringify(mended.slice(-MENDED_KEPT)));
+    } catch (error) {
+      console.warn(error);
+    }
+    dispatch({ type: 'cleaned', removed });
+    nudge();
+  }
+  return removed;
+}
+
+/**
+ * Lets go of the file of a song somebody pressed keep on, which is another
+ * song, so that the song is looked for again: see `mendBeforeKeeping` in
+ * `core.ts`. Whatever becomes of it is said back, so that the song is asked
+ * for again the moment its file is gone.
+ */
+async function mend(effect: Extract<Effect, { kind: 'mend' }>): Promise<void> {
+  let removed = false;
+  try {
+    const job = boot().jobs.find((other) => other.id === effect.jobId);
+    if (job) removed = (await letGo([job])).includes(job.id);
+  } finally {
+    dispatch({ type: 'mended', id: effect.id, jobId: effect.jobId, removed });
+  }
 }
 
 /** The looking-up of a preview that is under way, so that it can be given up when the preview is no longer wanted. */
@@ -417,6 +545,8 @@ function run(effect: Effect): void {
     }
     case 'keep':
       return going(keep(effect));
+    case 'mend':
+      return going(mend(effect));
     case 'cancel':
       return going((downloads?.cancelAsync(effect.jobId) ?? Promise.resolve()).then(nudge));
     case 'clean':
@@ -500,6 +630,29 @@ export function playerChanged(currentId: string | null, queue: readonly string[]
 
 let maintaining: Promise<void> | null = null;
 
+let libraryWatched = false;
+
+/**
+ * Looks over the list again the moment the library has music in it, where
+ * the last look found none.
+ *
+ * On a new install the first look is made as the app opens, before the app
+ * has been given leave to read the music, and finds nothing; the library
+ * screen asks for that leave and reads the folder a moment later. Without
+ * this, Discover went on saying it had no music to start from until the app
+ * next came to the front.
+ */
+function watchLibrary(): void {
+  if (libraryWatched) return;
+  libraryWatched = true;
+  subscribeLibrary(() => {
+    const library = libraryState();
+    if (library.kind !== 'library' || !library.confirmed || library.tracks.length === 0) return;
+    const state = boot();
+    if (state.problem?.code === 'noLibrary' && !state.building) void maintainDiscover();
+  });
+}
+
 /**
  * Looks over the list: is a refresh due, is it short, are there files nobody
  * needs. Asked when the app is opened or comes back to the front.
@@ -510,11 +663,16 @@ let maintaining: Promise<void> | null = null;
  * shown as busy for it and nothing on the screen waits for it.
  */
 export function maintainDiscover(): Promise<void> {
+  watchLibrary();
   if (maintaining) return maintaining;
   const pass = (async () => {
     boot();
     const network = (await downloads?.discoverNetworkAsync().catch(() => null)) ?? null;
-    if (!readerPresent()) await readJobs().catch(console.warn);
+    // Read from here as well where nobody has read the queue yet: the files that are another song are found in it.
+    if (!readerPresent() || !boot().jobsRead) await readJobs().catch(console.warn);
+    // Before the looking-over, which drops whatever this put away. The songs it let go are asked for again
+    // when the queue is next read, and every event's settling asks for what is wanted (`fill` in `core.ts`).
+    await mendWrongFinds().catch(console.warn);
     dispatch({ type: 'maintain', network, away: exclusions(), hidden: blockedArtistIds() });
   })().finally(() => {
     maintaining = null;
@@ -634,4 +792,90 @@ export const discoverActions: DiscoverActions = {
 /** Whether [id] is a song on the list now. */
 export function onDiscoverList(id: string): boolean {
   return !!itemOf(boot(), id);
+}
+
+/* ------------------------------------------------------------------------ */
+/* What the player's similar songs is given.                                */
+/* ------------------------------------------------------------------------ */
+
+/** Discover as the player's similar songs reads it: see `player/autoplay/controller.ts`. */
+export type AutoplaySource = {
+  /** This build can fetch a song at all. */
+  usable: boolean;
+  network: Network | null;
+  wifiOnly: boolean;
+  items: { song: Song; track: Track | null; heard: boolean; lost: boolean }[];
+  pool: readonly Song[];
+};
+
+/**
+ * The list and the pool, as the player's similar songs chooses from them.
+ *
+ * A new list in the making is not offered: nobody has seen it yet, and its
+ * songs are being got ready for the list's own sake.
+ */
+export function autoplaySource(): AutoplaySource {
+  const s = boot();
+  return {
+    usable: !!downloads?.enqueueFindAsync,
+    network: s.network,
+    wifiOnly: s.settings.wifiOnly,
+    items: s.list.map((item) => ({ song: item.song, track: item.track ?? null, heard: !!item.heardAt, lost: !playable(item) })),
+    pool: s.pool,
+  };
+}
+
+/** How many songs of the list are ready to play: what tells the player's similar songs that one it was waiting for may have come in. */
+export function discoverReadyCount(): number {
+  const s = loop.peek();
+  return s ? s.list.reduce((count, item) => count + (item.track ? 1 : 0), 0) : 0;
+}
+
+/** Has these songs got ready for the player: see `call` in `core.ts`. */
+export function callForAutoplay(songs: readonly Song[]): void {
+  dispatch({ type: 'call', songs });
+}
+
+/** Says these files were put in the queue by the player's similar songs: see `lent` in `core.ts`. */
+export function lendToAutoplay(trackIds: readonly string[]): void {
+  dispatch({ type: 'lend', trackIds });
+}
+
+/** When songs were last gathered around what was playing, and whether they are being now. */
+let grownAt = 0;
+let growing = false;
+
+/**
+ * Gathers songs around the artists the player is playing, into the pool, for
+ * when nothing Discover has is near them.
+ *
+ * The same asking a list is built by — the same neighbours from ListenBrainz
+ * and Deezer, the same songs of theirs, the same answers remembered — started
+ * from these artists instead of the month's. Held to Discover's own restraint:
+ * not while a list is being built, not with no connection, and no more often
+ * than Discover would ask by itself, a quarter of an hour. Whatever goes wrong
+ * goes wrong quietly; the player plays from the library meanwhile.
+ */
+export async function growForAutoplay(artists: readonly string[]): Promise<void> {
+  const s = boot();
+  if (growing || s.building || !artists.length) return;
+  if (s.network && !s.network.connected) return;
+  const since = Date.now() - grownAt;
+  if (since >= 0 && since < BUILD_EVERY_MS) return;
+  const library = libraryState();
+  if (library.kind !== 'library' || !library.tracks.length) return;
+  growing = true;
+  grownAt = Date.now();
+  const controller = new AbortController();
+  const stop = setTimeout(() => controller.abort(), BUILD_MS);
+  try {
+    const pool = await buildPool(library.tracks, Date.now(), () => {}, controller.signal, strings(), { around: artists });
+    const owned = new Set(library.tracks.map(songKey));
+    dispatch({ type: 'grown', pool: pool.filter((song) => !owned.has(songKey(song))) });
+  } catch (error) {
+    if (!isAbortError(error)) console.warn('Could not gather songs around what is playing', error);
+  } finally {
+    clearTimeout(stop);
+    growing = false;
+  }
 }

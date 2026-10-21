@@ -4,7 +4,8 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Pressable } from '../Pressable';
-import { makeStyles, outlined, outlinedClip, scene, usePressed } from '../../lib/theme/index';
+import { useUnderBars } from '../UnderBars';
+import { makeStyles, outlinedClip, scene, usePressed } from '../../lib/theme/index';
 import { Behind } from '../../lib/theme/Veil';
 
 /**
@@ -41,25 +42,18 @@ export const useRows = makeStyles((c) => StyleSheet.create({
     marginBottom: 8,
     marginLeft: 4,
   },
+  /** A heading that follows another card in the same column, and needs room above it. */
+  sectionAfter: { marginTop: 24 },
   /** A line under a card that is about the whole card rather than a row of it. */
   aside: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
   note: { color: c.success, fontSize: 12.5, marginTop: 8, marginLeft: 4 },
   noteBad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
 
-  /** A short row of alternatives, where one of them is already the answer. */
+  /*
+    Things side by side at the end of a row: what it is set to and its
+    chevron. A row of alternatives, one of them the answer, is a `Segmented`.
+  */
   choices: { flexDirection: 'row', gap: 6 },
-  choice: {
-    minWidth: 32,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    backgroundColor: c.surfaceRaised,
-    alignItems: 'center',
-    ...outlined(c),
-  },
-  choiceOn: { backgroundColor: c.primary, ...outlined(c, c.primary) },
-  choiceText: { color: c.textSecondary, fontSize: 13.5, fontVariant: ['tabular-nums'] },
-  choiceTextOn: { color: c.onPrimary, fontWeight: '600' },
 
   title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
   /** What a row that opens a list is set to at the moment, beside its chevron. */
@@ -97,6 +91,8 @@ export function SettingsPage({
 }) {
   const insets = useSafeAreaInsets();
   const styles = usePage();
+  // In a theme of glass the screen's bar is over the top of this, and the rows pass under it.
+  const under = useUnderBars();
   return (
     <View style={styles.screen}>
       <Behind veiled={veiled} style={styles.behind}>
@@ -105,7 +101,12 @@ export function SettingsPage({
           // itself is taken off how far it will scroll, and the last row stops short of its own edge.
           contentContainerStyle={[
             styles.content,
-            { paddingLeft: 20 + insets.left, paddingRight: 20 + insets.right, paddingBottom: 32 + insets.bottom },
+            {
+              paddingTop: 12 + under.top,
+              paddingLeft: 20 + insets.left,
+              paddingRight: 20 + insets.right,
+              paddingBottom: 32 + insets.bottom,
+            },
           ]}>
           {children}
         </ScrollView>
@@ -141,7 +142,7 @@ export function CategoryRow({ href, title, note, value }: { href: Href; title: s
                   {value}
                 </Text>
               ) : null}
-              <Text style={rows.chevron}>›</Text>
+              <Text style={rows.chevron} importantForAccessibility="no">›</Text>
             </View>
           </View>
           <Text style={rows.muted}>{note}</Text>

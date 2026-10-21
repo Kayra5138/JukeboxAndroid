@@ -203,3 +203,29 @@ describe('withoutPackaging', () => {
     assert.equal(withoutPackaging('(Official Video)'), '(Official Video)');
   });
 });
+
+describe('withoutPackaging, beyond brackets', () => {
+  it('drops a note after a dash or a bar, or at the end', () => {
+    assert.equal(withoutPackaging('Numb - Official Audio'), 'Numb');
+    assert.equal(withoutPackaging('Numb | Lyrics'), 'Numb');
+    assert.equal(withoutPackaging('Numb Official Music Video'), 'Numb');
+    assert.equal(withoutPackaging('Berzerk (Official) (Explicit)'), 'Berzerk');
+    assert.equal(withoutPackaging('Lemon 【MV】'), 'Lemon');
+  });
+
+  it('knows the note in other languages', () => {
+    assert.equal(withoutPackaging('Dernière Danse (Clip Officiel)'), 'Dernière Danse');
+    assert.equal(withoutPackaging('Gülümse (Resmi Video)'), 'Gülümse');
+    assert.equal(withoutPackaging('Despacito (Video Oficial)'), 'Despacito');
+    assert.equal(withoutPackaging('Yalnızlık (Şarkı Sözleri)'), 'Yalnızlık');
+  });
+
+  it('keeps the recording a note was about, and anything it cannot account for', () => {
+    assert.equal(withoutPackaging('Numb (Official Live Video)'), 'Numb (Live)');
+    assert.equal(withoutPackaging('Zitti E Buoni (Official Video – Sanremo 2021 Winners)'), 'Zitti E Buoni (Official Video – Sanremo 2021 Winners)');
+    assert.equal(withoutPackaging('Video Games'), 'Video Games');
+    assert.equal(withoutPackaging('Music'), 'Music');
+    assert.equal(withoutPackaging('Video Killed the Radio Star'), 'Video Killed the Radio Star');
+    assert.equal(withoutPackaging('Lose Yourself - Live'), 'Lose Yourself - Live');
+  });
+});

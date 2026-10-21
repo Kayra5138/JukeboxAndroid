@@ -1,4 +1,4 @@
-import { albumKey } from '../media/albums.ts';
+import { albumKey, nameOfKey } from '../media/albums.ts';
 import { isStoredCover } from '../metadata/covers.ts';
 import { isActive, type DownloadJob } from '../youtube/types.ts';
 import type { TrackMetadata } from '../db/metadata.ts';
@@ -23,6 +23,13 @@ import type { TrackMetadata } from '../db/metadata.ts';
 export type Placement = {
   /** The record's name exactly as the library shows it, since that is what groups tracks. */
   album: string;
+  /**
+   * Its album artist as the library shows it, or null where the record has
+   * none: with the name, what puts the track on that record and not on
+   * another of the same name. Absent from a job asked for before records had
+   * album artists, which is read as none.
+   */
+  albumArtist?: string | null;
   title: string;
   artist: string | null;
   track: number;
@@ -52,8 +59,11 @@ export function placementOf(video: unknown): Placement | null {
   const title = text(from.title);
   const track = whole(from.track);
   if (!album || !title || track == null) return null;
+  const albumArtist = text(from.albumArtist);
   return {
     album,
+    // Only where one was said, so that a place from before is read as it was.
+    ...(albumArtist ? { albumArtist } : {}),
     title,
     artist: text(from.artist),
     track,
@@ -61,6 +71,18 @@ export function placementOf(video: unknown): Placement | null {
     year: whole(from.year),
     genre: text(from.genre),
   };
+}
+
+/**
+ * Whether a place is on the record a screen was opened with by [key].
+ *
+ * By the record's key where the place says whose record it is. A place from
+ * before records had album artists names the record alone, and is taken to
+ * be on whichever record of that name the screen is about.
+ */
+export function onRecord(place: Placement, key: string): boolean {
+  if (albumKey(place.album, place.albumArtist) === key) return true;
+  return place.albumArtist == null && albumKey(place.album) === nameOfKey(key);
 }
 
 /** One place on a record, as a word: what a row and its download are matched by. */
@@ -83,7 +105,7 @@ export function jobsBySlot(jobs: DownloadJob[], album: string): Map<string, Down
   const settled = (job: DownloadJob) => job.status === 'done' || isActive(job);
   for (const job of jobs) {
     const place = placementOf(job.video);
-    if (!place || albumKey(place.album) !== album) continue;
+    if (!place || !onRecord(place, album)) continue;
     const slot = slotOf(place);
     const held = found.get(slot);
     if (!held || (!settled(held) && settled(job))) found.set(slot, job);
@@ -139,6 +161,10 @@ export function placedRow(
     title: place.title,
     artist: place.artist,
     album: place.album,
+    // With the album, so that the track joins that record and not another
+    // of its name. Left out where there is none to say, which is saved as
+    // none and leaves the file's word standing.
+    ...(place.albumArtist ? { albumArtist: place.albumArtist } : {}),
     genre: place.genre ?? existing?.genre ?? null,
     year: place.year ?? existing?.year ?? null,
     // A cover the app already holds for it stays; an address on the internet

@@ -1,6 +1,6 @@
 import { albumKey } from './albums.ts';
 import { scanLibrary } from './library.ts';
-import { readAllMetadata } from '../db/metadata.ts';
+import { readAllMetadata, readSharedCovers } from '../db/metadata.ts';
 import { coverIndex } from '../metadata/covers.ts';
 
 /**
@@ -13,14 +13,24 @@ import { coverIndex } from '../metadata/covers.ts';
  * The rules are the ones in `metadata/covers.ts`. The track itself is left out
  * of the count, so that its own cover is never what it is offered.
  *
+ * The record is the album and its album artist as they stand in the fields,
+ * and [artist] the track's own artist, which a record known only by its name
+ * has to share with most of it (see `covers.ts`).
+ *
  * Null for a record nobody named, and for one none of whose tracks has a cover.
  */
-export async function recordCover(album: string | null, exceptTrackId: string): Promise<string | null> {
-  const key = albumKey(album ?? '');
-  if (key === '') return null;
+export async function recordCover(
+  album: string | null,
+  albumArtist: string | null,
+  artist: string | null,
+  exceptTrackId: string
+): Promise<string | null> {
+  if (!album?.trim()) return null;
+  const key = albumKey(album, albumArtist);
   const library = await scanLibrary();
   return coverIndex(
     library.filter((track) => track.id !== exceptTrackId),
-    readAllMetadata()
-  ).pick(key);
+    readAllMetadata(),
+    readSharedCovers()
+  ).pick(key, artist);
 }

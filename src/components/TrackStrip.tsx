@@ -285,8 +285,16 @@ export function TrackStrip({
   const behindAt = step(shownAt, -1, queue, wraps);
   const aheadAt = step(shownAt, 1, queue, wraps);
 
-  const slot = (index: number, spare: string) => (
-    <View key={index >= 0 && queue[index] ? `q${index}` : spare} style={{ width }}>
+  /*
+    Only the middle card is for a screen reader. The two either side are
+    clipped out of sight until a finger brings one in, and a reader that found
+    one would announce the track before or after as though it were playing.
+  */
+  const slot = (index: number, spare: string, shown: boolean) => (
+    <View
+      key={index >= 0 && queue[index] ? `q${index}` : spare}
+      style={{ width }}
+      importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'}>
       {index >= 0 && queue[index] ? renderTrack(queue[index]) : null}
     </View>
   );
@@ -305,9 +313,9 @@ export function TrackStrip({
           { width: width * 3, marginLeft: -width, transform: [{ translateX: shift }] },
         ]}
         {...pan.panHandlers}>
-        {slot(behindAt, 'before')}
-        {slot(shownAt, 'here')}
-        {slot(aheadAt, 'after')}
+        {slot(behindAt, 'before', false)}
+        {slot(shownAt, 'here', true)}
+        {slot(aheadAt, 'after', false)}
       </Animated.View>
     </View>
   );

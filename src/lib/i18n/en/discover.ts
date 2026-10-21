@@ -176,8 +176,11 @@ export const discover = {
       `A new list is on its way · ${format.number(ready)} of ${format.number(target)} songs ready.${ready > 0 ? ' Refresh again to see it now.' : ''}`,
     offline: 'No connection. Your list is kept; new songs are looked for when there is one.',
     offlineEmpty: 'No connection. Discover makes your list when there is one.',
-    noLibrary: 'Add some music to your library, and Discover has something to go on.',
-    noTaste: 'Add some music or listen to a few songs, and Discover has something to go on.',
+    /** No music found under the library's folder, or none the app may read yet. */
+    noLibrary: 'Discover starts from the music on this phone, and has not found any yet.',
+    /** Music, but none of it says who it is by, and nothing has been played or kept. */
+    noTaste:
+      'Your songs do not say who they are by, so Discover has nobody to start from. Find their details under Settings → Library → Tags.',
     unreachable: 'The recommendations could not be reached. Your list is kept; please retry later.',
     unreachableEmpty: 'The recommendations could not be reached. Please retry later.',
     exhausted: 'There are not enough new songs yet. Your list is kept as it is.',
@@ -198,6 +201,8 @@ export const discover = {
     restored: (title: string) => `${title} is back on the list.`,
     refreshed: 'Here is your new list.',
     keepFailed: (title: string) => `${title} could not be saved to Library. Please retry.`,
+    /** Keep was pressed on a song whose file turned out to be another song: it is let go, and the right one fetched and saved. */
+    wrongFile: (title: string) => `The file for ${title} was another song. Looking for the right one to save.`,
     undo: 'Undo',
   },
 
@@ -206,7 +211,7 @@ export const discover = {
    * `fault` in `engine.ts`. Nothing shows them; what is shown is `status`.
    */
   engine: {
-    needsTaste: 'Add some music or listen to a few songs to build your Discover taste profile.',
+    needsTaste: 'Discover has no artist and no tag to start from.',
     nothingFetched:
       'No recommendations could be fetched. Your current Discover list is kept; please retry later.',
   },

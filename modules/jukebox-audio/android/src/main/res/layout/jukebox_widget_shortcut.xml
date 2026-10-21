@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The shortcut tile: one press and the music starts, shuffled. Two halves,
+  everything and what was played lately, the same two the car offers on its
+  first screen; one cell wide it is the first alone (see JukeboxShortcutWidget).
+  The same glass as the player widgets, in the colours of the last cover, so a
+  tile next to one of those looks like part of it.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/jukebox_widget_root"
+  android:layout_width="match_parent" android:layout_height="match_parent"
+  android:background="@drawable/jukebox_widget_shape"
+  android:clipToOutline="true"
+  android:foreground="@drawable/jukebox_widget_edge">
+  <ImageView android:id="@+id/jukebox_widget_glass"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:src="@drawable/jukebox_widget_background" android:scaleType="fitXY"
+    android:importantForAccessibility="no" />
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal">
+
+    <LinearLayout
+      android:id="@+id/jukebox_shortcut_all"
+      android:layout_width="0dp"
+      android:layout_height="match_parent"
+      android:layout_weight="1"
+      android:background="?android:attr/selectableItemBackground"
+      android:gravity="center"
+      android:orientation="vertical"
+      android:padding="6dp">
+      <ImageView
+        android:layout_width="24dp" android:layout_height="24dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/jukebox_ic_shuffle" />
+      <TextView
+        android:id="@+id/jukebox_shortcut_all_label"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end" android:gravity="center" android:maxLines="2"
+        android:text="@string/jukebox_auto_shuffle_all"
+        android:textColor="#EDEDED" android:textSize="12sp" />
+    </LinearLayout>
+
+    <ImageView
+      android:id="@+id/jukebox_shortcut_divider"
+      android:layout_width="1dp" android:layout_height="match_parent"
+      android:layout_marginTop="14dp" android:layout_marginBottom="14dp"
+      android:importantForAccessibility="no"
+      android:src="@drawable/jukebox_widget_divider" android:scaleType="fitXY" />
+
+    <LinearLayout
+      android:id="@+id/jukebox_shortcut_recent"
+      android:layout_width="0dp"
+      android:layout_height="match_parent"
+      android:layout_weight="1"
+      android:background="?android:attr/selectableItemBackground"
+      android:gravity="center"
+      android:orientation="vertical"
+      android:padding="6dp">
+      <ImageView
+        android:layout_width="24dp" android:layout_height="24dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/jukebox_ic_recent" />
+      <TextView
+        android:id="@+id/jukebox_shortcut_recent_label"
+        android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end" android:gravity="center" android:maxLines="2"
+        android:text="@string/jukebox_auto_shuffle_recent"
+        android:textColor="#EDEDED" android:textSize="12sp" />
+    </LinearLayout>
+  </LinearLayout>
+</FrameLayout>

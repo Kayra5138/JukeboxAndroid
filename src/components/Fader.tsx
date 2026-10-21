@@ -17,6 +17,9 @@ const SEND_EVERY_MS = 40;
 const TAP_SLOP = 6;
 
 const THUMB = 22;
+
+/** What a screen reader may ask of a slider: a step up and a step down. */
+const ADJUST = [{ name: 'increment' }, { name: 'decrement' }];
 const TRACK = 6;
 
 /**
@@ -260,7 +263,40 @@ function useDrag({
     [position]
   );
 
-  return { position, shown, handlers: responder.panHandlers };
+  /*
+    A step one way or the other, for a screen reader, which has no finger to
+    drag with and asks by swiping up or down instead.
+
+    A notched control moves to the next notch rather than by some share of its
+    range: a share smaller than the notch would snap straight back to where it
+    was, and the swipe would do nothing at all. So it feels its way along in
+    small amounts until the value changes, or the end is reached. A smooth
+    control has no notches to find and goes a twentieth of the way.
+  */
+  const nudge = (direction: 1 | -1) => {
+    const state = live.current;
+    if (state.span === 0) return;
+    const from = latest.current;
+    let next = from;
+    if (state.snap) {
+      for (let tried = 1; tried <= 200 && next === from; tried++) {
+        const fraction = state.at(from) + (direction * tried) / 200;
+        next = valueAt(fraction, state);
+        if (fraction <= 0 || fraction >= 1) break;
+      }
+    } else {
+      next = valueAt(state.at(from) + direction / 20, state);
+    }
+    if (next === from) return;
+    position.setValue(state.at(next));
+    setShown(next);
+    latest.current = next;
+    sentValue.current = next;
+    state.onDrag(next);
+    state.onSettle(next);
+  };
+
+  return { position, shown, nudge, handlers: responder.panHandlers };
 }
 
 /**
@@ -422,7 +458,7 @@ export function Slider({
   const tapPosition = (page: number) =>
     travel <= 0 ? null : (page - left.current - THUMB / 2) / travel;
 
-  const { position, shown, handlers } = useDrag({
+  const { position, shown, nudge, handlers } = useDrag({
     value,
     min,
     max,
@@ -480,7 +516,9 @@ export function Slider({
 
   return (
     <View style={styles.slider}>
-      <View style={styles.sliderHead}>
+      {/* Said by the track below, which a screen reader stops on; read here as
+          well, the name and the figure would be heard twice over. */}
+      <View style={styles.sliderHead} importantForAccessibility="no-hide-descendants">
         <Text style={styles.sliderLabel}>{label}</Text>
         <Text style={[styles.sliderValue, format(shown) !== idle && { color: accent }]}>
           {format(shown)}
@@ -490,6 +528,15 @@ export function Slider({
       <View
         ref={track}
         style={styles.sliderTrack}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityValue={{ text: format(shown) }}
+        accessibilityActions={ADJUST}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'increment') nudge(1);
+          else if (event.nativeEvent.actionName === 'decrement') nudge(-1);
+        }}
         onLayout={(event) => {
           setWidth(event.nativeEvent.layout.width);
           measure();

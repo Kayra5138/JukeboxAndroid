@@ -16,6 +16,7 @@ import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { makeStyles, outlineWidth, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 import { useLandscape } from '../lib/ui/layout';
+import { barGlass, FootDock } from './UnderBars';
 
 /** One track's cover, looked up per card so the neighbours arrive with theirs. */
 function Cover({ track, column }: { track: Track; column: boolean }) {
@@ -91,6 +92,20 @@ const around = StyleSheet.create({
  * some.
  */
 export function NowPlayingBar({ column = false }: { column?: boolean }) {
+  /*
+    Along the bottom in a theme of glass it is laid over the screen, on the
+    tab bar, so that the list runs on under it; see `UnderBars`. Down the
+    side it is a panel beside the list, as in every theme.
+  */
+  if (column) return <PlayingBar column />;
+  return (
+    <FootDock>
+      <PlayingBar column={false} />
+    </FootDock>
+  );
+}
+
+function PlayingBar({ column }: { column: boolean }) {
   const { current, currentIndex, queue, repeat, isPlaying } = usePlayerState();
   const { toggle, next, previous, skipToIndex } = usePlayerActions();
   const openPlayer = useOpenPlayer();
@@ -247,21 +262,18 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
   touch: this much further out on each side still counts as the button. Less
   sideways than up and down, because sideways is where the next button is —
   and less again down the side of the screen, where the three share a narrower
-  row.
+  row. Up and down they reach the 48 Android asks for; sideways they stop at
+  half the gap to the next button, which is as far as they can go without two
+  of them answering the same touch.
 */
-const SLOP = { top: 6, bottom: 6, left: 5, right: 5 };
-const SLOP_COLUMN = { top: 6, bottom: 6, left: 2, right: 2 };
+const SLOP = { top: 8, bottom: 8, left: 5, right: 5 };
+const SLOP_COLUMN = { top: 8, bottom: 8, left: 2, right: 2 };
 
 /** How wide the panel is when it runs down the side. */
 export const NOW_PLAYING_WIDTH = 132;
 
-/**
- * How tall the bar is along the bottom: its padding and the cover, or the
- * two lines beside the cover once the phone's writing is large enough for
- * them to be the taller. For what is drawn over the app and has to keep
- * clear of it; see `DownloadsButton`.
- */
-export const nowPlayingHeight = (fontScale: number) => 20 + Math.max(40, Math.ceil(2 + 36 * fontScale));
+/** Worked out with the rest of what the bars cover; see there. */
+export { nowPlayingHeight } from '../lib/ui/bars';
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   bar: {
@@ -273,6 +285,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderTopColor: c.border,
     backgroundColor: c.surface,
+    // In a theme of glass, the wash every bar with a list under it has.
+    ...barGlass(c),
     paddingHorizontal: 14,
     paddingVertical: 10,
   },

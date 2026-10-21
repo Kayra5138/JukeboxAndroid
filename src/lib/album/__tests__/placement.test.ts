@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { track } from '../../__tests__/support.ts';
-import { albumsOf } from '../../media/albums.ts';
+import { albumKey, albumsOf } from '../../media/albums.ts';
 import { mergeMetadata } from '../../media/enriched.ts';
 import { siblingCover } from '../../metadata/covers.ts';
-import { jobsBySlot, placedRow, placementOf, sharedGenre, slotOf, type Placement } from '../placement.ts';
+import { jobsBySlot, onRecord, placedRow, placementOf, sharedGenre, slotOf, type Placement } from '../placement.ts';
 import type { TrackMetadata } from '../../db/metadata.ts';
 import type { DownloadJob, DownloadStatus } from '../../youtube/types.ts';
 
@@ -183,5 +183,25 @@ describe('the genre a record is counted under', () => {
     assert.equal(genres('rock', 'pop'), 'rock');
     assert.equal(genres(null, null), null);
     assert.equal(genres(), null);
+  });
+});
+
+describe('which record a place is on', () => {
+  const place = (albumArtist?: string | null) =>
+    placementOf({ placement: { album: 'Greatest Hits', title: 'Waterloo', track: 1, albumArtist } })!;
+
+  it('is the record of that name and album artist', () => {
+    assert.equal(onRecord(place('ABBA'), albumKey('Greatest Hits', 'ABBA')), true);
+    assert.equal(onRecord(place('ABBA'), albumKey('Greatest Hits', 'Queen')), false);
+    assert.equal(onRecord(place(null), albumKey('Greatest Hits')), true);
+  });
+
+  it('is any record of the name for a place asked for before records had album artists', () => {
+    assert.equal(onRecord(place(), albumKey('Greatest Hits', 'Queen')), true);
+    assert.equal(onRecord(place(), albumKey('Other')), false);
+  });
+
+  it('files the track with its album artist, so that it joins that record', () => {
+    assert.equal(placedRow('9', place('ABBA'), null)?.albumArtist, 'ABBA');
   });
 });

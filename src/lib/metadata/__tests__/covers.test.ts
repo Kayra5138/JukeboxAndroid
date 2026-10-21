@@ -186,3 +186,36 @@ describe('whether a track’s own picture came out of its file', () => {
     assert.ok(!isEmbeddedPicture(null));
   });
 });
+
+describe('the cover of a record two artists share the name of', () => {
+  it('is not handed to a track by somebody other than whoever most of the record is by', () => {
+    const wanting = track({ id: '9', title: 'Waterloo', album: 'Greatest Hits', artist: 'ABBA' });
+    const library = [
+      wanting,
+      track({ id: '1', title: 'A', album: 'Greatest Hits', artist: 'Queen' }),
+      track({ id: '2', title: 'B', album: 'Greatest Hits', artist: 'Queen' }),
+      track({ id: '3', title: 'C', album: 'Greatest Hits', artist: 'Queen feat. Somebody' }),
+    ];
+    const rows = rowsOf(row('1', { artworkUrl: RUINS }));
+
+    assert.equal(siblingCover(wanting, library, rows), null);
+    assert.equal(siblingCover(library[2]!, library, rows), RUINS);
+    // A guest on the record's own artist's song is still on the record.
+    assert.equal(siblingCover(library[3]!, library, rows), RUINS);
+  });
+
+  it('is handed to anybody on a record whose album artist is known, and counts a cover the record gave', () => {
+    const wanting = track({ id: '9', title: 'X', album: 'Hits', artist: 'Guest', albumArtist: 'Queen' });
+    const library = [wanting, track({ id: '1', title: 'A', album: 'Hits', artist: 'Queen', albumArtist: 'Queen' })];
+
+    assert.equal(siblingCover(wanting, library, rowsOf(), new Map([['1', RUINS]])), RUINS);
+    assert.equal(recordKey(wanting, undefined), 'hits\u001fqueen');
+  });
+
+  it('keeps a record of one album artist apart from the record of that name by another', () => {
+    const wanting = track({ id: '9', title: 'X', album: 'Hits', artist: 'ABBA', albumArtist: 'ABBA' });
+    const library = [wanting, track({ id: '1', title: 'A', album: 'Hits', artist: 'Queen', albumArtist: 'Queen' })];
+
+    assert.equal(siblingCover(wanting, library, rowsOf(row('1', { artworkUrl: RUINS }))), null);
+  });
+});

@@ -55,20 +55,20 @@ export default function SoundSettingsScreen() {
   const shaping = (
     <>
       <Link href="/equalizer" asChild>
-        <Pressable android_ripple={pressed} style={styles.row}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.nav.equalizer}</Text>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
           </View>
           <Text style={styles.muted}>{t.settings.equalizer.note}</Text>
         </Pressable>
       </Link>
       <View style={styles.rule} />
       <Link href="/effects" asChild>
-        <Pressable android_ripple={pressed} style={styles.row}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.nav.effects}</Text>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
           </View>
           <Text style={styles.muted}>{t.settings.effects.note}</Text>
         </Pressable>
@@ -86,6 +86,8 @@ export default function SoundSettingsScreen() {
             <View style={styles.line}>
               <Text style={styles.title}>{t.settings.loudness.title}</Text>
               <Switch
+                // Named, for a screen reader, which otherwise says only "switch, off".
+                accessibilityLabel={t.settings.loudness.title}
                 value={even}
                 onValueChange={(on) => {
                   // Shown at once and put back if the player would not
@@ -110,19 +112,19 @@ export default function SoundSettingsScreen() {
   const pacing = (
     <>
       <Link href="/transitions" asChild>
-        <Pressable android_ripple={pressed} style={styles.row}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.nav.crossfade}</Text>
-            <Text style={styles.chevron}>›</Text>
+            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
           </View>
           <Text style={styles.muted}>{t.settings.crossfade.note}</Text>
         </Pressable>
       </Link>
       <View style={styles.rule} />
-      <Pressable android_ripple={pressed} style={styles.row} onPress={() => setPlaybackOpen(true)}>
+      <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => setPlaybackOpen(true)}>
         <View style={styles.line}>
           <Text style={styles.title}>{t.settings.playback.title}</Text>
-          <Text style={styles.chevron}>›</Text>
+          <Text style={styles.chevron} importantForAccessibility="no">›</Text>
         </View>
         <Text style={styles.muted}>{t.settings.playback.note(String(speed))}</Text>
       </Pressable>

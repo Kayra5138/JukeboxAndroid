@@ -152,8 +152,11 @@ using TagLib::ID3v2::TextIdentificationFrame;
  * TDAT and TIME are the day and the hour of a v2.3 date, which TagLib folds
  * into the one date it keeps and unfolds again on the way out. They go where
  * the year goes: a date given a different year has no day left to keep.
+ *
+ * TPE2 is "the band", which every player of the last twenty years reads as
+ * the album artist and nothing else.
  */
-const char *const OWN_FRAMES[] = {"TIT2", "TPE1", "TALB", "TCON", "TDRC", "TDAT", "TIME",
+const char *const OWN_FRAMES[] = {"TIT2", "TPE1", "TPE2", "TALB", "TCON", "TDRC", "TDAT", "TIME",
                                   "TRCK", "TPOS", "APIC"};
 
 bool own(const ByteVector &id) {
@@ -223,6 +226,7 @@ void describe(TagLib::ID3v2::Tag *tag, Report &report) {
   report.emplace_back("title", plain(textOf(tag, "TIT2")));
   report.emplace_back("artist", plain(textOf(tag, "TPE1")));
   report.emplace_back("album", plain(textOf(tag, "TALB")));
+  report.emplace_back("albumArtist", plain(textOf(tag, "TPE2")));
   report.emplace_back("genre", plain(tag->genre()));
   report.emplace_back("year", std::to_string(tag->year()));
   report.emplace_back("track", std::to_string(tag->track()));
@@ -299,6 +303,9 @@ bool writeMp3(const char *path, const Details &details, const Cover *cover,
   if (details.title && setText(tag, "TIT2", utf8(*details.title))) changed.push_back("title");
   if (details.artist && setText(tag, "TPE1", utf8(*details.artist))) changed.push_back("artist");
   if (details.album && setText(tag, "TALB", utf8(*details.album))) changed.push_back("album");
+  if (details.albumArtist && setText(tag, "TPE2", utf8(*details.albumArtist))) {
+    changed.push_back("albumArtist");
+  }
   // Through genre() and not the frame's own text, which may be a number in
   // brackets from the list ID3v1 had: "(17)" already says Rock.
   if (details.genre && tag->genre() != utf8(*details.genre)) {
@@ -341,7 +348,8 @@ bool writeMp3(const char *path, const Details &details, const Cover *cover,
 // ---- FLAC ----
 
 /* The comments this writes. Every other comment in the block is left as found. */
-const char *const OWN_FIELDS[] = {"TITLE", "ARTIST", "ALBUM", "GENRE", "DATE", "TRACKNUMBER", "DISCNUMBER"};
+const char *const OWN_FIELDS[] = {"TITLE", "ARTIST", "ALBUM", "ALBUMARTIST", "GENRE", "DATE",
+                                  "TRACKNUMBER", "DISCNUMBER"};
 
 String fieldOf(TagLib::Ogg::XiphComment *comment, const char *key) {
   const StringList values = comment->fieldListMap().value(key);
@@ -401,6 +409,7 @@ bool readFlac(const char *path, Report &report, std::string &error) {
   report.emplace_back("title", plain(fieldOf(comment, "TITLE")));
   report.emplace_back("artist", plain(fieldOf(comment, "ARTIST")));
   report.emplace_back("album", plain(fieldOf(comment, "ALBUM")));
+  report.emplace_back("albumArtist", plain(fieldOf(comment, "ALBUMARTIST")));
   report.emplace_back("genre", plain(fieldOf(comment, "GENRE")));
   report.emplace_back("year", std::to_string(fieldOf(comment, "DATE").substr(0, 4).toInt()));
   report.emplace_back("track", std::to_string(fieldOf(comment, "TRACKNUMBER").toInt()));
@@ -434,6 +443,9 @@ bool writeFlac(const char *path, const Details &details, const Cover *cover,
   if (details.title && setField(comment, "TITLE", utf8(*details.title))) changed.push_back("title");
   if (details.artist && setField(comment, "ARTIST", utf8(*details.artist))) changed.push_back("artist");
   if (details.album && setField(comment, "ALBUM", utf8(*details.album))) changed.push_back("album");
+  if (details.albumArtist && setField(comment, "ALBUMARTIST", utf8(*details.albumArtist))) {
+    changed.push_back("albumArtist");
+  }
   if (details.genre && setField(comment, "GENRE", utf8(*details.genre))) changed.push_back("genre");
   if (details.year && fieldOf(comment, "DATE").substr(0, 4).toInt() != *details.year) {
     comment->addField("DATE", String::number(*details.year), true);

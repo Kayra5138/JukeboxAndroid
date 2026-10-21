@@ -100,10 +100,32 @@ internal data class Kept(
   val title: String?,
   val artist: String?,
   val album: String?,
-  val position: Int?
+  val position: Int?,
+  /** Whoever the record in [album] is by; an empty one typed by hand is "nobody". */
+  val albumArtist: String? = null
 )
 
 internal data class Named(val title: String, val artist: String?, val album: String?)
+
+/**
+ * Whoever the record a track is shown on is by, from its file and from what
+ * the app [kept] for it: the phone's `albumArtistShown`.
+ *
+ * The file's word, unless somebody typed another — an empty one being their
+ * saying the record names nobody. A lookup's only fills a gap, and only when
+ * the record it is the artist of is the record the track is shown on.
+ */
+internal fun albumArtistNamed(album: String?, albumArtist: String?, kept: Kept?): String? {
+  val own = albumArtist?.trim()?.takeIf { it.isNotEmpty() }
+  return when {
+    kept == null -> own
+    kept.manual -> if (kept.albumArtist != null) kept.albumArtist.trim().takeIf { it.isNotEmpty() } else own
+    own != null -> own
+    else -> kept.albumArtist?.trim()?.takeIf { said ->
+      said.isNotEmpty() && (album.isNullOrBlank() || album.trim().equals(kept.album?.trim(), ignoreCase = true))
+    }
+  }
+}
 
 /**
  * What a track is called, from its file and from what the app [kept] for it.

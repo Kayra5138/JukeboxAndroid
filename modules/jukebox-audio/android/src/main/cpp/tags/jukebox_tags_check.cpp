@@ -9,20 +9,29 @@
  * but whose every byte is known. That is the point of making them up -- after
  * a write, the sound can be looked for in the file and must be there whole.
  *
+ * The reading of a file's words is tried here too, on the same made-up files,
+ * since it is the same library and no more runnable from a unit test.
+ *
  * Run by `./gradlew :jukebox-audio:checkTagWriter`. It is not part of an
  * ordinary build, which should not need a desktop compiler to make a phone
  * app.
  */
 #include "jukebox_tags.h"
 
+#include <apetag.h>
 #include <attachedpictureframe.h>
 #include <commentsframe.h>
 #include <flacfile.h>
 #include <id3v1tag.h>
 #include <id3v2tag.h>
 #include <mpegfile.h>
+#include <synchronizedlyricsframe.h>
 #include <textidentificationframe.h>
+#include <unsynchronizedlyricsframe.h>
 #include <xiphcomment.h>
+
+#include <fcntl.h>
+#include <unistd.h>
 
 #include <cstdio>
 #include <fstream>
@@ -287,6 +296,47 @@ void flac(const std::string &dir) {
   expect(write(path, details, &cover).empty(), "writing the same again changes nothing");
 }
 
+void albumArtists(const std::string &dir) {
+  std::puts("whoever the record is by");
+  const std::string mp3 = dir + "/band.mp3";
+  spit(mp3, mp3Sound());
+  {
+    TagLib::MPEG::File file(mp3.c_str());
+    auto *band = new TagLib::ID3v2::TextIdentificationFrame("TPE2", TagLib::String::Latin1);
+    band->setText("Queen");
+    file.ID3v2Tag(true)->addFrame(band);
+    file.save(TagLib::MPEG::File::ID3v2, TagLib::File::StripNone, TagLib::ID3v2::v3, TagLib::File::DoNotDuplicate);
+  }
+  const auto before = read(mp3);
+  expect(one(before, "albumArtist") == "Queen", "an MP3's TPE2 is read as its album artist");
+  expect(all(before, "other").empty(), "and is not counted as somebody else's frame");
+
+  jukebox::Details details;
+  details.albumArtist = "Queen";
+  expect(write(mp3, details, nullptr).empty(), "an album artist the file already names is left as it is");
+  details.albumArtist = "Freddie Mercury & Queen";
+  expect(write(mp3, details, nullptr) == "albumArtist,", "another one is written");
+  const auto after = read(mp3);
+  expect(one(after, "albumArtist") == "Freddie Mercury & Queen", "and comes back");
+  expect(one(after, "id3v2") == "3", "in the version the tag already had");
+
+  const std::string flacPath = dir + "/band.flac";
+  spit(flacPath, flacFile(std::string("\xFF\xF8", 2) + noise(4000, 17)));
+  {
+    TagLib::FLAC::File file(flacPath.c_str());
+    // How another program spells it, which is that program's and stays.
+    file.xiphComment(true)->addField("ALBUM ARTIST", "Somebody");
+    file.save();
+  }
+  const auto flacBefore = read(flacPath);
+  jukebox::Details flacDetails;
+  flacDetails.albumArtist = "Various Artists";
+  expect(write(flacPath, flacDetails, nullptr) == "albumArtist,", "a FLAC is given an ALBUMARTIST");
+  const auto flacAfter = read(flacPath);
+  expect(one(flacAfter, "albumArtist") == "Various Artists", "which comes back");
+  expect(all(flacAfter, "other") == all(flacBefore, "other"), "and the other program's spelling is untouched");
+}
+
 void neither(const std::string &dir) {
   std::puts("something that is neither");
   const std::string path = dir + "/notes.mp3";
@@ -296,6 +346,85 @@ void neither(const std::string &dir) {
   details.title = "Anything";
   expect(write(path, details, nullptr).rfind("error:", 0) == 0, "writing it is refused");
   expect(slurp(path).rfind("These are not", 0) == 0, "and it is left alone");
+}
+
+
+/* What readLyrics makes of the file at [path], opened the way the phone opens one. */
+jukebox::Report words(const std::string &path, bool &closed) {
+  const int fd = ::open(path.c_str(), O_RDONLY);
+  jukebox::Report report;
+  std::string error;
+  if (!jukebox::readLyrics(fd, report, error)) {
+    report.clear();
+    report.emplace_back("error", error);
+  }
+  closed = ::fcntl(fd, F_GETFD) == -1;
+  return report;
+}
+
+std::vector<std::string> named(const jukebox::Report &report, const std::string &name) {
+  std::vector<std::string> found;
+  for (const auto &[key, value] : report) {
+    if (key == name) found.push_back(value);
+  }
+  return found;
+}
+
+void lyrics(const std::string &dir) {
+  std::puts("the words a file carries");
+  bool closed = false;
+
+  const std::string mp3 = dir + "/words.mp3";
+  spit(mp3, mp3Sound());
+  {
+    TagLib::MPEG::File file(mp3.c_str());
+    auto *tag = file.ID3v2Tag(true);
+    tag->setTitle("Only a title");
+    auto *words = new TagLib::ID3v2::UnsynchronizedLyricsFrame(TagLib::String::UTF8);
+    words->setText(TagLib::String("First line \xE2\x99\xAA\nSecond line", TagLib::String::UTF8));
+    tag->addFrame(words);
+    auto *other = new TagLib::ID3v2::UnsynchronizedLyricsFrame(TagLib::String::UTF8);
+    other->setDescription("Translation");
+    other->setText("Erste Zeile");
+    tag->addFrame(other);
+    auto *timed = new TagLib::ID3v2::SynchronizedLyricsFrame(TagLib::String::UTF8);
+    timed->setTimestampFormat(TagLib::ID3v2::SynchronizedLyricsFrame::AbsoluteMilliseconds);
+    timed->setType(TagLib::ID3v2::SynchronizedLyricsFrame::Lyrics);
+    timed->setSynchedText({{1500, "First line"}, {4250, "Second line"}});
+    tag->addFrame(timed);
+    file.APETag(true)->addValue("Lyrics", "From the APE tag");
+    file.save(TagLib::MPEG::File::ID3v2 | TagLib::MPEG::File::APE, TagLib::File::StripNone,
+              TagLib::ID3v2::v4, TagLib::File::DoNotDuplicate);
+  }
+  const auto fromMp3 = words(mp3, closed);
+  expect(closed, "the descriptor is closed once the words are read");
+  expect(named(fromMp3, "sylt") == std::vector<std::string>({"1500\tFirst line", "4250\tSecond line"}),
+         "the timed frame comes as milliseconds and text, entry by entry");
+  expect(named(fromMp3, "text") ==
+             std::vector<std::string>({"First line \xE2\x99\xAA\nSecond line", "Erste Zeile", "From the APE tag"}),
+         "the plain words come first, then the described ones, then the APE tag's");
+
+  const std::string flacPath = dir + "/words.flac";
+  spit(flacPath, flacFile(std::string("\xFF\xF8", 2) + noise(4000, 13)));
+  {
+    TagLib::FLAC::File file(flacPath.c_str());
+    file.xiphComment(true)->addField("UNSYNCEDLYRICS", "Plain verse");
+    file.xiphComment()->addField("LYRICS", "[00:01.00]Timed verse");
+    file.save();
+  }
+  expect(named(words(flacPath, closed), "text") == std::vector<std::string>({"[00:01.00]Timed verse", "Plain verse"}),
+         "a FLAC's comments are read, LYRICS first");
+
+  const std::string bare = dir + "/nowords.mp3";
+  spit(bare, mp3Sound());
+  const auto none = words(bare, closed);
+  expect(none.empty(), "a file with no words answers with nothing, not an error");
+  expect(closed, "and its descriptor is closed too");
+
+  const std::string notes = dir + "/notes.txt";
+  spit(notes, "These are not the bytes of a song.\n" + noise(4000, 2));
+  expect(named(words(notes, closed), "error").size() == 1, "something that is not a song says so");
+  expect(closed, "and is closed all the same");
 }
 
 }  // namespace
@@ -310,7 +439,9 @@ int main(int argc, char **argv) {
   taggedMp3(dir);
   twoArtists(dir);
   flac(dir);
+  albumArtists(dir);
   neither(dir);
+  lyrics(dir);
   if (failures > 0) {
     std::fprintf(stderr, "%d check(s) failed.\n", failures);
     return 1;

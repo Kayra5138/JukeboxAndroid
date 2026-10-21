@@ -7,28 +7,13 @@ import { formatDuration, formatHour } from '../../lib/stats/period';
 import { creditsOn, photoFor, pictureFor } from '../../lib/stats/photos';
 import type { Covers, Photos } from '../../lib/stats/photos';
 import type { RankedEntry, ReportCard } from '../../lib/stats/report';
+import { CARD_PALETTES, CARD_SOFT_ALPHA, legibleStops } from '../../lib/stats/cardPalette';
 import { ThemeScope } from '../../lib/theme/index';
 
 export type { Covers, Photos };
 
-/**
- * A palette per card, and they are meant to clash.
- *
- * A recap read one card at a time has nothing but colour to tell the reader
- * they have moved on; a single house palette across seven cards reads as one
- * long card. Each is three stops rather than two so the corner the heading
- * sits in is darker than the middle, which is what keeps white text legible
- * over the bright end without laying a scrim over the whole thing.
- */
-const PALETTES: Record<string, readonly [string, string, string]> = {
-  opening: ['#1B1040', '#4C1D95', '#A855F7'],
-  tracks: ['#052E2B', '#0F766E', '#2DD4BF'],
-  artists: ['#3B0A2A', '#9D174D', '#F472B6'],
-  genres: ['#2A1403', '#B45309', '#FBBF24'],
-  clock: ['#07182E', '#1D4ED8', '#60A5FA'],
-  numbers: ['#170B2E', '#5B21B6', '#8B5CF6'],
-  closing: ['#2B0A3D', '#7209B7', '#F72585'],
-};
+/** A palette per card, and the rule its writing is held to: see `cardPalette`. */
+const PALETTES: Record<string, readonly [string, string, string]> = CARD_PALETTES;
 
 export type Tints = ReadonlyMap<string, readonly [string, string, string]>;
 
@@ -42,7 +27,8 @@ export type Tints = ReadonlyMap<string, readonly [string, string, string]>;
  */
 function paletteFor(card: ReportCard, tints: Tints): readonly [string, string, string] {
   const fromCover = card.tint ? tints.get(card.tint) : undefined;
-  if (fromCover) return fromCover;
+  // A cover can be as light as it likes; the writing on its card cannot.
+  if (fromCover) return legibleStops(fromCover);
   if (card.kind === 'ranking') return PALETTES[card.of];
   return PALETTES[card.kind];
 }
@@ -606,7 +592,13 @@ function Heading({ heading, lead, unit }: { heading: string; lead: string; unit:
 }
 
 const WHITE = '#ffffff';
-const SOFT = 'rgba(255,255,255,0.72)';
+/*
+  Every quieter line is this one strength of white, which the palettes are
+  measured against (see `cardPalette`). The places, the labels and the
+  credit once had fainter strengths of their own, and those were the lines
+  that could not be read.
+*/
+const SOFT = `rgba(255,255,255,${CARD_SOFT_ALPHA})`;
 const FAINT = 'rgba(255,255,255,0.28)';
 
 const styles = StyleSheet.create({
@@ -641,7 +633,7 @@ const styles = StyleSheet.create({
 
   rows: { justifyContent: 'center' },
   rank: { flexDirection: 'row', alignItems: 'center' },
-  place: { color: 'rgba(255,255,255,0.55)', fontWeight: '800', fontVariant: ['tabular-nums'] },
+  place: { color: SOFT, fontWeight: '800', fontVariant: ['tabular-nums'] },
   rankLabel: { color: WHITE, fontWeight: '600' },
   rankDetail: { color: SOFT, marginTop: 1 },
   track: { backgroundColor: FAINT, borderRadius: 2, overflow: 'hidden' },
@@ -667,7 +659,7 @@ const styles = StyleSheet.create({
   closingTime: { color: WHITE, fontWeight: '800', textAlign: 'center' },
 
   leader: { flexDirection: 'row', alignItems: 'center' },
-  leaderPlace: { color: 'rgba(255,255,255,0.65)', fontWeight: '700' },
+  leaderPlace: { color: SOFT, fontWeight: '700' },
   leaderLabel: { color: WHITE, fontWeight: '800', marginTop: 3 },
   leaderPlays: { color: SOFT, fontWeight: '600' },
   bigValue: { color: WHITE, fontWeight: '800' },
@@ -686,7 +678,7 @@ const styles = StyleSheet.create({
     read. Wraps rather than truncating: an attribution cut off in the middle of
     a name is not an attribution.
   */
-  credit: { color: 'rgba(255,255,255,0.58)', fontWeight: '500' },
-  namedLabel: { color: 'rgba(255,255,255,0.6)', fontWeight: '700' },
+  credit: { color: SOFT, fontWeight: '500' },
+  namedLabel: { color: SOFT, fontWeight: '700' },
   namedValue: { color: WHITE, fontWeight: '700', textAlign: 'center', marginTop: 4 },
 });

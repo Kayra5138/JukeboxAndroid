@@ -84,7 +84,7 @@ export function SearchField({
         onFocus={onFocus}
         onBlur={onBlur}
         placeholder={placeholder}
-        placeholderTextColor={c.textDisabled}
+        placeholderTextColor={c.textFaint}
         accessibilityLabel={accessibilityLabel ?? placeholder}
         autoCapitalize="none"
         autoCorrect={false}

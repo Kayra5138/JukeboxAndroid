@@ -7,8 +7,14 @@ const KEY = 'youtube:playlist-imports:v1';
 type Import = { sourceId: string; playlistId: number; items: ImportedItem[] };
 const read = (): Import[] => JSON.parse(readSetting(KEY) ?? '[]');
 
-/** Save intent before enqueueing so background completion survives app restarts. */
-export function registerYouTubePlaylist(videos: YouTubeVideo[]): void {
+/**
+ * Save intent before enqueueing so background completion survives app restarts.
+ *
+ * [owned] are the videos the library already has a file of, by track
+ * (`youtube/owned.ts`): they are not fetched again, and go into the list
+ * now, in their places, as the others will when they arrive.
+ */
+export function registerYouTubePlaylist(videos: YouTubeVideo[], owned: ReadonlyMap<string, string> = new Map()): void {
   const source = videos[0]?.sourcePlaylist;
   if (!source) return;
   db().withTransactionSync(() => {
@@ -26,6 +32,12 @@ export function registerYouTubePlaylist(videos: YouTubeVideo[]): void {
     }
     writeSetting(KEY, JSON.stringify(imports));
   });
+  if (owned.size > 0) {
+    // Put in as if fetched: a finished job of each is all the list needs to place it.
+    syncYouTubePlaylists(
+      [...owned].map(([videoId, trackId]) => ({ status: 'done', trackId, video: { id: videoId } }) as unknown as DownloadJob)
+    );
+  }
 }
 
 export function syncYouTubePlaylists(jobs: DownloadJob[]): boolean {

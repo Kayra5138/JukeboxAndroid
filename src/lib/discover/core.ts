@@ -2,6 +2,7 @@ import type { Discovery } from '../db/discover.ts';
 import type { Track } from '../types.ts';
 import type { DownloadJob } from '../youtube/types.ts';
 import { DAY, NO_MATCH_CODE, WAITING_WIFI, previewsOn, selectSongs, songKey, type DiscoverSettings } from './policy.ts';
+import { foundAnother } from './verify.ts';
 
 /**
  * Discover's list, and everything that happens to it, with nothing done.
@@ -117,6 +118,12 @@ export type Item = {
    * in the list and in nobody's sight.
    */
   seen?: true;
+  /**
+   * On the list only because the player's similar songs asked for it: it was
+   * in the pool and near what was playing. It is found and shown like any
+   * other, and is the first to give its place up once heard: see `call`.
+   */
+  called?: true;
 };
 
 export type Live = {
@@ -151,7 +158,7 @@ export type Building = { refresh: boolean; done: number; total: number | null; l
 
 /** The last thing done that somebody may want to know of, or take back. */
 export type Notice =
-  | { kind: 'kept' | 'restored' | 'refreshed'; id?: string; title?: string; until: number }
+  | { kind: 'kept' | 'restored' | 'refreshed' | 'wrongFile'; id?: string; title?: string; until: number }
   | { kind: 'excluded'; id: string; title: string; artist: string | null; until: number }
   | { kind: 'keepFailed'; id: string; title: string; code: string; until: number };
 
@@ -233,8 +240,28 @@ export type State = {
   /** Jobs whose file has been asked for, and songs being put in the library: asked once, not at every reading. */
   asking: ReadonlySet<string>;
   keeping: ReadonlySet<string>;
+  /**
+   * Songs pressed keep on whose file turned out to be another song, each with
+   * the job that fetched that file: see `mendBeforeKeeping`. A song is looked
+   * for again once in a sitting this way.
+   */
+  wrong: ReadonlyMap<string, string>;
+  /** Those of them whose wrong file has been asked to be let go. */
+  mending: ReadonlySet<string>;
   /** The pool and the list as they were when the pool last had nothing to add: not asked again until one changes. */
   dry: { pool: readonly Song[]; away: ReadonlySet<string>; have: number; staged: number } | null;
+  /**
+   * Songs the player's similar songs wants ready, by id: see `call`. Fetched
+   * as Discover's own songs are, on the connection its settings allow, whether
+   * or not any songs are kept ready. Only the latest asking counts.
+   */
+  called: ReadonlySet<string>;
+  /**
+   * Files the player's similar songs put in the queue, and not a tap here.
+   * Discover does not go on with its list from one of these the way it does
+   * from a song somebody played from it: the player is choosing what follows.
+   */
+  lent: ReadonlySet<string>;
 };
 
 export type Event =
@@ -255,6 +282,8 @@ export type Event =
   | { type: 'keep'; id: string }
   | { type: 'kept'; id: string }
   | { type: 'keepFailed'; id: string; code: string }
+  /** What came of letting go of a wrong file before keeping its song: whether the phone took the file away. */
+  | { type: 'mended'; id: string; jobId: string; removed: boolean }
   | { type: 'exclude'; id: string; artist?: boolean }
   | { type: 'undo' }
   | { type: 'allow'; id: string; key: string }
@@ -269,6 +298,12 @@ export type Event =
   | { type: 'buildFailed'; code: ProblemCode }
   | { type: 'settings'; value: DiscoverSettings }
   | { type: 'player'; currentId: string | null; queue: readonly string[]; playing: boolean }
+  /** The player's similar songs wants these songs ready: on the list already, or brought onto it from the pool. */
+  | { type: 'call'; songs: readonly Song[] }
+  /** The player's similar songs has put these files in the queue. */
+  | { type: 'lend'; trackIds: readonly string[] }
+  /** Songs gathered around the artists the player is playing, for the pool. */
+  | { type: 'grown'; pool: readonly Song[] }
   | { type: 'tick' };
 
 /** Why a song is put away, which is also for how long: see `store.ts`. */
@@ -295,6 +330,8 @@ export type Effect =
   | { kind: 'hideArtist'; song: Song }
   | { kind: 'showArtist'; artistMbid: string }
   | { kind: 'keep'; id: string; jobId: string; tags: readonly string[] }
+  /** Let go of the song's file, which is another song, so that it can be looked for again: see `mendBeforeKeeping`. */
+  | { kind: 'mend'; id: string; jobId: string }
   | { kind: 'cancel'; jobId: string }
   | { kind: 'clean'; ids: readonly string[] }
   | { kind: 'build'; refresh: boolean }
@@ -360,6 +397,7 @@ export const NETWORK_EVERY_MS = 30_000;
 const NO_LIVE: ReadonlyMap<string, Live> = new Map();
 const NONE: ReadonlySet<string> = new Set();
 const NO_STOPPING: ReadonlyMap<string, string> = new Map();
+const NO_WRONG: ReadonlyMap<string, string> = new Map();
 const NO_PLAYER: Player = { currentId: null, queue: [], key: '', playing: false };
 
 /** What is written down, as it is read back: see `store.ts`. */
@@ -396,7 +434,11 @@ export function initial(
     repictured: NONE,
     asking: NONE,
     keeping: NONE,
+    wrong: NO_WRONG,
+    mending: NONE,
     dry: null,
+    called: NONE,
+    lent: NONE,
   };
 }
 
@@ -548,6 +590,12 @@ function release(d: Draft, item: Item): void {
   setLive(d, item.id, undefined);
   if (d.s.intent?.id === item.id) set(d, { intent: null });
   if (d.s.keeping.has(item.id)) set(d, { keeping: without(d.s.keeping, item.id) });
+  if (d.s.mending.has(item.id)) set(d, { mending: without(d.s.mending, item.id) });
+  if (d.s.wrong.has(item.id)) {
+    const wrong = new Map(d.s.wrong);
+    wrong.delete(item.id);
+    set(d, { wrong });
+  }
 }
 
 /**
@@ -606,7 +654,6 @@ function playingAt(s: State): number {
  */
 export function wanted(s: State, now: number): Item[] {
   const count = s.settings.ready;
-  if (count <= 0) return [];
   const window = (items: readonly Item[]) => {
     const taken: Item[] = [];
     for (const item of items) {
@@ -623,10 +670,29 @@ export function wanted(s: State, now: number): Item[] {
     (!item.failure || isWaitingWifi(item) || retryable(item, now));
   const at = playingAt(s);
   // A new list in the making is what is wanted next; the one on show only while it is being played from.
-  const rows = s.staged
+  const rows = count <= 0 ? [] : s.staged
     ? [...window(s.staged.items), ...(at >= 0 ? window(following(s.list, at)) : [])]
     : window(at >= 0 ? following(s.list, at) : s.list);
-  return rows.filter(askable);
+  /*
+    And after them, whatever the player's similar songs asked for, seen or
+    not: it was chosen for what is playing, and asking for it is how it is
+    found. Wanted however many songs are kept ready, none included — that
+    setting is about the list, and the player asked for these by name.
+  */
+  const called = s.called.size
+    ? everyItem(s).filter((item) => s.called.has(item.id) && !gone(item) && !rows.includes(item))
+    : [];
+  return [...rows, ...called].filter(askable);
+}
+
+/**
+ * Whether a song can still be played: it is a song and not a row saying none
+ * was found, and it has a file or has not failed for good. For the player's
+ * similar songs, which reads the list from outside.
+ */
+export function playable(item: Item): boolean {
+  if (gone(item)) return false;
+  return !!item.track || !item.failure || !LASTING.has(item.failure.code);
 }
 
 /** How many confirmed songs a new list has to have before it is worth showing in the old one's place, where none are fetched ahead. */
@@ -820,6 +886,10 @@ function settle(d: Draft): void {
 
   for (const item of d.s.list) {
     if (!item.keep || !item.track || !item.jobId || d.s.keeping.has(item.id)) continue;
+    if (wrongFile(d.s, item)) {
+      mendBeforeKeeping(d, item);
+      continue;
+    }
     set(d, { keeping: added(d.s.keeping, item.id) });
     d.fx.push({ kind: 'keep', id: item.id, jobId: item.jobId, tags: item.song.tags ?? [] });
   }
@@ -856,6 +926,56 @@ function askTapped(d: Draft): void {
     if (d.s.live.has(item.id) || beingStopped(d.s, item.id)) continue;
     ask(d, item, true);
   }
+}
+
+/**
+ * Whether the song's file is, by the title of the video it was fetched from,
+ * another song (see `verify.ts`). Judged by the job as last read; a job not
+ * read yet, or one whose video is still to be found, says nothing, and the
+ * song is kept as it always was.
+ */
+function wrongFile(s: State, item: Item): boolean {
+  const job = item.jobId ? s.jobs.find((other) => other.id === item.jobId) : undefined;
+  return !!job && foundAnother(job);
+}
+
+/**
+ * Keep was pressed on a song whose file is another song. It is not put in
+ * the library: it would go in under the wrong name, as `bôa – Twilight` came
+ * to be `Frozen`, and stay there. The file is let go instead, as the mending
+ * when the app comes to the front lets go of such files (`mendWrongFinds` in
+ * `engine.ts`), and the song is looked for again; it stays pressed keep on,
+ * and is kept when the right file is in. Somebody pressed keep in front of
+ * this before the mending had come round to it, so they are told, once.
+ *
+ * The file the player is playing is left to finish: the phone would not let
+ * it go, and taking it out of the player would cut off what is being heard.
+ * It is let go when the player has moved on. A song whose second file is
+ * wrong as well is not looked for a third time: the keep is given up, and the
+ * mending puts the song away (the chooser cannot give a song such a file
+ * now, so this is only so that it cannot go round for ever).
+ */
+function mendBeforeKeeping(d: Draft, item: Item): void {
+  const jobId = item.jobId!;
+  const before = d.s.wrong.get(item.id);
+  if (before != null && before !== jobId) {
+    const { keep: _keep, ...rest } = item;
+    replace(d, rest);
+    set(d, { notice: { kind: 'keepFailed', id: item.id, title: item.song.title, code: KEEP_FAILED, until: d.now + NOTICE_MS } });
+    return;
+  }
+  if (before == null) {
+    set(d, {
+      wrong: new Map(d.s.wrong).set(item.id, jobId),
+      notice: { kind: 'wrongFile', id: item.id, title: item.song.title, until: d.now + NOTICE_MS },
+      undo: null,
+    });
+    // Asked for by somebody now, which is what has it asked for again the moment its job is gone (`askTapped`), whoever lets it go.
+    if (!item.asked) replace(d, { ...item, asked: true });
+  }
+  if (item.track?.id === d.s.player.currentId || d.s.mending.has(item.id)) return;
+  set(d, { mending: added(d.s.mending, item.id) });
+  d.fx.push({ kind: 'mend', id: item.id, jobId });
 }
 
 /** Takes a row out, and whatever was being done for it with it. */
@@ -961,6 +1081,8 @@ function start(d: Draft, at: number): void {
   set(d, {
     intent: null,
     offered: new Set(ids),
+    // Played from here, so Discover's own again, whoever put them in the queue before.
+    lent: without(d.s.lent, ...ids),
     // As the player will say it is, a moment from now. Said here so that nothing decided before it answers is decided on the old queue.
     player: { currentId: ids[0], queue: ids, key: ids.join('|'), playing: true },
   });
@@ -975,6 +1097,8 @@ function start(d: Draft, at: number): void {
 function appendReady(d: Draft): void {
   const at = playingAt(d.s);
   if (at < 0) return;
+  // Put on by the player's similar songs, which is choosing what follows it: see `lent`.
+  if (d.s.lent.has(d.s.player.currentId!)) return;
   const queued = new Set(d.s.player.queue);
   const tracks = following(d.s.list, at)
     .map((item) => item.track)
@@ -1329,8 +1453,14 @@ function build(d: Draft, refresh: boolean): void {
   d.fx.push({ kind: 'build', refresh });
 }
 
-/** Problems that asking again would only meet again, until something about the listener has changed. */
-const SAME_AGAIN: ReadonlySet<ProblemCode> = new Set(['exhausted', 'nothing', 'noTaste', 'noLibrary']);
+/**
+ * Problems that asking again would only meet again, until something about the listener has changed.
+ *
+ * Not an empty library. Finding one asks nobody anything, so there is nothing to hold back from, and on a new
+ * install it is how the very first look goes: made as the app opens, while the question of whether it may read
+ * the music is still on the screen. Held for a day, it told somebody with hundreds of songs to add some music.
+ */
+const SAME_AGAIN: ReadonlySet<ProblemCode> = new Set(['exhausted', 'nothing', 'noTaste']);
 
 /** A refresh is due on its day, and only for a list there is: an empty one is filled, which is not the same thing. */
 function refreshDue(s: State, now: number): boolean {
@@ -1530,6 +1660,22 @@ function take(d: Draft, event: Event): void {
       return;
     }
 
+    case 'mended': {
+      /*
+        Let go: the song has no file and no job now, and is asked for again
+        at once, still pressed keep on (see `askTapped`). Not let go — the
+        phone found it in the player's queue after all — and it stays as it
+        is; the mending when the app next comes to the front lets go of it,
+        and the song is asked for again when its job is read as gone.
+      */
+      const item = itemOf(s, event.id);
+      if (!event.removed || !item || item.jobId !== event.jobId) return;
+      const { jobId: _job, track: _track, jobAt: _at, ...rest } = item;
+      replace(d, rest);
+      setLive(d, item.id, undefined);
+      return;
+    }
+
     case 'exclude': {
       const index = s.list.findIndex((item) => item.id === event.id);
       const item = s.list[index];
@@ -1651,6 +1797,8 @@ function take(d: Draft, event: Event): void {
     case 'buildFailed':
       set(d, { building: null, problem: { code: event.code, at: d.now } });
       if (SAME_AGAIN.has(event.code)) set(d, { fruitlessAt: d.now });
+      // Nor the quarter of an hour between two askings, for the same reason: the catalogue was never asked.
+      if (event.code === 'noLibrary') set(d, { attemptAt: 0 });
       /*
         No connection, whatever was read of it a while ago. Believed, as a
         download refused for want of Wi-Fi is: the next asking is then
@@ -1675,6 +1823,30 @@ function take(d: Draft, event: Event): void {
       return;
     }
 
+    case 'call':
+      return call(d, event.songs);
+
+    case 'lend':
+      if (!event.trackIds.length) return;
+      // Offered, as well: a file the player was given is not then added again from here.
+      set(d, { lent: added(s.lent, ...event.trackIds), offered: added(s.offered, ...event.trackIds) });
+      return;
+
+    case 'grown': {
+      // Not into a pool that is being made again this moment: the new pool will be the whole of it.
+      if (s.building) return;
+      const have = new Set(s.pool.flatMap((song) => [song.recordingMbid, songKey(song)]));
+      const more = event.pool.filter((song) => {
+        const key = songKey(song);
+        if (have.has(song.recordingMbid) || have.has(key)) return false;
+        have.add(song.recordingMbid);
+        have.add(key);
+        return !s.hidden.has(song.artistMbid) && !s.away.has(song.recordingMbid) && !s.away.has(key);
+      });
+      if (more.length && s.pool.length < POOL_MOST) set(d, { pool: [...s.pool, ...more].slice(0, POOL_MOST), dry: null });
+      return;
+    }
+
     case 'tick':
       if (s.networkAt != null && s.networkAt <= d.now) {
         d.fx.push({ kind: 'network' });
@@ -1684,6 +1856,82 @@ function take(d: Draft, event: Event): void {
       fill(d);
       return upkeep(d);
   }
+}
+
+/**
+ * How many rows the list may run to beyond its number to make room for songs
+ * the player's similar songs brought onto it. Past this, the oldest of those
+ * that have been heard, and are no longer in the queue, give their places up.
+ */
+export const CALLED_ROOM = 10;
+
+/** As large as the pool is allowed to grow by songs gathered for the player. A built pool is several hundred. */
+export const POOL_MOST = 1500;
+
+/**
+ * The player's similar songs wants these songs ready.
+ *
+ * A song on the list already is only marked as wanted, and is fetched in its
+ * turn (see `wanted`). One that is still in the pool is brought onto the end
+ * of the list first, unseen, as a song that is chosen and not yet confirmed:
+ * it is looked for and fetched in the one job, and shown once found, like any
+ * other song on the list — so that once it plays, the player can offer to keep
+ * it or exclude it as it does for every Discover song.
+ *
+ * Such songs are the first to go when the list has run [CALLED_ROOM] past its
+ * number (see `makeRoom`): one heard, and no longer in the queue, is put away
+ * as a song heard from a list is when the list is refreshed. Songs put away or
+ * by an artist nobody wants are never brought on.
+ */
+function call(d: Draft, songs: readonly Song[]): void {
+  const asked = new Set(songs.map((song) => song.recordingMbid));
+  const ids: string[] = [];
+  for (const song of songs) {
+    const id = song.recordingMbid;
+    if (itemOf(d.s, id)) {
+      ids.push(id);
+      continue;
+    }
+    if (d.s.away.has(id) || d.s.away.has(songKey(song)) || d.s.hidden.has(song.artistMbid)) continue;
+    if (!makeRoom(d, asked)) break;
+    set(d, { list: [...d.s.list, { ...fresh(song, d.now), called: true }] });
+    ids.push(id);
+  }
+  const called = new Set(ids);
+  const same = called.size === d.s.called.size && ids.every((id) => d.s.called.has(id));
+  if (!same) set(d, { called: called.size ? called : NONE });
+}
+
+/**
+ * Makes room for one more called song, where the list has run to its limit.
+ * Answers whether there is room.
+ *
+ * First to go is a song brought on for the player that is not asked for now,
+ * that nobody has seen and nothing has been started for — it was never on
+ * the screen, so it leaves no gap there. Then one that has been heard and is
+ * no longer in the queue. A song in [asked] stays, and so does one somebody
+ * pressed keep on.
+ */
+function makeRoom(d: Draft, asked: ReadonlySet<string>): boolean {
+  const limit = d.s.settings.count + CALLED_ROOM;
+  while (d.s.list.length >= limit) {
+    const queued = new Set(d.s.player.queue);
+    const spare = (item: Item) =>
+      !!item.called && !asked.has(item.id) && !item.keep && !d.s.keeping.has(item.id) && !(item.track && queued.has(item.track.id));
+    // Not one already being looked for or fetched: that would be work thrown away for a song that may yet be wanted.
+    const unseen = d.s.list.find(
+      (item) => spare(item) && !item.seen && !item.jobId && !d.s.live.has(item.id) && !d.s.seeking.has(item.id)
+    );
+    if (unseen) {
+      remove(d, unseen.id);
+      continue;
+    }
+    const spent = d.s.list.find((item) => spare(item) && item.heardAt);
+    if (!spent) return false;
+    putAway(d, spent.song, 'played');
+    remove(d, spent.id);
+  }
+  return true;
 }
 
 /**

@@ -13,13 +13,37 @@ import expo.modules.jukeboxaudio.CoverColour
  * same way the tiles pick theirs, and laid out as a gradient.
  */
 object WidgetGlass {
-  private var cachedKey: String? = null
-  private var cachedBitmap: Bitmap? = null
+  /**
+   * The last few drawn, by what they were drawn for.
+   *
+   * A widget is redrawn on every pause and every change of track, and there
+   * may be several on the home screen at different sizes; drawing the same
+   * gradient again for each would be most of the work of an update. Four,
+   * which covers a home screen with one of each kind on it.
+   */
+  private val drawn = object : LinkedHashMap<String, Bitmap>(8, 0.75f, true) {
+    override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?) = size > 4
+  }
 
-  /** Drawn small: it is all gradient, and it crosses to the launcher by binder. */
-  private const val WIDTH = 320
-  private const val HEIGHT = 96
-  private const val CORNER = 20f
+  /**
+   * How many pixels the gradient is drawn in at most.
+   *
+   * It is all gradient, which survives being stretched, and it crosses to the
+   * launcher by binder in the same transaction as the cover. Forty thousand is
+   * the original 320 by 96 with a little to spare, and every shape is drawn
+   * within it whatever its size on the screen.
+   */
+  private const val PIXELS = 40_000f
+
+  /**
+   * The rounding for the phones that draw it from the bitmap, in the units of
+   * the widget: see jukebox_widget_radius. Twenty, as the original was.
+   */
+  private const val CORNER_DP = 20f
+
+  /** The proportions the original was drawn in, for a widget whose size is not known. */
+  private const val PLAIN_WIDTH_DP = 320f
+  private const val PLAIN_HEIGHT_DP = 96f
 
   /** What is drawn where there is no cover to take colours from. */
   private val PLAIN = intArrayOf(0xFF1B1F27.toInt(), 0xFF2A303B.toInt(), 0xFF3A4352.toInt())
@@ -33,54 +57,92 @@ object WidgetGlass {
    */
   private val KEPT = floatArrayOf(1f, 0.72f, 0.56f)
 
+  /**
+   * The background for a widget [widthDp] by [heightDp], in the colours of
+   * the cover at [path]; the plain one where that is null, which the caller
+   * makes it where the cover could not be read.
+   *
+   * Drawn in the widget's own proportions, so that a large square widget is
+   * not a long thin gradient stretched to fit and its glow is round.
+   *
+   * [rounded] is for Android 10 and 11 only. From 12 the layout clips itself
+   * to the phone's own widget rounding (see jukebox_widget_shape.xml), at
+   * the screen's resolution rather than the bitmap's, and corners drawn in
+   * here as well would show as a soft second edge inside the sharp one.
+   */
   @Synchronized
-  fun background(cover: Bitmap?, path: String?): Bitmap {
-    val key = if (cover == null) "empty" else "$path:${java.io.File(path.orEmpty()).lastModified()}"
-    if (key == cachedKey) cachedBitmap?.let { return it }
+  fun background(path: String?, widthDp: Float, heightDp: Float, rounded: Boolean): Bitmap {
+    val wide = if (widthDp > 0f) widthDp else PLAIN_WIDTH_DP
+    val tall = if (heightDp > 0f) heightDp else PLAIN_HEIGHT_DP
+    val scale = kotlin.math.sqrt(PIXELS / (wide * tall))
+    val width = (wide * scale).toInt().coerceIn(16, 640)
+    val height = (tall * scale).toInt().coerceIn(16, 640)
+    val corner = if (rounded) CORNER_DP * width / wide else 0f
 
-    val stops = stopsFor(if (cover == null) null else path)
-    val bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888)
+    val source = if (path == null) "empty" else "$path:${java.io.File(path).lastModified()}"
+    val key = "$source:$width:$height:$corner"
+    drawn[key]?.let { return it }
+
+    val colours = stopsFor(source, path)
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-    val bounds = RectF(0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat())
-    canvas.clipPath(Path().apply { addRoundRect(bounds, CORNER, CORNER, Path.Direction.CW) })
+    val w = width.toFloat()
+    val h = height.toFloat()
+    val bounds = RectF(0f, 0f, w, h)
+    if (corner > 0f) canvas.clipPath(Path().apply { addRoundRect(bounds, corner, corner, Path.Direction.CW) })
     val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.DITHER_FLAG)
 
     // Corner to corner, dark under the cover and the title, where the eye starts.
     paint.shader = LinearGradient(
-      0f, 0f, WIDTH.toFloat(), HEIGHT.toFloat(),
-      stops, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP
+      0f, 0f, w, h,
+      colours, floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP
     )
     canvas.drawRect(bounds, paint)
 
     // The second colour again as a glow in the far corner, so the gradient
-    // has somewhere it is going rather than only fading along a line.
+    // has somewhere it is going rather than only fading along a line. Sized
+    // by the longer side, which in the original row was the width.
     paint.shader = RadialGradient(
-      WIDTH * 0.92f, 0f, WIDTH * 0.5f,
-      withAlpha(stops[2], 150), withAlpha(stops[2], 0), Shader.TileMode.CLAMP
+      w * 0.92f, 0f, maxOf(w, h) * 0.5f,
+      withAlpha(colours[2], 150), withAlpha(colours[2], 0), Shader.TileMode.CLAMP
     )
     canvas.drawRect(bounds, paint)
 
     // A sheen from the top and a shade at the foot, which is where the
     // progress line sits and wants something dark to be seen against.
     paint.shader = LinearGradient(
-      0f, 0f, 0f, HEIGHT.toFloat(),
+      0f, 0f, 0f, h,
       intArrayOf(0x1AFFFFFF, 0x00FFFFFF, 0x38000000), floatArrayOf(0f, 0.45f, 1f),
       Shader.TileMode.CLAMP
     )
     canvas.drawRect(bounds, paint)
     paint.shader = null
 
-    paint.color = 0x2EFFFFFF
-    paint.style = Paint.Style.STROKE
-    paint.strokeWidth = 1f
-    canvas.drawRoundRect(RectF(.5f, .5f, WIDTH - .5f, HEIGHT - .5f), CORNER, CORNER, paint)
+    /*
+      The fine light edge the original drew here is drawn by the layout now,
+      as the root's foreground (jukebox_widget_edge.xml). Drawn into a bitmap
+      that is stretched four or five times over it was a blurred band rather
+      than a line, and from Android 12 the clip would have cut it off at the
+      corners.
+    */
 
-    cachedKey = key
-    cachedBitmap = bitmap
+    drawn[key] = bitmap
     return bitmap
   }
 
-  private fun stopsFor(path: String?): IntArray {
+  /** The colours of the last cover read, which every size of widget shares. */
+  private var stopsSource: String? = null
+  private var stops: IntArray = PLAIN
+
+  private fun stopsFor(source: String, path: String?): IntArray {
+    if (source == stopsSource) return stops
+    return read(path).also {
+      stopsSource = source
+      stops = it
+    }
+  }
+
+  private fun read(path: String?): IntArray {
     val found = path?.let { runCatching { CoverColour.of(it) }.getOrNull() }
     if (found == null || found.size < 3) return PLAIN
     return IntArray(3) { dimmed(Color.parseColor(found[it]), KEPT[it]) }

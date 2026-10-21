@@ -1,13 +1,16 @@
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../components/Pressable';
+import { Segmented } from '../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NowPlayingBar, usePageSides } from '../components/NowPlayingBar';
+import { useUnderBars } from '../components/UnderBars';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { TextPrompt } from '../components/TextPrompt';
+import { useListFiles } from '../components/useListFiles';
 import { AUTO_LISTS } from '../lib/db/autoLists';
 import {
   addToPlaylist,
@@ -38,6 +41,10 @@ export default function PlaylistsScreen() {
   const downloadRevision = useDownloadLibraryRevision();
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
+  // In a theme of glass the tab bar and the bar of what is playing are over the foot of this.
+  const under = useUnderBars({ player: true });
+  // The tab bar alone, which the sheet of tags stands on as it always has: it covers the bar of what is playing.
+  const tabBar = useUnderBars();
   const landscape = useLandscape();
   const t = useT();
   const styles = useStyles();
@@ -47,6 +54,19 @@ export default function PlaylistsScreen() {
   const [tags, setTags] = useState<TagCount[]>([]);
   const [naming, setNaming] = useState(false);
   const [fromTags, setFromTags] = useState(false);
+  /*
+    Back closes the sheet of tags rather than the tab under it: it is the way
+    out a screen reader's user reaches for first, and the sheet has no button
+    of its own to cancel with.
+  */
+  useEffect(() => {
+    if (!fromTags) return;
+    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
+      setFromTags(false);
+      return true;
+    });
+    return () => listener.remove();
+  }, [fromTags]);
   /** Which of the two a tag list will be. Following the tag is the one people
       mean more often, and it is also the one that cannot be got back to by
       hand once a copy has been taken. */
@@ -162,6 +182,16 @@ export default function PlaylistsScreen() {
     [load, router]
   );
 
+  /*
+    Playlist files: brought in from other players, and every list written
+    out for them. Its sheets are windows of their own, so all this screen
+    does is offer the two and read the lists again after an import.
+  */
+  const files = useListFiles({
+    onChanged: load,
+    onOpen: (listId) => router.push({ pathname: '/playlist', params: { id: String(listId) } }),
+  });
+
   if (!lists) return <View style={styles.screen} />;
 
   return (
@@ -177,17 +207,33 @@ export default function PlaylistsScreen() {
             // See usePageSides for why these are not the phone's own sideways.
             paddingLeft: sides.left + 20,
             paddingRight: sides.right + 20,
-            paddingBottom: insets.bottom + 32,
+            paddingBottom: insets.bottom + 32 + under.bottom,
           },
         ]}>
-        <View style={styles.newRow}>
-          <Pressable android_ripple={pressed} style={styles.new} onPress={() => setNaming(true)}>
+        <View style={[styles.newRow, files.available && styles.newRowOverLinks]}>
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.new} onPress={() => setNaming(true)}>
             <Text style={styles.newLabel}>{t.lists.screen.newList}</Text>
           </Pressable>
-          <Pressable android_ripple={pressed} style={styles.secondary} onPress={() => setFromTags(true)}>
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.secondary} onPress={() => setFromTags(true)}>
             <Text style={styles.secondaryLabel}>{t.lists.screen.fromTag}</Text>
           </Pressable>
         </View>
+
+        {/* Quieter than the two above: brought out now and then, not every visit. */}
+        {files.available ? (
+          <View style={styles.fileLinks}>
+            <Pressable style={styles.fileLinkHit} accessibilityRole="button" onPress={files.importFiles}>
+              <Text style={styles.fileLink}>{t.lists.files.importFiles}</Text>
+            </Pressable>
+            <Pressable
+              style={styles.fileLinkHit}
+              accessibilityRole="button"
+              disabled={lists.length === 0}
+              onPress={files.exportAll}>
+              <Text style={[styles.fileLink, lists.length === 0 && styles.fileLinkOff]}>{t.lists.files.exportAll}</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {lists.length === 0 ? (
           <Text style={styles.empty}>{t.lists.screen.empty}</Text>
@@ -195,6 +241,7 @@ export default function PlaylistsScreen() {
           <View style={landscape ? styles.grid : undefined}>
             {lists.map((list) => (
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 key={list.id}
                 style={[styles.row, styles.withCover, landscape && styles.cell]}
@@ -228,10 +275,11 @@ export default function PlaylistsScreen() {
           </View>
         )}
 
-        <Text style={styles.section}>{t.format.upper(t.lists.screen.fromListening)}</Text>
+        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.screen.fromListening)}</Text>
         <View style={landscape ? styles.grid : undefined}>
           {AUTO_LISTS.map((list) => (
             <Pressable
+              accessibilityRole="button"
               android_ripple={pressed}
               key={list}
               style={[styles.row, landscape && styles.cell]}
@@ -251,6 +299,7 @@ export default function PlaylistsScreen() {
             a list, since nothing in it can be played.
           */}
           <Pressable
+            accessibilityRole="button"
             android_ripple={pressed}
             style={[styles.row, landscape && styles.cell]}
             onPress={() => router.push('/(tabs)/search?mode=discover')}>
@@ -278,22 +327,26 @@ export default function PlaylistsScreen() {
 
       {fromTags ? (
         <View style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={() => setFromTags(false)} />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
-            <Text style={styles.sheetHeading}>{t.lists.screen.tagSheet.heading}</Text>
-            <View style={styles.kinds}>
-              {([true, false] as const).map((wantsLive) => (
-                <Pressable
-                  android_ripple={pressed}
-                  key={String(wantsLive)}
-                  style={[styles.kind, wantsLive === live && styles.kindOn]}
-                  onPress={() => setLive(wantsLive)}>
-                  <Text style={[styles.kindLabel, wantsLive === live && styles.kindLabelOn]}>
-                    {wantsLive ? t.lists.screen.tagSheet.follows : t.lists.screen.tagSheet.copy}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+          {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
+              of its own, touching outside it is one of the ways out, and it has to be findable. */}
+          <Pressable
+            style={styles.backdrop}
+            accessibilityRole="button"
+            accessibilityLabel={t.common.close}
+            onPress={() => setFromTags(false)}
+          />
+          <View style={[styles.sheet, { bottom: tabBar.bottom, paddingBottom: insets.bottom + 20 }]}>
+            <Text accessibilityRole="header" style={styles.sheetHeading}>{t.lists.screen.tagSheet.heading}</Text>
+            <Segmented
+              size="compact"
+              style={styles.kinds}
+              options={[
+                { value: 'follows', label: t.lists.screen.tagSheet.follows },
+                { value: 'copy', label: t.lists.screen.tagSheet.copy },
+              ]}
+              value={live ? 'follows' : 'copy'}
+              onChange={(kind) => setLive(kind === 'follows')}
+            />
             <Text style={styles.sheetHint}>
               {live ? t.lists.screen.tagSheet.followsHint : t.lists.screen.tagSheet.copyHint}
             </Text>
@@ -303,6 +356,7 @@ export default function PlaylistsScreen() {
               ) : (
                 tags.map((entry) => (
                   <Pressable
+                    accessibilityRole="button"
                     android_ripple={pressed}
                     key={entry.tag}
                     style={styles.tagRow}
@@ -318,6 +372,8 @@ export default function PlaylistsScreen() {
           </View>
         </View>
       ) : null}
+
+      {files.element}
     </View>
   );
 }
@@ -331,6 +387,12 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   content: { gap: 4 },
 
   newRow: { flexDirection: 'row', gap: 10, paddingBottom: 22 },
+  /* The links below take the room the buttons kept under them, inside their own finger's height. */
+  newRowOverLinks: { paddingBottom: 4 },
+  fileLinks: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20, paddingBottom: 10 },
+  fileLinkHit: { minHeight: 48, justifyContent: 'center' },
+  fileLink: { color: c.accent, fontSize: 13.5 },
+  fileLinkOff: { opacity: 0.35 },
   new: {
     flex: 1,
     alignItems: 'center',
@@ -393,11 +455,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   sheetHeading: { color: c.text, fontSize: 15, fontWeight: '600' },
   sheetHint: { color: c.textFaint, fontSize: 12, lineHeight: 18, paddingBottom: 8 },
-  kinds: { flexDirection: 'row', backgroundColor: c.bg, borderRadius: 9, padding: 2, marginTop: 10, ...outlined(c) },
-  kind: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: 7 },
-  kindOn: { backgroundColor: c.selected },
-  kindLabel: { color: c.textMuted, fontSize: 13 },
-  kindLabelOn: { color: c.onSelected, fontWeight: '600' },
+  // On the sheet, which is the surface a tray is elsewhere: the page's colour is the step off it here.
+  kinds: { backgroundColor: c.bg, marginTop: 10 },
   tagScroll: { flexGrow: 0 },
   tagRow: {
     flexDirection: 'row',

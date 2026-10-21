@@ -59,6 +59,43 @@ export const SETTINGS = {
    * in one folder below it.
    */
   libraryRoot: 'library:root',
+  /**
+   * The folders under the library folder that are left out of the library,
+   * as a JSON list of whole media store paths without slashes at either end
+   * (`["Music/WhatsApp"]`). Absent or unreadable, nothing is left out. See
+   * `library/hiding.ts`; the car reads it too, from its copy.
+   */
+  libraryLeftOut: 'library:leftOut',
+  /**
+   * How short a file has to be, in seconds, to be left out of the library:
+   * one of `'0' | '10' | '30' | '60'`, `'0'` for not at all. Absent is the
+   * same as `'0'`, which is where every install starts.
+   */
+  libraryShortest: 'library:shortest',
+  /**
+   * The pairs of tracks the user has said are two songs and not one song
+   * twice, as a JSON list of `pairKey` in `library/copies.ts` (`["12:7"]`).
+   * Absent or unreadable, none: every pair that looks like a copy is shown
+   * on the Copies screen. Ids and not names, so that a third file turning
+   * up later is asked about afresh.
+   */
+  libraryNotCopies: 'library:notCopies',
+  /**
+   * The downloads in the library the user has said are the song they are
+   * filed as, though their video's title names another, as a JSON list of
+   * `rightKey` in `discover/verify.ts` (`["12:dQw4w9WgXcQ"]`). Absent or
+   * unreadable, none: every such file is shown on the Wrong downloads screen.
+   * The file and the video, so that the same file fetched again from another
+   * video is asked about afresh.
+   */
+  libraryRightDownloads: 'library:rightDownloads',
+  /**
+   * The songs of Discover's whose file was found to be another song and let
+   * go, to be looked for again, as a JSON list of recording ids, newest last.
+   * A song that turns up here a second time is put away instead of being
+   * looked for once more: see `mendWrongFinds` in `discover/engine.ts`.
+   */
+  discoverWrongMended: 'discover:wrongMended',
   /** `'true'` when playback order is shuffled. */
   shuffle: 'player:shuffle',
   /** One of `'off' | 'one' | 'all'`. */
@@ -122,6 +159,10 @@ export const SETTINGS = {
    * someone who turns it on has not thereby asked a game to look plainer.
    */
   reduceMotion: 'ui:reduceMotion',
+  /** `'false'` when rows of tracks leave out the three dots that open their menu; anything else shows them. */
+  moreButton: 'ui:moreButton',
+  /** The tabs left off the bar, as JSON: `storedHidden` in `ui/tabChoice.ts`. Absent, every tab is there. */
+  hiddenTabs: 'ui:hiddenTabs',
   /**
    * `'true'` while a round button floats over the app whenever something is
    * being downloaded; see `components/DownloadsButton.tsx`.
@@ -133,6 +174,8 @@ export const SETTINGS = {
   downloadsButton: 'ui:downloadsButton',
   /** `'true'` where the player has its heart: see `lib/ui/heart.ts`. */
   heart: 'ui:heart',
+  /** `'false'` where the player leaves out its add-to-list button; anything else shows it. */
+  listButton: 'player:listButton',
   /**
    * `'false'` where the app is not to look for a newer yt-dlp by itself.
    * Anything else, and nothing at all, is yes: see `lib/youtube/extractor.ts`
@@ -162,6 +205,22 @@ export const SETTINGS = {
    */
   jumpSeconds: 'player:jumpSeconds',
   sleepTimer: 'player:sleepTimer', // What the sleep timer was last set to; see `player/sleep.ts`.
+  /**
+   * What plays when the queue is about to run out: one of
+   * `'off' | 'library' | 'fresh' | 'mixed'` — nothing, similar songs from the
+   * library, new songs from Discover, or the two together. Absent or anything
+   * else, `'off'`; see `player/autoplay/plan.ts`. A preference, and travels in
+   * a backup.
+   */
+  autoplay: 'player:autoplay',
+  /**
+   * Which songs at the end of the queue were picked by the above, so that the
+   * heading over them is still there after the app is closed and opened: the
+   * ids of those songs in order, and whether the picks were taken out of the
+   * queue that begins with `head`. As `TailNote` in `player/autoplay/tail.ts`
+   * writes it. About this phone's queue, and so stays behind in a backup.
+   */
+  autoplayQueued: 'player:autoplay:queued',
   /**
    * The language the app speaks, as the id of one in `i18n/languages.ts`.
    *
@@ -197,4 +256,62 @@ export const SETTINGS = {
    * Absent, English; see `lyrics/target.ts`.
    */
   lyricsTarget: 'lyrics:target',
+  /**
+   * The folders `.lrc` files are read from, beside the songs in them: a JSON
+   * list of the system's address for each and a name to show, as
+   * `writeFolders` in `lyrics/local.ts` writes it. Absent or empty, no `.lrc`
+   * is read. Each was picked by the user once, with the system's folder
+   * picker, which is the only way Android lets an app read a text file it did
+   * not make; the grant itself is the system's and is checked at every read,
+   * so a list restored onto another phone reads as no folders at all.
+   */
+  lyricsFolders: 'lyrics:folders',
+  /**
+   * How the library's offer to look its files up was answered: how often, when,
+   * and whether with a yes. As `OfferKept` in `metadata/offer.ts` writes it.
+   * Absent, it has never been asked.
+   */
+  lookupOffer: 'metadata:offer',
+  /**
+   * Whether this install shows the newcomer's tips, and which have been put
+   * away: `TipsKept` in `ui/tips.ts`. Absent, it is decided the first time a
+   * tip could show, from whether anything has been listened to.
+   */
+  tips: 'ui:tips',
+  /**
+   * Whether the first start's setup has been seen: `WelcomeKept` in
+   * `ui/welcome.ts`. Absent, it is owed to a new install and written once it
+   * is finished. Which version of the setup is `setupSeen`, below.
+   */
+  welcome: 'ui:welcome',
+  /**
+   * The setup version this install has seen through to the end, as a whole
+   * number: `SETUP_VERSION` in `ui/welcome.ts`. Absent is nought, an install
+   * from before the first start was more than the language. Somebody whose
+   * number is lower than the app's is shown the newer screens once. About
+   * this phone and what it has shown, so it stays behind in a backup.
+   */
+  setupSeen: 'ui:setup',
+  /**
+   * The last fifty things that went wrong, scrubbed of anything that could
+   * be somebody's, for the report screen to show: `ErrorLog` in
+   * `support/errorLog.ts`. Never sent anywhere by the app.
+   */
+  errorLog: 'support:errors',
+  /**
+   * `'false'` where the app is not to ask GitHub whether there is a newer
+   * Jukebox. Anything else, and nothing at all, is yes: see
+   * `support/update.ts` for what is asked, and how rarely.
+   */
+  updateCheck: 'support:updateCheck',
+  /** What the last of those asks found and when it was made, as `UpdateKnown` in that file writes it. */
+  updateKnown: 'support:updateKnown',
+  /**
+   * How a list written out as a playlist file names its songs: `'phone'`
+   * for whole paths on the phone, `'library'` for paths from the library
+   * folder down, for a computer. Absent or anything else, `'phone'`; see
+   * `PathStyle` in `playlists/m3u/write.ts`. The last one chosen is offered
+   * first, since somebody exporting for their PC does it again.
+   */
+  listFilePaths: 'lists:filePaths',
 } as const;

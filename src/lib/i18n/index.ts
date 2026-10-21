@@ -53,6 +53,16 @@ export function chooseLanguage(language: Language): void {
   tellNativeLanguage(language);
 }
 
+/**
+ * Speaks [language] for now, without keeping it: for the first start's
+ * screen, which shows each language as it is picked and keeps one only when
+ * it is put away. Closed before then, the app starts as it would have.
+ */
+export function tryLanguage(language: Language): void {
+  currentLanguage.set(language);
+  tellNativeLanguage(language);
+}
+
 export function useLanguage(): Language {
   return useSyncExternalStore(currentLanguage.subscribe, currentLanguage.get);
 }

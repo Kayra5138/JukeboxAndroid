@@ -162,6 +162,12 @@ function VectorIcon({ source, size, color }: { source: number; size: number; col
     contentFit="contain" transition={0} accessible={false} />;
 }
 
+/** Lines of a list and a plus beside them: putting something into a list. */
+export function ListAddIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/list-add.svg')} size={size} color={color} />;
+}
+
 export function SettingsIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
   const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/settings.svg')} size={size} color={color} />;

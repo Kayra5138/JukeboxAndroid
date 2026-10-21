@@ -257,6 +257,7 @@ export function readdress(database: BackupDb, moves: Pair[], stays: (id: string)
     ['skips', 'track_id'],
     ['playlist_tracks', 'track_id'],
     ['playlists', 'cover_track_id'],
+    ['shared_covers', 'track_id'],
   ] as const) {
     const moving = held(database, table, column, froms);
     if (moving.length === 0) continue;
@@ -268,6 +269,13 @@ export function readdress(database: BackupDb, moves: Pair[], stays: (id: string)
       );
     }
     for (const from of moving) {
+      if (table === 'shared_covers') {
+        // A cover the record gave the song goes with it, unless the new id
+        // was given one of its own already, which stays.
+        database.run(`UPDATE OR IGNORE shared_covers SET track_id = ? WHERE track_id = ?`, to.get(from)!, between(from));
+        database.run(`DELETE FROM shared_covers WHERE track_id = ?`, between(from));
+        continue;
+      }
       if (table !== 'playlist_tracks') {
         database.run(`UPDATE ${table} SET ${column} = ? WHERE ${column} = ?`, to.get(from)!, between(from));
         continue;

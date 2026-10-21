@@ -1,7 +1,6 @@
 import { NO_MATCH_CODE } from '../discover/policy.ts';
 import { findQuery } from '../discover/video.ts';
-import { albumKey } from '../media/albums.ts';
-import { jobsBySlot, placementOf, slotOf, type Placement } from './placement.ts';
+import { jobsBySlot, onRecord, placementOf, slotOf, type Placement } from './placement.ts';
 import { looseTitle } from './rest.ts';
 import { isActive, type DownloadJob, type FindRequest, type YouTubeVideo } from '../youtube/types.ts';
 
@@ -142,6 +141,6 @@ export function unsought(jobs: DownloadJob[], album: string): DownloadJob[] {
   return jobs.filter((job) => {
     if (slotState(job) !== 'waiting') return false;
     const place = placementOf(job.video);
-    return place != null && albumKey(place.album) === album;
+    return place != null && onRecord(place, album);
   });
 }

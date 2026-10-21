@@ -58,6 +58,8 @@ export const search: Strings['search'] = {
   listedHint:
     'Daha önce indirilmiş ya da kuyruğa alınmış parçalar atlanır. Gizli, silinmiş ve canlı videolar kullanılamayabilir.',
   listCreated: (name) => `Liste oluşturuldu: ${name}. İndirilen parçalar Listeler’de görünecek.`,
+  inLibrary: 'Kütüphanende',
+  alreadyHave: (count) => `${format.number(count)} şarkı zaten kütüphanendeydi, yeniden indirilmedi.`,
   unnamedPlaylist: 'YouTube oynatma listesi',
 
   jobLine: (status, mp3) => `${status} · ${mp3 ? 'MP3' : 'Özgün'}`,

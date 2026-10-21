@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBatch } from '../downloads/useBatch';
 import { AlertIcon } from '../Icons';
 import { Pressable } from '../Pressable';
+import { useUnderBars } from '../UnderBars';
 import { useDiscoverNotice } from './hooks';
 import { useDiscoverActions, type DiscoverNotice as Notice } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
@@ -68,6 +69,8 @@ function Snack({ notice, room }: { notice: Notice; room: number }) {
   const styles = useStyles();
   const pressed = usePressed();
   const rise = useRise();
+  // Over the bars at the foot in a theme of glass, which are laid over the list and so over this.
+  const under = useUnderBars({ player: true });
   const bad = notice.kind === 'keepFailed';
 
   return (
@@ -78,7 +81,7 @@ function Snack({ notice, room }: { notice: Notice; room: number }) {
         {
           right: MARGIN + room,
           // Upright the tab bar keeps the scene off the strip the phone has for its gestures. On its side nothing does.
-          bottom: MARGIN + (landscape ? insets.bottom : 0),
+          bottom: MARGIN + (landscape ? insets.bottom : 0) + under.bottom,
         },
       ]}>
       <Animated.View

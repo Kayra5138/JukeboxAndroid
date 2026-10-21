@@ -143,6 +143,13 @@ export type BuildOptions = {
   onReport?: (report: BuildReport) => void;
   /** The five questions, for a test that is not to ask anybody anything. */
   sources?: Sources;
+  /**
+   * Artists to start from, the first counting most, in place of the ones the
+   * listening would choose — and no searches by tag. For the player's similar
+   * songs, which wants songs around what is playing now and not around the
+   * month: see `growForAutoplay` in `engine.ts`.
+   */
+  around?: readonly string[];
 };
 
 /**
@@ -216,21 +223,23 @@ export async function buildPool(
   ];
   const standing = standings(feedback, now);
 
-  const chosen = chooseSeeds({
-    recent: profile.artists,
-    kept: feedbackFrom(rows).filter((event) => event.kind === 'kept').map((event) => event.artist),
-    allTime: byArtist(ever, (row) => row.artist, (row) => row.seconds ?? 0, splitCredit).map((row) => ({
-      name: row.name,
-      seconds: row.amount,
-    })),
-    library: byArtist(library, (track) => track.artist, () => 1, splitCredit).map((row) => ({
-      name: row.name,
-      tracks: row.amount,
-    })),
-    standings: standing,
-    limit,
-    edition,
-  });
+  const chosen = options.around?.length
+    ? options.around.map((name, place) => ({ name, weight: 1 / (1 + place * 0.5), source: 'recent' as const }))
+    : chooseSeeds({
+      recent: profile.artists,
+      kept: feedbackFrom(rows).filter((event) => event.kind === 'kept').map((event) => event.artist),
+      allTime: byArtist(ever, (row) => row.artist, (row) => row.seconds ?? 0, splitCredit).map((row) => ({
+        name: row.name,
+        seconds: row.amount,
+      })),
+      library: byArtist(library, (track) => track.artist, () => 1, splitCredit).map((row) => ({
+        name: row.name,
+        tracks: row.amount,
+      })),
+      standings: standing,
+      limit,
+      edition,
+    });
 
   /*
     What somebody has under each of those names, the most played first. A name
@@ -252,12 +261,12 @@ export async function buildPool(
     where there are not pairs enough to ask about — and with nobody to start
     from, the tags are all there is, so a third question is asked.
   */
-  const searches: TagSearch[] = mix.pairs.map((pair) => ({
+  const searches: TagSearch[] = options.around?.length ? [] : mix.pairs.map((pair) => ({
     label: pair.join(' + '),
     tags: [...pair],
     operator: 'and' as const,
   }));
-  const most = seeds.length ? 2 : 3;
+  const most = options.around?.length ? 0 : seeds.length ? 2 : 3;
   for (const tag of mix.tags) {
     if (searches.length < most) searches.push({ label: tag, tags: [tag], operator: 'or' });
   }

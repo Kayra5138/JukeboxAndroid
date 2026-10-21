@@ -29,6 +29,11 @@ export type EnrichedTrack = Track & {
 export type MetadataStore = {
   readAllMetadata: () => Map<string, TrackMetadata>;
   allTags: () => Map<string, Tag[]>;
+  /**
+   * The covers tracks with no row of their own were given by their record
+   * (`fillCovers`), by track. Left out, there are none.
+   */
+  readSharedCovers?: () => Map<string, string>;
 };
 
 /**
@@ -43,8 +48,50 @@ export function albumShown(
   found: Pick<TrackMetadata, 'status' | 'album'> | null | undefined
 ): string | null {
   if (!found || found.status === 'not_found') return track.album;
-  return found.status === 'manual' ? (found.album ?? track.album) : (track.album ?? found.album);
+  // A typed empty string is somebody saying the track is on no record, as
+  // for the album artist below; a null is nobody having said, and the file's
+  // word stands.
+  if (found.status === 'manual') return found.album != null ? found.album.trim() || null : track.album;
+  return track.album ?? found.album;
 }
+
+/**
+ * Whoever the record a track is shown on is by, or null.
+ *
+ * The file's word first, as for the record itself, unless somebody typed
+ * another — and a typed empty string is somebody saying the record names
+ * nobody, which is how a wrong album artist splitting a record in two is put
+ * right without retagging the file.
+ *
+ * A lookup's album artist only fills a gap, and only when the record it is
+ * the artist of is the record shown. A catalogue answers with whichever
+ * release it sells the song on, and the album artist of the artist's own
+ * album, laid over a track the library shows on a compilation, would take it
+ * off the compilation and put it on a record of one song.
+ */
+export function albumArtistShown(
+  track: Pick<Track, 'album' | 'albumArtist'>,
+  found: Pick<TrackMetadata, 'status' | 'album' | 'albumArtist'> | null | undefined
+): string | null {
+  const own = track.albumArtist?.trim() || null;
+  if (!found || found.status === 'not_found') return own;
+  if (found.status === 'manual') {
+    return found.albumArtist != null ? found.albumArtist.trim() || null : own;
+  }
+  if (own) return own;
+  const said = found.albumArtist?.trim();
+  if (!said) return null;
+  const shown = albumShown(track, found);
+  return track.album == null || sameRecord(shown, found.album) ? said : null;
+}
+
+/** Whether two names are one record, as `albumKey` compares them. */
+function sameRecord(left: string | null | undefined, right: string | null | undefined): boolean {
+  return left != null && right != null && left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+/** A cover the app holds a copy of, as against an address on the internet. */
+const stored = (url: string | null | undefined): url is string => url != null && url.startsWith('file://');
 
 /**
  * Online data fills gaps rather than overwriting the file.
@@ -57,13 +104,19 @@ export function albumShown(
 export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTrack[] {
   const known = store.readAllMetadata();
   const tagsByTrack = store.allTags();
+  const shared = store.readSharedCovers?.() ?? new Map<string, string>();
 
   return tracks.map((track) => {
     const tags = (tagsByTrack.get(track.id) ?? []).map((entry) => entry.tag);
     const found = known.get(track.id);
+    // Given by the rest of the record, for a track with no cover of its own;
+    // it never stands in front of one (see `fillCovers`).
+    const given = shared.get(track.id) ?? null;
     if (!found || found.status === 'not_found') {
       return {
         ...track,
+        albumArtist: track.albumArtist ?? null,
+        artworkUri: given ?? track.artworkUri,
         genre: null,
         year: null,
         discNumber: null,
@@ -80,7 +133,12 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
         title: found.title ?? track.title,
         artist: found.artist ?? track.artist,
         album: albumShown(track, found),
-        artworkUri: found.artworkUrl ?? track.artworkUri,
+        albumArtist: albumArtistShown(track, found),
+        // A cover somebody took off stays off, whatever the record gave the
+        // track before or since — a backup brought in, say.
+        artworkUri: stored(found.artworkUrl)
+          ? found.artworkUrl
+          : ((found.coverRemovedAt == null ? given : null) ?? found.artworkUrl ?? track.artworkUri),
         genre: found.genre,
         year: found.year,
         trackNumber: found.trackNumber ?? track.trackNumber,
@@ -94,10 +152,12 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
       ...track,
       artist: track.artist ?? found.artist,
       album: albumShown(track, found),
+      albumArtist: albumArtistShown(track, found),
       // Unconditional, unlike the two above: the media store's own album-art
       // provider stopped resolving years ago and the field arrives null from
-      // it every time, so a looked-up cover is competing with nothing.
-      artworkUri: found.artworkUrl,
+      // it every time, so a looked-up cover is competing with nothing — but
+      // for one the record gave, which a mere address does not outrank.
+      artworkUri: stored(found.artworkUrl) ? found.artworkUrl : (given ?? found.artworkUrl),
       genre: found.genre,
       year: found.year,
       trackNumber: found.trackNumber ?? track.trackNumber,

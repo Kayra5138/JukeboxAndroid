@@ -55,6 +55,7 @@ export function detailsFor(shown: EnrichedTrack, cover: string | null): FileDeta
     title: text(shown.title),
     artist: text(shown.artist),
     album: text(shown.album),
+    albumArtist: text(shown.albumArtist),
     genre: text(shown.tags[0]),
     year: count(shown.year),
     track: count(shown.trackNumber),

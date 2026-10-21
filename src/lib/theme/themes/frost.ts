@@ -68,7 +68,8 @@ export const frost: Theme = {
       sheen: 'linear-gradient(180deg, #ffffff80 0px, #ffffff00 48px)',
       shadow: null,
       veil: 8,
-      coverWash: 0.8,
+      // Enough that the faintest line and the accent are read at 4.5:1 over any cover; see the tests.
+      coverWash: 0.87,
     }
   ),
 };

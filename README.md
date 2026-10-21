@@ -62,6 +62,9 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
 
 - Pick a folder in Settings and Jukebox plays everything under it, subfolders
   included.
+- Leave folders out (voice notes, call recordings, ringtones) and hide files
+  shorter than 10, 30 or 60 seconds. Nothing is deleted, and a folder switched
+  back on comes back with its history.
 - Browse by track or by album. Sort by name, date added or most played, and
   search as you type.
 - Or by artist, where a song by two artists is under both, or by the folders
@@ -75,9 +78,28 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   write their details into the files or delete them. In the album, artist and
   folder views a tick takes the whole group, and shows a dash when only part
   of it is chosen.
+- **More…** on a selection, here and on the Tags screen, offers every edit a
+  single track has, for all of them at once: look up details, covers only or
+  lyrics; edit artist, album artist, album and year together (an empty box
+  leaves each track as it is, a tick under it clears it on all); add or remove
+  a tag; choose one cover; write to files; reset; delete.
+- **Copies of the same song** are found: files whose names or tags say the
+  same song and whose lengths agree to two seconds. A screen lists them with
+  the copy to keep suggested (most listens first), moves each copy's history
+  to it, and deletes the rest with one confirmation from Android.
+- Search finds the tracks no artist was named for by "Unknown artist", to
+  select and fix them at once.
+- Albums, lists, artists and folders open with **Play**, **Shuffle** and
+  **Add to queue** side by side.
 - In the player, the artist's name and the album under the title open that
   artist and that record.
 - A queue you can reorder, trim and jump around in.
+- **Keep playing similar songs** when the queue runs out, from your library,
+  new songs from Discover, or both mixed (off unless you choose). They are
+  added a few songs early, so crossfade and the lock screen work as for any
+  queue, under a heading of their own that one tap clears; what you add goes
+  above them.
+- A button on the player puts the playing song into a list in two taps.
 - Repeat off, one or all.
 - Jump back and forward by 5, 10, 15, 30 or 60 seconds (your pick).
 - Speed and pitch sliders that work independently: slow a song down without
@@ -122,7 +144,16 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
 
 ### Lyrics
 
-- Fetched from LRCLIB, synced line by line when a timed version exists.
+<p align="center">
+  <img src="docs/screenshots/lyrics-translation.gif" width="300" alt="Lyrics following a German song, then translated line by line on the phone">
+</p>
+
+- Read from the song itself first: lyrics kept in the file's tags (ID3,
+  Vorbis/FLAC, MP4, APE; timed or plain), or a `.lrc` of the same name beside
+  it. Android shows an app only audio files, so `.lrc` files are read from
+  folders you grant once in Settings → Player. Nothing local is sent anywhere.
+- Otherwise fetched from LRCLIB, synced line by line when a timed version
+  exists. Each set of lyrics says where it came from.
 - On-device translation with Bergamot, the engine behind Firefox Translations.
   Models come from Mozilla. No account, no key.
 - A song in two languages is translated as two: a Japanese song with an
@@ -147,28 +178,47 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   bundled), so `seen live` never shows up in your stats.
 - Songs with more than one artist are found too. `Eminem, Rihanna`,
   `Eminem feat. Rihanna` and a guest left in the title are searched name by
-  name, and `(Official Video)` is not part of the title.
+  name.
+- What a video's title says about the upload is left out of every search:
+  `(Official Video)`, `(Explicit)`, `【MV】`, `- Official Audio`, `| Lyrics`, a
+  bare `Official Music Video` at the end, and the same in French, Spanish,
+  Italian, German and Turkish. `(Official Live Video)` is still searched as
+  the live recording.
+- Emoji that Android's scanner turned into question marks in a title, artist
+  or album are put back from the file's own name.
 - Everything is editable, and a later lookup never overwrites what you typed.
-- **A cover is looked for once an album.** A track that needs one takes the
-  cover another track of its album already has, without asking anybody; only
-  to fill a gap, never over a cover you chose or the picture inside the file.
-  In a bulk lookup one search serves the whole record, and "not found" is
-  remembered, so the next run does not ask again.
+- **A cover is looked for once an album, and the album wears it.** A track
+  that needs one takes the cover another track of its album already has,
+  without asking anybody, whenever a cover arrives: a lookup, one chosen by
+  hand, a new download joining the album, or the picture inside one of its
+  files. Only to fill a gap, never over a cover you chose, and never back
+  onto one you took off. An album shows the cover most of its tracks wear,
+  so an empty first track no longer leaves the whole record blank.
+- **Look up this album**, from an album's page or menu, finds the release on
+  MusicBrainz once and matches its track list to your files, with one cover
+  search for the record: a dozen tracks in about five requests. **Choose album
+  cover** puts one picture on every track.
+- **Album artist.** Read from the files, filled in by lookups, editable and
+  written back. Two records of one name by different artists are two albums;
+  a guest on one track, or a compilation ("Various Artists"), stays one.
 - **Look up missing** on the Tags screen asks MusicBrainz and Apple side by
   side, each at its own polite pace, and fills the rows in as answers arrive.
   A track with nothing missing costs nothing. If one service cannot be reached
   the other finishes and the screen says which was given up on.
+- **Lookups go on behind the screen.** A run over details, covers or lyrics
+  keeps going with the app in the background or the phone locked, with a
+  notification that shows how far it has got and has its own Stop.
 - **View & edit details** is one page with three tabs: General, Tags, Lyrics.
-- General edits title, artist, album, year, track and disc number, and the
-  cover, which you can pick from your gallery.
+- General edits title, artist, album artist, album, year, track and disc
+  number, and the cover, which you can pick from your gallery.
 - Each tab has its own **Look up**. In General and Tags it only fills the form
   in: nothing is kept until you press Save.
 - `Rock` and `rock` are the same tag.
 - All of this is kept in the app and your files are left as they are, unless
   you press **Write to file**: on the General tab for one song, or **Write to
   files** in the Library's selection for many. It never happens by itself.
-- Write to file puts what the app shows into the file: title, artist, album,
-  year, track and disc number, the first tag as the genre, and a cover saved in
+- Write to file puts what the app shows into the file: title, artist, album
+  artist, album, year, track and disc number, the first tag as the genre, and a cover saved in
   the app. MP3 (ID3v2) and FLAC only, on Android 11 or newer. Android asks
   before anything is changed, and lyrics are not written.
 - The file itself is not worked on. A copy is tagged with TagLib and read back,
@@ -183,6 +233,12 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   track's cover, or a picture from your phone.
 - Make a list from a tag in two ways. A *following* list always mirrors the
   tag. A *copy* is yours to rearrange.
+- **M3U in and out.** Bring in playlists from another player or a computer
+  (`.m3u`, `.m3u8`; Windows paths, `file://` addresses and old Turkish,
+  Western and Cyrillic encodings included), matched to your files by path, by
+  file name or by the artist and title the file names. Write one list, or all
+  of them into a folder, as `.m3u8` with the phone's paths or paths a computer
+  can follow. A list holds each song once, so repeats in a file are folded.
 - Suggestions for what else belongs in a list, based on its tags. Rare tags
   weigh more than common ones.
 - Four automatic lists built from your history: Most played, New this month,
@@ -279,6 +335,12 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   away: three months if you heard them, two weeks if you did not.
 - No live takes, and no remaster of a song you already have. A song with no
   studio recording to be found gives up its place.
+- **The video has to be the song.** A video is taken by its name; on its
+  length only when its title is in another writing (いってらっしゃい for
+  Itterasshai), never when its title, readable, is another song. A download
+  saved under a name its video does not say is caught: Discover's own are
+  fetched again, and any already in your library are listed to be renamed,
+  deleted or marked right.
 
 ### Downloads
 
@@ -288,6 +350,10 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   without duplicates.
 - Downloads keep going when you leave the app, and unfinished ones are picked
   up again when you come back.
+- **Nothing twice.** Importing a playlist leaves out what the library
+  already has, even files copied from a computer: by the video id yt-dlp puts
+  in a file's name, or by title and length; a search result already in the
+  library says so.
 - **One queue.** Everything fetched from YouTube waits in one line and is
   fetched one thing at a time: what you search for, a playlist, the rest of
   an album, what Discover wants. A search you type goes at once and the queue
@@ -350,8 +416,20 @@ from the song itself.
 
 ### Language and looks
 
-- English or Turkish, chosen in Settings rather than taken from the phone. The
-  notification, the widget and Android Auto follow the same choice.
+- Ten languages: English, Turkish, German, Spanish, French, Italian,
+  Brazilian Portuguese, Russian, Japanese and Simplified Chinese. The first
+  start asks which, with the phone's own already picked, and Settings changes
+  it later. The notification, the widget and Android Auto follow the same
+  choice. Everything but English was translated by AI; see
+  [Development](#development) if a line reads wrong.
+- **A short setup on the first start**: the language, the look, Discover and
+  whether to keep playing similar songs, each step skippable. Somebody
+  updating is shown, once, only the steps added since they last saw it.
+- **The first start again**, from the foot of Settings: the setup, the offer
+  to find covers and the tips, as on the day it was installed, with your
+  music, lists and settings left as they are.
+- **Tabs you do not use can go.** Lists, Search and Stats can each be taken
+  off the bar in Settings → Look; Library and Settings stay.
 - **Your own pair for day and night.** Following the phone goes between two
   themes, and you choose which: any theme for its light mode, any for its
   dark.
@@ -361,6 +439,11 @@ from the song itself.
   ones (Sweet pastel, Sepia, Ice, Mint, Lavender, Peach), six dark (Pure
   black for OLED, Midnight blue, Forest, Sunset, Dark pastel, Plum), four of
   glass and a high-contrast one.
+- **Glass both ways.** In the glass themes a screen opens over the one it
+  came from, which shows through out of focus, and lists scroll under the top
+  bar, the tab bar, the mini player and the queue's handle and show through
+  them; the bars are dense enough that their words stay readable whatever
+  passes under.
 - **Glass and gloss.** Night glass and Frosted glass are panes over a slow
   sky, by night and by day; Aero is the polished look of an old desktop, sky
   over grass with a band of gloss on everything; Cover glass is the night
@@ -385,14 +468,28 @@ from the song itself.
 
 ### Around the phone
 
-- Home-screen widget and media notification, both with working controls.
-- The widget is one row tall, on a gradient made from the cover's colours.
+- Home-screen widgets and a media notification, all with working controls, on
+  a gradient made from the cover's colours:
+  - **Jukebox**, one row tall;
+  - **Now playing** (4×2): a large cover, a progress bar, shuffle and repeat;
+  - **Up next** (4×4): the same with the next songs in the queue, each
+    playable with a tap;
+  - **Shuffle** (2×1): Shuffle all and Shuffle recent in one tap.
+
+  The now-playing ones change layout as they are resized, and the cover opens
+  the player.
+- Three dots at the end of every row of tracks open its menu, as a long press
+  does; Settings → Look can take them away.
 - Pause, then swipe the notification away to close the music.
 - Playback keeps going with the app closed.
 - A landscape layout: tabs move to a rail on the left, the player to a panel on
   the right.
 - A "hold the decoration still" switch for older phones. It turns off the
-  decorative animations and leaves the game playable.
+  decorative animations and leaves the game playable. Android's own "Remove
+  animations" does the same.
+- Usable with TalkBack: every control is named, sliders and the scrubber move
+  by swipe, queue and list rows have move actions, and progress is read out.
+  Rows grow with large text instead of cutting it off.
 
 ### Android Auto
 
@@ -440,9 +537,12 @@ the only one that sends anything about you.
 | Open a recap | MusicBrainz, Wikimedia Commons (artist photos) |
 | Ask for recommendations | ListenBrainz, Deezer and MusicBrainz (artists and songs; nothing about you), Cover Art Archive and Deezer (covers), YouTube (the songs) |
 | Tap a recommendation that is not ready | Deezer (a thirty-second preview, unless turned off) |
+| Keep playing new songs when the queue runs out (if chosen) | The same as Discover: ListenBrainz, Deezer and MusicBrainz about artists, YouTube for the songs |
 | Open Downloads, or ask for a download | GitHub (whether there is a newer yt-dlp; at most once a day, and it can be turned off) |
 | Press Update on the Downloads screen | GitHub (the newer yt-dlp, about 3 MB) |
 | Use the Search tab | YouTube |
+| Open the app, at most once a day | GitHub (whether there is a newer Jukebox; it can be turned off under Settings → Your data) |
+| Press Open GitHub on Report a problem | GitHub, in your browser (the report you have just read; nothing is sent otherwise) |
 | Browse in the car | iTunes (a cover not saved yet, fetched once) |
 | Connect ListenBrainz and switch sending on | ListenBrainz (your listens) |
 
@@ -459,13 +559,13 @@ To build it. To run it, see [Install](#install).
 
 ```bash
 npm install
-npm test                 # 1,106 tests, pure logic
+npm test                 # 2,247 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android
 
 cd android
-./gradlew :jukebox-audio:testDebugUnitTest   # 319 more, in Kotlin
+./gradlew :jukebox-audio:testDebugUnitTest   # 473 more, in Kotlin
 ./gradlew :app:assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
@@ -503,9 +603,9 @@ Good to know:
 | `READ_MEDIA_AUDIO` | Reading your music |
 | `POST_NOTIFICATIONS` | The playback notification |
 | `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | Playing in the background |
-| `FOREGROUND_SERVICE_DATA_SYNC` | Downloads that outlive the screen |
+| `FOREGROUND_SERVICE_DATA_SYNC` | Downloads and lookups that outlive the screen |
 | `MODIFY_AUDIO_SETTINGS` | Attaching the bass boost, surround and loudness |
-| `WAKE_LOCK` | Keeping the phone awake while music plays |
+| `WAKE_LOCK` | Keeping the phone awake while music plays, a download runs or a lookup goes on |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Lookups, lyrics, downloads, and telling "offline" from "failed" |
 | `VIBRATE` | Haptics on swipes and in the game |
 
@@ -601,6 +701,31 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
   source.** Bergamot, minimp3 and TagLib are fetched at pinned commits and
   rejected if their SHA-256 does not match. The downloader's FFmpeg and Python are the
   exception: they come prebuilt with its wrapper, pinned by version.
+
+## Development
+
+Jukebox is made by one person. The day-to-day work happens in a private
+repository, and each release is published here as one commit holding that
+release's code: the history here is a commit per version, not every change.
+
+- **Bugs and ideas** are welcome as
+  [issues](https://github.com/Kayra5138/JukeboxAndroid/issues). There is a
+  form for each. Settings → Report a problem fills the bug form in for you
+  with the version, the phone and the app's recent errors (scrubbed of names,
+  paths and addresses), and shows all of it before anything is sent.
+- **Translations.** English is written by hand. The other nine languages,
+  Turkish included, were translated by AI and have not yet been checked by
+  a native speaker; the app says so on its language screen. If a line
+  reads wrong in yours, an issue saying where it is and how it should read is
+  the most useful thing you can send. Each language is a folder under
+  `src/lib/i18n/` and a `strings.xml` under
+  `modules/jukebox-audio/android/src/main/res/values-*/`.
+- **Code.** Pull requests are read, but because of how this repository is
+  published they are not merged here. A change that is taken is applied by
+  hand and arrives with the next release, credited in its notes. For anything
+  bigger than a fix, an issue first saves both of us time.
+- Before sending code, `npm test` and `npx tsc --noEmit` should pass; see
+  [Building](#building) for the Kotlin tests.
 
 ## Licence
 

@@ -8,6 +8,7 @@ const FIELD_NAMES: Record<string, string> = {
   title: 'title',
   artist: 'artist',
   album: 'album',
+  albumArtist: 'album artist',
   genre: 'genre',
   year: 'year',
   track: 'track number',
@@ -39,6 +40,8 @@ export const details = {
       title: 'Title',
       artist: 'Artist',
       album: 'Album',
+      /** Whoever the whole record is by, which tells two records of one name apart. */
+      albumArtist: 'Album artist',
       year: 'Release year',
       trackNumber: 'Track number',
       discNumber: 'Disc number',
@@ -119,6 +122,10 @@ export const details = {
   editor: {
     label: 'Tags',
     add: 'Add a tag',
+    /** What a screen reader calls the arrows and the cross beside a tag; [tag] is the tag. */
+    moveUp: (tag: string) => `Move ${tag} up`,
+    moveDown: (tag: string) => `Move ${tag} down`,
+    remove: (tag: string) => `Remove ${tag}`,
   },
 
   /** Asking for one tag to put on a run of tracks. */
@@ -161,6 +168,10 @@ export const details = {
     reset: 'Reset',
     offsetHeading: 'How far out are the words?',
     offsetPlaceholder: 'Seconds, e.g. 1.5 or -0.75',
+    /** For a screen reader, on the figure of the shift, which is pressed to type one. */
+    typeOffset: 'Type an exact shift',
+    /** What a screen reader calls the box the stored words are edited in. */
+    wordsField: 'Lyrics',
 
     byHand: 'Search by hand',
     byHandHint:
@@ -191,9 +202,14 @@ export const details = {
     /** A track is done when its details and its cover are both settled. */
     lookingUpProgress: (done: number, total: number) =>
       `Looking up… ${format.number(done)} of ${format.number(total)} tracks done`,
+    /** The same, while one album is being looked up as a whole. */
+    lookingUpAlbum: (album: string, done: number, total: number) =>
+      `Looking up “${album}”… ${format.number(done)} of ${format.number(total)} tracks done`,
     soFar: (matched: number, covers: number) =>
       `${format.number(matched)} matched, ${format.number(covers)} covers so far`,
     stop: 'Stop',
+    /** The name of the notification a lookup shows while it goes on behind the screen, as Android's settings list it. */
+    lookupChannel: 'Lookups',
 
     selected: (count: number) => `${format.number(count)} selected`,
     /** How the library stands. Tracks edited by hand are only mentioned when there are some. */
@@ -214,6 +230,115 @@ export const details = {
     noGenre: 'no genre',
     noMatch: 'no match found',
     notLookedUp: 'not looked up yet',
+    /**
+     * What a screen reader says for the line under a title, which the eye
+     * tells apart by colour alone: found by a lookup, or written in by hand.
+     */
+    matchedSpoken: (artist: string, title: string) => `Matched: ${artist} — ${title}`,
+    manualSpoken: (artist: string, title: string) => `Set by hand: ${artist} — ${title}`,
+  },
+
+  /**
+   * Everything that can be done to tracks chosen together: on the Tags
+   * screen, and from the library's selection. One sheet in both places.
+   */
+  selection: {
+    more: 'More…',
+    /** For a screen reader, on the button that opens the sheet. */
+    moreHint: 'Everything that can be done to the selected tracks',
+    heading: (count: number) =>
+      `${format.number(count)} ${oneOrMany(count, 'track', 'tracks')} selected`,
+    /** The sheet's three parts: finding things out, changing them, and the rest. */
+    sections: { find: 'Look up', change: 'Change', other: 'Other' },
+    actions: {
+      lookUp: {
+        label: 'Look up details',
+        hint: 'Forgets what was found for them before and looks them up again, covers included. Your own edits stay.',
+      },
+      covers: {
+        label: 'Look up covers',
+        hint: 'Covers only, for the ones without one. Nothing else is looked up again, and a cover you chose or took off stays as it is.',
+      },
+      lyrics: {
+        label: 'Look up lyrics',
+        hint: 'From the files and .lrc files first, then LRCLIB. Words you chose stay.',
+      },
+      edit: {
+        label: 'Edit details together',
+        hint: 'Artist, album artist, album or year, set on all of them at once',
+      },
+      addTag: { label: 'Add a tag', hint: 'One tag, put on all of them' },
+      removeTag: { label: 'Remove a tag', hint: 'One of their tags, taken off all of them' },
+      cover: { label: 'Choose a cover', hint: 'One picture from your gallery, for all of them' },
+      write: {
+        label: 'Write to files',
+        hint: 'Puts the details the library shows into the files themselves. Android asks first.',
+      },
+      addToList: { label: 'Add to a list', hint: 'Puts them in one of your lists' },
+      reset: {
+        label: 'Reset',
+        hint: 'Forgets what lookups found for them. Your own edits stay.',
+      },
+      delete: { label: 'Delete from phone', hint: 'Erases the files. Android asks first.' },
+    },
+    /** Under a lookup that cannot be started while another is going. */
+    busy: 'Another lookup is under way. Wait for it to finish, or stop it.',
+
+    editHeading: (count: number) =>
+      `Edit ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')}`,
+    editHint:
+      'Fill in only what should be the same on all of them. An empty box leaves each track as it is; to empty a field on all of them, tick the option under it. Titles, track and disc numbers are not touched.',
+    /** In a box whose tracks do not all say the same thing. */
+    keepEach: 'Each keeps its own',
+    /** In a box whose field is empty on every track: on the one track, where only one is chosen. */
+    empty: 'Empty',
+    /**
+     * Under each box, to empty that field on every track rather than leave
+     * each its own. The artist cannot be emptied, only given back to what
+     * each file says (see `CLEARS` in `metadata/edit.ts`).
+     */
+    clearOn: { remove: 'Remove from all', own: 'Use each file’s artist' },
+    /** In a box whose field is being cleared, in place of what was typed. */
+    cleared: { remove: 'Removed from all', own: 'Each file’s artist' },
+    edited: (count: number) =>
+      oneOrMany(
+        count,
+        'Saved. It is your edit now, and lookups leave it alone.',
+        `Saved for ${format.number(count)} tracks. They are your edits now, and lookups leave them alone.`
+      ),
+
+    tagAdded: (tag: string, count: number) =>
+      `“${tag}” is on ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')} now.`,
+    removeTagHeading: (count: number) =>
+      `Remove a tag from ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')}`,
+    /** A tag in the list to remove, with how many of the tracks carry it. */
+    tagOption: (tag: string, count: number) => `${tag} · ${format.number(count)}`,
+    noTags: 'None of these tracks has a tag.',
+    tagRemoved: (tag: string, count: number) =>
+      `“${tag}” is off ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')}.`,
+
+    resetQuestion: (count: number) =>
+      `Reset ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')}?`,
+    resetBody:
+      'What lookups found for them is forgotten, and they count as not looked up. Your own edits stay. This cannot be undone.',
+
+    coversProgress: (done: number, total: number) =>
+      `Looking for covers… ${format.number(done)} of ${format.number(total)} tracks done`,
+    coversNone: 'No new covers were found.',
+    lyricsProgress: (done: number, total: number) =>
+      `Looking for lyrics… ${format.number(done)} of ${format.number(total)} tracks done`,
+    lyricsSoFar: (found: number) => `${format.number(found)} found so far`,
+    /** How a lyrics run ended: found for so many of those that had none, and how many already had some. */
+    lyricsFound: (found: number, wanted: number, had: number) =>
+      [
+        wanted > 0 ? `Lyrics found for ${format.number(found)} of ${format.number(wanted)}.` : null,
+        had > 0
+          ? oneOrMany(had, '1 already had them.', `${format.number(had)} already had them.`)
+          : null,
+      ]
+        .filter(Boolean)
+        .join(' ') || 'Nothing to look for: the words of these were chosen by hand.',
+    lyricsOffline: 'LRCLIB could not be reached, so the run stopped. The rest can be tried again later.',
   },
 
   /** Writing a run of tracks into their files, and what became of each. */
@@ -279,6 +404,32 @@ export const details = {
     into: 'Into',
     keepApart: 'Keep apart',
     merge: 'Merge',
+    /** Choosing several pairs and answering them at once. */
+    bulk: {
+      /** On each pair, under its two buttons: the history moves, then the first file is erased. */
+      mergeDelete: 'Merge, and delete the first file',
+      /** In the bar, while a merge of several is being asked about. */
+      deleteToo: 'Delete the first file of each pair as well',
+      deleteNote: 'Android asks before anything is deleted.',
+      notDeleted: 'The files were not deleted.',
+      deleted: (count: number) => oneOrMany(count, '1 file deleted.', `${format.number(count)} files deleted.`),
+      /** For a screen reader: the box on each pair. */
+      choose: 'Choose this pair',
+      chosen: (count: number) => oneOrMany(count, '1 pair chosen', `${format.number(count)} pairs chosen`),
+      merge: (count: number) => `Merge ${format.number(count)}`,
+      keepApart: (count: number) => `Keep ${format.number(count)} apart`,
+      /** Asked before a merge of several, which cannot be undone. */
+      confirm: (count: number) =>
+        oneOrMany(
+          count,
+          'Merge 1 pair? The first file’s listens, tags, lyrics and places in lists move to the second, and cannot be split off again.',
+          `Merge ${format.number(count)} pairs? In each, the first file’s listens, tags, lyrics and places in lists move to the second, and cannot be split off again.`
+        ),
+      done: (done: number, skipped: number) =>
+        skipped > 0
+          ? `${oneOrMany(done, '1 pair answered', `${format.number(done)} pairs answered`)}; ${oneOrMany(skipped, '1 was', `${format.number(skipped)} were`)} already settled by another.`
+          : oneOrMany(done, '1 pair answered.', `${format.number(done)} pairs answered.`),
+    },
     unknown: 'Unknown',
     noFileName: 'File name not known',
     /** What a file has to its name, in as few words as say it. */

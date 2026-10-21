@@ -1,17 +1,31 @@
 import { Tabs } from 'expo-router';
-import { View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SettingsIcon, LibraryIcon, ListsIcon, SearchIcon } from '../../components/Icons';
 import { TabBar } from '../../components/TabBar';
+import { BarsOver } from '../../components/UnderBars';
 import { useT } from '../../lib/i18n/index';
-import { scene, useColours } from '../../lib/theme/index';
+import { useUpdateOffer } from '../../lib/support/updateStore';
+import { makeStyles, scene, useColours } from '../../lib/theme/index';
 import { useLandscape } from '../../lib/ui/layout';
 
 export default function MainTabs() {
   const landscape = useLandscape();
   const t = useT();
   const c = useColours();
+  const styles = useStyles();
+  /*
+    A newer Jukebox is out: a dot on the Settings tab, where the row that
+    says so is, and the tab's name read out with the news. Nothing louder —
+    no badge with a number, nothing that moves.
+  */
+  const update = useUpdateOffer() != null;
 
   return (
+    /*
+      The tab bar is along the foot of every tab, and in a theme of glass laid
+      over it: each tab's list keeps clear of it by what `useUnderBars` says.
+    */
+    <BarsOver tabs>
     <Tabs
       /*
         Drawn by hand rather than configured. The side bar the navigator
@@ -50,8 +64,30 @@ export default function MainTabs() {
       }} />
       <Tabs.Screen name="settings" options={{
         title: t.nav.settings, headerShown: false,
-        tabBarIcon: ({ focused }) => <SettingsIcon size={22} color={focused ? c.text : c.textMuted} />,
+        tabBarAccessibilityLabel: update ? t.support.update.tab(t.nav.settings) : undefined,
+        tabBarIcon: ({ focused }) => (
+          <View>
+            <SettingsIcon size={22} color={focused ? c.text : c.textMuted} />
+            {update ? <View style={styles.dot} /> : null}
+          </View>
+        ),
       }} />
     </Tabs>
+    </BarsOver>
   );
 }
+
+const useStyles = makeStyles((c) => StyleSheet.create({
+  // On the icon's top corner, ringed in the bar's colour so that it reads apart from the gear under it.
+  dot: {
+    position: 'absolute',
+    top: -2,
+    right: -3,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: c.accent,
+    borderWidth: 1.5,
+    borderColor: c.bar,
+  },
+}));

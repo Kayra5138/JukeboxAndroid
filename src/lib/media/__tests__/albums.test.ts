@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { albumsOf, orderWithin } from '../albums.ts';
+import { albumKey, albumsOf, findAlbum, nameOfKey, narrowAlbums, orderWithin } from '../albums.ts';
 import type { EnrichedTrack } from '../enriched.ts';
 import { track } from '../../__tests__/support.ts';
 
@@ -283,5 +283,168 @@ describe('orderWithin', () => {
     ]);
 
     assert.deepEqual(names(ordered), ['A', 'B', 'C']);
+  });
+});
+
+describe('records told apart by their album artist', () => {
+  const keys = (albums: { key: string }[]) => albums.map((album) => album.key).sort();
+
+  it('keeps two records of one name apart when their tracks say who each is by', () => {
+    const albums = albumsOf([
+      song('1', { title: 'Bohemian Rhapsody', album: 'Greatest Hits', artist: 'Queen', albumArtist: 'Queen', folder: 'Music/Queen/' }),
+      song('2', { title: 'Somebody to Love', album: 'Greatest Hits', artist: 'Queen', albumArtist: 'Queen', folder: 'Music/Queen/' }),
+      song('3', { title: 'Waterloo', album: 'Greatest Hits', artist: 'ABBA', albumArtist: 'ABBA', folder: 'Music/ABBA/' }),
+      song('4', { title: 'SOS', album: 'Greatest Hits', artist: 'ABBA', albumArtist: 'ABBA', folder: 'Music/ABBA/' }),
+    ]);
+
+    assert.equal(albums.length, 2);
+    assert.deepEqual(keys(albums), ['greatest hits\u001fabba', 'greatest hits\u001fqueen']);
+    assert.deepEqual(albums.map((album) => album.artist), ['ABBA', 'Queen']);
+    assert.deepEqual(albums.map((album) => album.albumArtist), ['ABBA', 'Queen']);
+  });
+
+  it('does not split a record over a guest on one of its songs', () => {
+    const albums = albumsOf([
+      song('1', { title: 'A', album: 'Infections', artist: 'Aurora', albumArtist: 'Aurora' }),
+      song('2', { title: 'B', album: 'Infections', artist: 'Aurora & Someone', albumArtist: 'Aurora & Someone' }),
+      song('3', { title: 'C', album: 'Infections', artist: 'Aurora feat. Other' }),
+    ]);
+
+    assert.equal(albums.length, 1);
+    assert.equal(albums[0]!.tracks.length, 3);
+    assert.equal(albums[0]!.artist, 'Aurora');
+  });
+
+  it('keeps a record of no album artist exactly as it was, key and all', () => {
+    const albums = albumsOf([
+      song('1', { title: 'A', album: 'Ruins', artist: 'Aurora' }),
+      song('2', { title: 'B', album: 'Ruins', artist: 'Aurora & Someone' }),
+    ]);
+
+    assert.equal(albums.length, 1);
+    assert.equal(albums[0]!.key, 'ruins');
+    assert.equal(albums[0]!.albumArtist, null);
+    assert.equal(albums[0]!.artist, 'Aurora');
+  });
+
+  it('keeps a compilation by name, whatever its tracks call their own artists', () => {
+    const albums = albumsOf([
+      song('1', { title: 'A', album: 'Now 50', artist: 'One', albumArtist: 'Various Artists' }),
+      song('2', { title: 'B', album: 'Now 50', artist: 'Two', albumArtist: 'Various Artists' }),
+      song('3', { title: 'C', album: 'Now 50', artist: 'Three' }),
+    ]);
+
+    assert.equal(albums.length, 1);
+    assert.equal(albums[0]!.key, 'now 50');
+    assert.equal(albums[0]!.compilation, true);
+    assert.equal(albums[0]!.artist, 'Various Artists');
+  });
+
+  it('knows a compilation in the languages its tags are written in', () => {
+    for (const many of ['Çeşitli Sanatçılar', 'Verschiedene Interpreten', 'ヴァリアス・アーティスト', 'VA']) {
+      const [album] = albumsOf([
+        song('1', { title: 'A', album: 'Hits', artist: 'One', albumArtist: many }),
+        song('2', { title: 'B', album: 'Hits', artist: 'Two', albumArtist: many }),
+      ]);
+      assert.equal(album!.key, 'hits', many);
+    }
+  });
+
+  it('keeps whole a compilation whose tagger put each singer down as the album artist', () => {
+    const albums = albumsOf([
+      song('1', { title: 'A', album: 'Hits', artist: 'One', albumArtist: 'One', folder: 'Music/Hits/' }),
+      song('2', { title: 'B', album: 'Hits', artist: 'Two', albumArtist: 'Two', folder: 'Music/Hits/' }),
+      song('3', { title: 'C', album: 'Hits', artist: 'Three', albumArtist: 'Three', folder: 'Music/Hits/' }),
+    ]);
+
+    assert.equal(albums.length, 1);
+    assert.equal(albums[0]!.key, 'hits');
+    assert.equal(albums[0]!.artist, null);
+  });
+
+  it('sends a track naming no album artist to the record of its own artist', () => {
+    const albums = albumsOf([
+      song('1', { title: 'A', album: 'Greatest Hits', artist: 'Queen', albumArtist: 'Queen' }),
+      song('2', { title: 'B', album: 'Greatest Hits', artist: 'Queen' }),
+      song('3', { title: 'C', album: 'Greatest Hits', artist: 'ABBA', albumArtist: 'ABBA' }),
+      song('4', { title: 'D', album: 'Greatest Hits', artist: 'ABBA feat. Somebody' }),
+    ]);
+
+    const byKey = new Map(albums.map((album) => [album.key, names(album.tracks)]));
+    assert.deepEqual(byKey.get('greatest hits\u001fqueen'), ['A', 'B']);
+    assert.deepEqual(byKey.get('greatest hits\u001fabba'), ['C', 'D']);
+  });
+
+  it('sends one by somebody else to the record in its folder, and leaves it by name where nothing says', () => {
+    const albums = albumsOf([
+      song('1', { title: 'A', album: 'Live', artist: 'Queen', albumArtist: 'Queen', folder: 'Music/Queen/Live/' }),
+      song('2', { title: 'B', album: 'Live', artist: 'Freddie Mercury', folder: 'Music/Queen/Live/' }),
+      song('3', { title: 'C', album: 'Live', artist: 'ABBA', albumArtist: 'ABBA', folder: 'Music/ABBA/Live/' }),
+      song('4', { title: 'D', album: 'Live', artist: 'Stranger', folder: 'Music/Elsewhere/' }),
+    ]);
+
+    const byKey = new Map(albums.map((album) => [album.key, names(album.tracks)]));
+    assert.deepEqual(byKey.get('live\u001fqueen'), ['A', 'B']);
+    assert.deepEqual(byKey.get('live\u001fabba'), ['C']);
+    assert.deepEqual(byKey.get('live'), ['D']);
+  });
+
+  it('makes keys that are unique, and the same whatever order the tracks came in', () => {
+    const tracks = [
+      song('1', { title: 'A', album: 'X', artist: 'P', albumArtist: 'P', folder: 'a/' }),
+      song('2', { title: 'B', album: 'X', artist: 'Q', albumArtist: 'Q', folder: 'b/' }),
+      song('3', { title: 'C', album: 'X', artist: 'R', folder: 'c/' }),
+    ];
+    const once = albumsOf(tracks);
+    const again = albumsOf([...tracks].reverse());
+    assert.equal(new Set(once.map((album) => album.key)).size, once.length);
+    assert.deepEqual(keys(once), keys(again));
+  });
+});
+
+describe('opening a record by its key', () => {
+  const library = [
+    song('1', { title: 'A', album: 'Greatest Hits', artist: 'Queen', albumArtist: 'Queen', folder: 'q/' }),
+    song('2', { title: 'B', album: 'Greatest Hits', artist: 'Queen', albumArtist: 'Queen', folder: 'q/' }),
+    song('3', { title: 'C', album: 'Greatest Hits', artist: 'ABBA', albumArtist: 'ABBA', folder: 'a/' }),
+  ];
+
+  it('finds the record with the very key', () => {
+    const albums = albumsOf(library);
+    assert.equal(findAlbum(albums, albumKey('Greatest Hits', 'ABBA'))?.tracks.length, 1);
+  });
+
+  it('finds the record a track is on, from the name alone', () => {
+    const albums = albumsOf(library);
+    assert.equal(findAlbum(albums, albumKey('Greatest Hits'), '3')?.artist, 'ABBA');
+  });
+
+  it('finds the record most of a name is on for a key written before records had artists', () => {
+    const albums = albumsOf(library);
+    assert.equal(findAlbum(albums, 'greatest hits')?.artist, 'Queen');
+    assert.equal(findAlbum(albums, 'nothing'), null);
+    assert.equal(nameOfKey(albumKey('Greatest Hits', 'Queen')), 'greatest hits');
+  });
+
+  it('keys a record by its name alone when it is by many people or by nobody', () => {
+    assert.equal(albumKey(' Ruins ', null), 'ruins');
+    assert.equal(albumKey('Ruins', 'Various Artists'), 'ruins');
+    assert.equal(albumKey('Ruins', 'Aurora & Someone'), 'ruins\u001faurora');
+  });
+});
+
+describe('records narrowed by a search', () => {
+  it('keeps each record the search touched, with only what it found and under the record’s own key', () => {
+    const library = [
+      song('1', { title: 'A', album: 'Live', artist: 'Queen', albumArtist: 'Queen', folder: 'q/' }),
+      song('2', { title: 'B', album: 'Live', artist: 'Freddie Mercury', folder: 'q/' }),
+      song('3', { title: 'C', album: 'Live', artist: 'ABBA', albumArtist: 'ABBA', folder: 'a/' }),
+    ];
+    const albums = albumsOf(library);
+    // Only the untagged track matched: grouped alone it would be a record of
+    // the name; narrowed, it is still on Queen's.
+    const narrowed = narrowAlbums(albums, [library[1]!]);
+    assert.deepEqual(narrowed.map((album) => [album.key, names(album.tracks)]), [['live\u001fqueen', ['B']]]);
+    assert.equal(narrowAlbums(albums, library)[0], albums[0]);
   });
 });

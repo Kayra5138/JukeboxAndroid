@@ -11,6 +11,7 @@ import { search } from '../lib/media/search';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { scrimOf } from '../lib/theme/Veil';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
 /**
  * Picking tracks out of the library to put somewhere.
@@ -66,11 +67,19 @@ export function TrackPicker({
 
   return (
     <View style={styles.layer}>
-      <Pressable style={styles.backdrop} onPress={close} />
+      {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
+          of its own, touching outside it is one of the ways out, and it has to be findable. */}
+      <Pressable
+        style={styles.backdrop}
+        accessibilityRole="button"
+        accessibilityLabel={t.common.close}
+        onPress={close}
+      />
       <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
         <View style={styles.head}>
-          <Text style={styles.heading}>{t.lists.trackPicker.heading}</Text>
-          <Pressable onPress={close}>
+          <Text accessibilityRole="header" style={styles.heading}>{t.lists.trackPicker.heading}</Text>
+          {/* A word in the corner; this much further is a finger's height to press. */}
+          <Pressable accessibilityRole="button" hitSlop={14} onPress={close}>
             <Text style={styles.link}>{t.common.done}</Text>
           </Pressable>
         </View>
@@ -82,6 +91,7 @@ export function TrackPicker({
         />
 
         <FlatList
+                  removeClippedSubviews={CLIP_SUBVIEWS}
           style={styles.list}
           data={results}
           keyExtractor={(track) => track.id}
@@ -101,6 +111,7 @@ export function TrackPicker({
         />
 
         <Pressable
+          accessibilityRole="button"
           android_ripple={pressed}
           style={[styles.action, chosen.size === 0 && styles.actionOff]}
           disabled={chosen.size === 0}
@@ -135,7 +146,16 @@ function Row({
   const pressed = usePressed();
 
   return (
-    <Pressable android_ripple={pressed} style={styles.row} onPress={onPress} disabled={held}>
+    <Pressable
+      android_ripple={pressed}
+      style={styles.row}
+      onPress={onPress}
+      disabled={held}
+      // A tick box, which says whether it is ticked: the dot at the end is
+      // all that says so to the eye. One already in the list is ticked and
+      // cannot be unticked here.
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: ticked || held, disabled: held }}>
       {artwork ? (
         <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
       ) : (

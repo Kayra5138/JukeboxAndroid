@@ -5,15 +5,23 @@ import { AlertIcon, MinusIcon, PlayIcon, PlayingIcon, PlusIcon, TickIcon } from 
 import { Image } from '../Picture';
 import { Pressable } from '../Pressable';
 import { SwipeRow } from '../SwipeRow';
-import { TRACK_ROW_HEIGHT } from '../TrackRow';
+import { trackRowHeight, useTrackRowHeight } from '../TrackRow';
 import { ProgressRing } from './ProgressRing';
 import { rowLabel, rowShows, watchRow, type RowShows, type RowWatch } from './show';
 import { useDiscoverActions, useDiscoverEntry, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 
-/** As tall as a row of the Library, and fixed for the same reason: the list lays itself out without measuring. */
-export const DISCOVER_ROW_HEIGHT = TRACK_ROW_HEIGHT;
+/**
+ * As tall as a row of the Library, and worked out the same way, for the same
+ * reason: the list lays itself out without measuring. This is the figure at
+ * the ordinary size of writing, for what only stands in for a row; a row
+ * itself grows with the writing (see `trackRowHeight`).
+ */
+export const DISCOVER_ROW_HEIGHT = trackRowHeight(1);
+
+/** A row's height at the size of writing the phone is set to now. */
+export const useDiscoverRowHeight = useTrackRowHeight;
 
 /** Across the mark at the right of a row. */
 const MARK = 18;
@@ -63,6 +71,7 @@ function Song({
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
+  const height = useDiscoverRowHeight();
   const said = t.discover.row;
   const shows = rowShows(entry, t);
   const { id } = entry;
@@ -87,7 +96,7 @@ function Song({
           : { label: said.swipeKeep, colour: c.successSoft, tint: c.success, onAct: () => keep(id) }
       }
       right={{ label: said.swipeExclude, colour: c.dangerSoft, tint: c.danger, onAct: () => exclude(id) }}>
-      <View style={[styles.row, shows.chosen && styles.rowChosen, shows.gone && styles.rowGone]}>
+      <View style={[styles.row, { height }, shows.chosen && styles.rowChosen, shows.gone && styles.rowGone]}>
         {/*
           The song is the button, and the two beside it are not inside it: a
           press on either would otherwise be the row's as well, and its wash
@@ -246,7 +255,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: DISCOVER_ROW_HEIGHT,
     paddingRight: 4,
   },
   shared: { flex: 1, minWidth: 0 },

@@ -5,6 +5,8 @@ export type FileDetails = {
   title?: string;
   artist?: string;
   album?: string;
+  /** Whoever the record is by: ID3's TPE2, a FLAC's ALBUMARTIST. */
+  albumArtist?: string;
   genre?: string;
   year?: number;
   track?: number;

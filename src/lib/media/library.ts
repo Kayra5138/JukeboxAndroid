@@ -1,6 +1,15 @@
 import JukeboxAudio, { type FolderEntry } from '../../../modules/jukebox-audio/index.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { recogniseLater } from '../identity/index.ts';
+import {
+  hidingRule,
+  leftOutUnder,
+  parseLeftOut,
+  parseShortest,
+  shownTracks,
+  type Hiding,
+  type Shortest,
+} from '../library/hiding.ts';
 import type { Track } from '../types.ts';
 
 /**
@@ -21,6 +30,46 @@ export function setLibraryRoot(root: string): void {
   writeSetting(SETTINGS.libraryRoot, root.replace(/^\/+|\/+$/g, ''));
 }
 
+/**
+ * The folders under the library folder somebody has switched off, as whole
+ * paths. Kept across a change of library folder, and applied only to the
+ * ones inside it: see `leftOutUnder` in `library/hiding.ts`.
+ */
+export function leftOutFolders(): string[] {
+  return parseLeftOut(readSetting(SETTINGS.libraryLeftOut));
+}
+
+export function setLeftOutFolders(folders: readonly string[]): void {
+  writeSetting(SETTINGS.libraryLeftOut, JSON.stringify(folders));
+}
+
+/** How many folders are left out of the library as it is now: what Settings says of them. */
+export function leftOutCount(): number {
+  return leftOutUnder(leftOutFolders(), libraryRoot()).length;
+}
+
+/**
+ * How short a file has to be to be left out, in seconds, or nought for not
+ * at all, which is where every install starts: a song that is not shown
+ * looks like a song lost, and voice notes are better left out by somebody
+ * who has seen them there.
+ */
+export function shortestFiles(): Shortest {
+  return parseShortest(readSetting(SETTINGS.libraryShortest)) ?? 0;
+}
+
+export function setShortestFiles(seconds: Shortest): void {
+  writeSetting(SETTINGS.libraryShortest, String(seconds));
+}
+
+/**
+ * What the library leaves out at this moment, or null where it leaves out
+ * nothing. Read afresh each time: it is two rows of the settings table.
+ */
+export function libraryHiding(): Hiding | null {
+  return hidingRule({ root: libraryRoot(), leftOut: leftOutFolders(), shortest: shortestFiles() });
+}
+
 export type LibraryFolder = FolderEntry;
 
 /**
@@ -34,6 +83,28 @@ export type LibraryFolder = FolderEntry;
  */
 export function listFolders(): Promise<LibraryFolder[]> {
   return JukeboxAudio.queryFoldersAsync(DEFAULT_ROOT);
+}
+
+/**
+ * The folders under [root] that hold music, each with how many tracks are
+ * directly in it: what the screen that leaves folders out is made from. One
+ * column of the media store, read once, which is cheap enough to ask on every
+ * visit to that screen.
+ */
+export function listFoldersUnder(root: string): Promise<LibraryFolder[]> {
+  return JukeboxAudio.queryFoldersAsync(root);
+}
+
+/**
+ * Whether the app may read audio, without asking.
+ *
+ * For work that is not somebody's tap — Discover looking over its list as the
+ * app opens, or behind the screen — which must not put a dialog up, and which
+ * has to tell a library it may not read yet from one with nothing in it: the
+ * media store answers both with no rows.
+ */
+export async function hasAudioPermission(): Promise<boolean> {
+  return (await JukeboxAudio.getPermissionsAsync()).granted;
 }
 
 export async function ensureAudioPermission(): Promise<boolean> {
@@ -73,14 +144,29 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 /**
- * Every track under the chosen root, already sorted by artist/album/track.
+ * Every track in the library, already sorted by artist/album/track: what is
+ * under the chosen root, less what is left out of it ({@link libraryHiding}).
  *
  * Each scan is also shown to whatever keeps a song's history with the song
  * when its file is given a new id. Here rather than in the screens, so that no
  * way of reading the library can leave it out; and after the tracks have been
- * handed back, so that no screen waits on it.
+ * handed back, so that no screen waits on it. It is shown the whole folder,
+ * left-out files too: a file that is only not being shown has not gone, and
+ * must not have its history handed to something else.
  */
 export async function scanLibrary(): Promise<Track[]> {
+  return shownTracks(await scanEverything(), libraryHiding());
+}
+
+/**
+ * Every track under the chosen root, what is left out of the library too.
+ *
+ * For whatever keeps the user's own record of their tracks rather than
+ * showing them a library: a backup, which has to be able to name every track
+ * a play or a tag belongs to, and the names sent with a listen. A folder
+ * switched off for a while has not stopped being theirs.
+ */
+export async function scanEverything(): Promise<Track[]> {
   return scanUnder(libraryRoot());
 }
 
@@ -90,7 +176,14 @@ export async function scanLibrary(): Promise<Track[]> {
  * library for the screens and must not hold one folder's under another's name.
  */
 export async function scanUnder(root: string): Promise<Track[]> {
-  const tracks = await JukeboxAudio.queryTracksAsync(root);
+  const read = await JukeboxAudio.queryTracksAsync(root);
+  // A native side from before the album artist was read sends no such field.
+  // Said as nothing here, so that a track read by it is the same track as the
+  // one written down for the next start, which always carries the field.
+  const tracks =
+    read.length > 0 && !('albumArtist' in read[0]!)
+      ? read.map((track) => ({ ...track, albumArtist: null }))
+      : read;
   recogniseLater(tracks);
   return tracks;
 }

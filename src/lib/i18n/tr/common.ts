@@ -37,6 +37,8 @@ export const common: Strings['common'] = {
   previousTrack: 'Önceki parça',
   shuffle: 'Karıştır',
   addToQueue: 'Sıraya ekle',
+  moveUp: 'Yukarı taşı',
+  moveDown: 'Aşağı taşı',
 
   unknownArtist: 'Bilinmeyen sanatçı',
   unknownAlbum: 'Bilinmeyen albüm',

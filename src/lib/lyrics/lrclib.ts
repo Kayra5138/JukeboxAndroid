@@ -1,6 +1,9 @@
 import { isSynced } from './lrc.ts';
 import { request, sleep, statusOf, USER_AGENT } from '../metadata/http.ts';
+import { withoutPackaging } from '../metadata/credit.ts';
+import { identify } from '../metadata/identify.ts';
 import { bareTitle, matchScore } from '../metadata/text.ts';
+import type { Track } from '../types.ts';
 
 /**
  * LRCLIB is a lyrics database built for music players: open, free, no key and
@@ -37,6 +40,26 @@ export type LyricsQuery = {
   album: string | null;
   durationSec: number | null;
 };
+
+/**
+ * The song's name as a lyrics site would have it: without the artist in
+ * front and without what the video's title said about the upload —
+ * `Eminem - Berzerk (Official) (Explicit)` is `Berzerk`. See `withoutPackaging`.
+ */
+function songOf(track: LyricsQuery): string {
+  return withoutPackaging(bareTitle(track.title, track.artist));
+}
+
+/**
+ * A file with no artist tag, named the way a download is, `Artist - Title`:
+ * asked about by that artist, the way the catalogue lookup does
+ * (`metadata/identify.ts`), rather than by the whole name as one search.
+ */
+function named(track: LyricsQuery): LyricsQuery {
+  if (track.artist) return track;
+  const identity = identify({ title: track.title, artist: null } as Track);
+  return identity.artist ? { ...track, artist: identity.artist, title: identity.title } : track;
+}
 
 type LrcRecord = {
   id: number;
@@ -96,9 +119,10 @@ const query = (params: Record<string, string | number | null | undefined>) =>
  * filtered rather than trusted.
  */
 export async function fetchLyrics(
-  track: LyricsQuery,
+  asked: LyricsQuery,
   signal?: AbortSignal
 ): Promise<Lyrics | null> {
+  const track = named(asked);
   if (!track.artist) return searchLyrics(track, signal);
 
   const duration = track.durationSec ? Math.round(track.durationSec) : null;
@@ -109,7 +133,7 @@ export async function fetchLyrics(
     `Akuma no Ko` finds the words. The tagged title is still tried after, for
     the songs whose real name happens to contain a dash.
   */
-  const titles = [bareTitle(track.title, track.artist), track.title];
+  const titles = [songOf(track), bareTitle(track.title, track.artist), track.title];
   const names = [...new Set(titles)].map((track_name) => ({
     artist_name: track.artist,
     track_name,
@@ -152,8 +176,8 @@ async function searchLyrics(
   signal?: AbortSignal
 ): Promise<Lyrics | null> {
   const params = track.artist
-    ? { artist_name: track.artist, track_name: bareTitle(track.title, track.artist) }
-    : { q: track.title };
+    ? { artist_name: track.artist, track_name: songOf(track) }
+    : { q: songOf(track) };
 
   const results = ((await get(`/search?${query(params)}`, signal)) ?? []) as LrcRecord[];
   if (results.length === 0) return null;
@@ -199,7 +223,7 @@ export async function fetchLyricsVersions(
 ): Promise<Lyrics[]> {
   if (!track.durationSec) return [];
   const wanted = Math.round(track.durationSec);
-  const title = bareTitle(track.title, track.artist);
+  const title = songOf(named(track));
 
   // By name and artist first, then by name alone: the entry in the original
   // writing is often filed under the artist's name in that writing too, where

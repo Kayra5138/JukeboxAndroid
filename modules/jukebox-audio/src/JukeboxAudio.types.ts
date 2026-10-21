@@ -8,6 +8,14 @@ export type LibraryTrack = {
   artist: string | null;
   album: string | null;
   /**
+   * Whoever the record is by, as the file's own tag says it (ID3's TPE2, a
+   * FLAC's ALBUMARTIST), or null where the file does not say.
+   *
+   * Optional because a build of the native module from before it was read
+   * does not send it, and absent is read as the file saying nothing.
+   */
+  albumArtist?: string | null;
+  /**
    * Always null. The media store's album-art provider was never public API and
    * stopped resolving around Android 10, so the field is kept only so callers
    * have somewhere to hang a cover from elsewhere; `getEmbeddedArtworkAsync` is
@@ -162,6 +170,18 @@ export type JukeboxAudioEvents = {
    * relied on to notice.
    */
   onQueueReplaced: () => void;
+  /**
+   * The player's repeat mode changed, whoever changed it — this app, or the
+   * repeat button on the home screen widget. Never sent by a native module
+   * that predates it.
+   */
+  onRepeatModeChange: (event: { repeat: RepeatMode }) => void;
+  /**
+   * The widget's cover was pressed while the app was running, asking for the
+   * player to be opened. An app started by that press is asked with
+   * `takeOpenPlayer` instead, since nothing is listening yet when it arrives.
+   */
+  onOpenPlayer: () => void;
 };
 
 

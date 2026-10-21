@@ -1,6 +1,7 @@
 import { findTrack } from './library.ts';
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
-import { isManual, writeLyrics } from '../db/lyrics.ts';
+import { isManual, writeLocalLyrics, writeLyrics } from '../db/lyrics.ts';
+import { readLocalLyrics } from '../lyrics/device.ts';
 import { fetchLyrics } from '../lyrics/lrclib.ts';
 import { enrichLibrary } from '../metadata/enrich.ts';
 
@@ -31,6 +32,16 @@ export async function describeTrack(trackId: string, signal?: AbortSignal): Prom
     // Words somebody chose are not a guess waiting to be improved on, and this
     // runs from "look up details" as well as from an import.
     if (isManual(trackId)) return;
+
+    // Words on the phone come before LRCLIB here as they do when the track is
+    // played, and LRCLIB is not asked about a song whose words are already in
+    // hand; see `lyrics/local.ts`.
+    const local = await readLocalLyrics(trackId);
+    if (signal?.aborted) return;
+    if (local) {
+      writeLocalLyrics(trackId, local, Date.now());
+      return;
+    }
 
     const lyrics = await fetchLyrics(
       {

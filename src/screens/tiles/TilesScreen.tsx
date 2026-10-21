@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BackHandler, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { AccessibilityInfo, BackHandler, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
@@ -15,6 +15,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { motionReduced } from '../../lib/ui/motion';
 import { BackIcon } from '../../components/Icons';
+import { Segmented } from '../../components/Segmented';
 
 import { Image } from 'expo-image';
 
@@ -44,7 +45,7 @@ import {
   type Score,
   type Speed,
 } from '../../lib/tiles/game';
-import { keyShades, laneShades } from '../../lib/tiles/shade';
+import { inkOnFace, keyShades, laneShades } from '../../lib/tiles/shade';
 
 import {
   AWAY_MS,
@@ -102,6 +103,9 @@ import { speedName, Words } from './Words';
 
 /** Room round the pause button that counts as it: a press that lands beside it was meant for it. */
 const STOP_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
+
+/** The chips of the setup are some thirty-six tall; this is the rest of a finger's height. */
+const CHIP_SLOP = { top: 6, bottom: 6 };
 
 export default function TilesScreen() {
   const insets = useSafeAreaInsets();
@@ -297,6 +301,21 @@ export default function TilesScreen() {
     is three screens away and getting to it means leaving the run.
   */
   const [still] = useState(motionReduced);
+
+  /*
+    Whether a screen reader is on, followed as it changes. The game is played
+    by tapping in time, and a screen reader takes the first tap of every touch
+    for itself, so with one on the keys cannot be struck at all; the setup
+    says so rather than letting somebody start a run they cannot play.
+  */
+  const [screenReader, setScreenReader] = useState(false);
+  useEffect(() => {
+    void AccessibilityInfo.isScreenReaderEnabled()
+      .then(setScreenReader)
+      .catch(() => {});
+    const listener = AccessibilityInfo.addEventListener('screenReaderChanged', setScreenReader);
+    return () => listener.remove();
+  }, []);
   const sStill = useSharedValue(still ? 1 : 0);
 
   const spanMs = useSharedValue(SPEEDS[2]!.onScreenMs);
@@ -1620,32 +1639,49 @@ export default function TilesScreen() {
       */}
       {phase === 'playing' || phase === 'paused' || (phase === 'over' && end !== 'stopped') ? (
         <View pointerEvents="box-none" style={[styles.hud, { paddingTop: insets.top + 8 }]}>
-          <View style={styles.tally}>
-            <Text style={styles.score}>{pointsOf(score)}</Text>
-            <View style={styles.lives}>
-              {Array.from({ length: LIVES }, (_, slot) => (
-                <Life key={slot} slot={slot} left={sLives} still={sStill} />
-              ))}
-            </View>
-          </View>
+          {/* A bare number to a screen reader otherwise; said as the score it is. */}
+          <Words>
+            {(t) => (
+              <View style={styles.tally} accessible accessibilityLabel={t.tiles.hud.score(pointsOf(score))}>
+                <Text style={styles.score}>{pointsOf(score)}</Text>
+                <View style={styles.lives}>
+                  {Array.from({ length: LIVES }, (_, slot) => (
+                    <Life key={slot} slot={slot} left={sLives} still={sStill} />
+                  ))}
+                </View>
+              </View>
+            )}
+          </Words>
           <Progress at={songMs} ofMs={chart?.durationMs ?? 0} />
-          <Pressable
-            accessibilityRole="button"
-            onPress={pause}
-            hitSlop={STOP_SLOP}
-            disabled={phase === 'over'}
-            style={[styles.stop, phase === 'over' && styles.gone]}>
-            <View style={styles.pauseBars}>
-              <View style={styles.pauseBar} />
-              <View style={styles.pauseBar} />
-            </View>
-          </Pressable>
+          {/* Two bars and nothing else, so it is named for a screen reader. */}
+          <Words>
+            {(t) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t.common.pause}
+                onPress={pause}
+                hitSlop={STOP_SLOP}
+                disabled={phase === 'over'}
+                style={[styles.stop, phase === 'over' && styles.gone]}>
+                <View style={styles.pauseBars}>
+                  <View style={styles.pauseBar} />
+                  <View style={styles.pauseBar} />
+                </View>
+              </Pressable>
+            )}
+          </Words>
         </View>
       ) : null}
 
       {phase === 'paused' ? (
         <View style={styles.pauseScreen}>
-          <Words>{(t) => <Text style={styles.pauseTitle}>{t.tiles.pause.title}</Text>}</Words>
+          <Words>
+            {(t) => (
+              <Text accessibilityRole="header" style={styles.pauseTitle}>
+                {t.tiles.pause.title}
+              </Text>
+            )}
+          </Words>
           <Pressable accessibilityRole="button" style={styles.go} onPress={resume}>
             <Words>{(t) => <Text style={styles.goLabel}>{t.tiles.pause.resume}</Text>}</Words>
           </Pressable>
@@ -1676,7 +1712,16 @@ export default function TilesScreen() {
               </Pressable>
             )}
           </Words>
-          <Words>{(t) => <Text style={styles.title}>{t.tiles.setup.title}</Text>}</Words>
+          <Words>
+            {(t) => (
+              <Text accessibilityRole="header" style={styles.title}>
+                {t.tiles.setup.title}
+              </Text>
+            )}
+          </Words>
+          {screenReader ? (
+            <Words>{(t) => <Text style={styles.note}>{t.tiles.setup.screenReader}</Text>}</Words>
+          ) : null}
 
           {!trackId ? (
             <Words>{(t) => <Text style={styles.note}>{t.tiles.setup.noTrack}</Text>}</Words>
@@ -1697,31 +1742,46 @@ export default function TilesScreen() {
                 )}
               </Words>
 
-              <View style={styles.row}>
-                {SPEEDS.map((option) => (
-                  <Pressable
-                    key={option.id}
-                    accessibilityRole="button"
-                    onPress={() => chooseSpeed(option)}
-                    style={[styles.chip, option.id === speed.id && styles.chipOn]}>
-                    <Words>
-                      {(t) => (
-                        <Text style={[styles.chipLabel, option.id === speed.id && styles.chipLabelOn]}>
-                          {speedName(option, t)}
-                        </Text>
-                      )}
-                    </Words>
-                  </Pressable>
-                ))}
-              </View>
+              {/*
+                The one chosen is marked, which a screen reader is told as well. In the
+                game's own colours, which are dark whatever the theme is.
+              */}
+              <Words>
+                {(t) => (
+                  <Segmented
+                    role="button"
+                    variant="chips"
+                    hitSlop={CHIP_SLOP}
+                    style={styles.row}
+                    optionStyle={styles.chip}
+                    plateStyle={styles.chipPlate}
+                    markStyle={styles.chipOn}
+                    labelStyle={styles.chipLabel}
+                    chosenLabelStyle={styles.chipLabelOn}
+                    options={SPEEDS.map((option) => ({ value: option.id, label: speedName(option, t) }))}
+                    value={speed.id}
+                    onChange={(id) => {
+                      const next = SPEEDS.find((option) => option.id === id);
+                      if (next) chooseSpeed(next);
+                    }}
+                  />
+                )}
+              </Words>
 
               <Words>{(t) => <Text style={styles.small}>{t.tiles.setup.latency}</Text>}</Words>
               <View style={styles.row}>
-                <Pressable style={styles.chip} onPress={() => nudge(-20)}>
+                <Pressable accessibilityRole="button" hitSlop={CHIP_SLOP} style={styles.chip} onPress={() => nudge(-20)}>
                   <Words>{(t) => <Text style={styles.chipLabel}>{t.tiles.setup.earlier}</Text>}</Words>
                 </Pressable>
-                <Words>{(t) => <Text style={styles.offset}>{t.tiles.setup.offset(offset)}</Text>}</Words>
-                <Pressable style={styles.chip} onPress={() => nudge(20)}>
+                {/* Said again as the buttons either side move it, which is where the attention is. */}
+                <Words>
+                  {(t) => (
+                    <Text style={styles.offset} accessibilityLiveRegion="polite">
+                      {t.tiles.setup.offset(offset)}
+                    </Text>
+                  )}
+                </Words>
+                <Pressable accessibilityRole="button" hitSlop={CHIP_SLOP} style={styles.chip} onPress={() => nudge(20)}>
                   <Words>{(t) => <Text style={styles.chipLabel}>{t.tiles.setup.later}</Text>}</Words>
                 </Pressable>
               </View>
@@ -1733,7 +1793,8 @@ export default function TilesScreen() {
                 onPress={() => void begin()}>
                 <Words>
                   {(t) => (
-                    <Text style={styles.goLabel}>
+                    // In whichever of white and black can be read on the record's colour.
+                    <Text style={[styles.goLabel, { color: inkOnFace(keyColour) }]}>
                       {phase === 'starting' ? t.tiles.setup.starting : t.tiles.setup.start}
                     </Text>
                   )}

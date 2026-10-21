@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values/strings.xml と values/jukebox_widget_strings.xml の日本語版です。
+     名前ごとに対応しています。日本語は数で名詞の形が変わらないため、plurals は
+     other だけです。固有名詞はそのまま: Jukebox, YouTube, Android, Wi-Fi, MP3,
+     FLAC, ID3。用語はアプリの画面と同じです: ライブラリ, リスト, 検索, 曲,
+     ジャケット, 端末。translatable="false" の項目はここに置きません。 -->
+<resources>
+  <!-- ホーム画面のウィジェット。名前 (Jukebox) は翻訳しません。 -->
+  <string name="jukebox_widget_description">アプリを開かずに再生、一時停止、曲送りができます。</string>
+  <string name="jukebox_widget_art">アルバムジャケット</string>
+  <string name="jukebox_widget_previous">前の曲</string>
+  <string name="jukebox_widget_toggle">再生または一時停止</string>
+  <!-- 中央のボタンをスクリーンリーダーが読み上げる名前。押したときの動作です。 -->
+  <string name="jukebox_widget_play">再生</string>
+  <string name="jukebox_widget_pause">一時停止</string>
+  <string name="jukebox_widget_next">次の曲</string>
+  <string name="jukebox_widget_idle">再生中の曲はありません</string>
+  <string name="jukebox_widget_progress">再生位置</string>
+  <string name="jukebox_widget_card_label">再生中</string>
+  <string name="jukebox_widget_card_description">大きなジャケットと操作ボタン、シャッフル、リピート。</string>
+  <string name="jukebox_widget_large_label">次に再生</string>
+  <string name="jukebox_widget_large_description">再生中の曲と操作ボタン、キューの次の曲。曲をタップすると再生します。</string>
+  <string name="jukebox_widget_shortcut_label">シャッフル</string>
+  <string name="jukebox_widget_shortcut_description">すべての曲や最近聴いた曲をワンタップでシャッフル再生します。</string>
+  <string name="jukebox_widget_shuffle">キューをシャッフル</string>
+  <string name="jukebox_widget_repeat_off">リピート</string>
+  <string name="jukebox_widget_repeat_all">全曲リピート</string>
+  <string name="jukebox_widget_repeat_one">1曲リピート</string>
+  <string name="jukebox_widget_up_next">次に再生</string>
+  <string name="jukebox_widget_up_next_empty">次に再生する曲はありません</string>
+  <string name="jukebox_widget_open">プレーヤーを開きます</string>
+
+  <!-- メディア通知。 -->
+  <string name="jukebox_playback_channel">再生中</string>
+
+  <!-- 再生できなかった曲。プレーヤー自身の技術的なメッセージの横に表示されます。 -->
+  <string name="jukebox_playback_missing">このファイルが見つかりませんでした。</string>
+  <string name="jukebox_playback_denied">Androidがこのファイルの読み込みを許可しませんでした。</string>
+  <string name="jukebox_playback_unreadable">このファイルを読み込めませんでした。</string>
+  <string name="jukebox_playback_unsupported">この種類のファイルはこの端末では再生できません。</string>
+  <string name="jukebox_playback_failed">この曲を再生できませんでした。</string>
+
+  <!-- ダウンロードの通知。 -->
+  <string name="jukebox_downloads_channel">音楽のダウンロード</string>
+  <string name="jukebox_downloads_title">Jukebox · ダウンロード</string>
+  <string name="jukebox_downloads_preparing">ダウンロードを準備中…</string>
+  <string name="jukebox_downloads_downloading">ダウンロード中：%1$s</string>
+  <string name="jukebox_downloads_converting">変換中：%1$s</string>
+  <string name="jukebox_downloads_finding">検索中：%1$s</string>
+  <string name="jukebox_downloads_resting">次のダウンロードまで少し待機しています…</string>
+
+  <!-- Android Auto: 4つのタブ、最初のタブの3つのタイル、棚の並び順。 -->
+  <string name="jukebox_auto_home">ホーム</string>
+  <string name="jukebox_auto_tracks">曲</string>
+  <string name="jukebox_auto_albums">アルバム</string>
+  <string name="jukebox_auto_lists">リスト</string>
+  <string name="jukebox_auto_continue">続きから再生</string>
+  <string name="jukebox_auto_shuffle_recent">最近の曲をシャッフル</string>
+  <string name="jukebox_auto_shuffle_all">すべてシャッフル</string>
+  <string name="jukebox_auto_sort">並べ替え</string>
+  <string name="jukebox_auto_sort_now">現在の並び順</string>
+  <string name="jukebox_auto_sort_name">名前順</string>
+  <string name="jukebox_auto_sort_artist">アーティスト順</string>
+  <string name="jukebox_auto_sort_added">最近追加した順</string>
+  <string name="jukebox_auto_sort_most">再生回数順</string>
+  <string name="jukebox_auto_sort_recent">最近再生した順</string>
+  <string name="jukebox_auto_sort_changed">最近変更した順</string>
+  <string name="jukebox_auto_sort_size">長い順</string>
+  <plurals name="jukebox_count_tracks">
+    <item quantity="other">%d曲</item>
+  </plurals>
+  <plurals name="jukebox_count_songs">
+    <item quantity="other">%d曲</item>
+  </plurals>
+
+  <!-- タイトルもファイル名もない曲と、端末のイコライザーから引き継いだ設定。 -->
+  <string name="jukebox_unknown_title">不明</string>
+  <string name="jukebox_unknown_artist">不明なアーティスト</string>
+  <string name="jukebox_equalizer_carried">端末のイコライザー</string>
+
+  <!-- YouTubeの検索とダウンロード。JavaScript側はコードで判別します: Failure.kt を参照。 -->
+  <string name="jukebox_youtube_verification">この動画はYouTube側で確認を求められています。別の音源をお試しください。</string>
+  <string name="jukebox_youtube_unavailable">この動画は利用できないか、非公開です。</string>
+  <string name="jukebox_youtube_outdated">YouTubeの仕様が変わり、このバージョンのダウンローダーではまだ読み取れません。ダウンロード画面で新しいバージョンを確認するか、Jukeboxを更新してください。</string>
+  <string name="jukebox_youtube_network">YouTubeに接続できませんでした。接続を確認して、もう一度お試しください。</string>
+  <string name="jukebox_youtube_refused">YouTubeがこのダウンロードを拒否しました。後でもう一度試すか、Jukeboxを更新してください。</string>
+  <string name="jukebox_youtube_timed_out">YouTubeの応答に時間がかかりすぎました。もう一度お試しください。</string>
+  <string name="jukebox_youtube_live">ライブ配信と公開前の動画はダウンロードできません。</string>
+  <string name="jukebox_youtube_too_long">2時間未満の音源を選んでください。</string>
+  <string name="jukebox_youtube_not_a_song">見つかった動画は、ライブ配信か、この曲にしては長すぎるものでした。</string>
+  <string name="jukebox_youtube_no_audio">YouTubeから音声ファイルを取得できませんでした。</string>
+  <string name="jukebox_youtube_engine">YouTubeエンジンを準備できませんでした。</string>
+  <string name="jukebox_youtube_invalid_video">無効なYouTube動画です。</string>
+  <string name="jukebox_youtube_query">曲名、アーティスト、YouTubeのリンクを入力してください（500文字以内）。</string>
+  <string name="jukebox_youtube_video_link">YouTube動画のリンクを使うか、曲名で検索してください。</string>
+  <string name="jukebox_youtube_not_a_video">動画のリンクを使ってください。プレイリストのリンクは「プレイリスト」で開いてください。</string>
+  <string name="jukebox_youtube_playlist_query">プレイリスト名を入力するか、YouTubeのプレイリストのリンクを貼り付けてください。</string>
+  <string name="jukebox_youtube_playlist_link">YouTubeのプレイリストのリンクを貼り付けてください。</string>
+  <string name="jukebox_youtube_no_playlist">このリンクにはプレイリストが含まれていません。</string>
+  <string name="jukebox_download_folder">「Music」フォルダ内のフォルダを選んでください。</string>
+  <string name="jukebox_download_queue_full">キューがいっぱいです。ダウンロードが完了するまでお待ちください。</string>
+  <string name="jukebox_download_batch">一度に選べるのは500曲までです。</string>
+  <string name="jukebox_download_waiting_wifi">Wi-Fiを待っています。自動ダウンロードは後で再開されます。</string>
+  <string name="jukebox_download_paused">ダウンロードは一時停止中です。ディスカバーを開いて再試行してください。</string>
+  <string name="jukebox_download_interrupted">ダウンロードが中断されました。「再試行」をタップしてください。</string>
+  <string name="jukebox_download_stopped">Androidがバックグラウンドでのダウンロードを停止しました。検索を開いて再試行してください。</string>
+  <string name="jukebox_download_service">ダウンロードサービスを開始できませんでした。</string>
+  <string name="jukebox_download_open_search">検索を開いて、ダウンロードを再試行してください。</string>
+  <string name="jukebox_download_open_discover">ダウンロードを再開するには、ディスカバーを開いてください。</string>
+  <string name="jukebox_download_retry_discover">このダウンロードを再試行するには、ディスカバーを開いてください。</string>
+  <string name="jukebox_download_not_here">保存する前に、この曲をダウンロードしてください。</string>
+  <string name="jukebox_download_no_match">YouTubeで一致する音源が見つかりませんでした。</string>
+  <string name="jukebox_download_failed">ダウンロードに失敗しました。もう一度お試しください。</string>
+
+  <!-- ファイルをライブラリに取り込むとき。 -->
+  <string name="jukebox_import_refused">音楽ライブラリが新しいファイルを受け付けませんでした。</string>
+  <string name="jukebox_import_not_written">音楽ライブラリに書き込めませんでした。</string>
+  <string name="jukebox_import_not_published">音声ファイルをライブラリに反映できませんでした。</string>
+  <string name="jukebox_import_too_large">このファイルは曲にしては大きすぎます。</string>
+  <string name="jukebox_import_empty">ファイルが空でした。</string>
+  <string name="jukebox_import_cut_short">ダウンロードしたファイルが完全に届きませんでした。</string>
+
+  <!-- 画像: 選択、ジャケットの取得、ギャラリーへの保存。 -->
+  <string name="jukebox_picture_not_opened">この画像を開けませんでした。</string>
+  <string name="jukebox_picture_not_one">このファイルは画像ではありません。</string>
+  <string name="jukebox_picture_not_read">この画像を読み込めませんでした。</string>
+  <string name="jukebox_picture_not_saved">この画像を保存できませんでした。</string>
+  <string name="jukebox_picture_none">保存する画像がありません。</string>
+  <string name="jukebox_picture_gallery">ギャラリーに画像を保存できませんでした。</string>
+  <string name="jukebox_cover_source">ダウンロードできるのは、カタログ、YouTube、Wikimediaの画像だけです。</string>
+  <string name="jukebox_cover_redirect">ジャケットのリダイレクト先がありません。</string>
+  <string name="jukebox_cover_unavailable">アルバムジャケットを取得できません。</string>
+  <string name="jukebox_cover_too_large">アルバムジャケットが大きすぎます。</string>
+  <string name="jukebox_cover_invalid">アルバムジャケットが無効です。</string>
+  <string name="jukebox_cover_not_saved">アルバムジャケットを保存できませんでした。</string>
+  <string name="jukebox_cover_redirects">アルバムジャケットのリダイレクトが多すぎます。</string>
+
+  <!-- ユーザーが選んだファイル: バックアップ、イコライザーの設定。 -->
+  <string name="jukebox_file_not_opened">このファイルを開けませんでした。</string>
+  <string name="jukebox_file_not_writable">この場所には書き込めませんでした。</string>
+  <string name="jukebox_file_too_big_for_equalizer">このファイルはイコライザーの設定にしては大きすぎます。</string>
+  <string name="jukebox_backup_too_large">このバックアップは大きすぎて読み込めません。</string>
+  <string name="jukebox_backup_not_one">このファイルはJukeboxのバックアップではありません。</string>
+  <string name="jukebox_delete_needs_11">削除するにはAndroid 11以降が必要です。</string>
+
+  <!-- 曲の情報をファイルに書き込むとき。 -->
+  <string name="jukebox_tags_needs_11">ファイルへの書き込みにはAndroid 11以降が必要です。</string>
+  <string name="jukebox_tags_no_build">このバージョンではファイルに書き込めません。</string>
+  <string name="jukebox_tags_unreadable">ファイルを読み込めませんでした。</string>
+  <string name="jukebox_tags_not_written">新しい情報を作業用コピーに書き込めませんでした。</string>
+  <string name="jukebox_tags_not_mp3">MP3として読み込めませんでした。</string>
+  <string name="jukebox_tags_not_flac">FLACとして読み込めませんでした。</string>
+  <string name="jukebox_tags_copy_not_writable">作業用コピーを書き込み用に開けませんでした。</string>
+  <string name="jukebox_tags_neither">MP3でもFLACでもありません。</string>
+  <string name="jukebox_tags_kind_changed">コピーのファイル形式が元と変わってしまいました。</string>
+  <string name="jukebox_tags_length_changed">コピーの長さが元のファイルと一致しないため、音声が損なわれている可能性があります。</string>
+  <!-- %1$s は下の7つの名前のいずれかです。 -->
+  <string name="jukebox_tags_field_wrong">コピーから読み戻した%1$sが、書き込んだ内容と一致しませんでした。</string>
+  <string name="jukebox_tags_field_title">タイトル</string>
+  <string name="jukebox_tags_field_artist">アーティスト</string>
+  <string name="jukebox_tags_field_album">アルバム</string>
+  <string name="jukebox_tags_field_album_artist">アルバムアーティスト</string>
+  <string name="jukebox_tags_field_genre">ジャンル</string>
+  <string name="jukebox_tags_field_year">年</string>
+  <string name="jukebox_tags_field_track">トラック番号</string>
+  <string name="jukebox_tags_field_disc">ディスク番号</string>
+  <string name="jukebox_tags_cover_unasked">指定していないジャケットが書き込まれました。</string>
+  <string name="jukebox_tags_pictures_wrong">コピー内の画像が、本来あるべきものと異なります。</string>
+  <string name="jukebox_tags_details_added">コピーに、元のファイルになかった情報が含まれています。</string>
+  <!-- %1$s はファイル内でのフレーム名です: "RVAD, TXXX"。 -->
+  <string name="jukebox_tags_details_lost">書き込むと、このアプリが管理していない情報（%1$s）が失われるか変更されます。</string>
+  <string name="jukebox_tags_old_tag_changed">ファイル末尾の旧形式のタグが追加または削除されました。</string>
+  <string name="jukebox_tags_version_wrong">タグがID3v2.%2$dではなくID3v2.%1$dで書き込まれました。</string>
+  <string name="jukebox_tags_sound_original_unknown">元のファイルで音声の始まりと終わりの位置を特定できませんでした。</string>
+  <string name="jukebox_tags_sound_copy_unknown">コピーで音声の始まりと終わりの位置を特定できませんでした。</string>
+  <string name="jukebox_tags_sound_described">コピーに記録された音声の情報が、元のファイルと異なります。</string>
+  <string name="jukebox_tags_sound_length">コピーの音声の長さが、元のファイルの音声と異なります。</string>
+  <string name="jukebox_tags_sound_differs">コピーの音声が、元のファイルの音声と異なります。</string>
+  <string name="jukebox_tags_cover_missing">ジャケットが見つかりませんでした。</string>
+  <string name="jukebox_tags_cover_too_large">ジャケットが大きすぎてファイルに入れられません。</string>
+  <string name="jukebox_tags_cover_unreadable">ジャケットが読み込める画像ではありません。</string>
+  <string name="jukebox_tags_not_in_library">この曲はライブラリにありません。</string>
+  <string name="jukebox_tags_cache">アプリのキャッシュを使用できませんでした。ファイルは変更されていません。</string>
+  <string name="jukebox_tags_gone">この曲はもう端末にありません。</string>
+  <string name="jukebox_tags_no_room_for_copy">先にファイルのコピーで作業するための空き容量が足りません。</string>
+  <string name="jukebox_tags_copy_incomplete">ファイルを完全にコピーできませんでした。</string>
+  <string name="jukebox_tags_not_opened">ファイルを開けませんでした。</string>
+  <string name="jukebox_tags_not_opened_for_writing">ファイルを書き込み用に開けませんでした。</string>
+  <string name="jukebox_tags_denied">Androidがこのファイルの変更を許可しませんでした。</string>
+  <string name="jukebox_tags_no_room_for_file">ファイルの保存場所に十分な空き容量がありません。</string>
+  <string name="jukebox_tags_copy_not_read_back">作業用コピーを読み戻せませんでした。</string>
+  <!-- 下の2つは、その後の3つのかっこの中に入ります。 -->
+  <string name="jukebox_tags_not_as_written">書き込んだとおりに読み戻せません</string>
+  <string name="jukebox_tags_cut_short">書き込みが途中で中断されました</string>
+  <!-- %1$s は理由、%2$s は完成したコピーの保存場所です。 -->
+  <string name="jukebox_tags_partly_kept">ファイルは一部しか書き換えられておらず、再生できない可能性があります（%1$s）。新しい情報を含む完全なコピーを%2$sに保存しました。パソコンかファイルマネージャーで、このコピーを元のファイルに上書きしてください。</string>
+  <string name="jukebox_tags_partly_lost">ファイルは一部しか書き換えられておらず、再生できない可能性があります（%1$s）。完成したコピーも保存できませんでした。</string>
+  <string name="jukebox_tags_maybe_partly">ファイルが一部だけ書き換えられた状態になっている可能性があります（%1$s）。再生して確認してください。</string>
+  <!-- %1$s は上のいずれかの文で、句点まで含みます。 -->
+  <string name="jukebox_tags_untouched">%1$sファイルは変更されていません。</string>
+  <!-- %1$s はシステムが報告したエラーで、句点がありません。 -->
+  <string name="jukebox_tags_untouched_after">%1$s。ファイルは変更されていません。</string>
+  <!-- 通話中に再生を押したとき、通話の下で小さく音楽を流す際のトースト。 -->
+  <string name="jukebox_under_a_call">通話中のため、小さい音量で再生しています。</string>
+</resources>

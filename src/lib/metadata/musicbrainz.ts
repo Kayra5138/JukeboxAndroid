@@ -192,6 +192,15 @@ async function resolveArtist(
   return resolved;
 }
 
+/**
+ * The genres of a record, best first, from the one request its release group
+ * takes: for a whole record looked up at once, whose genres every track of it
+ * shares. Asked once per record and kept, as for a recording.
+ */
+export async function recordGenres(groupId: string, signal?: AbortSignal): Promise<string[]> {
+  return rankGenres(await releaseGroupGenres(groupId, signal));
+}
+
 async function releaseGroupGenres(
   id: string,
   signal?: AbortSignal

@@ -36,6 +36,15 @@ const WORTH_SPREADING = 3;
  * wherever those rows happen to fall, and two of them landing together stops
  * being something chance can arrange.
  *
+ * The spread is laid round a circle and not along a line, and the list starts
+ * wherever on the circle chance says. Along a line it went wrong at the ends:
+ * a track's small wander could carry it past the start, which only an artist
+ * with one track has room to do, so that nine in ten shuffles began with one
+ * of them and an artist with fifty tracks nearly never did. Round a circle
+ * nothing is past the start, and starting anywhere makes every track as
+ * likely as every other to be the one that plays first — which is the first
+ * thing anybody notices about a shuffle.
+ *
  * One pass to group, one shuffle per group, one sort. Nothing looks at any
  * other track, nothing is measured twice, and there is no pass that tries to
  * improve on the result — this runs on the press, every press, on whatever the
@@ -74,15 +83,16 @@ export function spreadShuffle<T>(
     // with the same number of tracks do not march in step.
     const start = Math.random() * gap;
     for (let i = 0; i < order.length; i += 1) {
-      dealt.push({
-        at: start + i * gap + (Math.random() - 0.5) * gap * WANDER,
-        item: order[i]!,
-      });
+      const at = start + i * gap + (Math.random() - 0.5) * gap * WANDER;
+      // Round the circle: past one end is the other, not beyond the list.
+      dealt.push({ at: ((at % 1) + 1) % 1, item: order[i]! });
     }
   }
 
   dealt.sort((a, b) => a.at - b.at);
-  const result = dealt.map((entry) => entry.item);
+  // Begun anywhere on the circle. The order round it is kept, so is the spacing.
+  const from = Math.floor(Math.random() * dealt.length);
+  const result = [...dealt.slice(from), ...dealt.slice(0, from)].map((entry) => entry.item);
 
   /*
     The one thing the spread cannot see. Everything in the list was placed

@@ -16,6 +16,12 @@ export const tiles: Strings['tiles'] = {
     offset: (ms) => `${ms} ms`,
     start: 'Baştan çal',
     starting: 'Başlatılıyor…',
+    screenReader:
+      'Bu oyun müziğe uyarak dokunmayla oynanır ve TalkBack bu dokunuşları kendine alır. Oynamak için TalkBack’i duraklat.',
+  },
+
+  hud: {
+    score: (points) => `Puan ${points}`,
   },
 
   pause: {

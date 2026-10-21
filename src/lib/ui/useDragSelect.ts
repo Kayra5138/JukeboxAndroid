@@ -33,6 +33,7 @@ export function useDragSelect({
   enabled,
   selected,
   onChange,
+  top = 0,
 }: {
   /** In the order they are drawn, so an index can be found from a position. */
   ids: string[];
@@ -41,6 +42,11 @@ export function useDragSelect({
   enabled: boolean;
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
+  /**
+   * Room above the rows in what is scrolled, where a list runs on under a
+   * bar of glass and begins that far down; see `UnderBars`.
+   */
+  top?: number;
 }): DragSelect {
   const wrapperRef = useRef<View | null>(null);
   const listTop = useRef(0);
@@ -58,7 +64,9 @@ export function useDragSelect({
   const selectedRef = useRef(selected);
   const enabledRef = useRef(enabled);
   const columnsRef = useRef(columns);
+  const topRef = useRef(top);
   idsRef.current = ids;
+  topRef.current = top;
   selectedRef.current = selected;
   enabledRef.current = enabled;
   columnsRef.current = columns;
@@ -80,7 +88,7 @@ export function useDragSelect({
 
   const indexAt = useCallback((pageX: number, pageY: number) => {
     const across = columnsRef.current;
-    const row = Math.floor((pageY - listTop.current + scrollOffset.current) / rowHeight);
+    const row = Math.floor((pageY - listTop.current + scrollOffset.current - topRef.current) / rowHeight);
     const columnWidth = (listWidth.current || 1) / across;
     const column = Math.min(
       Math.max(Math.floor((pageX - listLeft.current) / columnWidth), 0),

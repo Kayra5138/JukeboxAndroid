@@ -29,6 +29,8 @@ type Playing = {
   kept: boolean;
   /** A keep of it that failed, in words. */
   failed: string | null;
+  /** What was last said about keeping it, in words: that it failed, or that its file was another song and is being fetched again. */
+  told: string | null;
 };
 
 /**
@@ -62,6 +64,7 @@ function usePlaying(trackId: string): Playing {
     entry,
     kept: !entry && !!now?.kept,
     failed: (about?.kind === 'keepFailed' && about.text) || null,
+    told: ((about?.kind === 'keepFailed' || about?.kind === 'wrongFile') && about.text) || null,
   };
 }
 
@@ -92,7 +95,7 @@ export function PlayerDiscoverSide({
   /** On its side the player draws everything a sixth smaller, and the name is not as tall. */
   small?: boolean;
 }) {
-  const { entry, kept, failed } = usePlaying(trackId);
+  const { entry, kept, failed, told } = usePlaying(trackId);
   const { keep, exclude } = useDiscoverActions();
   const t = useT();
   const c = useColours();
@@ -101,6 +104,9 @@ export function PlayerDiscoverSide({
   const said = t.discover;
   if (!entry && !kept) return null;
   const box = small ? styles.sideSmall : styles.side;
+  // Drawn at 44, or 40 on its side; reaching this much further is the 48 a
+  // finger is owed, without the name beside it giving up any room.
+  const slop = small ? 4 : 2;
 
   if (!entry) {
     // Kept: a tick where the button was, for as long as the song plays, and its room kept at the other end.
@@ -118,6 +124,7 @@ export function PlayerDiscoverSide({
       <Pressable
         android_ripple={pressed}
         style={[box, styles.button]}
+        hitSlop={slop}
         accessibilityRole="button"
         accessibilityLabel={said.row.exclude}
         onPress={() => exclude(entry.id)}>
@@ -131,9 +138,11 @@ export function PlayerDiscoverSide({
     <Pressable
       android_ripple={pressed}
       style={[box, styles.button]}
+      hitSlop={slop}
       accessibilityRole="button"
-      // A keep that failed is said here, where it was asked for; pressing again is trying again.
-      accessibilityLabel={failed ?? said.row.keep}
+      // A keep that failed is said here, where it was asked for; pressing again is trying again. So is
+      // a file found to be another song when keep was pressed, while the right one is fetched.
+      accessibilityLabel={told ?? said.row.keep}
       accessibilityState={{ busy: keeping, disabled: keeping }}
       disabled={keeping}
       onPress={() => keep(entry.id)}>
@@ -168,6 +177,7 @@ export function PlayerDiscoverUndo() {
       accessibilityRole="button"
       // Which song, for somebody who cannot see that the one playing has changed.
       accessibilityLabel={`${notice.text} ${t.discover.notice.undo}`}
+      hitSlop={2}
       style={styles.undo}
       onPress={undo}>
       <Text style={styles.undoLabel}>{t.discover.notice.undo}</Text>

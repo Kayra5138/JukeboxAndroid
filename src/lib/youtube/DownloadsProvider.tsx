@@ -12,6 +12,7 @@ import { strings } from '../i18n/index';
 import { armFinder, awaitsFinding, kickFinder } from './finder';
 import { arrivedSignature, filingKey, jobsSignature } from './signature';
 import { publishJobs, readOnChange, standAsReader } from './watch';
+import { noteFailedDownloads } from '../support/errorLogStore';
 
 /** Being fetched at this moment: the states a download's progress moves in. */
 const FETCHING: readonly string[] = ['preparing', 'downloading', 'converting', 'saving', 'cancelling'];
@@ -24,7 +25,11 @@ type DownloadContext = {
   error: string | null;
   refresh: (checkFiles?: boolean) => Promise<void>;
   enqueue: (video: YouTubeVideo, format: AudioFormat) => Promise<void>;
-  enqueueBatch: (videos: YouTubeVideo[], format: AudioFormat) => Promise<void>;
+  /**
+   * [owned] are the videos the library has already, by track: put in the
+   * list and not fetched again (`owned.ts`).
+   */
+  enqueueBatch: (videos: YouTubeVideo[], format: AudioFormat, owned?: ReadonlyMap<string, string>) => Promise<void>;
   /**
    * Several videos already chosen, in the order given, as downloads and
    * nothing more: the missing tracks of a record read off a playlist of it.
@@ -92,6 +97,8 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
         const every = await downloads.getJobsAsync(checkFiles);
         const state = await downloads.queueStateAsync?.();
         const next = every.filter(job => !job.discoverKey);
+        // Whatever has failed since last time, for the report screen; Discover's own included.
+        noteFailedDownloads(every);
         // The phone hands them over newest first, which is the order the
         // older screens list them in. It keeps them the other way round, and
         // that is the order they are fetched in.
@@ -260,17 +267,20 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     await refresh(true);
   }, [refresh]);
 
-  const enqueueBatch = useCallback(async (videos: YouTubeVideo[], format: AudioFormat) => {
+  const enqueueBatch = useCallback(async (videos: YouTubeVideo[], format: AudioFormat, owned: ReadonlyMap<string, string> = new Map()) => {
     if (!downloads) throw new Error(strings().search.unavailable.downloads);
-    await ensureNotificationPermission();
-    extractorWanted();
-    registerYouTubePlaylist(videos);
+    const wanted = videos.filter((video) => !owned.has(video.id));
+    if (wanted.length > 0) {
+      await ensureNotificationPermission();
+      extractorWanted();
+    }
+    registerYouTubePlaylist(videos, owned);
     // A list just made may be of songs that arrived long ago, with no job
     // of them changed by its making: the next reading is to be gone through.
     seen.current = null;
     arrived.current = null;
     setRevision((value) => value + 1);
-    await downloads.enqueueBatchAsync(videos.map(carried), format, libraryRoot());
+    if (wanted.length > 0) await downloads.enqueueBatchAsync(wanted.map(carried), format, libraryRoot());
     await refresh(true);
   }, [refresh]);
 

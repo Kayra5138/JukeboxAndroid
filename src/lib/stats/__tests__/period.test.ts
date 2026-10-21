@@ -506,3 +506,12 @@ describe('the three readings of a period', () => {
     }
   });
 });
+
+describe('a month in a twelfth of the width', () => {
+  it('is a letter where months are spelt and a number where they are counted', () => {
+    const counted = { ...stringsFor('en'), format: { ...stringsFor('en').format, monthsShort: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'] } };
+    const year = bucketsOf('year', at(2026, 6, 1), null, counted);
+    assert.deepEqual(year.map((bucket) => bucket.label), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12']);
+    assert.equal(bucketsOf('year', at(2026, 6, 1), null, stringsFor('en'))[9]!.label, 'O');
+  });
+});

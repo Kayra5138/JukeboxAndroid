@@ -10,6 +10,9 @@ import { LIBRARY_VIEWS, storedViews, viewsFrom, withView, type LibraryView } fro
 import { switchColours, useColours, usePressed, useThemeChoice } from '../lib/theme/index';
 import { themeOf } from '../lib/theme/registry';
 import { rackWanted, useLandscape } from '../lib/ui/layout';
+import { setMoreButtonShown, useMoreButtonShown } from '../lib/ui/moreButton';
+import { OPTIONAL_TABS } from '../lib/ui/tabChoice';
+import { setTabShown, useHiddenTabs } from '../lib/ui/tabs';
 
 /**
  * How the app looks: its theme, the rack of sleeves, how much of it moves,
@@ -39,6 +42,10 @@ export default function LookSettingsScreen() {
   */
   const [rack, setRack] = useState(() => rackWanted(true));
   const [still, setStill] = useState(() => readSetting(SETTINGS.reduceMotion) === 'true');
+  /** Held where every row is watching, like the theme; switching it redraws them and this. */
+  const dots = useMoreButtonShown();
+  /** Held where the tab bar watches it, so a switch here changes the bar at once. */
+  const hiddenTabs = useHiddenTabs();
   /** The ways of looking at the library that its switch offers. */
   const [views, setViews] = useState<LibraryView[]>(() => viewsFrom(readSetting(SETTINGS.libraryViews)));
 
@@ -74,7 +81,7 @@ export default function LookSettingsScreen() {
                     <Text style={styles.value} numberOfLines={1}>
                       {t.themes[themeNameKey]}
                     </Text>
-                    <Text style={styles.chevron}>›</Text>
+                    <Text style={styles.chevron} importantForAccessibility="no">›</Text>
                   </View>
                 </View>
                 <Text style={styles.muted}>{t.settings.theme.open}</Text>
@@ -97,6 +104,8 @@ export default function LookSettingsScreen() {
               <View style={styles.line}>
                 <Text style={styles.title}>{t.settings.rack.title}</Text>
                 <Switch
+                  // Named, for a screen reader, which otherwise says only "switch, off".
+                  accessibilityLabel={t.settings.rack.title}
                   value={rack}
                   onValueChange={(on) => {
                     setRack(on);
@@ -112,6 +121,7 @@ export default function LookSettingsScreen() {
               <View style={styles.line}>
                 <Text style={styles.title}>{t.settings.still.title}</Text>
                 <Switch
+                  accessibilityLabel={t.settings.still.title}
                   value={still}
                   onValueChange={(on) => {
                     setStill(on);
@@ -121,6 +131,19 @@ export default function LookSettingsScreen() {
                 />
               </View>
               <Text style={styles.muted}>{t.settings.still.note}</Text>
+            </View>
+            <View style={styles.rule} />
+            <View style={styles.row}>
+              <View style={styles.line}>
+                <Text style={styles.title}>{t.settings.moreButton.title}</Text>
+                <Switch
+                  accessibilityLabel={t.settings.moreButton.title}
+                  value={dots}
+                  onValueChange={setMoreButtonShown}
+                  {...switchColours(c, dots)}
+                />
+              </View>
+              <Text style={styles.muted}>{t.settings.moreButton.note}</Text>
             </View>
           </View>
         </View>
@@ -133,7 +156,7 @@ export default function LookSettingsScreen() {
             alternatives: the question for each is whether it earns a place on
             a row that gets more crowded with every one that does.
           */}
-          <Text style={styles.section}>{t.format.upper(t.settings.sections.views)}</Text>
+          <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.settings.sections.views)}</Text>
           <View style={styles.card}>
             {LIBRARY_VIEWS.map((view, index) => {
               const on = views.includes(view);
@@ -174,6 +197,35 @@ export default function LookSettingsScreen() {
           <Text style={styles.aside}>
             {views.length === 1 ? t.settings.views.asideOne : t.settings.views.asideMany}
           </Text>
+
+          {/* The tabs that can be taken off the bar: see `ui/tabChoice.ts`. */}
+          <Text accessibilityRole="header" style={[styles.section, styles.sectionAfter]}>
+            {t.format.upper(t.settings.tabs.title)}
+          </Text>
+          <View style={styles.card}>
+            {OPTIONAL_TABS.map((tab, index) => {
+              const on = !hiddenTabs.has(tab);
+              const name = t.nav[tab];
+              return (
+                <View key={tab}>
+                  {index > 0 ? <View style={styles.rule} /> : null}
+                  <View style={styles.row}>
+                    <View style={styles.line}>
+                      <Text style={styles.title}>{name}</Text>
+                      <Switch
+                        accessibilityLabel={name}
+                        value={on}
+                        onValueChange={(wanted) => setTabShown(tab, wanted)}
+                        {...switchColours(c, on)}
+                      />
+                    </View>
+                    {tab === 'search' ? <Text style={styles.muted}>{t.settings.tabs.searchNote}</Text> : null}
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.aside}>{t.settings.tabs.aside}</Text>
         </View>
       </View>
     </SettingsPage>

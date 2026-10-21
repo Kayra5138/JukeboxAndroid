@@ -50,6 +50,8 @@ export const library: Strings['library'] = {
     writeToFilesSpoken: 'Seçili parçaların bilgilerini dosyalarına yaz',
 
     swipePlayNext: 'Sonraki olarak çal',
+    swipeQueue: 'Sıraya ekle',
+    queuedAll: (count) => `${common.tracks(count)} sıraya eklendi`,
 
     needsAccess: 'Jukebox’ın bu cihazdaki seslere erişmesi gerekiyor.',
     nothingIn: (folder) => `${folder} klasöründe hiçbir şey yok.`,
@@ -71,6 +73,7 @@ export const library: Strings['library'] = {
   rack: {
     open: (album) => `${album} albümünü aç`,
     openHint: 'Albümdeki parçaları gösterir',
+    bringForward: 'Bu albümü öne getirir',
   },
 
   albumActions: {
@@ -79,6 +82,31 @@ export const library: Strings['library'] = {
       label: 'Albümün geri kalanını bul',
       hint: 'Albümde olup sende henüz olmayan parçalar',
     },
+    lookUp: {
+      label: 'Albüm bilgilerini otomatik bul',
+      hint: 'Bilgiler ve kapak, albümün tamamı için tek seferde aranır',
+    },
+    cover: {
+      label: 'Albüm kapağı seç',
+      hint: 'Galeriden bir resim, albümdeki her parça için',
+    },
+  },
+
+  albumTools: {
+    lookingUp: (done, total) =>
+      `Albüm aranıyor… ${format.number(total)} parçadan ${format.number(done)} tanesi tamam`,
+    stop: 'Aramayı durdur',
+    lookedUp: (found, covers) =>
+      found === 0 && covers === 0
+        ? 'Bu albüm için yeni bir şey bulunamadı.'
+        : covers === 0
+          ? `${common.tracks(found)} için bilgi bulundu.`
+          : found === 0
+            ? `${common.tracks(covers)} için kapak bulundu.`
+            : `${common.tracks(found)} için bilgi, ${common.tracks(covers)} için kapak bulundu.`,
+    offline: 'Hiçbir yanıt gelmedi. Bağlantını kontrol edip yeniden dene.',
+    failed: 'Arama beklenmedik şekilde durdu.',
+    coverChosen: (count) => `Kapak ${common.tracks(count)} için ayarlandı.`,
   },
 
   rest: {
@@ -151,5 +179,87 @@ export const library: Strings['library'] = {
       'Jukebox’ın klasörleri listeleyebilmesi için önce bu cihazdaki seslere erişmesi gerekiyor.',
     note: 'Jukebox, alt klasörler dahil seçtiğin klasörün altındaki her şeyi çalar. Zil seslerini ve oyun seslerini dışarıda bırakmanın yolu bir alt klasör seçmektir.',
     everything: (path) => `${path}  (her şey)`,
+  },
+
+  leftOut: {
+    title: 'Dışarıda bırakılan klasörler',
+    none: 'Yok. Sesli mesaj, kayıt ya da zil sesi klasörlerini kapatabilirsin.',
+    some: (count) => `${format.number(count)} klasör kütüphanenin dışında`,
+    note: 'Kapattığın klasör, içindeki bütün klasörlerle birlikte kütüphanenin dışında kalır. Hiçbir şey silinmez: şarkıların dinlemeleri, etiketleri ve listelerdeki yerleri saklanır; klasörü yeniden açınca hepsi geri gelir.',
+    within: 'İçinde bulunduğu klasörle birlikte dışarıda',
+    spoken: (path, count) => `${path}, ${format.number(count)} parça`,
+    hint: 'Açıksa klasör kütüphanede, kapalıysa dışarıda',
+    empty: (root) => `${root} klasöründe müzik içeren bir alt klasör yok.`,
+  },
+
+  shortFiles: {
+    title: 'Kısa dosyaları gizle',
+    note: 'Sesli mesajları, zil seslerini ve bildirim seslerini uzunluklarına göre dışarıda bırakır. Hiçbir şey silinmez.',
+    under: (seconds) => `${format.number(seconds)} sn altı`,
+    shorterThan: (seconds) => `${format.number(seconds)} saniyeden kısa`,
+  },
+
+  copies: {
+    title: 'Aynı şarkının kopyaları',
+    some: (count) =>
+      `${format.number(count)} şarkı kütüphanende birden fazla kez var`,
+    review: 'İncele',
+    reviewHint: 'Kopyaları açar; hangisinin kalacağını seçersin',
+    note: 'Bu dosyalar aynı kaydın birden fazla kez kaydedilmiş hâline benziyor: adları ya da sanatçı ve şarkı adları aynı, süreleri en fazla iki saniye farklı. Her birinden bir kopya kalır. Diğerleri silinmeden önce dinlemeleri, etiketleri, sözleri ve listelerdeki yerleri kalan kopyaya aktarılır.',
+    empty: 'Kütüphanende birden fazla kez bulunan şarkı yok.',
+    cleanAll: (count) => `Tümünü temizle (${format.number(count)})`,
+    confirmAll: (files, songs) =>
+      `${format.number(files)} dosya silinsin mi? ${format.number(songs)} şarkının her birinden bir kopya kalır; silinen her dosyanın dinlemeleri, etiketleri, sözleri ve listelerdeki yerleri önce o kopyaya aktarılır. Bir şey silinmeden önce Android bir kez daha sorar.`,
+    confirm: (files) => `${format.number(files)} dosyayı sil`,
+    deleteOthers: (count) => (count === 1 ? 'Diğer kopyayı sil' : `Diğer ${format.number(count)} kopyayı sil`),
+    different: 'Bunlar farklı şarkılar',
+    choose: 'Hangi kopya kalsın',
+    keepHint: 'Bu kopya kalır, diğerleri silinir',
+    keeps: 'Kalacak',
+    goes: 'Silinecek',
+    why: {
+      listens: 'En çok dinlenen bu olduğu için önerildi.',
+      described: 'Ayrıntıları ya da kapağı olduğu için önerildi.',
+      folder: 'Kütüphane klasöründe olduğu için önerildi.',
+      larger: 'Daha büyük dosya olduğu için önerildi.',
+      older: 'Daha eski dosya olduğu için önerildi.',
+      alike: 'Kopyalar birbirinin aynı; hangisi kalsa olur.',
+    },
+    yourChoice: 'Senin seçtiğin kopya kalacak.',
+    holds: (copy) => {
+      const parts = [copy.listens > 0 ? `${format.number(copy.listens)} dinleme` : 'dinlenmemiş'];
+      if (copy.described) parts.push('ayrıntılar');
+      if (copy.cover) parts.push('kapak');
+      if (copy.outside) parts.push('kütüphane klasörünün dışında');
+      return parts.join(' · ');
+    },
+    deleted: (count) => `${format.number(count)} dosya silindi.`,
+    notDeleted: 'Dosyalar silinmedi. Dinlemeleri ve geri kalanı artık kalan kopyada.',
+    failed: (error) => `Bazı geçmişler aktarılamadı; o dosyalara dokunulmadı. ${error}`,
+  },
+
+  wrong: {
+    title: 'Yanlış şarkı olabilecek indirmeler',
+    some: (count) =>
+      `${format.number(count)} indirme, adının söylediğinden başka bir şarkı olabilir`,
+    review: 'İncele',
+    reviewHint: 'Bu indirmeleri açar; her birini düzeltebilirsin',
+    note: 'Bunların her biri bir şarkı olarak indirildi ve o şarkının adını aldı, ama geldiği videonun adı başka; yani başka bir şarkı olabilir. Hangisi olduğunu duymak için çal, sonra ona videonun adını ver, sil ya da olduğu gibi doğru olduğunu söyle. Sen seçmeden hiçbir şey değişmez.',
+    empty: 'Yanlış şarkıya benzeyen indirme yok.',
+    filedAs: 'Kayıtlı adı',
+    videoWas: 'Videonun adı',
+    facts: (length, listens) => `${length} · ${listens > 0 ? `${format.number(listens)} dinleme` : 'dinlenmemiş'}`,
+    playHint: 'Bu dosyayı çalar',
+    rename: 'Gerçek adını ver',
+    delete: 'Sil',
+    right: 'Bu doğru',
+    sheetNote: 'Videonun adından alındı. Tam doğru değilse değiştir. Senin düzenlemen olarak kaydedilir; aramalar ona dokunmaz.',
+    titleField: 'Şarkı adı',
+    artistField: 'Sanatçı',
+    renamed: (title) => `Adı “${title}” oldu.`,
+    deleted: 'Silindi.',
+    notDeleted: 'Dosya silinmedi.',
+    keptRight: 'Olduğu gibi kaldı. Bir daha sorulmayacak.',
+    failed: (error) => `Bu yapılamadı. ${error}`,
   },
 };

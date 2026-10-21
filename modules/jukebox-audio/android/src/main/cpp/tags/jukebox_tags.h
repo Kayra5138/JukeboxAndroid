@@ -1,8 +1,9 @@
 /*
- * Reading a file's own details and writing new ones into it. See
- * jukebox_tags.cpp for what is done and why; this is only the shape of it.
+ * Reading a file's own details and writing new ones into it, and reading the
+ * words it carries for its song. See jukebox_tags.cpp and jukebox_lyrics.cpp
+ * for what is done and why; this is only the shape of it.
  *
- * Nothing here knows about Java. The same two functions are called by the
+ * Nothing here knows about Java. The same functions are called by the
  * phone through jukebox_tags_jni.cpp and by a computer through
  * jukebox_tags_check.cpp, which is the only place they can be run without one.
  */
@@ -30,6 +31,8 @@ struct Details {
   std::optional<int> year;
   std::optional<int> track;
   std::optional<int> disc;
+  /* Whoever the whole record is by: TPE2 in an ID3 tag, ALBUMARTIST in a FLAC. */
+  std::optional<std::string> albumArtist;
 };
 
 /* A picture for the front of the record: its bytes exactly as they are stored. */
@@ -66,6 +69,15 @@ bool readTags(const char *path, Report &report, std::string &error);
  */
 bool writeTags(const char *path, const Details &details, const Cover *cover,
                std::vector<std::string> &changed, std::string &error);
+
+/*
+ * The words the file open on [fd] carries for its song, as `text` for a field
+ * of words and `sylt` for each entry of a timed ID3 frame, in the order they
+ * were found; see jukebox_lyrics.cpp. An empty report is a file with none.
+ *
+ * [fd] is handed over: it is closed here, whatever the answer.
+ */
+bool readLyrics(int fd, Report &report, std::string &error);
 
 }  // namespace jukebox
 

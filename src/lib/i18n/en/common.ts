@@ -43,6 +43,9 @@ export const common = {
   previousTrack: 'Previous track',
   shuffle: 'Shuffle',
   addToQueue: 'Add to queue',
+  /** A screen reader's way of moving a row of a list one place, where a finger would drag it. */
+  moveUp: 'Move up',
+  moveDown: 'Move down',
 
   unknownArtist: 'Unknown artist',
   unknownAlbum: 'Unknown album',

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The shortcut tile. Two cells wide for its two halves; one cell wide is
+     allowed, and is the first half alone. Forty is the least that counts as
+     one cell either way. Nothing on it moves with playback except its
+     colours, so it is redrawn with the player widgets and asks for no
+     updates of its own. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:description="@string/jukebox_widget_shortcut_description"
+  android:initialLayout="@layout/jukebox_widget_shortcut"
+  android:minWidth="110dp"
+  android:minHeight="40dp"
+  android:minResizeWidth="40dp"
+  android:minResizeHeight="40dp"
+  android:previewLayout="@layout/jukebox_widget_shortcut"
+  android:previewImage="@drawable/jukebox_widget_preview_shortcut"
+  android:resizeMode="horizontal|vertical"
+  android:targetCellWidth="2"
+  android:targetCellHeight="1"
+  android:updatePeriodMillis="0"
+  android:widgetCategory="home_screen" />

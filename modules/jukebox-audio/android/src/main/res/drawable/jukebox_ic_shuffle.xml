@@ -1,0 +1,8 @@
+<!-- assets/icons/shuffle.svg, the player's own. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="24dp" android:height="24dp"
+  android:viewportWidth="24" android:viewportHeight="24">
+  <path android:strokeColor="#F2F2F2" android:strokeWidth="1.8"
+    android:strokeLineCap="round" android:strokeLineJoin="round"
+    android:pathData="M3 6h2c4 0 6 12 10 12h6m-4-4 4 4-4 4M3 18h2c4 0 6-12 10-12h6m-4-4 4 4-4 4" />
+</vector>

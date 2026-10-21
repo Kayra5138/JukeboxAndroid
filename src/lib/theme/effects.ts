@@ -1,4 +1,4 @@
-import { parseColour, toHex } from './colour.ts';
+import { contrast, parseColour, toHex, withAlpha } from './colour.ts';
 import type { Palette } from './tokens.ts';
 
 /**
@@ -67,7 +67,9 @@ export type Effects = {
    * The wash is what keeps the ink readable whatever the cover is, and how
    * much it takes depends on which way up the theme is. Covers are dark more
    * often than not: a dark page needs little washed over one to stay dark,
-   * and a light page a good deal to stay light.
+   * and a light page a good deal to stay light. The tests hold every theme's
+   * figure to what keeps its faintest writing at 4.5:1 over a cover of any
+   * colour.
    */
   coverWash: number;
 };
@@ -164,6 +166,52 @@ export function finishOf(c: Palette): { experimental_backgroundImage?: string; b
 /** How far what is behind a sheet is blurred in this theme. Nought in nearly all. */
 export function veilOf(c: Palette): number {
   return effectsOf(c)?.veil ?? 0;
+}
+
+/**
+ * The least of `bg` a bar of glass is washed with: the tab bar, the bar of
+ * what is playing, the bar over a pushed screen, and the top of a screen
+ * that a list scrolls under.
+ *
+ * A card can be as clear as a theme likes, because what is under it is the
+ * page, which is smooth. A bar is over whatever the list has brought under
+ * it — a black cover, a white one, a line of writing — and nothing blurs
+ * that (see `Veil`), so it is the wash alone that keeps the bar's writing
+ * readable over it. This much is always let through, so that what passes
+ * under is seen to.
+ */
+const BAR_WASH_LEAST = 0.6;
+
+/** The ink a bar of glass is written in, held to 4.5:1 over anything at all passing under it. */
+const BAR_INK = ['text', 'textMuted', 'textFaint'] as const satisfies readonly (keyof Palette)[];
+
+/** What could be under a bar at its worst: the two ends of light. */
+const ANYTHING = ['#000000', '#ffffff'] as const;
+
+const BAR_WASHES = new WeakMap<Palette, string>();
+
+/**
+ * The fill of a bar of glass with something scrolling under it: the page's
+ * own colour, as little of it as keeps the bar's writing readable over the
+ * darkest and the lightest thing that can pass beneath.
+ *
+ * Worked out and not written down, because it depends on the ink: a dark
+ * glass with pale writing reads over a white cover through less of itself
+ * than a light one with grey writing does over a black cover. Found by
+ * going up a step at a time from the least, which costs a few dozen
+ * measurements once for each palette.
+ */
+export function barWashOf(c: Palette): string {
+  let made = BAR_WASHES.get(c);
+  if (!made) {
+    let alpha = BAR_WASH_LEAST;
+    const reads = (wash: string) =>
+      ANYTHING.every((under) => BAR_INK.every((ink) => contrast(c[ink], laid(wash, under)) >= 4.5));
+    while (alpha < 1 && !reads(withAlpha(c.bg, alpha))) alpha = Math.min(1, alpha + 0.01);
+    made = withAlpha(c.bg, alpha);
+    BAR_WASHES.set(c, made);
+  }
+  return made;
 }
 
 /** Every colour written in a gradient or a shadow, in the forms a token is written in. */

@@ -1,8 +1,10 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Pressable } from './Pressable';
 
+import { announce } from '../lib/ui/announce';
 import { useT } from '../lib/i18n/index';
+import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { formatDuration } from '../lib/stats/period';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
@@ -12,7 +14,8 @@ export const LIST_COVER_SIZE = 96;
 
 /**
  * What a list of tracks is headed by: the way back, its cover and name, how
- * much is in it, and the two ways of starting it.
+ * much is in it, and the three things to do with all of it: play it, play it
+ * shuffled, or put it at the end of the queue.
  *
  * Its own component because a record is opened in two places — on the screen
  * every list opens on, and over the rack a sleeve was tapped in — and the
@@ -49,6 +52,20 @@ export function ListHeading({
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
+  const { addToQueue } = usePlayerActions();
+  /** Just put at the end of the queue: the button says so for a moment. */
+  const [queued, setQueued] = useState(false);
+  useEffect(() => {
+    if (!queued) return;
+    const timer = setTimeout(() => setQueued(false), QUEUED_FOR_MS);
+    return () => clearTimeout(timer);
+  }, [queued]);
+  /** In order, one after another, so that the queue gains them as the list has them. */
+  const queueAll = async () => {
+    for (const track of tracks) await addToQueue(track);
+    setQueued(true);
+    announce(t.library.screen.queuedAll(tracks.length));
+  };
   const total = tracks.reduce((sum, track) => sum + (track.durationSec ?? 0), 0);
   const nothing = tracks.length === 0;
 
@@ -67,7 +84,7 @@ export function ListHeading({
         <View style={styles.identity}>
           {cover}
           <View style={styles.identityText}>
-            <Text style={styles.name} numberOfLines={3}>
+            <Text accessibilityRole="header" style={styles.name} numberOfLines={3}>
               {name}
             </Text>
             <Text style={styles.detail}>
@@ -81,6 +98,7 @@ export function ListHeading({
 
         <View style={styles.actions}>
           <Pressable
+            accessibilityRole="button"
             android_ripple={pressed}
             style={[styles.action, nothing && styles.actionOff]}
             disabled={nothing}
@@ -88,11 +106,23 @@ export function ListHeading({
             <Text style={styles.actionLabel}>{t.common.play}</Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
             android_ripple={pressed}
             style={[styles.secondary, nothing && styles.actionOff]}
             disabled={nothing}
             onPress={onShuffle}>
             <Text style={styles.secondaryLabel}>{t.common.shuffle}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.common.addToQueue}
+            android_ripple={pressed}
+            style={[styles.secondary, nothing && styles.actionOff]}
+            disabled={nothing}
+            onPress={() => void queueAll()}>
+            <Text style={styles.secondaryLabel} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+              {queued ? '✓' : t.library.screen.swipeQueue}
+            </Text>
           </Pressable>
         </View>
 
@@ -101,6 +131,9 @@ export function ListHeading({
     </>
   );
 }
+
+/** How long the queue button says it has done its work. */
+const QUEUED_FOR_MS = 1800;
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   back: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 2 },
@@ -112,7 +145,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   detail: { color: c.textMuted, fontSize: 13 },
   hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
 
-  actions: { flexDirection: 'row', gap: 10, paddingTop: 16 },
+  actions: { flexDirection: 'row', gap: 8, paddingTop: 16 },
   action: {
     flex: 1,
     alignItems: 'center',
@@ -127,6 +160,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     alignItems: 'center',
     borderRadius: 11,
     paddingVertical: 12,
+    paddingHorizontal: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.borderStrong,
   },

@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values/strings.xml and values/jukebox_widget_strings.xml in Italian, name
+     for name, in the informal "tu". Apostrophes are the typographic ’, which
+     needs no escaping. Names stay as they are: Jukebox, YouTube, Android,
+     Wi-Fi, MP3, FLAC, ID3. The same words as the app's own screens: Libreria,
+     Liste, Cerca, Scopri, brano, canzone, copertina. -->
+<resources>
+  <!-- The home screen widget. Its label (Jukebox) is not translated. -->
+  <string name="jukebox_widget_description">Riproduci, metti in pausa e cambia brano senza aprire l’app.</string>
+  <string name="jukebox_widget_art">Copertina dell’album</string>
+  <string name="jukebox_widget_previous">Brano precedente</string>
+  <string name="jukebox_widget_toggle">Riproduci o metti in pausa</string>
+  <!-- The middle button, to a screen reader: what a press will do. -->
+  <string name="jukebox_widget_play">Riproduci</string>
+  <string name="jukebox_widget_pause">Pausa</string>
+  <string name="jukebox_widget_next">Brano successivo</string>
+  <string name="jukebox_widget_idle">Nessuna riproduzione in corso</string>
+  <string name="jukebox_widget_progress">Avanzamento del brano</string>
+  <string name="jukebox_widget_card_label">In riproduzione</string>
+  <string name="jukebox_widget_card_description">Copertina grande con i controlli, casuale e ripeti.</string>
+  <string name="jukebox_widget_large_label">In coda</string>
+  <string name="jukebox_widget_large_description">Il brano in riproduzione, i controlli e i prossimi brani in coda. Tocca un brano per riprodurlo.</string>
+  <string name="jukebox_widget_shortcut_label">Casuale</string>
+  <string name="jukebox_widget_shortcut_description">Mescola tutta la tua musica, o quello che hai ascoltato di recente, con un tocco.</string>
+  <string name="jukebox_widget_shuffle">Mescola la coda</string>
+  <string name="jukebox_widget_repeat_off">Ripeti</string>
+  <string name="jukebox_widget_repeat_all">Ripeti tutto</string>
+  <string name="jukebox_widget_repeat_one">Ripeti brano</string>
+  <string name="jukebox_widget_up_next">In coda</string>
+  <string name="jukebox_widget_up_next_empty">Nient’altro in coda</string>
+  <string name="jukebox_widget_open">Apre il lettore</string>
+
+  <!-- The media notification. -->
+  <string name="jukebox_playback_channel">In riproduzione</string>
+
+  <string name="jukebox_playback_missing">Impossibile trovare questo file.</string>
+  <string name="jukebox_playback_denied">Android non ha consentito la lettura di questo file.</string>
+  <string name="jukebox_playback_unreadable">Impossibile leggere questo file.</string>
+  <string name="jukebox_playback_unsupported">Questo tipo di file non può essere riprodotto su questo dispositivo.</string>
+  <string name="jukebox_playback_failed">Impossibile riprodurre questo brano.</string>
+
+  <!-- The downloads notification. -->
+  <string name="jukebox_downloads_channel">Download di musica</string>
+  <string name="jukebox_downloads_title">Jukebox · Download</string>
+  <string name="jukebox_downloads_preparing">Preparazione del download…</string>
+  <string name="jukebox_downloads_downloading">Download: %1$s</string>
+  <string name="jukebox_downloads_converting">Conversione: %1$s</string>
+  <string name="jukebox_downloads_finding">Ricerca: %1$s</string>
+  <string name="jukebox_downloads_resting">Breve attesa prima del prossimo…</string>
+
+  <!-- Android Auto. -->
+  <string name="jukebox_auto_home">Home</string>
+  <string name="jukebox_auto_tracks">Brani</string>
+  <string name="jukebox_auto_albums">Album</string>
+  <string name="jukebox_auto_lists">Liste</string>
+  <string name="jukebox_auto_continue">Continua</string>
+  <string name="jukebox_auto_shuffle_recent">Mescola recenti</string>
+  <string name="jukebox_auto_shuffle_all">Mescola tutto</string>
+  <string name="jukebox_auto_sort">Ordina</string>
+  <string name="jukebox_auto_sort_now">Ordine attuale</string>
+  <string name="jukebox_auto_sort_name">Nome</string>
+  <string name="jukebox_auto_sort_artist">Artista</string>
+  <string name="jukebox_auto_sort_added">Aggiunti di recente</string>
+  <string name="jukebox_auto_sort_most">Più ascoltati</string>
+  <string name="jukebox_auto_sort_recent">Ascoltati di recente</string>
+  <string name="jukebox_auto_sort_changed">Modificati di recente</string>
+  <string name="jukebox_auto_sort_size">Più lunghi</string>
+  <!-- Italian tells one from many, and nought is many: "0 brani". -->
+  <plurals name="jukebox_count_tracks">
+    <item quantity="one">%d brano</item>
+    <item quantity="other">%d brani</item>
+  </plurals>
+  <plurals name="jukebox_count_songs">
+    <item quantity="one">%d canzone</item>
+    <item quantity="other">%d canzoni</item>
+  </plurals>
+
+  <string name="jukebox_unknown_title">Sconosciuto</string>
+  <string name="jukebox_unknown_artist">Artista sconosciuto</string>
+  <string name="jukebox_equalizer_carried">Equalizzatore del telefono</string>
+
+  <!-- Searching YouTube and downloading from it. -->
+  <string name="jukebox_youtube_verification">YouTube richiede una verifica per questo video. Prova un’altra registrazione.</string>
+  <string name="jukebox_youtube_unavailable">Questo video non è disponibile o è privato.</string>
+  <string name="jukebox_youtube_outdated">YouTube è cambiato e il downloader di questa versione non riesce ancora a leggerlo. Cerca una versione più recente in Download o aggiorna Jukebox.</string>
+  <string name="jukebox_youtube_network">Impossibile raggiungere YouTube. Controlla la connessione e riprova.</string>
+  <string name="jukebox_youtube_refused">YouTube ha rifiutato questo download. Riprova più tardi o aggiorna Jukebox.</string>
+  <string name="jukebox_youtube_timed_out">YouTube ha impiegato troppo tempo a rispondere. Riprova.</string>
+  <string name="jukebox_youtube_live">Le dirette e i video non ancora pubblicati non si possono scaricare.</string>
+  <string name="jukebox_youtube_too_long">Scegli una registrazione più breve di due ore.</string>
+  <string name="jukebox_youtube_not_a_song">Il video trovato è una diretta, o è troppo lungo per essere questa canzone.</string>
+  <string name="jukebox_youtube_no_audio">YouTube non ha prodotto un file audio.</string>
+  <string name="jukebox_youtube_engine">Impossibile preparare il motore di YouTube.</string>
+  <string name="jukebox_youtube_invalid_video">Video di YouTube non valido.</string>
+  <string name="jukebox_youtube_query">Inserisci una canzone, un artista o un link di YouTube (massimo 500 caratteri).</string>
+  <string name="jukebox_youtube_video_link">Usa il link di un video di YouTube o cerca per nome della canzone.</string>
+  <string name="jukebox_youtube_not_a_video">Usa il link di un video, oppure apri Playlist per i link alle playlist.</string>
+  <string name="jukebox_youtube_playlist_query">Inserisci il nome di una playlist o incolla il link di una playlist di YouTube.</string>
+  <string name="jukebox_youtube_playlist_link">Incolla il link di una playlist di YouTube.</string>
+  <string name="jukebox_youtube_no_playlist">Questo link non contiene una playlist.</string>
+  <string name="jukebox_download_folder">Scegli una cartella dentro Music.</string>
+  <string name="jukebox_download_queue_full">La coda è piena. Attendi che finisca un download.</string>
+  <string name="jukebox_download_batch">Scegli al massimo 500 brani alla volta.</string>
+  <string name="jukebox_download_waiting_wifi">In attesa del Wi-Fi. Il download automatico riprenderà più tardi.</string>
+  <string name="jukebox_download_paused">Download in pausa. Apri Scopri per riprovare.</string>
+  <string name="jukebox_download_interrupted">Download interrotto. Tocca Riprova.</string>
+  <string name="jukebox_download_stopped">Android ha interrotto il download in background. Apri Cerca e riprova.</string>
+  <string name="jukebox_download_service">Impossibile avviare il servizio di download.</string>
+  <string name="jukebox_download_open_search">Apri Cerca e riprova il download.</string>
+  <string name="jukebox_download_open_discover">Apri Scopri per riprendere i download.</string>
+  <string name="jukebox_download_retry_discover">Apri Scopri per riprovare questo download.</string>
+  <string name="jukebox_download_not_here">Scarica questa canzone prima di salvarla.</string>
+  <string name="jukebox_download_no_match">Su YouTube non è stata trovata nessuna registrazione corrispondente.</string>
+  <string name="jukebox_download_failed">Download non riuscito. Riprova.</string>
+
+  <!-- Bringing a file into the library. -->
+  <string name="jukebox_import_refused">La raccolta musicale non ha accettato un nuovo file.</string>
+  <string name="jukebox_import_not_written">Impossibile scrivere nella raccolta musicale.</string>
+  <string name="jukebox_import_not_published">Impossibile pubblicare il file audio.</string>
+  <string name="jukebox_import_too_large">Il file è troppo grande per essere una canzone.</string>
+  <string name="jukebox_import_empty">Il file era vuoto.</string>
+  <string name="jukebox_import_cut_short">Il download non è arrivato integro.</string>
+
+  <!-- Pictures. -->
+  <string name="jukebox_picture_not_opened">Impossibile aprire l’immagine.</string>
+  <string name="jukebox_picture_not_one">Questo file non è un’immagine.</string>
+  <string name="jukebox_picture_not_read">Impossibile leggere l’immagine.</string>
+  <string name="jukebox_picture_not_saved">Impossibile salvare l’immagine.</string>
+  <string name="jukebox_picture_none">Non c’è nessuna immagine da salvare.</string>
+  <string name="jukebox_picture_gallery">La galleria non ha accettato l’immagine.</string>
+  <string name="jukebox_cover_source">Si possono scaricare solo immagini dal catalogo, da YouTube o da Wikimedia.</string>
+  <string name="jukebox_cover_redirect">Manca il reindirizzamento della copertina.</string>
+  <string name="jukebox_cover_unavailable">Copertina dell’album non disponibile.</string>
+  <string name="jukebox_cover_too_large">La copertina dell’album è troppo grande.</string>
+  <string name="jukebox_cover_invalid">Copertina dell’album non valida.</string>
+  <string name="jukebox_cover_not_saved">Impossibile salvare la copertina dell’album.</string>
+  <string name="jukebox_cover_redirects">Troppi reindirizzamenti per la copertina dell’album.</string>
+
+  <!-- Files chosen by the user. -->
+  <string name="jukebox_file_not_opened">Impossibile aprire il file.</string>
+  <string name="jukebox_file_not_writable">Impossibile scrivere in quella posizione.</string>
+  <string name="jukebox_file_too_big_for_equalizer">Il file è troppo grande per essere un’impostazione dell’equalizzatore.</string>
+  <string name="jukebox_backup_too_large">Il backup è troppo grande per essere letto.</string>
+  <string name="jukebox_backup_not_one">Questo file non è un backup di Jukebox.</string>
+  <string name="jukebox_delete_needs_11">Per eliminare serve Android 11 o versioni successive.</string>
+
+  <!-- Writing a track's details into its file. -->
+  <string name="jukebox_tags_needs_11">Per scrivere nei file serve Android 11 o versioni successive.</string>
+  <string name="jukebox_tags_no_build">Questa versione non può scrivere nei file.</string>
+  <string name="jukebox_tags_unreadable">Impossibile leggere il file.</string>
+  <string name="jukebox_tags_not_written">Impossibile scrivere i nuovi dettagli nella copia di lavoro.</string>
+  <string name="jukebox_tags_not_mp3">Impossibile leggerlo come MP3.</string>
+  <string name="jukebox_tags_not_flac">Impossibile leggerlo come FLAC.</string>
+  <string name="jukebox_tags_copy_not_writable">Impossibile aprire in scrittura la copia di lavoro.</string>
+  <string name="jukebox_tags_neither">Non è né un MP3 né un FLAC.</string>
+  <string name="jukebox_tags_kind_changed">La copia non è più lo stesso tipo di file che era.</string>
+  <string name="jukebox_tags_length_changed">La copia non ha più la stessa durata dell’originale, quindi il suono potrebbe essere stato alterato.</string>
+  <!-- %1$s is one of the seven names below; "il campo" keeps the article from depending on which. -->
+  <string name="jukebox_tags_field_wrong">Il campo %1$s non è stato riletto dalla copia come doveva.</string>
+  <string name="jukebox_tags_field_title">titolo</string>
+  <string name="jukebox_tags_field_artist">artista</string>
+  <string name="jukebox_tags_field_album">album</string>
+  <string name="jukebox_tags_field_album_artist">artista dell’album</string>
+  <string name="jukebox_tags_field_genre">genere</string>
+  <string name="jukebox_tags_field_year">anno</string>
+  <string name="jukebox_tags_field_track">numero di traccia</string>
+  <string name="jukebox_tags_field_disc">numero di disco</string>
+  <string name="jukebox_tags_cover_unasked">È stata scritta una copertina che nessuno aveva chiesto.</string>
+  <string name="jukebox_tags_pictures_wrong">Le immagini nella copia non sono quelle che dovrebbero esserci.</string>
+  <string name="jukebox_tags_details_added">La copia contiene dettagli che l’originale non aveva.</string>
+  <!-- %1$s is the names of the frames, as the file calls them: "RVAD, TXXX". -->
+  <string name="jukebox_tags_details_lost">La scrittura perderebbe o altererebbe dettagli che questa app non gestisce (%1$s).</string>
+  <string name="jukebox_tags_old_tag_changed">Il tag di vecchio tipo alla fine del file è stato aggiunto o rimosso.</string>
+  <string name="jukebox_tags_version_wrong">Il tag è stato scritto come ID3v2.%1$d invece che come ID3v2.%2$d.</string>
+  <string name="jukebox_tags_sound_original_unknown">Impossibile stabilire dove inizia e finisce il suono nell’originale.</string>
+  <string name="jukebox_tags_sound_copy_unknown">Impossibile stabilire dove inizia e finisce il suono nella copia.</string>
+  <string name="jukebox_tags_sound_described">La descrizione del suono nella copia non è quella dell’originale.</string>
+  <string name="jukebox_tags_sound_length">Il suono nella copia non ha la stessa durata di quello nell’originale.</string>
+  <string name="jukebox_tags_sound_differs">Il suono nella copia non è quello dell’originale.</string>
+  <string name="jukebox_tags_cover_missing">Impossibile trovare la copertina.</string>
+  <string name="jukebox_tags_cover_too_large">La copertina è troppo grande per essere inserita in un file.</string>
+  <string name="jukebox_tags_cover_unreadable">La copertina non è un’immagine leggibile.</string>
+  <string name="jukebox_tags_not_in_library">Questo brano non è nella libreria.</string>
+  <string name="jukebox_tags_cache">Impossibile usare la cache dell’app. Il file non è stato toccato.</string>
+  <string name="jukebox_tags_gone">Questo brano non è più sul dispositivo.</string>
+  <string name="jukebox_tags_no_room_for_copy">Non c’è abbastanza spazio libero per lavorare prima su una copia del file.</string>
+  <string name="jukebox_tags_copy_incomplete">Impossibile copiare il file per intero.</string>
+  <string name="jukebox_tags_not_opened">Impossibile aprire il file.</string>
+  <string name="jukebox_tags_not_opened_for_writing">Impossibile aprire il file in scrittura.</string>
+  <string name="jukebox_tags_denied">Android non ha consentito di modificare questo file.</string>
+  <string name="jukebox_tags_no_room_for_file">Non c’è abbastanza spazio libero dove si trova il file.</string>
+  <string name="jukebox_tags_copy_not_read_back">Impossibile rileggere la copia di lavoro.</string>
+  <!-- The two below go in the brackets of the three after them, so they begin small. -->
+  <string name="jukebox_tags_not_as_written">non si rilegge come è stato scritto</string>
+  <string name="jukebox_tags_cut_short">la scrittura si è interrotta</string>
+  <!-- %1$s is why; %2$s is where the finished copy was put. -->
+  <string name="jukebox_tags_partly_kept">Il file è stato riscritto solo in parte e potrebbe non essere riproducibile (%1$s). Una copia completa con i nuovi dettagli è stata conservata in %2$s: copiala sopra l’originale da un computer o con un file manager.</string>
+  <string name="jukebox_tags_partly_lost">Il file è stato riscritto solo in parte e potrebbe non essere riproducibile (%1$s). Non è stato possibile conservare nemmeno la copia completa.</string>
+  <string name="jukebox_tags_maybe_partly">Il file potrebbe essere rimasto riscritto solo in parte (%1$s). Riproducilo per controllare.</string>
+  <!-- %1$s is a whole sentence of the ones above, full stop and all. -->
+  <string name="jukebox_tags_untouched">%1$s Il file non è stato toccato.</string>
+  <!-- %1$s is whatever the system said went wrong, which has no full stop. -->
+  <string name="jukebox_tags_untouched_after">%1$s. Il file non è stato toccato.</string>
+  <!-- A toast, when play is pressed during a call and the music is played quietly under it. -->
+  <string name="jukebox_under_a_call">Chiamata in corso. Riproduzione a volume basso.</string>
+</resources>

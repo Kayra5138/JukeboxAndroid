@@ -18,10 +18,16 @@ export type SearchResult = {
  * Folded rather than compared directly, so `simarik` finds `Şımarık`. That
  * folding is ASCII on purpose — Turkish casing rules turn `INDIE` into `ındıe`,
  * which matches nothing.
+ *
+ * A track nobody has named an artist for is drawn as "Unknown artist", and
+ * is found by that too: [unknown] are the words it is drawn with, in the
+ * language in use and in English. It is how somebody finds the tracks still
+ * to be put right, to select them all and fix them at once.
  */
-export function search(tracks: EnrichedTrack[], query: string): SearchResult {
+export function search(tracks: EnrichedTrack[], query: string, unknown: readonly string[] = []): SearchResult {
   const needle = foldForMatch(query);
   if (!needle) return { tracks, matchedTags: [] };
+  const nameless = unknown.some((words) => foldForMatch(words).includes(needle));
 
   const matchedTags = new Set<string>();
   const matches = tracks.filter((track) => {
@@ -31,7 +37,7 @@ export function search(tracks: EnrichedTrack[], query: string): SearchResult {
     return (
       tagHit.length > 0 ||
       foldForMatch(track.title).includes(needle) ||
-      foldForMatch(track.artist ?? '').includes(needle) ||
+      (track.artist?.trim() ? foldForMatch(track.artist).includes(needle) : nameless) ||
       foldForMatch(track.album ?? '').includes(needle)
     );
   });

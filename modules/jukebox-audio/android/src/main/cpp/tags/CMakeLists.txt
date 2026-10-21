@@ -23,7 +23,7 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_compile_options(-ffunction-sections -fdata-sections)
 
 # A static library with its symbols kept to itself: the only things anything
-# outside needs to find are the two JNI functions.
+# outside needs to find are the JNI functions.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 set(VISIBILITY_HIDDEN ON CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
@@ -31,10 +31,16 @@ set(BUILD_BINDINGS OFF CACHE BOOL "" FORCE)
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 # MP3 is always built; FLAC comes with the Vorbis comments it keeps its tags
-# in. Everything else is switched off rather than left for the linker to drop,
-# because what is never compiled is also never waited for.
+# in, and Ogg Vorbis and Opus with it. MP4 and APE are only ever read, for the
+# words a song carries (jukebox_lyrics.cpp): M4A is common on phones, and an
+# APE tag is where some Windows taggers put lyrics, at the end of an MP3 too.
+# The writer still opens nothing but MP3 and FLAC. Everything else is switched
+# off rather than left for the linker to drop, because what is never compiled
+# is also never waited for.
 set(WITH_VORBIS ON CACHE BOOL "" FORCE)
-foreach(unused APE ASF DSF MATROSKA MOD MP4 RIFF SHORTEN TRUEAUDIO)
+set(WITH_MP4 ON CACHE BOOL "" FORCE)
+set(WITH_APE ON CACHE BOOL "" FORCE)
+foreach(unused ASF DSF MATROSKA MOD RIFF SHORTEN TRUEAUDIO)
   set(WITH_${unused} OFF CACHE BOOL "" FORCE)
 endforeach()
 
@@ -54,7 +60,7 @@ add_subdirectory("${JUKEBOX_TAGLIB}" taglib EXCLUDE_FROM_ALL)
 
 # TagLib describes its headers only as they are once installed, and this is
 # never installed, so the directories are named as they are in the source.
-add_library(jukeboxtags_core STATIC jukebox_tags.cpp)
+add_library(jukeboxtags_core STATIC jukebox_tags.cpp jukebox_lyrics.cpp)
 target_include_directories(jukeboxtags_core
   PUBLIC
     "${CMAKE_CURRENT_BINARY_DIR}/taglib"
@@ -64,6 +70,7 @@ target_include_directories(jukeboxtags_core
     "${JUKEBOX_TAGLIB}/taglib/mpeg/id3v1"
     "${JUKEBOX_TAGLIB}/taglib/mpeg/id3v2"
     "${JUKEBOX_TAGLIB}/taglib/mpeg/id3v2/frames"
+    "${JUKEBOX_TAGLIB}/taglib/ape"
     "${JUKEBOX_TAGLIB}/taglib/flac"
     "${JUKEBOX_TAGLIB}/taglib/ogg"
     "${JUKEBOX_TAGLIB}/taglib/ogg/flac")

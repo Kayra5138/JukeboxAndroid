@@ -6,11 +6,15 @@ import { DiscoverAbout } from './discover/DiscoverAbout';
 import { DiscoverHeader, discoverHeaderHeight } from './discover/DiscoverHeader';
 import { DiscoverMenu } from './discover/DiscoverMenu';
 import { DiscoverNotice } from './discover/DiscoverNotice';
-import { DISCOVER_ROW_HEIGHT, DiscoverRow } from './discover/DiscoverRow';
+import { DiscoverRow, useDiscoverRowHeight } from './discover/DiscoverRow';
 import { useDiscoverIds } from './discover/hooks';
 import { ListEmpty, ListFoot } from './discover/ListEdges';
 import { makeStyles } from '../lib/theme/index';
+import { useTip } from '../lib/ui/tipsStore';
 import { useListColumns } from '../lib/ui/layout';
+import { DiscoverTip } from './welcome/DiscoverTip';
+import { useUnderBars } from './UnderBars';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
 const keyOf = (id: string) => id;
 
@@ -48,11 +52,23 @@ export function DiscoverPanel() {
     ({ item }: { item: string }) => <DiscoverRow id={item} shared={shared} onMenu={openMenu} />,
     [openMenu, shared]
   );
-  const headerHeight = discoverHeaderHeight(width, fontScale);
+  const rowHeight = useDiscoverRowHeight();
+  /*
+    In a theme of glass the switches of the Search tab are over the top of
+    this and the bars at the foot over the foot of it, and the list runs on
+    under both. The tip, when there is one, keeps clear of the top itself
+    and the list then begins under it, as it always has.
+  */
+  const under = useUnderBars({ player: true });
+  const tipped = useTip('discover').shown;
+  const top = tipped ? 0 : under.top;
+  const headerHeight = top + discoverHeaderHeight(width, fontScale);
 
   return (
     <View style={styles.panel}>
+      <DiscoverTip />
       <FlatList
+              removeClippedSubviews={CLIP_SUBVIEWS}
         data={ids}
         // Remounted when the count changes: a list will not take a new
         // numColumns in place, and turning the phone is when it changes.
@@ -61,7 +77,7 @@ export function DiscoverPanel() {
         columnWrapperStyle={shared ? styles.columns : undefined}
         keyExtractor={keyOf}
         renderItem={renderItem}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingTop: top, paddingBottom: 76 + under.bottom }]}
         /*
           Exact with one column, where every row is one further down than
           the last, and left to be measured with two: see the Library's list,
@@ -71,14 +87,13 @@ export function DiscoverPanel() {
           shared
             ? undefined
             : (_data, index) => ({
-                length: DISCOVER_ROW_HEIGHT,
-                offset: headerHeight + DISCOVER_ROW_HEIGHT * index,
+                length: rowHeight,
+                offset: headerHeight + rowHeight * index,
                 index,
               })
         }
         initialNumToRender={10 * columns}
         windowSize={7}
-        removeClippedSubviews={!shared}
         ListHeaderComponent={<DiscoverHeader onAbout={openAbout} onSettings={openSettings} />}
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={ListFoot}

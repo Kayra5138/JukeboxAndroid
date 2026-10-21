@@ -62,7 +62,8 @@ export const GLASS_FINISH = {
   sheen: 'linear-gradient(180deg, #ffffff1a 0px, #ffffff00 56px)',
   shadow: null,
   veil: 8,
-  coverWash: 0.7,
+  // Enough that the faintest line is read at 4.5:1 over any cover; see the tests.
+  coverWash: 0.72,
 } as const;
 
 export const glass: Theme = {

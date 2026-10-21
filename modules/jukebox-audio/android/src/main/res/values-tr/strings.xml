@@ -10,9 +10,24 @@
   <string name="jukebox_widget_art">Albüm kapağı</string>
   <string name="jukebox_widget_previous">Önceki parça</string>
   <string name="jukebox_widget_toggle">Çal ya da duraklat</string>
+  <string name="jukebox_widget_play">Çal</string>
+  <string name="jukebox_widget_pause">Duraklat</string>
   <string name="jukebox_widget_next">Sonraki parça</string>
   <string name="jukebox_widget_idle">Çalan bir şey yok</string>
   <string name="jukebox_widget_progress">Şarkının ilerleyişi</string>
+  <string name="jukebox_widget_card_label">Şimdi çalıyor</string>
+  <string name="jukebox_widget_card_description">Büyük kapak, kontroller, karıştırma ve tekrar.</string>
+  <string name="jukebox_widget_large_label">Sıradaki</string>
+  <string name="jukebox_widget_large_description">Çalan parça, kontroller ve sıradaki şarkılar. Çalmak için birine dokun.</string>
+  <string name="jukebox_widget_shortcut_label">Karıştır</string>
+  <string name="jukebox_widget_shortcut_description">Tüm müziğini ya da son dinlediklerini tek dokunuşla karıştır.</string>
+  <string name="jukebox_widget_shuffle">Sırayı karıştır</string>
+  <string name="jukebox_widget_repeat_off">Tekrarla</string>
+  <string name="jukebox_widget_repeat_all">Tümünü tekrarla</string>
+  <string name="jukebox_widget_repeat_one">Tek parçayı tekrarla</string>
+  <string name="jukebox_widget_up_next">Sıradaki</string>
+  <string name="jukebox_widget_up_next_empty">Sırada başka şarkı yok</string>
+  <string name="jukebox_widget_open">Oynatıcıyı açar</string>
 
   <string name="jukebox_playback_channel">Şimdi çalıyor</string>
 
@@ -56,6 +71,7 @@
   </plurals>
 
   <string name="jukebox_unknown_title">Bilinmeyen</string>
+  <string name="jukebox_unknown_artist">Bilinmeyen sanatçı</string>
   <string name="jukebox_equalizer_carried">Telefonun ekolayzeri</string>
 
   <string name="jukebox_youtube_verification">YouTube bu video için doğrulama istiyor. Başka bir kaydı dene.</string>
@@ -133,6 +149,7 @@
   <string name="jukebox_tags_field_title">başlık</string>
   <string name="jukebox_tags_field_artist">sanatçı</string>
   <string name="jukebox_tags_field_album">albüm</string>
+  <string name="jukebox_tags_field_album_artist">albüm sanatçısı</string>
   <string name="jukebox_tags_field_genre">tür</string>
   <string name="jukebox_tags_field_year">yıl</string>
   <string name="jukebox_tags_field_track">parça numarası</string>

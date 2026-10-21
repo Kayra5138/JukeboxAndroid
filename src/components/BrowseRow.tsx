@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
@@ -11,9 +11,20 @@ import { PlaylistCover } from './PlaylistCover';
 /**
  * Declared rather than left to the row, so a list of these can say where every
  * one of them is without drawing it first: the cover and the room above and
- * below it, which is all a row is ever as tall as.
+ * below it, which is all a row is as tall as at the ordinary size of writing.
+ *
+ * Taller as the writing is turned up, by what the two lines beside the cover
+ * grow by, so that at twice the size they are not cut; see `trackRowHeight`.
  */
-export const BROWSE_ROW_HEIGHT = 70;
+export function browseRowHeight(fontScale: number): number {
+  const scale = Math.min(Math.max(fontScale, 1), 2);
+  return Math.round(38 + 32 * scale);
+}
+
+/** The row's height at the size of writing the phone is set to now. */
+export function useBrowseRowHeight(): number {
+  return browseRowHeight(useWindowDimensions().fontScale);
+}
 
 /**
  * One album, one artist or one folder in the library: something that is opened
@@ -47,8 +58,11 @@ export const BrowseRow = memo(function BrowseRow({
   detail: string;
   /** What is under the heading; only ever looked at for a cover. */
   tracks: Track[];
-  /** The one track whose cover stands for all of them. */
-  cover: Track | null;
+  /**
+   * The tracks one cover is found among to stand for all of them: a record's,
+   * an artist's first record's, a folder's. See `useAlbumArtwork`.
+   */
+  cover: readonly Track[];
   /** True when the row has a neighbour beside it and must share the width. */
   shared: boolean;
   /**
@@ -67,6 +81,7 @@ export const BrowseRow = memo(function BrowseRow({
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
+  const height = useBrowseRowHeight();
   const choosing = mark !== undefined;
   return (
     <Pressable
@@ -96,6 +111,7 @@ export const BrowseRow = memo(function BrowseRow({
       }
       style={[
         styles.row,
+        { height },
         shared && styles.shared,
         choosing && styles.choosing,
         mark === true && styles.chosen,
@@ -108,11 +124,11 @@ export const BrowseRow = memo(function BrowseRow({
         // it reads as begun and cannot be taken for either of the other two.
         <View
           style={[styles.checkbox, mark === true && styles.checkboxOn, mark === 'mixed' && styles.checkboxSome]}>
-          {mark === true ? <Text style={styles.checkMark}>✓</Text> : null}
+          {mark === true ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
           {mark === 'mixed' ? <View style={styles.bar} /> : null}
         </View>
       ) : null}
-      <PlaylistCover tracks={tracks} chosen={cover} size={52} />
+      <PlaylistCover tracks={tracks} chosen={null} sleeve={cover} size={52} />
       <View style={styles.text}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -127,7 +143,6 @@ export const BrowseRow = memo(function BrowseRow({
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   row: {
-    height: BROWSE_ROW_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 13,

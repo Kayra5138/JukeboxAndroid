@@ -77,11 +77,13 @@ export function ImportSheet({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      {/* Neither the backdrop nor the sheet is a stop for a screen reader; see
+          `OptionSheet`. Cancel and the back gesture are the ways out. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {/* Swallows taps so touching the sheet does not count as touching the
             backdrop behind it. */}
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <Text style={styles.heading}>{t.sound.autoEq.title}</Text>
+        <Pressable style={styles.sheet} onPress={() => {}} accessible={false}>
+          <Text accessibilityRole="header" style={styles.heading}>{t.sound.autoEq.title}</Text>
           <Text style={styles.hint}>{t.sound.autoEq.about}</Text>
           <TextInput
             style={styles.input}
@@ -91,7 +93,7 @@ export function ImportSheet({
               setProblem(null);
             }}
             placeholder={'Preamp: -6.2 dB\nFilter 1: ON PK Fc 105 Hz Gain -3.4 dB Q 0.70'}
-            placeholderTextColor={c.textDisabled}
+            placeholderTextColor={c.textFaint}
             accessibilityLabel={t.sound.autoEq.textLabel}
             autoCapitalize="none"
             autoCorrect={false}
@@ -99,7 +101,7 @@ export function ImportSheet({
             textAlignVertical="top"
           />
           {problem ? (
-            <Text accessibilityRole="alert" style={styles.bad}>
+            <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
               {problem}
             </Text>
           ) : null}

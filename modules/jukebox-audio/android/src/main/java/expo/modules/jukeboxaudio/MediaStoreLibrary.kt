@@ -45,6 +45,42 @@ object MediaStoreLibrary {
   )
 
   /**
+   * Whoever the record a file is on is by, as the file's own tag says it:
+   * ID3's TPE2, a Vorbis comment's ALBUMARTIST, an MP4's aART. The media store
+   * reads it when it scans the file, so having it costs the library nothing
+   * more than a column, where reading it with TagLib would mean opening every
+   * file on the device.
+   *
+   * Named by its string and asked for apart from [PROJECTION]. The constant
+   * is only public from Android 11, and although the column is older than
+   * that, a store that turned the projection down would be a library that
+   * could not be read at all. So it is tried, and a store that refuses it is
+   * asked again without and not asked for it again in this process.
+   */
+  private const val ALBUM_ARTIST = "album_artist"
+
+  /** Null until a query has said; false once the store has refused the column. */
+  @Volatile
+  private var albumArtistReadable: Boolean? = null
+
+  /** [PROJECTION], with the album artist where the store will give it. */
+  private fun projection(): Array<String> =
+    if (albumArtistReadable == false) PROJECTION else PROJECTION + ALBUM_ARTIST
+
+  /**
+   * Runs [query] with the album artist asked for, and once more without it if
+   * the store says there is no such column.
+   */
+  private fun <T> withAlbumArtist(query: (Array<String>) -> T): T =
+    try {
+      query(projection()).also { if (albumArtistReadable == null) albumArtistReadable = true }
+    } catch (refused: IllegalArgumentException) {
+      if (albumArtistReadable == true) throw refused
+      albumArtistReadable = false
+      query(PROJECTION)
+    }
+
+  /**
    * `%` and `_` are wildcards inside LIKE and folder names are allowed to
    * contain both, so `Live_Sets` would otherwise also match `Live Sets`.
    */
@@ -72,22 +108,22 @@ object MediaStoreLibrary {
       MediaStore.Audio.Media.TITLE
     ).joinToString(", ") { "$it COLLATE NOCASE ASC" }
 
-    val tracks = mutableListOf<Map<String, Any?>>()
-
-    context.contentResolver.query(
-      COLLECTION,
-      PROJECTION,
-      UNDER_FOLDER,
-      arrayOf(underFolderArg(rootFolder)),
-      sortOrder
-    )?.use { cursor ->
-      val row = TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title))
-      while (cursor.moveToNext()) {
-        tracks.add(row.read())
+    return withAlbumArtist { projection ->
+      val tracks = mutableListOf<Map<String, Any?>>()
+      context.contentResolver.query(
+        COLLECTION,
+        projection,
+        UNDER_FOLDER,
+        arrayOf(underFolderArg(rootFolder)),
+        sortOrder
+      )?.use { cursor ->
+        val row = TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title))
+        while (cursor.moveToNext()) {
+          tracks.add(row.read())
+        }
       }
+      tracks
     }
-
-    return tracks
   }
 
   /**
@@ -153,14 +189,16 @@ object MediaStoreLibrary {
   fun queryTrack(context: Context, trackId: String, rootFolder: String): Map<String, Any?>? {
     val id = trackId.toLongOrNull() ?: return null
 
-    return context.contentResolver.query(
-      COLLECTION,
-      PROJECTION,
-      "${MediaStore.Audio.Media._ID} = ? AND $UNDER_FOLDER",
-      arrayOf(id.toString(), underFolderArg(rootFolder)),
-      null
-    )?.use { cursor ->
-      if (cursor.moveToFirst()) TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title)).read() else null
+    return withAlbumArtist { projection ->
+      context.contentResolver.query(
+        COLLECTION,
+        projection,
+        "${MediaStore.Audio.Media._ID} = ? AND $UNDER_FOLDER",
+        arrayOf(id.toString(), underFolderArg(rootFolder)),
+        null
+      )?.use { cursor ->
+        if (cursor.moveToFirst()) TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title)).read() else null
+      }
     }
   }
 
@@ -250,6 +288,51 @@ object MediaStoreLibrary {
   }
 
   /**
+   * Which of [trackIds] carry a picture inside the file: true, false, or null
+   * where that is not known without opening the file and [open] says not to.
+   *
+   * For sharing a record's cover among its tracks, which may only give one to
+   * a track whose file has none, and which asks about many tracks at once.
+   * What [embeddedArtwork] has already found out is read from the names it
+   * left in the cache, which costs one query for every five hundred tracks
+   * and no file opened at all; only the tracks it has never been asked about
+   * are opened, one after another, and only when [open] allows. Either way
+   * the answer is left in the cache for next time, as asking for the picture
+   * would have left it.
+   *
+   * A track the store has no row for is answered false: there is no file to
+   * carry anything.
+   */
+  fun embeddedPictures(context: Context, trackIds: List<String>, open: Boolean): Map<String, Boolean?> {
+    val cacheDir = File(context.cacheDir, "artwork")
+    val modified = mutableMapOf<Long, Long>()
+    for (chunk in trackIds.mapNotNull { it.toLongOrNull() }.distinct().chunked(500)) {
+      context.contentResolver.query(
+        COLLECTION,
+        arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DATE_MODIFIED),
+        "${MediaStore.Audio.Media._ID} IN (${chunk.joinToString(",") { "?" }})",
+        chunk.map { it.toString() }.toTypedArray(),
+        null
+      )?.use { cursor ->
+        while (cursor.moveToNext()) {
+          modified[cursor.getLong(0)] = if (cursor.isNull(1)) -1L else cursor.getLong(1)
+        }
+      }
+    }
+
+    return trackIds.associateWith { trackId ->
+      val id = trackId.toLongOrNull() ?: return@associateWith false
+      val stamp = modified[id] ?: return@associateWith false
+      when {
+        File(cacheDir, "$id-$stamp.jpg").exists() -> true
+        File(cacheDir, "$id-$stamp.none").exists() -> false
+        open -> embeddedArtwork(context, trackId) != null
+        else -> null
+      }
+    }
+  }
+
+  /**
    * What one track is called, without reading the rest of the library.
    *
    * One indexed lookup, for the tile a song with no artwork is drawn. Scanning
@@ -266,7 +349,8 @@ object MediaStoreLibrary {
       null
     )?.use { cursor ->
       if (!cursor.moveToFirst()) null
-      else cursor.getStringOrNull(0)?.takeIf { it.isNotBlank() } ?: cursor.getStringOrNull(1)
+      else MangledTitle.repair(cursor.getStringOrNull(0), cursor.getStringOrNull(1))?.takeIf { it.isNotBlank() }
+        ?: cursor.getStringOrNull(1)
     }
   }
 
@@ -344,6 +428,8 @@ private class TrackRow(private val cursor: Cursor, private val unknown: String) 
   private val pathColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
   private val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
   private val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+  /** Minus one where the store would not give the column; see `ALBUM_ARTIST`. */
+  private val albumArtistColumn = cursor.getColumnIndex("album_artist")
 
   /**
    * The name of the folder a track sits in, which is what the media store
@@ -366,15 +452,27 @@ private class TrackRow(private val cursor: Cursor, private val unknown: String) 
     return value.takeUnless { it.equals(containingFolder(), ignoreCase = true) }
   }
 
+  /** A tag with any emoji the store turned into question marks mended, or its runs of them taken out. */
+  private fun spoiled(column: Int): String? =
+    MangledTitle.repairTag(cursor.getStringOrNull(column), cursor.getStringOrNull(nameColumn))
+
   fun read(): Map<String, Any?> {
     val id = cursor.getLong(idColumn)
 
     return mapOf(
       "id" to id.toString(),
       "uri" to ContentUris.withAppendedId(COLLECTION, id).toString(),
-      "title" to (cursor.getStringOrNull(titleColumn) ?: cursor.getStringOrNull(nameColumn) ?: unknown),
-      "artist" to tagged(cursor.getStringOrNull(artistColumn)),
-      "album" to tagged(cursor.getStringOrNull(albumColumn)),
+      // With any emoji the store turned into question marks put back from the file's name.
+      "title" to (MangledTitle.repair(cursor.getStringOrNull(titleColumn), cursor.getStringOrNull(nameColumn))
+        ?: cursor.getStringOrNull(nameColumn) ?: unknown),
+      // The same, as far as it can be done safely; see `MangledTitle.repairTag`.
+      "artist" to tagged(spoiled(artistColumn)),
+      "album" to tagged(spoiled(albumColumn)),
+      // Not passed through [tagged]: the store never makes this one up out of
+      // the folder, and a record whose artist happens to share its folder's
+      // name is common enough -- `Music/Queen/` -- to lose a true value to it.
+      "albumArtist" to if (albumArtistColumn < 0) null else spoiled(albumArtistColumn)
+        ?.trim()?.takeUnless { it == MediaStore.UNKNOWN_STRING || it.isEmpty() },
       // Deliberately never filled in. The media store's `albumart` provider was
       // never public API and stopped resolving around Android 10, so every value
       // it produced was a broken image; [MediaStoreLibrary.embeddedArtwork] is

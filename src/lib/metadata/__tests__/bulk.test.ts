@@ -75,7 +75,7 @@ const found = (song: Track, changes: Partial<MusicBrainzMatch> = {}): MusicBrain
 });
 
 const sold = (song: Track, album: string, picture: string): ItunesMatch => ({
-  title: song.title, artist: song.artist ?? 'Someone', album, genre: 'Rock', year: 2001,
+  title: song.title, artist: song.artist ?? 'Someone', album, albumArtist: null, genre: 'Rock', year: 2001,
   artworkUrl: `https://is1-ssl.mzstatic.com/${picture}`, trackNumber: null,
   discNumber: null, score: 1, storefront: 'TR',
 });
@@ -658,5 +658,92 @@ describe('stopping a run', () => {
     assert.deepEqual(second.asked.musicbrainz, ['A-2', 'A-3']);
     assert.equal(second.asked.itunes.length, 1);
     for (const song of tracks) assert.equal(db.coverOf(song.id), 'file:///covers/a.jpg');
+  });
+});
+
+describe('a run for covers alone', () => {
+  it('asks only for covers, and searches again for a track searched for before', async () => {
+    // Looked up already, with no cover, and a search that found nothing once.
+    // An ordinary run passes it over; asked for covers, it is asked again.
+    const ruins = album('Ruins', 3);
+    const db = memory(ruins, ruins.map((song) => row(song.id, { coverSearchedAt: 1 })));
+    const { asked, catalogues } = asking(
+      () => assert.fail('nothing is looked up'),
+      (song) => sold(song, 'Ruins', 'ruins.jpg')
+    );
+
+    const result = await runEnrichment(ruins, quietly, undefined, db.store, catalogues, 'covers');
+
+    assert.deepEqual(asked.musicbrainz, []);
+    // One search for the record, as in any run.
+    assert.equal(asked.itunes.length, 1);
+    for (const song of ruins) assert.equal(db.coverOf(song.id), 'file:///covers/ruins.jpg');
+    assert.equal(result.coversSaved, 3);
+    // What they were found to be is left as it was.
+    assert.equal(db.rows.get('Ruins-1')?.status, 'matched');
+    assert.equal(db.rows.get('Ruins-1')?.genre, 'rock');
+  });
+
+  it('searches by the file’s names for a track nobody could name, or nobody looked up', async () => {
+    const missed = track({ id: 'missed', title: 'Song', artist: 'Someone', album: 'Missed' });
+    const untried = track({ id: 'untried', title: 'Other', artist: 'Someone', album: 'Untried' });
+    const db = memory([missed, untried], [{ ...row('missed'), status: 'not_found', source: null, genre: null }]);
+    const searchedFor: Track[] = [];
+    const catalogues: Catalogues = {
+      musicbrainz: async () => assert.fail('nothing is looked up'),
+      itunes: async (song) => {
+        searchedFor.push(song);
+        return null;
+      },
+    };
+
+    await runEnrichment([missed, untried], quietly, undefined, db.store, catalogues, 'covers');
+
+    assert.deepEqual(
+      searchedFor.map((song) => [song.id, song.title, song.artist]).sort(),
+      [['missed', 'Song', 'Someone'], ['untried', 'Other', 'Someone']]
+    );
+    // No row is made for the one never looked up: having been searched for a
+    // cover is not having been looked up.
+    assert.equal(db.rows.has('untried'), false);
+    assert.equal(db.rows.get('missed')?.status, 'not_found');
+  });
+
+  it('leaves alone a cover somebody chose, one they took off, and a file’s own picture', async () => {
+    const chosen = track({ id: 'chosen', title: 'A', artist: 'Someone' });
+    const removed = track({ id: 'removed', title: 'B', artist: 'Someone' });
+    const own = track({ id: 'own', title: 'C', artist: 'Someone' });
+    const db = memory([chosen, removed, own], [
+      row('chosen', { status: 'manual', artworkUrl: 'file:///covers/mine.jpg' }),
+      row('removed', { coverRemovedAt: 5 }),
+      row('own'),
+    ]);
+    db.store.covers!.hasOwnPicture = async (id) => id === 'own';
+    const { asked, catalogues } = asking(
+      () => assert.fail('nothing is looked up'),
+      () => assert.fail('nothing needs a cover')
+    );
+
+    const result = await runEnrichment([chosen, removed, own], quietly, undefined, db.store, catalogues, 'covers');
+
+    assert.deepEqual(asked.itunes, []);
+    assert.equal(db.coverOf('chosen'), 'file:///covers/mine.jpg');
+    assert.equal(db.coverOf('removed'), null);
+    assert.equal(db.coverOf('own'), null);
+    assert.equal(result.coversSaved, 0);
+  });
+
+  it('gives a bare track the cover its record already has, without asking', async () => {
+    const ruins = album('Ruins', 2);
+    const db = memory(ruins, [row('Ruins-1', { artworkUrl: 'file:///covers/ruins.jpg' }), row('Ruins-2')]);
+    const { asked, catalogues } = asking(
+      () => assert.fail('nothing is looked up'),
+      () => assert.fail('the record has its cover')
+    );
+
+    await runEnrichment(ruins, quietly, undefined, db.store, catalogues, 'covers');
+
+    assert.deepEqual(asked.itunes, []);
+    assert.equal(db.coverOf('Ruins-2'), 'file:///covers/ruins.jpg');
   });
 });

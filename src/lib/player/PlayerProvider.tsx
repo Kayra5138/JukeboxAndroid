@@ -33,10 +33,13 @@ import {
   setSessionPlaying,
   type Session,
 } from './session.ts';
+import { afterMoving, afterRemoving, pendingFrom, placeQueued } from './autoplay/section.ts';
+import { readTail, restoreTail, tailOf, writeTail } from './autoplay/tail.ts';
 import { artistKey, spreadShuffle } from '../media/shuffle.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { recordPlay, recordSkip } from '../db/history.ts';
 import { listenRecorded } from '../scrobble/index.ts';
+import { noteError } from '../support/errorLogStore.ts';
 import type { Track } from '../types.ts';
 
 /** A track the player refused to start, or stopped part way through. */
@@ -77,6 +80,16 @@ type PlayerActions = {
    */
   lend: (track: Track) => Promise<void>;
   giveBack: () => Promise<void>;
+  /**
+   * Adds songs picked to keep the music going after everything in the queue;
+   * see `autoplay/controller.ts`. With `start`, plays the first of them, for a
+   * player that had stopped at the end. Only onto `basis`, the queue they were
+   * picked for: where that has changed since, nothing is added and the answer
+   * is `stale`; where the player refuses them, `failed`.
+   */
+  appendAuto: (tracks: Track[], start: boolean, basis: readonly Track[]) => Promise<'added' | 'stale' | 'failed'>;
+  /** Takes the picked songs still to come out of the queue, and gives this queue no more. */
+  removePicked: () => Promise<void>;
 };
 
 type PlayerState = {
@@ -113,6 +126,16 @@ type PlayerState = {
    * anything plays again, so it describes the present rather than accumulating.
    */
   error: PlaybackFailure | null;
+  /**
+   * Where the songs picked to keep the music going begin: everything from
+   * this position on, or -1 for none. See `autoplay/section.ts` for how it
+   * is kept true through every edit of the queue.
+   */
+  autoFrom: number;
+  /** The picks were taken out of this queue by hand, and it is given no more until another replaces it. */
+  autoDismissed: boolean;
+  /** The game has the player: see `lend`. */
+  onLoan: boolean;
 };
 
 const REPEAT_CYCLE: RepeatMode[] = ['off', 'all', 'one'];
@@ -212,6 +235,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [shuffled, setShuffled] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [error, setError] = useState<PlaybackFailure | null>(null);
+  /*
+    Where the picked songs begin, and whether this queue's picks were taken
+    out. Mirrored into refs for the reason `currentIndex` is: every edit of
+    the queue moves the boundary, and the edits are callbacks.
+  */
+  const autoFromRef = useRef(-1);
+  const [autoFrom, setAutoFrom] = useState(-1);
+  const dismissedRef = useRef(false);
+  const [autoDismissed, setAutoDismissed] = useState(false);
+  const [onLoan, setOnLoan] = useState(false);
+  /**
+   * Whether the note of which songs were picked has been read back yet. Until
+   * it has, nothing is written over it: the provider starts with an empty
+   * queue, and the note of the queue the player is still holding would be
+   * written away before it could be read.
+   */
+  const tailRead = useRef(false);
+  const tailWritten = useRef<string | null>(null);
 
   /**
    * Recording a listen must never take playback state down with it.
@@ -278,6 +319,16 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrent(track);
   }, []);
 
+  const placeAuto = useCallback((from: number) => {
+    autoFromRef.current = from;
+    setAutoFrom(from);
+  }, []);
+
+  const dismissPicks = useCallback((dismissed: boolean) => {
+    dismissedRef.current = dismissed;
+    setAutoDismissed(dismissed);
+  }, []);
+
   /** Follow the playing row through an edit made somewhere else in the queue. */
   const shiftCurrent = useCallback((to: (position: number) => number) => {
     if (currentIndexRef.current < 0) return;
@@ -329,8 +380,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       params.current = { speed: state.speed, pitch: state.pitch };
       told.current = { speed: state.speed, pitch: state.pitch };
       if (state.current) startSession(state.current, state.isPlaying);
+      /*
+        Which of it was picked, from the note written down beside it. A queue
+        that does not end the way the note says — a car's, the widget's — has
+        no picks in it.
+      */
+      let note = readTail(null);
+      try {
+        note = readTail(readSetting(SETTINGS.autoplayQueued));
+      } catch (failure) {
+        console.warn('Could not read which songs were picked', failure);
+      }
+      const restored = restoreTail(state.queue.map((track) => track.id), note);
+      placeAuto(restored.autoFrom);
+      dismissPicks(restored.dismissed);
+      tailRead.current = true;
     },
-    [flushSession, markPlaying, placeCurrent, startSession]
+    [dismissPicks, flushSession, markPlaying, placeAuto, placeCurrent, startSession]
   );
 
   /**
@@ -464,6 +530,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         adopt(reading.state);
         return;
       }
+      // An empty player: whatever the note said was about a queue that is gone.
+      tailRead.current = true;
 
       const savedRepeat = (readSetting(SETTINGS.repeat) as RepeatMode | null) ?? 'off';
       setRepeat(savedRepeat);
@@ -544,6 +612,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // `text` is the failure as a sentence in the app's language; `message`
       // is the player's own English and all an older build sends.
       setError({ trackId: event.trackId, message: event.text || event.message });
+      // The player's English and its code, for the report screen; scrubbed of the file's name and path.
+      noteError('playback', event.message, event.code);
+    });
+
+    /*
+      The repeat button on the home screen widget changes the player's mode
+      with nothing here asked. Followed, and kept as the setting, so the
+      player's own button shows the mode that is on and goes round from it.
+      The app's own changes come back this way too, saying what was already
+      set.
+    */
+    const repeatChanged = JukeboxAudio.addListener('onRepeatModeChange', (event) => {
+      setRepeat(event.repeat);
+      writeSetting(SETTINGS.repeat, event.repeat);
     });
 
     return () => {
@@ -552,12 +634,30 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       stateChange.remove();
       queueEnded.remove();
       failed.remove();
+      repeatChanged.remove();
     };
   }, [flushSession, markPlaying, placeCurrent, resync, startSession]);
 
   // A play in progress when the app closes is lost, which is preferable to
   // recording one that never happened.
   useEffect(() => () => flushSession(false), [flushSession]);
+
+  /*
+    The note of which songs were picked, written whenever that changes, so
+    that the heading over them outlives the app. Compared as words first: the
+    queue changes at every edit, and the note only when its end does.
+  */
+  useEffect(() => {
+    if (!tailRead.current) return;
+    const words = writeTail(tailOf(queue, autoFrom, autoDismissed));
+    if (words === tailWritten.current) return;
+    tailWritten.current = words;
+    try {
+      writeSetting(SETTINGS.autoplayQueued, words);
+    } catch (failure) {
+      console.warn('Could not write down which songs were picked', failure);
+    }
+  }, [queue, autoFrom, autoDismissed]);
 
   const replaceQueue = useCallback(
     async (tracks: Track[], startIndex: number, autoPlay: boolean) => {
@@ -569,6 +669,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // A new queue arrives in whatever order it was built in.
       setShuffled(false);
       setError(null);
+      // Nothing in it was picked, and having said no to the last queue's picks is not saying no to this one's.
+      placeAuto(-1);
+      dismissPicks(false);
+      // Somebody's own queue outranks whatever the note said about the last one.
+      tailRead.current = true;
       if (track) startSession(track, autoPlay);
       try {
         await JukeboxAudio.setQueueAsync(tracks.map(toQueueItem), startIndex, autoPlay);
@@ -588,7 +693,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         refused('take the queue', failure);
       }
     },
-    [flushSession, placeCurrent, refused, startSession]
+    [dismissPicks, flushSession, placeAuto, placeCurrent, refused, startSession]
   );
 
   const playQueue = useCallback(
@@ -665,14 +770,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         await replaceQueue([track], 0, false);
         return;
       }
+      // In front of any picked songs still to come: what somebody queued is never buried under what they did not.
+      const placed = placeQueued(
+        queueRef.current.length,
+        autoFromRef.current,
+        currentIndexRef.current,
+        plan.index,
+        where === 'end'
+      );
       const next = [...queueRef.current];
-      next.splice(plan.index, 0, track);
+      next.splice(placed.index, 0, track);
       queueRef.current = next;
       setQueue(next);
-      shiftCurrent((position) => indexAfterInsert(position, plan.index));
-      await JukeboxAudio.insertIntoQueueAsync(toQueueItem(track), plan.index);
+      shiftCurrent((position) => indexAfterInsert(position, placed.index));
+      if (placed.autoFrom !== autoFromRef.current) placeAuto(placed.autoFrom);
+      await JukeboxAudio.insertIntoQueueAsync(toQueueItem(track), placed.index);
     },
-    [adopt, readPlayer, replaceQueue, shiftCurrent]
+    [adopt, placeAuto, readPlayer, replaceQueue, shiftCurrent]
   );
 
   /**
@@ -707,13 +821,15 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       queueRef.current = next;
       setQueue(next);
       shiftCurrent((position) => indexAfterMove(position, from, to));
+      const boundary = afterMoving(autoFromRef.current, from, to, next.length);
+      if (boundary !== autoFromRef.current) placeAuto(boundary);
       try {
         await JukeboxAudio.moveInQueueAsync(from, to);
       } catch (failure) {
         refused('move a row', failure);
       }
     },
-    [refused, shiftCurrent]
+    [placeAuto, refused, shiftCurrent]
   );
 
   const removeFromQueue = useCallback(
@@ -724,6 +840,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const next = queueNow.filter((_track, position) => position !== index);
       queueRef.current = next;
       setQueue(next);
+      const boundary = afterRemoving(autoFromRef.current, index, next.length);
+      if (boundary !== autoFromRef.current) placeAuto(boundary);
       // The listen ends with the row. Left to the player, taking away the last
       // remaining row reaches the end of the queue rather than a track change,
       // and the removed track would be written down as one that played through.
@@ -741,7 +859,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         refused('remove a row', failure);
       }
     },
-    [flushSession, placeCurrent, refused]
+    [flushSession, placeAuto, placeCurrent, refused]
   );
 
   const removeTrackFromQueue = useCallback(
@@ -861,6 +979,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     shuffled: boolean;
     speed: number;
     pitch: number;
+    /** Where the picks began in the queue set aside, and whether they had been taken out. */
+    autoFrom: number;
+    dismissed: boolean;
   } | null>(null);
 
   const lend = useCallback(
@@ -873,7 +994,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           positionSec: status?.positionSec ?? 0,
           shuffled,
           ...params.current,
+          autoFrom: autoFromRef.current,
+          dismissed: dismissedRef.current,
         };
+        setOnLoan(true);
         // What was heard up to here was a listen, and is written down as one
         // before the record stops being kept.
         flushSession(false);
@@ -904,6 +1028,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!was) return;
     lent.current = null;
     offRecord.current = false;
+    setOnLoan(false);
 
     setSpeedState(was.speed);
     setPitchState(was.pitch);
@@ -914,6 +1039,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // for music.
       await replaceQueue(was.queue, was.index, false);
       setShuffled(was.shuffled);
+      placeAuto(was.autoFrom);
+      dismissPicks(was.dismissed);
       // A place that could not be found again is the start of the track,
       // which is not worth failing the handing back over.
       if (was.positionSec > 0) await JukeboxAudio.seekToAsync(was.positionSec).catch(() => {});
@@ -924,7 +1051,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // so it is kept from here.
     const track = queueRef.current[currentIndexRef.current];
     if (track) startSession(track, isPlayingRef.current);
-  }, [askPlayerFor, replaceQueue, startSession]);
+  }, [askPlayerFor, dismissPicks, placeAuto, replaceQueue, startSession]);
 
   /**
    * Rearranges the queue, and does it again on every press.
@@ -942,11 +1069,21 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    */
   const shuffleQueue = useCallback(async () => {
     const playing = queueRef.current[currentIndexRef.current];
-    const order = spreadShuffle(
-      queueRef.current.filter((track) => track !== playing),
-      artistKey,
-      playing ? artistKey(playing) : undefined
-    );
+    /*
+      Somebody's own songs are shuffled; the picked ones stay at the end, in
+      their order, still picked. Shuffling is a thing done to one's own queue,
+      and the picks are there for after it.
+    */
+    const from = autoFromRef.current;
+    const picks = from >= 0 ? queueRef.current.slice(from).filter((track) => track !== playing) : [];
+    const order = [
+      ...spreadShuffle(
+        (from >= 0 ? queueRef.current.slice(0, from) : queueRef.current).filter((track) => track !== playing),
+        artistKey,
+        playing ? artistKey(playing) : undefined
+      ),
+      ...picks,
+    ];
     // Nothing here has been changed yet, so a refusal leaves nothing to undo.
     const answer = await JukeboxAudio.shuffleQueueAsync(order.map((track) => track.id)).catch(
       (failure) => {
@@ -982,7 +1119,69 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     placeCurrent(landed, reordered[landed] ?? null);
     // Only a queue that actually moved is a shuffled one.
     setShuffled(reordered.length >= 3);
-  }, [placeCurrent, refused]);
+    // The picks where they were asked to go, or none: a queue that came back otherwise is not one to mark.
+    const tail = reordered.length - picks.length;
+    const kept = picks.length > 0 && tail > landed && picks.every((track, at) => reordered[tail + at]?.id === track.id);
+    placeAuto(kept ? tail : -1);
+  }, [placeAuto, placeCurrent, refused]);
+
+  /*
+    The picked songs go in and out through the same line as everything
+    queued by hand, one edit after another, so that a song somebody adds at
+    the moment a batch arrives is placed against the queue as it then is.
+  */
+  const appendAuto = useCallback(
+    (tracks: Track[], start: boolean, basis: readonly Track[]) => {
+      const one = async (): Promise<'added' | 'stale' | 'failed'> => {
+        if (offRecord.current || tracks.length === 0) return 'failed';
+        if (queueRef.current !== basis || basis.length === 0) return 'stale';
+        const at = basis.length;
+        const next = [...basis, ...tracks];
+        queueRef.current = next;
+        setQueue(next);
+        // Joining the picks still to come, or beginning them: either way they are the end of the queue.
+        if (pendingFrom(autoFromRef.current, currentIndexRef.current, at) < 0) placeAuto(at);
+        try {
+          for (const [offset, track] of tracks.entries()) {
+            await JukeboxAudio.insertIntoQueueAsync(toQueueItem(track), at + offset);
+          }
+          if (start) {
+            await JukeboxAudio.skipToIndexAsync(at);
+            await JukeboxAudio.playAsync();
+          }
+          return 'added';
+        } catch (failure) {
+          refused('add the songs picked to follow', failure);
+          return 'failed';
+        }
+      };
+      const done = inserting.current.then(one, one);
+      inserting.current = done;
+      return done;
+    },
+    [placeAuto, refused]
+  );
+
+  const removePicked = useCallback(() => {
+    const one = async () => {
+      const length = queueRef.current.length;
+      const from = pendingFrom(autoFromRef.current, currentIndexRef.current, length);
+      dismissPicks(true);
+      placeAuto(-1);
+      if (from < 0) return;
+      queueRef.current = queueRef.current.slice(0, from);
+      setQueue(queueRef.current);
+      try {
+        // Last first, so that the rows still to go keep their numbers.
+        for (let index = length - 1; index >= from; index--) await JukeboxAudio.removeFromQueueAsync(index);
+      } catch (failure) {
+        refused('take the picked songs out', failure);
+      }
+    };
+    const done = inserting.current.then(one, one);
+    inserting.current = done;
+    return done;
+  }, [dismissPicks, placeAuto, refused]);
 
   const cycleRepeat = useCallback(async () => {
     const mode = REPEAT_CYCLE[(REPEAT_CYCLE.indexOf(repeat) + 1) % REPEAT_CYCLE.length]!;
@@ -1018,6 +1217,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setPitch,
       lend,
       giveBack,
+      appendAuto,
+      removePicked,
     }),
     [
       playQueue,
@@ -1037,6 +1238,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setPitch,
       lend,
       giveBack,
+      appendAuto,
+      removePicked,
     ]
   );
 
@@ -1052,8 +1255,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       speed,
       pitch,
       error,
+      autoFrom,
+      autoDismissed,
+      onLoan,
     }),
-    [current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error]
+    [current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error, autoFrom, autoDismissed, onLoan]
   );
 
   return (

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The now-playing widget again, offered at two rows of cells so that it can
+     be picked out at that size rather than placed small and pulled taller.
+     It is the same widget in every way but where it starts: the same
+     provider code draws it (JukeboxWidget), and pulled shorter or taller it
+     becomes the row or the large one, as the row widget does the other way.
+
+     A hundred and ten is two rows by the reckoning a launcher uses when it
+     does not read the target size, (height + 30) / 70 rounded up. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+  android:description="@string/jukebox_widget_card_description"
+  android:initialLayout="@layout/jukebox_widget_card"
+  android:minWidth="250dp"
+  android:minHeight="110dp"
+  android:minResizeHeight="40dp"
+  android:previewLayout="@layout/jukebox_widget_card"
+  android:previewImage="@drawable/jukebox_widget_preview_card"
+  android:resizeMode="horizontal|vertical"
+  android:targetCellWidth="4"
+  android:targetCellHeight="2"
+  android:updatePeriodMillis="0"
+  android:widgetCategory="home_screen" />

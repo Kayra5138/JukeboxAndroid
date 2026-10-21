@@ -133,7 +133,12 @@ export function useTrackMenu({
         const name = track.album?.trim();
         if (!name) return;
         hooks.current.beforeLeaving?.();
-        router.push({ pathname: '/playlist', params: { album: albumKey(name) } });
+        // With the track, which says which record of the name it is on:
+        // whose a record is can take the rest of the library to know.
+        router.push({
+          pathname: '/playlist',
+          params: { album: albumKey(name, track.albumArtist), track: track.id },
+        });
       }
       else {
         hooks.current.beforeLeaving?.();

@@ -1,6 +1,7 @@
 import type { EnrichedTrack } from '../media/enriched.ts';
 import type { Track } from '../types.ts';
 import { decodeLibrary, encodeLibrary } from './cache.ts';
+import { shownTracks, type Hiding } from './hiding.ts';
 import { keepIdentity } from './reconcile.ts';
 
 /**
@@ -75,6 +76,18 @@ export type LibraryDeps = {
    * not.
    */
   stamp(root: string): Promise<string | null>;
+  /**
+   * What is left out of the library of what the device has under [root]:
+   * folders switched off and files too short to be music (`hiding.ts`), or
+   * null where nothing is. Asked on every look, and cheap to ask.
+   *
+   * Applied to what the device said and not asked of the device, so that
+   * what is read and written down stays the whole of the folder. Changing
+   * what is left out is then a look like any other: the device need not be
+   * read again, nothing written down is out of date, and letting a folder
+   * back in brings it back on the spot. A throw is taken as nothing left out.
+   */
+  hiding?(): Hiding | null;
   /** The tracks with what the app knows about them laid over. */
   merge(tracks: Track[]): EnrichedTrack[];
   /**
@@ -137,6 +150,13 @@ export function createLibraryStore(deps: LibraryDeps): LibraryStore {
   let mergedAt: number | null = null;
   /** What is written down for the next start, as far as is known: the tracks and their folder. */
   let written: { root: string; tracks: Track[] } | null = null;
+  /**
+   * The tracks last let into the library, what they were let in from, and
+   * by which rule. While the device's list and the rule are both the same,
+   * so is what is let in, and it is the same list, so that it can be told
+   * from {@link mergedFrom} without being merged again.
+   */
+  let letIn: { from: Track[]; key: string | null; tracks: Track[] } | null = null;
 
   const publish = (next: LibraryState) => {
     if (next === state) return;
@@ -146,6 +166,26 @@ export function createLibraryStore(deps: LibraryDeps): LibraryStore {
 
   /** The tracks on show, or none. */
   const shown = (): EnrichedTrack[] => (state.kind === 'library' ? state.tracks : []);
+
+  /** Of the device's [tracks], the ones the library shows. */
+  const shownOf = (tracks: Track[]): Track[] => {
+    const hiding = deps.hiding ? quietly(deps.hiding) : null;
+    const key = hiding?.key ?? null;
+    if (letIn && letIn.from === tracks && letIn.key === key) return letIn.tracks;
+    let shown = tracks;
+    try {
+      shown = shownTracks(tracks, hiding);
+    } catch {
+      // A rule that cannot be applied leaves nothing out. A library with too
+      // much in it is a nuisance; one with songs missing for no reason is not
+      // something anybody can put right.
+    }
+    // Another rule that lets in the same tracks — a folder switched off that
+    // holds nothing — lets in the same list, and nothing is merged again.
+    if (letIn && letIn.from === tracks && sameEntries(letIn.tracks, shown)) shown = letIn.tracks;
+    letIn = { from: tracks, key, tracks: shown };
+    return shown;
+  };
 
   /** Puts [tracks] on show, as the same objects wherever they say what is already there. */
   const show = (tracks: Track[], confirmed: boolean) => {
@@ -213,7 +253,7 @@ export function createLibraryStore(deps: LibraryDeps): LibraryStore {
         const before = quietly(() => decodeLibrary(deps.kept.read(), root));
         if (before) {
           written = { root, tracks: before };
-          show(before, false);
+          show(shownOf(before), false);
         }
       }
 
@@ -237,16 +277,17 @@ export function createLibraryStore(deps: LibraryDeps): LibraryStore {
       }
       if (device === null) return;
 
+      const shown = shownOf(device.tracks);
       const count = quietly(deps.overlay);
       if (
         state.kind === 'library' &&
-        device.tracks === mergedFrom &&
+        shown === mergedFrom &&
         count !== null &&
         count === mergedAt
       ) {
         settle(state.tracks, true);
       } else {
-        show(device.tracks, true);
+        show(shown, true);
       }
     } catch (error) {
       const message = String(error);
@@ -314,4 +355,11 @@ function quietly<T>(ask: () => T | null): T | null {
   } catch {
     return null;
   }
+}
+
+/** Whether two lists hold the very same objects in the same order. */
+function sameEntries<T>(left: readonly T[], right: readonly T[]): boolean {
+  if (left === right) return true;
+  if (left.length !== right.length) return false;
+  return left.every((entry, at) => entry === right[at]);
 }

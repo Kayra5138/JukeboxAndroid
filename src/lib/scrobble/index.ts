@@ -9,7 +9,7 @@ import { scrobbleStore, type Connection, type Counts, type ScrobbleDb, type Scro
 import { db } from '../db/index.ts';
 import { readMetadata } from '../db/metadata.ts';
 import { mergeMetadata } from '../media/enriched.ts';
-import { findTrack, scanLibrary } from '../media/library.ts';
+import { findTrack, scanEverything } from '../media/library.ts';
 import { withMetadata } from '../media/merge.ts';
 import type { Track } from '../types.ts';
 import { createStore } from '../ui/store.ts';
@@ -128,7 +128,9 @@ function shownNames(): (trackIds: string[]) => Promise<Map<string, ShownNames>> 
       return found;
     }
 
-    whole = new Map(withMetadata(await scanLibrary()).map((track) => [track.id, names(track)]));
+    // Everything under the folder: a listen is sent under its name whether
+    // or not the track is left out of the library since it was heard.
+    whole = new Map(withMetadata(await scanEverything()).map((track) => [track.id, names(track)]));
     return whole;
   };
 }

@@ -1,5 +1,4 @@
-import { placementOf, slotOf } from './placement.ts';
-import { albumKey } from '../media/albums.ts';
+import { onRecord, placementOf, slotOf } from './placement.ts';
 import type { TrackMetadata } from '../db/metadata.ts';
 import type { DownloadJob } from '../youtube/types.ts';
 
@@ -73,7 +72,7 @@ export function placedByApp(jobs: DownloadJob[], album: string): Set<string> {
   for (const job of jobs) {
     if (job.status !== 'done' || !job.trackId) continue;
     const place = placementOf(job.video);
-    if (place && albumKey(place.album) === album) placed.add(placedKey(job.trackId, place));
+    if (place && onRecord(place, album)) placed.add(placedKey(job.trackId, place));
   }
   return placed;
 }

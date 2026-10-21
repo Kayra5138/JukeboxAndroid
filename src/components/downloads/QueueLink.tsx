@@ -43,7 +43,7 @@ export function QueueLink() {
           <Text style={styles.state} numberOfLines={1}>
             {state}
           </Text>
-          <Text style={styles.chevron}>›</Text>
+          <Text style={styles.chevron} importantForAccessibility="no">›</Text>
         </View>
       </Pressable>
     </Link>

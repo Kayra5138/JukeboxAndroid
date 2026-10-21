@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Switch, Text, View } from 'react-native';
 
 import { Pressable } from './Pressable';
+import { Segmented } from './Segmented';
 import { useDiscoverSettings } from './discover/hooks';
 import { useDiscoverActions } from '../lib/discover/DiscoverProvider';
 import { scheduleDiscover } from '../lib/discover/background';
@@ -220,7 +221,7 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
         </Folded>
       </View>
       {error ? (
-        <Text accessibilityRole="alert" style={styles.error}>
+        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.error}>
           {error}
         </Text>
       ) : null}
@@ -228,8 +229,12 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
   );
 }
 
-/** A short row of alternatives, one of which is already the answer. */
-function Choices<Value extends string | number>({
+/**
+ * A short row of alternatives, one of which is already the answer: chips that
+ * run on to a second line, since six rhythms of refreshing do not fit one line
+ * of a phone. Also the first start's, for the same choices.
+ */
+export function Choices<Value extends string | number>({
   options,
   chosen,
   label,
@@ -240,26 +245,14 @@ function Choices<Value extends string | number>({
   label: (value: Value) => string;
   onChoose: (value: Value) => void;
 }) {
-  const styles = useStyles();
-  const pressed = usePressed();
   return (
-    <View accessibilityRole="radiogroup" style={styles.choices}>
-      {options.map((option) => {
-        const on = option === chosen;
-        return (
-          <Pressable
-            android_ripple={pressed}
-            key={option}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            hitSlop={CHOICE_SLOP}
-            style={on ? styles.choiceOn : styles.choice}
-            onPress={() => onChoose(option)}>
-            <Text style={on ? styles.choiceTextOn : styles.choiceText}>{label(option)}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
+    <Segmented
+      variant="chips"
+      hitSlop={CHOICE_SLOP}
+      options={options.map((option) => ({ value: option, label: label(option) }))}
+      value={chosen}
+      onChange={onChoose}
+    />
   );
 }
 
@@ -292,7 +285,7 @@ function Folded({
         onPress={onToggle}>
         <View style={styles.line}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.chevron}>{open ? '⌄' : '›'}</Text>
+          <Text style={styles.chevron} importantForAccessibility="no">{open ? '⌄' : '›'}</Text>
         </View>
         {note ? <Text style={styles.muted}>{note}</Text> : null}
       </Pressable>
@@ -326,14 +319,6 @@ const CHOICE_SLOP = { top: 8, bottom: 8, left: 2, right: 2 };
 
 const useStyles = makeStyles((c) => {
   const row = { paddingHorizontal: 16, paddingVertical: 14, gap: 8 };
-  const choice = {
-    minWidth: 40,
-    minHeight: 32,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  };
   return StyleSheet.create({
     // As the other groups in Settings, which this stands among.
     section: { marginTop: 26 },
@@ -353,14 +338,6 @@ const useStyles = makeStyles((c) => {
     title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
     muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
     chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
-
-    // Wrapping: six rhythms of refreshing do not fit one line of a phone.
-    choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    choice: { ...choice, backgroundColor: c.surfaceRaised, ...outlined(c) },
-    choiceOn: { ...choice, backgroundColor: c.primary, ...outlined(c, c.primary) },
-    choiceText: { color: c.textSecondary, fontSize: 13.5, fontVariant: ['tabular-nums'] },
-    // Heavier as well as filled, so that it is not its colour alone that says which is chosen.
-    choiceTextOn: { color: c.onPrimary, fontSize: 13.5, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
     list: { paddingHorizontal: 16, paddingBottom: 12, gap: 2 },
     entry: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },

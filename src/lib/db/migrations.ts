@@ -593,6 +593,47 @@ const EXCLUSIONS_DATED = `
   ALTER TABLE discover_exclusions ADD COLUMN created_at INTEGER;
 `;
 
+/**
+ * Whoever a record is by, a mark for a cover taken off by hand, and covers a
+ * track was given by the rest of its record.
+ *
+ * The album artist is what tells two records of one name apart — Queen's
+ * `Greatest Hits` from ABBA's — and what a lookup or an edit says of it is
+ * kept on the row beside the album it goes with.
+ *
+ * `cover_removed_at` is set when somebody takes a cover off a track. It lives
+ * on the row because taking a cover off is only ever done by saving an edit,
+ * so there is always a row to hold it, and because the row is what a backup
+ * carries: a cover somebody did not want must not come back from the rest of
+ * the record, on this phone or on the next one. Discarding the edit discards
+ * the mark with it, which is the edit being undone.
+ *
+ * `shared_covers` holds a cover a track was handed by its neighbours on the
+ * record when the track has no row of its own to hold it — never looked up,
+ * or looked up and not found. A row would have had to say the track had been
+ * looked up, and the Tags screen would have counted it as found and the next
+ * pass over the library would have passed it by. Kept apart, it says nothing
+ * about the track but its cover. It is not carried by a backup: it can be
+ * worked out again from the covers that are.
+ *
+ * The covers already given to tracks nobody could find are copied across.
+ * They sat on rows whose status the library reads as "nothing known", so
+ * they were never shown in the lists, and a pass that forgot the misses
+ * would have taken them with it.
+ */
+const ALBUM_ARTIST_AND_SHARED_COVERS = `
+  ALTER TABLE track_metadata ADD COLUMN album_artist TEXT;
+  ALTER TABLE track_metadata ADD COLUMN cover_removed_at INTEGER;
+  CREATE TABLE IF NOT EXISTS shared_covers (
+    track_id    TEXT PRIMARY KEY NOT NULL,
+    artwork_url TEXT NOT NULL,
+    shared_at   INTEGER NOT NULL
+  );
+  INSERT OR IGNORE INTO shared_covers (track_id, artwork_url, shared_at)
+    SELECT track_id, artwork_url, fetched_at FROM track_metadata
+    WHERE status = 'not_found' AND artwork_url LIKE 'file://%';
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -619,6 +660,7 @@ export const MIGRATIONS: string[] = [
   LISTENBRAINZ_LISTENS,
   COVER_SEARCHED,
   EXCLUSIONS_DATED,
+  ALBUM_ARTIST_AND_SHARED_COVERS,
 ];
 
 /**

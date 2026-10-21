@@ -41,7 +41,7 @@ jstring toJava(JNIEnv *env, const std::string &text) {
                         static_cast<jsize>(bytes.size() / 2));
 }
 
-/* One of the seven fields, or nothing where Kotlin sent null. */
+/* One of the fields, or nothing where Kotlin sent null. */
 std::optional<std::string> textAt(JNIEnv *env, jobjectArray fields, jsize index) {
   auto *value = static_cast<jstring>(env->GetObjectArrayElement(fields, index));
   if (!value) return std::nullopt;
@@ -61,23 +61,8 @@ std::optional<int> numberAt(JNIEnv *env, jobjectArray fields, jsize index) {
   }
 }
 
-}  // namespace
-
-extern "C" {
-
-/*
- * Names and values, one after the other: [name, value, name, value, ...].
- * A file that cannot be read answers ["error", why].
- */
-JNIEXPORT jobjectArray JNICALL
-Java_expo_modules_jukeboxaudio_tags_Tags_read(JNIEnv *env, jobject, jstring path) {
-  jukebox::Report report;
-  std::string error;
-  if (!jukebox::readTags(fromJava(env, path).c_str(), report, error)) {
-    report.clear();
-    report.emplace_back("error", error);
-  }
-
+/* A report as names and values one after the other: [name, value, name, value, ...]. */
+jobjectArray toJava(JNIEnv *env, const jukebox::Report &report) {
   jclass strings = env->FindClass("java/lang/String");
   if (!strings) return nullptr;
   jobjectArray out = env->NewObjectArray(static_cast<jsize>(report.size() * 2), strings, nullptr);
@@ -96,9 +81,44 @@ Java_expo_modules_jukeboxaudio_tags_Tags_read(JNIEnv *env, jobject, jstring path
   return out;
 }
 
+}  // namespace
+
+extern "C" {
+
 /*
- * [fields] is title, artist, album, genre, year, track, disc, in that order,
- * each one null where it is to be left alone. Answers "changed:" followed by
+ * Names and values, one after the other: [name, value, name, value, ...].
+ * A file that cannot be read answers ["error", why].
+ */
+JNIEXPORT jobjectArray JNICALL
+Java_expo_modules_jukeboxaudio_tags_Tags_read(JNIEnv *env, jobject, jstring path) {
+  jukebox::Report report;
+  std::string error;
+  if (!jukebox::readTags(fromJava(env, path).c_str(), report, error)) {
+    report.clear();
+    report.emplace_back("error", error);
+  }
+  return toJava(env, report);
+}
+
+/*
+ * The same shape for a file's words: see readLyrics. [fd] is a descriptor
+ * Kotlin has let go of, and is closed here.
+ */
+JNIEXPORT jobjectArray JNICALL
+Java_expo_modules_jukeboxaudio_tags_Tags_lyrics(JNIEnv *env, jobject, jint fd) {
+  jukebox::Report report;
+  std::string error;
+  if (!jukebox::readLyrics(fd, report, error)) {
+    report.clear();
+    report.emplace_back("error", error);
+  }
+  return toJava(env, report);
+}
+
+/*
+ * [fields] is title, artist, album, genre, year, track, disc and album
+ * artist, in that order, each one null where it is to be left alone. Seven
+ * is still taken, as a Kotlin side from before the album artist would send. Answers "changed:" followed by
  * the names of what was altered, separated by commas -- nothing after the
  * colon when the file already said all of it -- or "error:" and why.
  */
@@ -106,7 +126,8 @@ JNIEXPORT jstring JNICALL
 Java_expo_modules_jukeboxaudio_tags_Tags_write(JNIEnv *env, jobject, jstring path,
                                                jobjectArray fields, jbyteArray picture,
                                                jstring mime, jint width, jint height) {
-  if (!fields || env->GetArrayLength(fields) != 7) {
+  const jsize count = fields ? env->GetArrayLength(fields) : 0;
+  if (count != 7 && count != 8) {
     return toJava(env, "error:The details were not handed over in the shape expected.");
   }
   jukebox::Details details;
@@ -117,6 +138,7 @@ Java_expo_modules_jukeboxaudio_tags_Tags_write(JNIEnv *env, jobject, jstring pat
   details.year = numberAt(env, fields, 4);
   details.track = numberAt(env, fields, 5);
   details.disc = numberAt(env, fields, 6);
+  if (count == 8) details.albumArtist = textAt(env, fields, 7);
 
   jukebox::Cover cover;
   bool covered = false;

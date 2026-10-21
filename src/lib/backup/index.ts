@@ -3,7 +3,7 @@ import JukeboxAudio from '../../../modules/jukebox-audio';
 import { db } from '../db/index.ts';
 import { forBridge } from '../equalizer/bridge.ts';
 import { strings } from '../i18n/languages.ts';
-import { scanLibrary } from '../media/library.ts';
+import { scanEverything } from '../media/library.ts';
 import {
   mergeTables,
   referencedArtwork,
@@ -173,7 +173,9 @@ function fileName(now: Date): string {
 async function gather(): Promise<Backup> {
   const database = open();
   const tables = readTables(database);
-  const library = new Map((await scanLibrary()).map((track) => [track.id, track]));
+  // The tracks left out of the library too: a folder switched off still has
+  // its plays and tags in the tables, and they need describing like any other.
+  const library = new Map((await scanEverything()).map((track) => [track.id, track]));
 
   const lastHeard = new Map<string, { title: Cell; artist: Cell; filename: Cell }>();
   for (const row of tables.plays) {
@@ -273,7 +275,9 @@ export async function openBackup(): Promise<Opened | null> {
   if (!picked) return null;
 
   const backup = parseBackup(picked.json);
-  const to = matchTracks(backup.tracks, await scanLibrary());
+  // Matched against everything under the folder, left out or not, so that a
+  // restore finds the history of a folder that is switched off for now.
+  const to = matchTracks(backup.tracks, await scanEverything());
   return {
     backup,
     to,

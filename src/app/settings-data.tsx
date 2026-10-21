@@ -5,6 +5,7 @@ import { BackupSheet } from '../components/BackupSheet';
 import { ListenBrainzSettings } from '../components/ListenBrainzSettings';
 import { Pressable } from '../components/Pressable';
 import { SettingsPage, useRows } from '../components/settings/rows';
+import { UpdateCheckSetting } from '../components/support/UpdateRows';
 import {
   applyBackup,
   BackupError,
@@ -15,6 +16,7 @@ import {
 } from '../lib/backup/index';
 import { useT } from '../lib/i18n/index';
 import { useColours, usePressed } from '../lib/theme/index';
+import { useAnnounce } from '../lib/ui/announce';
 
 /**
  * What the app holds about the music besides the music: taking all of it out
@@ -38,6 +40,8 @@ export default function DataSettingsScreen() {
   */
   const [busy, setBusy] = useState<'export' | 'import' | null>(null);
   const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note?.text);
   const [opened, setOpened] = useState<Opened | null>(null);
   const [applying, setApplying] = useState(false);
   const [imported, setImported] = useState(false);
@@ -123,7 +127,7 @@ export default function DataSettingsScreen() {
           onPress={() => void saveBackup()}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.settings.exportAll.title}</Text>
-            {busy === 'export' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron}>›</Text>}
+            {busy === 'export' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
           </View>
           <Text style={styles.muted}>{t.settings.exportAll.note}</Text>
         </Pressable>
@@ -136,7 +140,7 @@ export default function DataSettingsScreen() {
           onPress={() => void chooseBackup()}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.settings.importBackup.title}</Text>
-            {busy === 'import' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron}>›</Text>}
+            {busy === 'import' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
           </View>
           <Text style={styles.muted}>{t.settings.importBackup.note}</Text>
         </Pressable>
@@ -146,6 +150,11 @@ export default function DataSettingsScreen() {
           {note.text}
         </Text>
       ) : null}
+      {/*
+        Whether the app may ask GitHub about a newer version of itself: what
+        the app sends about itself, kept with the rest of what it sends.
+      */}
+      <UpdateCheckSetting />
       {/*
         Last, and under a heading that says what it is: its own name, with
         the word Experimental before it, now that there is no group of that

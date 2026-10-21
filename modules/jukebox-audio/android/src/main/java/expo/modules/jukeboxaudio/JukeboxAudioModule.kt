@@ -72,7 +72,34 @@ class JukeboxAudioModule : Module() {
     Constant("buildTimestamp") { BuildConfig.BUILD_TIMESTAMP }
 
     Events("onTrackChange", "onPlaybackStateChange", "onQueueEnded", "onPlaybackError", "onQueueReplaced",
-      "onSleepTimerChange")
+      "onSleepTimerChange", "onRepeatModeChange", "onOpenPlayer")
+
+    /*
+      The widget's cover, pressed while the app was already running. The app
+      is brought forward with the same activity, which is handed the intent
+      here rather than started again; the request is taken off it, so that it
+      is answered once.
+    */
+    OnNewIntent { intent ->
+      if (intent.getBooleanExtra(JukeboxWidget.OPEN_PLAYER, false)) {
+        intent.removeExtra(JukeboxWidget.OPEN_PLAYER)
+        sendEvent("onOpenPlayer", emptyMap<String, Any?>())
+      }
+    }
+
+    /**
+     * Whether the app was opened from the widget's cover, asking for the
+     * player. True once: the request is taken off the intent as it is read.
+     * For an app that was started by the press, which has no JavaScript
+     * listening yet when the intent arrives; see [OnNewIntent] above for one
+     * that was already running.
+     */
+    Function("takeOpenPlayer") {
+      val intent = appContext.currentActivity?.intent ?: return@Function false
+      val asked = intent.getBooleanExtra(JukeboxWidget.OPEN_PLAYER, false)
+      if (asked) intent.removeExtra(JukeboxWidget.OPEN_PLAYER)
+      asked
+    }
 
     OnCreate {
       destroyed = false
@@ -437,6 +464,20 @@ class JukeboxAudioModule : Module() {
      */
     Function("thump") { buzz(context, android.os.VibrationEffect.EFFECT_HEAVY_CLICK) }
 
+    /**
+     * Puts [text] on the clipboard, for the report screen's Copy.
+     *
+     * Here rather than a library for it: this is the one thing the app ever
+     * copies, it is three lines, and React Native's own clipboard is on its
+     * way out of the framework. Only ever written, never read — nothing in
+     * the app looks at what somebody else put there. From Android 13 the
+     * phone says "Copied" by itself.
+     */
+    Function("copyText") { text: String ->
+      val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+      clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Jukebox", text))
+    }
+
     AsyncFunction("getEmbeddedArtworkAsync") { trackId: String ->
       expo.modules.jukeboxaudio.downloads.DownloadStore.artwork(context, trackId)
         ?: MediaStoreLibrary.embeddedArtwork(context, trackId)
@@ -444,6 +485,16 @@ class JukeboxAudioModule : Module() {
 
     AsyncFunction("downloadArtworkAsync") { url: String ->
       AlbumArtwork.download(context, url)
+    }.runOnQueue(io)
+
+    // Which files carry a picture of their own: see MediaStoreLibrary.embeddedPictures.
+    AsyncFunction("embeddedPicturesAsync") { trackIds: List<String>, open: Boolean ->
+      MediaStoreLibrary.embeddedPictures(context, trackIds, open)
+    }.runOnQueue(io)
+
+    // A file's own picture kept as one of the app's covers: see AlbumArtwork.keep.
+    AsyncFunction("keepArtworkAsync") { source: String ->
+      AlbumArtwork.keep(context, source)
     }.runOnQueue(io)
 
     AsyncFunction("queryFoldersAsync") { rootFolder: String ->

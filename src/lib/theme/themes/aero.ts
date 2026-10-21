@@ -69,7 +69,8 @@ export const aero: Theme = {
       sheen: 'linear-gradient(180deg, #ffffff59 0px, #ffffff14 22px, #ffffff00 23px)',
       shadow: 'inset 0 1px 0 0 #ffffffe6',
       veil: 8,
-      coverWash: 0.8,
+      // Enough that the faintest line and the accent are read at 4.5:1 over any cover; see the tests.
+      coverWash: 0.87,
     }
   ),
 };

@@ -38,7 +38,14 @@ internal object BrowseTree {
   private const val LISTS = "lists"
   private const val RECENT = "recent"
 
-  /** One record, one list, and the answer to one search: `album/Name`, `list/7`, `search/words`. */
+  /**
+   * One record, one list, and the answer to one search: `album/key`, `list/7`,
+   * `search/words`. A record's key is its name in small letters and, for one
+   * of two records sharing a name, its album artist after a separator (see
+   * [Records.key]); a car still holding a record by its name as it was
+   * spelled before is answered with the record of that name most of its
+   * tracks are on.
+   */
   private const val ALBUM = "album/"
   private const val LIST = "list/"
   private const val SEARCH = "search/"
@@ -51,11 +58,12 @@ internal object BrowseTree {
    * The three tiles at the top of the first screen.
    *
    * Their own ids rather than a track's: what each means is decided when it is
-   * chosen, not when it is drawn.
+   * chosen, not when it is drawn. The two shuffles are public because the
+   * shortcut widget starts the same two, and asks [resolve] for them.
    */
   const val CONTINUE = "continue"
-  private const val SHUFFLE = "shuffle"
-  private const val SHUFFLE_RECENT = "shuffle-recent"
+  const val SHUFFLE = "shuffle"
+  const val SHUFFLE_RECENT = "shuffle-recent"
 
   /** How far back "lately" goes, for the shelf a recent song is queued with. */
   private const val SHELF = 100
@@ -274,16 +282,20 @@ internal object BrowseTree {
 
     ALBUMS -> {
       val plays = if (sort == Sort.MOST) LibraryDatabase.plays(context) else emptyMap()
-      val records = albums(context, root).entries.toList()
+      val records = albums(context, root)
+      val covered = LibraryDatabase.covered(context)
       when (sort) {
-        Sort.ADDED -> records.sortedByDescending { (_, entries) -> entries.maxOf { it.addedAt ?: 0L } }
-        Sort.MOST -> records.sortedByDescending { (_, entries) -> entries.sumOf { plays[it.id]?.first ?: 0 } }
+        Sort.ADDED -> records.sortedByDescending { record -> record.tracks.maxOf { it.addedAt ?: 0L } }
+        Sort.MOST -> records.sortedByDescending { record -> record.tracks.sumOf { plays[it.id]?.first ?: 0 } }
         else -> records
-      }.map { (name, entries) ->
+      }.map { record ->
         browsable(
-          context, "$ALBUM$name", name,
-          subtitle = entries.mapNotNull { it.artist }.distinct().singleOrNull() ?: trackCount(context, entries.size),
-          cover = entries.firstOrNull()?.id
+          context, "$ALBUM${record.key}", record.name,
+          // Whoever it is by: its album artist, or the one artist all of it names.
+          subtitle = record.albumArtist
+            ?: record.tracks.mapNotNull { it.artist }.distinct().singleOrNull()
+            ?: trackCount(context, record.tracks.size),
+          cover = sleeveOf(record.tracks, covered)
         )
       }
     }
@@ -374,7 +386,7 @@ internal object BrowseTree {
       tracks(context, root), LibraryDatabase.recentlyPlayed(context, SHELF)
     )
 
-    parentId.startsWith(ALBUM) -> albums(context, root)[parentId.removePrefix(ALBUM)]
+    parentId.startsWith(ALBUM) -> recordFor(albums(context, root), parentId.removePrefix(ALBUM))?.tracks
 
     parentId.startsWith(LIST) -> {
       val id = parentId.removePrefix(LIST).toLongOrNull()
@@ -484,18 +496,31 @@ internal object BrowseTree {
     val title: String,
     val artist: String?,
     val album: String?,
+    /** Whoever the record is by, as the phone would show it, or null. */
+    val albumArtist: String?,
+    /** The media store's folder, which is one of the things that says two tracks are one record. */
+    val folder: String?,
     val position: Int?,
     /** Milliseconds, or null for a file the media store will not date. */
     val addedAt: Long?,
     val durationSec: Double
   )
 
+  /*
+    Every way into the library in the car comes through here — the shelves,
+    the records, search, shuffle, what was played lately — so what the phone
+    leaves out of the library is left out here, once, for all of them.
+  */
   private fun tracks(context: Context, root: String): List<Entry> {
     val kept = LibraryDatabase.kept(context)
+    val hiding = LibraryDatabase.hiding(context)
 
     return MediaStoreLibrary.queryTracks(context, root).mapNotNull { row ->
       val id = row["id"] as? String ?: return@mapNotNull null
       val uri = row["uri"] as? String ?: return@mapNotNull null
+      if (!hiding.leavesNothing &&
+        !hiding.shows(row["folder"] as? String, (row["durationSec"] as? Number)?.toDouble() ?: 0.0)
+      ) return@mapNotNull null
       val known = kept[id]
       // Named the way the phone names it, corrections and lookups included.
       val names = named(
@@ -507,6 +532,8 @@ internal object BrowseTree {
         title = names.title,
         artist = names.artist,
         album = names.album,
+        albumArtist = albumArtistNamed(row["album"] as? String, row["albumArtist"] as? String, known),
+        folder = row["folder"] as? String,
         position = known?.position ?: (row["trackNumber"] as? Number)?.toInt(),
         addedAt = row["addedAt"] as? Long,
         durationSec = (row["durationSec"] as? Number)?.toDouble() ?: -1.0
@@ -515,24 +542,46 @@ internal object BrowseTree {
   }
 
   /**
-   * Records, with their tracks in order.
+   * Records, with their tracks in order, by name.
    *
    * Every track that names one, by the name the phone shows for it, and only
    * what is still on the phone: the tracks are the media store's, so a record
-   * whose files have gone does not appear at all.
+   * whose files have gone does not appear at all. Which tracks are one record
+   * is [Records]' to say: the album name, and the album artist where tracks of
+   * one name name more than one.
    */
-  private fun albums(context: Context, root: String): Map<String, List<Entry>> =
-    tracks(context, root)
-      .filter { !it.album.isNullOrBlank() }
-      .groupBy { it.album!!.trim() }
-      .mapValues { (_, entries) ->
+  private fun albums(context: Context, root: String): List<Records.Record<Entry>> =
+    Records.group(tracks(context, root)) { Records.Said(it.album, it.albumArtist, it.artist, it.folder) }
+      .map { record ->
         // Numbered first and in order, the rest after them — the same rule the
         // app's own album screen follows.
-        entries.sortedWith(
-          compareBy({ it.position == null }, { it.position ?: 0 }, { it.title })
+        record.copy(
+          tracks = record.tracks.sortedWith(
+            compareBy({ it.position == null }, { it.position ?: 0 }, { it.title })
+          )
         )
       }
-      .toSortedMap(String.CASE_INSENSITIVE_ORDER)
+      .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER, { record: Records.Record<Entry> -> record.name }).thenBy { it.key })
+
+  /**
+   * The record a car asked for by [key]: the one with that very key, or for a
+   * key from before records had album artists — a name as it was spelled —
+   * the record of that name most of its tracks are on.
+   */
+  private fun recordFor(records: List<Records.Record<Entry>>, key: String): Records.Record<Entry>? =
+    records.firstOrNull { it.key == key }
+      ?: Records.key(Records.nameOf(key), null).let { name ->
+        records.filter { Records.nameOf(it.key) == name }.maxByOrNull { it.tracks.size }
+      }
+
+  /**
+   * The track whose picture stands for a record: the first that has one the
+   * app keeps for it, and failing that the first track, whose own file is
+   * then what [CoverProvider] looks in. A record whose first track is bare is
+   * not shown bare when another of its tracks has a cover.
+   */
+  private fun sleeveOf(entries: List<Entry>, covered: Set<String>): String? =
+    entries.firstOrNull { it.id in covered }?.id ?: entries.firstOrNull()?.id
 
   /**
    * A folder, drawn as a tile and holding tiles.
@@ -667,7 +716,10 @@ internal object BrowseTree {
       .setMediaMetadata(
         MediaMetadata.Builder()
           .setTitle(entry.title)
-          .setArtist(entry.artist)
+          // Said as unknown rather than left out: a car showed nothing under
+          // the title, which reads as something gone wrong, and a screen in
+          // a car is read at a glance or aloud.
+          .setArtist(entry.artist ?: Localised.text(context, R.string.jukebox_unknown_artist))
           .setAlbumTitle(entry.album)
           .setIsBrowsable(false)
           .setIsPlayable(true)

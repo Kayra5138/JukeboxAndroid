@@ -1,3 +1,5 @@
+import { isCompilationArtist } from '../media/albums.ts';
+import { sameRecordName, withoutEdition } from './covers.ts';
 import { asThrottle, pacer, request, statusOf } from './http.ts';
 import { identify } from './identify.ts';
 import { foldForMatch, matchScore, tokens } from './text.ts';
@@ -37,6 +39,13 @@ export type ItunesMatch = {
   title: string;
   artist: string;
   album: string | null;
+  /**
+   * Whoever the record in `album` is by: Apple's own name for the
+   * collection's artist where it gives one — "Various Artists" for a
+   * compilation — and the song's artist where it does not, which is when the
+   * two are the same.
+   */
+  albumArtist: string | null;
   genre: string | null;
   year: number | null;
   artworkUrl: string | null;
@@ -51,6 +60,8 @@ type ItunesResult = {
   trackName?: string;
   artistName?: string;
   collectionName?: string;
+  /** Only there when it is not the song's own artist. */
+  collectionArtistName?: string;
   primaryGenreName?: string;
   releaseDate?: string;
   artworkUrl100?: string;
@@ -162,6 +173,9 @@ async function searchStorefront(
       title: result.trackName ?? fallbackTitle,
       artist: result.artistName ?? '',
       album: result.collectionName ?? null,
+      albumArtist: result.collectionName
+        ? (result.collectionArtistName ?? result.artistName ?? null)
+        : null,
       genre: result.primaryGenreName ?? null,
       year: parseYear(result.releaseDate),
       artworkUrl: upscaleArtwork(result.artworkUrl100),
@@ -193,6 +207,63 @@ export async function lookupTrack(
   for (const storefront of STOREFRONTS) {
     const match = await searchStorefront(query, wanted, storefront, track.title, album, signal);
     if (match) return match;
+  }
+  return null;
+}
+
+type ItunesAlbum = {
+  collectionName?: string;
+  artistName?: string;
+  artworkUrl100?: string;
+  trackCount?: number;
+};
+
+/**
+ * The cover of a whole record, from one search for the record itself.
+ *
+ * Where the song search asks about one track and takes its record's cover as
+ * it comes, this asks about the record by name and its artist, which is one
+ * question for the whole of it however many tracks it has. Only a record of
+ * the same name is taken (`sameRecordName`: `Ruins - Single` is not `Ruins`
+ * here, nor `Ruins (Deluxe)` either way round unless nothing closer is
+ * sold), by the same artist where one is known; a compilation's artist is
+ * nobody, and any record of the name will do for it. The entry that names
+ * the record exactly comes first, and then the one nearest [tracks] in
+ * length, which is the pressing the library has.
+ *
+ * Null where no storefront sells it. Throws as the song search does: a
+ * refusal as a throttle, and a network that is not there.
+ */
+export async function searchAlbumCover(
+  album: string,
+  artist: string | null,
+  tracks: number,
+  signal?: AbortSignal
+): Promise<string | null> {
+  const name = withoutEdition(album) || album;
+  const someone = artist && !isCompilationArtist(artist) ? artist : null;
+  const query = someone ? `${name} ${someone}` : name;
+
+  for (const storefront of STOREFRONTS) {
+    const url =
+      `${ENDPOINT}?term=${encodeURIComponent(query)}` +
+      `&entity=album&limit=10&country=${storefront}`;
+    const body = await paced(
+      () => request<{ results?: ItunesAlbum[] }>(`iTunes ${storefront}`, url, {}, signal),
+      signal
+    ).catch((error: unknown) => {
+      throw statusOf(error) === 403 ? asThrottle(error) : error;
+    });
+
+    let best: { result: ItunesAlbum; exact: boolean; off: number } | null = null;
+    for (const result of body.results ?? []) {
+      if (!result.artworkUrl100 || !sameRecordName(result.collectionName, album)) continue;
+      if (someone && !sameOne(someone, result.artistName)) continue;
+      const exact = foldForMatch(result.collectionName ?? '') === foldForMatch(album);
+      const off = Math.abs((result.trackCount ?? tracks) - tracks);
+      if (!best || (exact !== best.exact ? exact : off < best.off)) best = { result, exact, off };
+    }
+    if (best) return upscaleArtwork(best.result.artworkUrl100);
   }
   return null;
 }

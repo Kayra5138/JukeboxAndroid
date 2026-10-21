@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The large widget, roughly. For the widget picker on Android 10 and 11, which shows a
+     picture where 12 and later draw the layout itself (previewLayout). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+  android:width="320dp" android:height="330dp"
+  android:viewportWidth="320" android:viewportHeight="330">
+  <path android:fillColor="#FF2A303B" android:pathData="M20,0h280a20,20 0 0 1 20,20v290a20,20 0 0 1 -20,20h-280a20,20 0 0 1 -20,-20v-290a20,20 0 0 1 20,-20z" />
+  <path android:fillColor="#40FFFFFF" android:pathData="M24,14h52a10,10 0 0 1 10,10v52a10,10 0 0 1 -10,10h-52a10,10 0 0 1 -10,-10v-52a10,10 0 0 1 10,-10z" />
+  <path android:fillColor="#E6EDEDED" android:pathData="M105,36h140a5,5 0 0 1 5,5v0a5,5 0 0 1 -5,5h-140a5,5 0 0 1 -5,-5v-0a5,5 0 0 1 5,-5z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M103.5,54h83.0a3.5,3.5 0 0 1 3.5,3.5v0.0a3.5,3.5 0 0 1 -3.5,3.5h-83.0a3.5,3.5 0 0 1 -3.5,-3.5v-0.0a3.5,3.5 0 0 1 3.5,-3.5z" />
+  <path android:fillColor="#40FFFFFF" android:pathData="M15.5,98h289.0a1.5,1.5 0 0 1 1.5,1.5v0.0a1.5,1.5 0 0 1 -1.5,1.5h-289.0a1.5,1.5 0 0 1 -1.5,-1.5v-0.0a1.5,1.5 0 0 1 1.5,-1.5z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M15.5,98h117.0a1.5,1.5 0 0 1 1.5,1.5v0.0a1.5,1.5 0 0 1 -1.5,1.5h-117.0a1.5,1.5 0 0 1 -1.5,-1.5v-0.0a1.5,1.5 0 0 1 1.5,-1.5z" />
+  <path android:fillColor="#80F2F2F2" android:pathData="M36.2,128h14a1,1 0 0 1 1,1v0a1,1 0 0 1 -1,1h-14a1,1 0 0 1 -1,-1v-0a1,1 0 0 1 1,-1z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M94.6,122.0h2.52v14h-2.52zM108.6,122.0v14L98.8,129z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M152.8,120.0L169.9,129L152.8,138.0z" />
+  <path android:fillColor="#FFF2F2F2" android:pathData="M211.4,122.0L221.20000000000002,129L211.4,136.0zM222.88,122.0h2.52v14h-2.52z" />
+  <path android:fillColor="#80F2F2F2" android:pathData="M269.8,128h14a1,1 0 0 1 1,1v0a1,1 0 0 1 -1,1h-14a1,1 0 0 1 -1,-1v-0a1,1 0 0 1 1,-1z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M23,166h54a3,3 0 0 1 3,3v0a3,3 0 0 1 -3,3h-54a3,3 0 0 1 -3,-3v-0a3,3 0 0 1 3,-3z" />
+  <path android:fillColor="#E6EDEDED" android:pathData="M24,186h142a4,4 0 0 1 4,4v0a4,4 0 0 1 -4,4h-142a4,4 0 0 1 -4,-4v-0a4,4 0 0 1 4,-4z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M23,199h84a3,3 0 0 1 3,3v0a3,3 0 0 1 -3,3h-84a3,3 0 0 1 -3,-3v-0a3,3 0 0 1 3,-3z" />
+  <path android:fillColor="#E6EDEDED" android:pathData="M24,222h128a4,4 0 0 1 4,4v0a4,4 0 0 1 -4,4h-128a4,4 0 0 1 -4,-4v-0a4,4 0 0 1 4,-4z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M23,235h78a3,3 0 0 1 3,3v0a3,3 0 0 1 -3,3h-78a3,3 0 0 1 -3,-3v-0a3,3 0 0 1 3,-3z" />
+  <path android:fillColor="#E6EDEDED" android:pathData="M24,258h114a4,4 0 0 1 4,4v0a4,4 0 0 1 -4,4h-114a4,4 0 0 1 -4,-4v-0a4,4 0 0 1 4,-4z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M23,271h72a3,3 0 0 1 3,3v0a3,3 0 0 1 -3,3h-72a3,3 0 0 1 -3,-3v-0a3,3 0 0 1 3,-3z" />
+  <path android:fillColor="#E6EDEDED" android:pathData="M24,294h100a4,4 0 0 1 4,4v0a4,4 0 0 1 -4,4h-100a4,4 0 0 1 -4,-4v-0a4,4 0 0 1 4,-4z" />
+  <path android:fillColor="#99D2D6DE" android:pathData="M23,307h66a3,3 0 0 1 3,3v0a3,3 0 0 1 -3,3h-66a3,3 0 0 1 -3,-3v-0a3,3 0 0 1 3,-3z" />
+</vector>

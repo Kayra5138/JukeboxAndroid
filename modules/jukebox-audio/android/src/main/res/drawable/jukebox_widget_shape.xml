@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The outline every widget is clipped to, from Android 12 where a layout
+     can ask for that (android:clipToOutline). The colour is the darkest of the
+     plain gradient's, and is only ever seen for the moment before the
+     gradient arrives. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+  android:shape="rectangle">
+  <solid android:color="#1B1F27" />
+  <corners android:radius="@dimen/jukebox_widget_radius" />
+</shape>

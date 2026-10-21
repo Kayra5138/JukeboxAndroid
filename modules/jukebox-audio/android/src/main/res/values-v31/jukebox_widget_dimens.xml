@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The phone's own widget rounding, which a launcher or a manufacturer may
+     have changed from Android's sixteen. The layouts clip to it themselves
+     (jukebox_widget_shape.xml), so it holds on launchers that do not enforce
+     it as well as on those that do. -->
+<resources>
+  <dimen name="jukebox_widget_radius">@android:dimen/system_app_widget_background_radius</dimen>
+  <dimen name="jukebox_widget_inner_radius">@android:dimen/system_app_widget_inner_radius</dimen>
+</resources>

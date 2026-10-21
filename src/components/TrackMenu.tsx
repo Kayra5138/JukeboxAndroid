@@ -68,13 +68,15 @@ export function TrackMenu({
       transparent
       animationType="fade"
       onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      {/* Not a stop for a screen reader, which would otherwise read the whole
+          heading as one button that closes the menu. The back gesture closes it. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {track ? (
           // Six actions and a heading are taller than a landscape screen, so the
           // sheet is bounded and scrolls rather than running off the bottom.
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
             <View style={styles.header}>
-              <Text style={styles.title} numberOfLines={2}>
+              <Text accessibilityRole="header" style={styles.title} numberOfLines={2}>
                 {track.title}
               </Text>
               <Text style={styles.artist} numberOfLines={1}>
@@ -91,6 +93,7 @@ export function TrackMenu({
                 (action !== 'album' || Boolean(track.album?.trim()))
             ).map((action) => (
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 key={action}
                 style={styles.action}
@@ -132,6 +135,7 @@ function DiscoverEntries({ trackId, onDone }: { trackId: string; onDone: () => v
   return (
     <>
       <Pressable
+        accessibilityRole="button"
         android_ripple={pressed}
         accessibilityState={{ disabled: entry.keeping }}
         disabled={entry.keeping}
@@ -140,11 +144,11 @@ function DiscoverEntries({ trackId, onDone }: { trackId: string; onDone: () => v
         <Text style={styles.actionLabel}>{said.keep.label}</Text>
         <Text style={styles.actionHint}>{entry.keeping ? t.discover.row.keeping : said.keep.hint}</Text>
       </Pressable>
-      <Pressable android_ripple={pressed} style={styles.action} onPress={then(exclude)}>
+      <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.action} onPress={then(exclude)}>
         <Text style={styles.actionLabel}>{said.exclude.label}</Text>
         <Text style={styles.actionHint}>{said.exclude.hint}</Text>
       </Pressable>
-      <Pressable android_ripple={pressed} style={styles.action} onPress={then(excludeArtist)}>
+      <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.action} onPress={then(excludeArtist)}>
         <Text style={styles.destructive} numberOfLines={1}>
           {said.neverArtist.label(entry.artist)}
         </Text>

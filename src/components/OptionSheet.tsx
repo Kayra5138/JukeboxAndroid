@@ -29,7 +29,11 @@ export function OptionSheet<Value extends string>({
   heading: string;
   /** A line under the list about the choice as a whole. */
   note?: string;
-  options: readonly { value: Value; label: string }[];
+  /**
+   * `detail` is a line under a choice about that choice alone, for a list of
+   * a few that differ in more than their names.
+   */
+  options: readonly { value: Value; label: string; detail?: string }[];
   chosen: Value;
   onChoose: (value: Value) => void;
   onClose: () => void;
@@ -48,11 +52,14 @@ export function OptionSheet<Value extends string>({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      {/* Neither the backdrop nor the sheet is a stop for a screen reader. Both are
+          pressable only to sort touches, and as stops they read the heading as a
+          button that does nothing, or one that closes the sheet unasked. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {/* Swallows taps so touching the sheet does not count as touching the
             backdrop behind it. */}
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <Text style={styles.heading}>{heading}</Text>
+        <Pressable style={styles.sheet} onPress={() => {}} accessible={false}>
+          <Text accessibilityRole="header" style={styles.heading}>{heading}</Text>
           <ScrollView style={styles.list} contentContainerStyle={picture ? styles.pictured : undefined}>
             {picture ?? options.map((option) => {
               const on = option.value === chosen;
@@ -60,17 +67,27 @@ export function OptionSheet<Value extends string>({
                 <Pressable
                   android_ripple={pressed}
                   key={option.value}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: on }}
+                  // One of a set of which one is the answer, and says which.
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: on }}
                   style={styles.option}
                   onPress={() => {
                     onChoose(option.value);
                     onClose();
                   }}>
-                  <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>
-                    {option.label}
-                  </Text>
-                  {on ? <Text style={styles.tick}>✓</Text> : null}
+                  {option.detail ? (
+                    <View style={styles.told}>
+                      <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>
+                        {option.label}
+                      </Text>
+                      <Text style={styles.detail}>{option.detail}</Text>
+                    </View>
+                  ) : (
+                    <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>
+                      {option.label}
+                    </Text>
+                  )}
+                  {on ? <Text style={styles.tick} importantForAccessibility="no">✓</Text> : null}
                 </Pressable>
               );
             })}
@@ -119,6 +136,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   label: { color: c.text, fontSize: 15, flexShrink: 1 },
   labelOn: { color: c.accent },
+  told: { flexShrink: 1, gap: 2 },
+  detail: { color: c.textMuted, fontSize: 12.5, lineHeight: 17 },
   tick: { color: c.accent, fontSize: 15, fontWeight: '700' },
   note: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 18 },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 18 },

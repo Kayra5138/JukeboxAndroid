@@ -1,7 +1,16 @@
 import { db } from './index.ts';
 import type { Lyrics } from '../lyrics/lrclib.ts';
+import { lrcOffsetMs, sameWords, type LocalLyrics } from '../lyrics/local.ts';
 
-export type LyricsSource = 'lookup' | 'manual';
+/**
+ * Where stored words came from: LRCLIB, somebody's own choice, the song's
+ * file, or a `.lrc` beside it. See `lyrics/local.ts` for which wins.
+ */
+export type LyricsSource = 'lookup' | 'manual' | 'file' | 'lrc';
+
+function sourceOf(stored: string | null): LyricsSource {
+  return stored === 'manual' || stored === 'file' || stored === 'lrc' ? stored : 'lookup';
+}
 
 export type StoredLyrics = Lyrics & {
   fetchedAt: number;
@@ -49,7 +58,7 @@ export function readLyrics(trackId: string): StoredLyrics | null {
     plain: row.plain,
     synced: row.synced,
     fetchedAt: row.fetched_at,
-    source: row.source === 'manual' ? 'manual' : 'lookup',
+    source: sourceOf(row.source),
     offsetMs: row.offset_ms ?? 0,
   };
 }
@@ -119,6 +128,41 @@ export function clearLyrics(trackId: string): void {
  */
 function dropTranslations(trackId: string): void {
   db().runSync(`DELETE FROM lyric_translations WHERE track_id = ?`, trackId);
+}
+
+/**
+ * Stores words read from the phone — the song's own file or a `.lrc` beside
+ * it — in place of whatever was there.
+ *
+ * Kept in the same table as everything else rather than read fresh and held
+ * nowhere, for two reasons: the words appear the moment the player opens
+ * instead of after the file has been read, and a shift somebody set for
+ * them has a row to live on.
+ *
+ * The shift and the translations go with the old words when the words
+ * change, as they do when a lookup replaces them; they belonged to those
+ * words. When only the place changed — the same text, now found in a `.lrc`
+ * rather than the tag — both stay. A new set of words starts at whatever
+ * shift the `.lrc` itself asks for, which is usually none.
+ */
+export function writeLocalLyrics(trackId: string, found: LocalLyrics, at: number): void {
+  const database = db();
+  database.withTransactionSync(() => {
+    const before = readLyrics(trackId);
+    const same = before !== null && sameWords(before, found.lyrics);
+    const offset = same ? before.offsetMs : lrcOffsetMs(found.lyrics.synced ?? '');
+    database.runSync(
+      `INSERT OR REPLACE INTO track_lyrics (track_id, plain, synced, fetched_at, unreachable_at, source, offset_ms)
+       VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+      trackId,
+      found.lyrics.plain,
+      found.lyrics.synced,
+      Math.round(at),
+      found.source,
+      Math.round(offset)
+    );
+    if (!same) dropTranslations(trackId);
+  });
 }
 
 /** How far the timings are shifted, in milliseconds. Positive means later. */

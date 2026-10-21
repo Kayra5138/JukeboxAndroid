@@ -8,7 +8,9 @@ import {
   View,
 } from 'react-native';
 import { Pressable } from '../components/Pressable';
+import { Segmented } from '../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnderBars } from '../components/UnderBars';
 
 import JukeboxAudio, {
   type EqualizerSettings,
@@ -41,8 +43,9 @@ import {
 import { forBridge } from '../lib/equalizer/bridge';
 import { BUILT_IN, labelOf, matching, removed, renamed, saved } from '../lib/equalizer/presets';
 import { useT, type Strings } from '../lib/i18n/index';
-import { makeStyles, outlined, outlineWidth, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
+import { useAnnounce } from '../lib/ui/announce';
 
 /** A change the player would not take, said in the log; see `settle`. */
 const refused = (failure: unknown) => console.warn('The equalizer could not be set', failure);
@@ -74,6 +77,8 @@ type Asking =
 
 export default function EqualizerScreen() {
   const insets = useSafeAreaInsets();
+  // How far the screen's bar of glass is over the top of what scrolls; nought in any other theme.
+  const under = useUnderBars();
   const landscape = useLandscape();
   const t = useT();
   const styles = useStyles();
@@ -95,6 +100,8 @@ export default function EqualizerScreen() {
   const [importing, setImporting] = useState(false);
   /** A line about the last thing that was done, where it needs saying. */
   const [note, setNote] = useState<string | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note);
   /** The preset "Delete" has been pressed on once, waiting to be pressed again. */
   const [armed, setArmed] = useState<string | null>(null);
 
@@ -275,6 +282,7 @@ export default function EqualizerScreen() {
       contentContainerStyle={[
         styles.content,
         {
+          paddingTop: 14 + under.top,
           paddingLeft: insets.left + 20,
           paddingRight: insets.right + 20,
           paddingBottom: insets.bottom + 40,
@@ -299,7 +307,7 @@ export default function EqualizerScreen() {
         <Text style={styles.notice}>{t.sound.equalizer.carried}</Text>
       ) : null}
       {parametric?.notice === 'lost' ? (
-        <Text style={styles.notice} accessibilityRole="alert">
+        <Text style={styles.notice} accessibilityRole="alert" accessibilityLiveRegion="assertive">
           {t.sound.equalizer.lost}
         </Text>
       ) : null}
@@ -317,7 +325,7 @@ export default function EqualizerScreen() {
               />
             </View>
 
-            <Text style={styles.section}>{t.format.upper(t.sound.equalizer.presets)}</Text>
+            <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.sound.equalizer.presets)}</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -326,19 +334,21 @@ export default function EqualizerScreen() {
               // amount, so the row scrolls under the margin instead of
               // being cut off at it.
               style={{ marginLeft: -(insets.left + 20), marginRight: -(insets.right + 20) }}
-              contentContainerStyle={[
-                styles.chips,
-                { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 },
-              ]}
-              accessibilityRole="radiogroup">
-              {[...BUILT_IN, ...kept].map((preset) => (
-                <Chip
-                  key={preset.name}
-                  label={labelOf(preset.name, t)}
-                  on={current === preset.name}
-                  onPress={() => choose(preset)}
-                />
-              ))}
+              contentContainerStyle={{ paddingLeft: insets.left + 20, paddingRight: insets.right + 20 }}>
+              {/*
+                Without a mark when the curve is none of them, having been
+                shaped by hand.
+              */}
+              <Segmented
+                variant="outline"
+                wrap={false}
+                options={[...BUILT_IN, ...kept].map((preset) => ({ value: preset.name, label: labelOf(preset.name, t) }))}
+                value={current}
+                onChange={(name) => {
+                  const preset = [...BUILT_IN, ...kept].find((candidate) => candidate.name === name);
+                  if (preset) choose(preset);
+                }}
+              />
             </ScrollView>
 
             <View style={styles.actions}>
@@ -392,7 +402,7 @@ export default function EqualizerScreen() {
             </View>
             {note ? <Text style={styles.said}>{note}</Text> : null}
 
-            <Text style={styles.section}>{t.format.upper(t.sound.equalizer.bands)}</Text>
+            <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.sound.equalizer.bands)}</Text>
             <View style={styles.bands}>
               {bands.map((band, index) => (
                 <BandEditor
@@ -436,24 +446,22 @@ export default function EqualizerScreen() {
               <Text style={[styles.hint, styles.full]}>{t.sound.equalizer.full(MAX_BANDS)}</Text>
             )}
 
-            <Text style={styles.section}>{t.format.upper(t.sound.equalizer.preamp)}</Text>
+            <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.sound.equalizer.preamp)}</Text>
             <View style={styles.tone}>
-              <View style={styles.kinds} accessibilityRole="radiogroup">
-                <Chip
-                  label={t.sound.equalizer.automatic}
-                  on={preampDb === null}
-                  onPress={() => shape({ preampDb: null }, true)}
-                />
-                <Chip
-                  label={t.sound.equalizer.byHand}
-                  on={preampDb !== null}
-                  onPress={() => {
-                    // From where the automatic one had it, so that changing
-                    // who decides does not change the level.
-                    if (preampDb === null) shape({ preampDb: Number(automatic.toFixed(1)) }, true);
-                  }}
-                />
-              </View>
+              <Segmented
+                variant="outline"
+                options={[
+                  { value: 'automatic', label: t.sound.equalizer.automatic },
+                  { value: 'byHand', label: t.sound.equalizer.byHand },
+                ]}
+                value={preampDb === null ? 'automatic' : 'byHand'}
+                onChange={(who) => {
+                  if (who === 'automatic') shape({ preampDb: null }, true);
+                  // From where the automatic one had it, so that changing
+                  // who decides does not change the level.
+                  else if (preampDb === null) shape({ preampDb: Number(automatic.toFixed(1)) }, true);
+                }}
+              />
               {preampDb === null ? (
                 <Text style={styles.hint}>
                   {automatic === 0
@@ -497,7 +505,7 @@ export default function EqualizerScreen() {
           <Text style={[styles.notice, styles.unbuilt]}>{t.sound.equalizer.unbuilt}</Text>
         )}
 
-        <Text style={styles.section}>{t.format.upper(t.sound.equalizer.tone)}</Text>
+        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.sound.equalizer.tone)}</Text>
         <View style={styles.tone}>
           {state.bassSupported ? (
             <Slider
@@ -645,24 +653,6 @@ function promptFor(asking: Asking | null, bands: Band[], preampDb: number | null
   return { heading: '', placeholder: '' };
 }
 
-function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
-  const styles = useStyles();
-  const pressed = usePressed();
-  return (
-    <Pressable
-      android_ripple={pressed}
-      style={[styles.chip, on && styles.chipOn]}
-      onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ checked: on }}
-      accessibilityLabel={label}>
-      <Text style={[styles.chipLabel, on && styles.chipLabelOn]} numberOfLines={1}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 function Action({
   label,
   accessibilityLabel,
@@ -752,23 +742,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingTop: 26,
     paddingBottom: 12,
   },
-
-  chips: { gap: 8 },
-  kinds: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: {
-    paddingHorizontal: 15,
-    paddingVertical: 9,
-    borderRadius: 18,
-    // The edge is the chip: there is no fill until it is on. So it is as wide
-    // as an outline where a theme draws those, on or off, and nothing moves.
-    borderWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
-    borderColor: c.borderStrong,
-  },
-  // Ringed in the accent itself where there are outlines, since the fill is
-  // the accent held back and is not far from the card it is on.
-  chipOn: { backgroundColor: c.accentMuted, borderColor: c.accentMuted, ...outlined(c, c.accent) },
-  chipLabel: { color: c.textSecondary, fontSize: 13 },
-  chipLabelOn: { color: c.text, fontWeight: '600' },
 
   // Wrapping, so four of them are two lines on a narrow phone rather than a
   // row running off the side of it.

@@ -1,10 +1,14 @@
 import { useCallback, useState } from 'react';
+import { AutoplaySetting } from '../components/AutoplaySetting';
 import { HeartSetting } from '../components/HeartSetting';
+import { ListButtonSetting } from '../components/ListButtonSetting';
+import { LyricsFolderSetting } from '../components/LyricsFolderSetting';
 import { useFocusEffect } from 'expo-router';
 import { Text, View } from 'react-native';
 
 import { OptionSheet } from '../components/OptionSheet';
 import { Pressable } from '../components/Pressable';
+import { Segmented } from '../components/Segmented';
 import { SettingsPage, useRows } from '../components/settings/rows';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useLanguage, useT } from '../lib/i18n/index';
@@ -14,9 +18,10 @@ import { JUMP_STEPS, stepFrom } from '../lib/player/jump';
 import { usePressed } from '../lib/theme/index';
 
 /**
- * The two things about the player that are settled once and not from the
- * player itself: how far its jump buttons go, and what its lyrics are
- * translated into.
+ * The things about the player that are settled once and not from the player
+ * itself: how far its jump buttons go, what plays when the queue runs out,
+ * what its lyrics are translated into, and whether they are read from .lrc
+ * files beside the songs.
  *
  * The rows are the ones that were on the Settings tab, as they were.
  */
@@ -68,27 +73,23 @@ export default function PlayerSettingsScreen() {
         <View style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.settings.jump.title}</Text>
-            <View style={styles.choices}>
-              {JUMP_STEPS.map((seconds) => (
-                <Pressable
-                  android_ripple={pressed}
-                  key={seconds}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: seconds === jump }}
-                  style={[styles.choice, seconds === jump && styles.choiceOn]}
-                  onPress={() => {
-                    setJump(seconds);
-                    writeSetting(SETTINGS.jumpSeconds, String(seconds));
-                  }}>
-                  <Text style={[styles.choiceText, seconds === jump && styles.choiceTextOn]}>
-                    {seconds}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+            <Segmented
+              role="button"
+              variant="chips"
+              size="compact"
+              options={JUMP_STEPS.map((seconds) => ({ value: seconds, label: String(seconds) }))}
+              value={jump}
+              onChange={(seconds) => {
+                setJump(seconds);
+                writeSetting(SETTINGS.jumpSeconds, String(seconds));
+              }}
+            />
           </View>
           <Text style={styles.muted}>{t.settings.jump.note}</Text>
         </View>
+        <View style={styles.rule} />
+        {/* What plays when the queue runs out: see the component, which opens its own list. */}
+        <AutoplaySetting />
         <View style={styles.rule} />
         {/*
           Too many to lay out as chips, so the row says which and opens a
@@ -107,11 +108,16 @@ export default function PlayerSettingsScreen() {
               <Text style={styles.value} numberOfLines={1}>
                 {targets.find((target) => target.tag === lyricsTarget)?.name ?? lyricsTarget}
               </Text>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
             </View>
           </View>
           <Text style={styles.muted}>{t.settings.lyricsLanguage.note}</Text>
         </Pressable>
+        <View style={styles.rule} />
+        {/* Beside the other lyrics row; see the component for why it asks for a folder. */}
+        <LyricsFolderSetting />
+        <View style={styles.rule} />
+        <ListButtonSetting />
         <View style={styles.rule} />
         {/* The last row of the player's page, said nowhere else: see `Heart.tsx`. */}
         <HeartSetting />

@@ -1,8 +1,9 @@
 import { albumShown } from '../media/enriched.ts';
 import {
+  artistShown,
   byRecord,
   coverIndex,
-  isStoredCover,
+  heldCover,
   recordKey,
   sameRecordName,
 } from './covers.ts';
@@ -130,6 +131,12 @@ export type CoverStore = {
   /** Remember that these were searched for and nothing was found. */
   markCoverSearched: (trackIds: string[]) => void;
   /**
+   * The covers tracks with no row of their own were given by their record,
+   * read once when the run starts. Such a track has its cover, and is not
+   * searched for one. Left out, there are none.
+   */
+  readSharedCovers?: () => Map<string, string>;
+  /**
    * Whether the file carries a picture of its own.
    *
    * Such a track is left out of everything here: it is given no cover from its
@@ -170,6 +177,25 @@ export type Catalogues = {
 };
 
 const REAL: Catalogues = { musicbrainz: lookupMusicBrainz, itunes: lookupItunes };
+
+/**
+ * What a run is for.
+ *
+ * `everything` is the ordinary run: what each track is, and its cover.
+ *
+ * `covers` is somebody asking for covers and nothing else, for tracks they
+ * chose. Nothing is looked up, so a track already looked up is not skipped
+ * for having been, and what it was found to be is not asked again. The rules
+ * about which covers stand are the ordinary ones — a cover of the app's own,
+ * chosen or found, is kept; one taken off by hand stays off; a file with a
+ * picture of its own is left with it — and a record is still searched for
+ * once and not once per track. What differs is that being asked is taken as
+ * reason enough to try again: a track no catalogue could name is searched
+ * for by what its file calls it, one never looked up at all is searched for
+ * the same way, and one whose cover was searched for before and not found is
+ * searched for afresh.
+ */
+export type RunMode = 'everything' | 'covers';
 
 type Found = Omit<TrackMetadata, 'trackId' | 'status' | 'source'> & {
   /**
@@ -214,6 +240,7 @@ function fromMusicBrainz(musicbrainz: MusicBrainzMatch): Found {
     title: musicbrainz.title,
     artist: musicbrainz.artist,
     album: null,
+    albumArtist: null,
     genre: musicbrainz.genres[0] ?? null,
     year: musicbrainz.year,
     artworkUrl: null,
@@ -236,6 +263,7 @@ function fromItunes(itunes: ItunesMatch, found: Found | null): Found {
     title: itunes.title,
     artist: itunes.artist,
     album: itunes.album,
+    albumArtist: itunes.albumArtist,
     genre: tags[0] ?? null,
     // MusicBrainz dates the recording; Apple dates the release it is selling,
     // which for a reissue is decades late. Prefer the earlier authority.
@@ -361,20 +389,43 @@ export async function runEnrichment(
   onProgress: (progress: EnrichProgress) => void,
   signal: AbortSignal | undefined,
   store: EnrichStore,
-  catalogues: Catalogues = REAL
+  catalogues: Catalogues = REAL,
+  mode: RunMode = 'everything'
 ): Promise<EnrichResult> {
   const covers = store.covers;
+  const coversOnly = mode === 'covers';
 
   // Hand-written entries are excluded even when explicitly selected: an edit is
-  // an answer, not a guess waiting to be improved on.
-  const edited = store.manualTrackIds();
-  const pending = new Set(store.filterUnenriched(tracks.map((track) => track.id)));
-  for (const id of edited) pending.delete(id);
+  // an answer, not a guess waiting to be improved on. A run for covers alone
+  // looks nothing up at all.
+  const pending = new Set<string>();
+  if (!coversOnly) {
+    const edited = store.manualTrackIds();
+    for (const id of store.filterUnenriched(tracks.map((track) => track.id))) {
+      if (!edited.has(id)) pending.add(id);
+    }
+  }
 
   // Kept in step with what is written below, so that nothing has to be read
   // back in the middle of a run to know what a track has by now.
   const rows = covers ? covers.readAllMetadata() : new Map<string, TrackMetadata>();
-  const index = coverIndex(covers ? await covers.library() : [], rows);
+  const shared = covers?.readSharedCovers?.() ?? new Map<string, string>();
+  const index = coverIndex(covers ? await covers.library() : [], rows, shared);
+  /**
+   * Whether a track has a cover, or is to have none: one of the app's own, on
+   * its row or given by its record, or one somebody took off by hand, which
+   * nothing here is to put back.
+   */
+  const settled = (trackId: string, row: TrackMetadata | undefined) =>
+    heldCover(row, shared.get(trackId)) != null || row?.coverRemovedAt != null;
+  /**
+   * A track's row as this run treats it. A run for covers alone takes a track
+   * with no row the way it takes one nobody could name: known by what its
+   * file says, and nothing else. Held nowhere, so that nothing written for
+   * the track is made to look as if a lookup had been.
+   */
+  const known = (trackId: string): TrackMetadata | undefined =>
+    rows.get(trackId) ?? (coversOnly ? miss(trackId) : undefined);
   const groups = new Map<string, Group>();
   /** Records whose first cover has been passed round the tracks of this run. */
   const reached = new Set<string>();
@@ -511,15 +562,22 @@ export async function runEnrichment(
     );
     const records = new Set<string>();
     for (const track of to) {
+      if (!filled.has(track.id)) continue;
       const row = rows.get(track.id);
-      if (!row || !filled.has(track.id)) continue;
-      // The same rule the table applies: a record name somebody typed stays.
-      const next = {
-        ...row,
-        artworkUrl: uri,
-        album: row.status === 'manual' ? row.album : (row.album ?? album),
-      };
-      rows.set(track.id, next);
+      let next: TrackMetadata | undefined = row;
+      if (row && row.status !== 'not_found') {
+        // The same rule the table applies: a record name somebody typed stays.
+        next = {
+          ...row,
+          artworkUrl: uri,
+          album: row.status === 'manual' ? row.album : (row.album ?? album),
+        };
+        rows.set(track.id, next);
+      } else {
+        // A track with no row of its own was given the cover apart from the
+        // rows, as the table does it.
+        shared.set(track.id, uri);
+      }
       coversSaved += 1;
 
       const key = recordKey(track, next);
@@ -535,7 +593,7 @@ export async function runEnrichment(
       if (group?.state === 'waiting') {
         group.state = 'answered';
         group.answer = { uri, album: null };
-        give(group.members.map((member) => member.track), uri, null);
+        give(fitting(group.members, key), uri, null);
         group.members.forEach(finish);
       }
       /*
@@ -549,15 +607,17 @@ export async function runEnrichment(
       reached.add(key);
       give(
         tracks.filter((other) => {
-          const held = rows.get(other.id);
+          const held = known(other.id);
           return (
             held != null &&
-            !isStoredCover(held.artworkUrl) &&
+            !settled(other.id, held) &&
             // Only a track whose file has been looked into, which is every
             // one that named a record when the run began or was looked up in it.
             looked.has(other.id) &&
             !own.has(other.id) &&
-            recordKey(other, held) === key
+            recordKey(other, held) === key &&
+            // Not across to a namesake's record: see `covers.ts`.
+            index.fits(key, artistShown(other, held))
           );
         }),
         uri,
@@ -565,6 +625,15 @@ export async function runEnrichment(
       );
     }
   };
+
+  /**
+   * The tracks of a record the library knows only by name that may wear its
+   * cover: not a namesake's, where most of the record is somebody else's.
+   */
+  const fitting = (members: Item[], key: string): Track[] =>
+    members
+      .map((member) => member.track)
+      .filter((track) => index.fits(key, artistShown(track, rows.get(track.id))));
 
   const searched = (items: Item[]) => {
     const ids = items.map((item) => item.track.id);
@@ -603,21 +672,22 @@ export async function runEnrichment(
   /** A track whose details are settled: find it a cover, or see that it needs none. */
   const wantCover = (item: Item) => {
     const { track } = item;
-    const row = rows.get(track.id);
-    if (!covers || !row || isStoredCover(row.artworkUrl)) return finish(item);
+    const row = known(track.id);
+    if (!covers || !row || settled(track.id, row)) return finish(item);
     // The file has a picture of its own, and that is its cover.
     if (own.has(track.id)) return finish(item);
 
     const key = recordKey(track, row);
-    const sibling = key ? index.pick(key) : null;
+    const sibling = key ? index.pick(key, artistShown(track, row)) : null;
     if (sibling) {
       give([track], sibling, null);
       return finish(item);
     }
 
     // Nobody could say what this is, so there is nothing to search for a cover
-    // with. The one above is the only kind it can have.
-    if (row.status === 'not_found') return finish(item);
+    // with. The one above is the only kind it can have — unless covers were
+    // asked for in so many words, and then the file's own names are tried.
+    if (row.status === 'not_found' && !coversOnly) return finish(item);
 
     // Its own lookup came with a picture. First in line, so the track that
     // was just found is also the track that is finished next.
@@ -625,7 +695,8 @@ export async function runEnrichment(
       return post({ kind: 'download', item, url: row.artworkUrl, album: row.album }, true);
     }
 
-    if (row.coverSearchedAt != null) return finish(item);
+    // Searched for before and not found. Asked again only when asked for.
+    if (row.coverSearchedAt != null && !coversOnly) return finish(item);
 
     join(
       item,
@@ -720,7 +791,7 @@ export async function runEnrichment(
       group.state = 'answered';
       group.answer = { uri, album: match.album };
       // Read again rather than held from above: tracks join while this waits.
-      give(group.members.map((member) => member.track), uri, match.album);
+      give(named ? fitting(group.members, key.slice('album:'.length)) : group.members.map((member) => member.track), uri, match.album);
       group.members.forEach(finish);
       return;
     }
@@ -812,11 +883,12 @@ export async function runEnrichment(
 
   /** Whether a track already looked up has anything left that could be done for it. */
   const coverless = (track: Track): TrackMetadata | null => {
-    const row = rows.get(track.id);
-    return covers && row && !isStoredCover(row.artworkUrl) ? row : null;
+    const row = known(track.id);
+    return covers && row && !settled(track.id, row) ? row : null;
   };
   const searchable = (row: TrackMetadata) =>
-    row.status !== 'not_found' && (row.artworkUrl != null || row.coverSearchedAt == null);
+    coversOnly ||
+    (row.status !== 'not_found' && (row.artworkUrl != null || row.coverSearchedAt == null));
 
   // The files are looked into first, and only the ones something could be
   // done for: a track to search for, or one that names a record and so may be
@@ -847,7 +919,7 @@ export async function runEnrichment(
     if (!row || own.has(track.id)) continue;
 
     const key = recordKey(track, row);
-    const sibling = key ? index.pick(key) : null;
+    const sibling = key ? index.pick(key, artistShown(track, row)) : null;
     if (sibling) {
       const takers = atOnce.get(sibling);
       if (takers) takers.push(track);
@@ -922,7 +994,7 @@ export async function runEnrichment(
           settle(job.item, itunes ? fromItunes(itunes, job.found) : job.found);
         } else if (job.kind === 'download') {
           // Unless the record got its cover while this was waiting its turn.
-          if (!isStoredCover(rows.get(job.item.track.id)?.artworkUrl)) {
+          if (!settled(job.item.track.id, rows.get(job.item.track.id))) {
             const uri = await covers!.download(job.url);
             if (halt.signal.aborted) break;
             give([job.item.track], uri, job.album);

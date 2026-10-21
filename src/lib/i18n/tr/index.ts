@@ -16,8 +16,10 @@ import { search } from './search.ts';
 import { settings } from './settings.ts';
 import { sound } from './sound.ts';
 import { stats } from './stats.ts';
+import { support } from './support.ts';
 import { themes } from './themes.ts';
 import { tiles } from './tiles.ts';
+import { welcome } from './welcome.ts';
 
 /**
  * Everything the app says, in Turkish.
@@ -46,5 +48,7 @@ export const tr: Strings = {
   backup,
   tiles,
   listenbrainz,
+  welcome,
+  support,
 };
 

@@ -48,8 +48,56 @@
         android:resource="@xml/jukebox_widget_info" />
     </receiver>
 
+    <!--
+      The same widget offered at two rows and at four, so that the picker shows
+      it at those sizes; see JukeboxWidget. Only the size each starts at is
+      their own. Their buttons are sent to the receiver above.
+    -->
+    <receiver
+      android:name=".widget.JukeboxCardWidget"
+      android:exported="true"
+      android:label="@string/jukebox_widget_card_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/jukebox_widget_card_info" />
+    </receiver>
+
+    <receiver
+      android:name=".widget.JukeboxLargeWidget"
+      android:exported="true"
+      android:label="@string/jukebox_widget_large_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/jukebox_widget_large_info" />
+    </receiver>
+
+    <!-- The tile that starts a shuffle. Its presses go to the receiver above too. -->
+    <receiver
+      android:name=".widget.JukeboxShortcutWidget"
+      android:exported="true"
+      android:label="@string/jukebox_widget_shortcut_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/jukebox_widget_shortcut_info" />
+    </receiver>
+
     <service
       android:name=".downloads.DownloadService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+
+    <!-- A lookup of the library's details, covers or lyrics, going on behind the screen. -->
+    <service
+      android:name=".work.LookupService"
       android:exported="false"
       android:foregroundServiceType="dataSync" />
 

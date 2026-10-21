@@ -114,7 +114,7 @@ export function ListenBrainzSettings({
           {revoked ? (
             <>
               <View style={styles.row}>
-                <Text accessibilityRole="alert" style={styles.bad}>
+                <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
                   {said.revoked(connection.user)}
                 </Text>
               </View>
@@ -130,7 +130,7 @@ export function ListenBrainzSettings({
             onPress={() => setAsking(true)}>
             <View style={styles.line}>
               <Text style={styles.title}>{revoked ? said.newToken : said.connect.title}</Text>
-              {checking ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron}>›</Text>}
+              {checking ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
             </View>
             <Text style={styles.muted}>{checking ? said.connect.checking : said.connect.note}</Text>
             <Text style={styles.muted}>{said.connect.where}</Text>
@@ -145,7 +145,7 @@ export function ListenBrainzSettings({
           </Pressable>
         </View>
         {refused ? (
-          <Text accessibilityRole="alert" style={styles.noteBad}>
+          <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.noteBad}>
             {refused}
           </Text>
         ) : null}
@@ -187,7 +187,7 @@ export function ListenBrainzSettings({
             </Text>
           ) : null}
           {trouble && waiting > 0 ? (
-            <Text accessibilityRole="alert" style={styles.bad}>
+            <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
               {troubleSaid}
             </Text>
           ) : connection.lastSentAt ? (

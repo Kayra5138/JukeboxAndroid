@@ -16,9 +16,26 @@ export const player: Strings['player'] = {
     lyrics: 'Sözler',
     translateLyrics: 'Sözleri çevir',
     upNext: (count) => `Sıradaki · ${format.number(count)}`,
+    position: 'Çalma konumu',
+    positionValue: (position, duration) => `${position}, toplam ${duration}`,
   },
   queue: {
     remove: (title) => `${title} parçasını kaldır`,
+    movedTo: (position, count) => `Şimdi ${format.number(count)} parça içinde ${format.number(position)}. sırada`,
+    auto: {
+      library: 'Benzer şarkılar · senin için seçildi',
+      fresh: 'Yeni şarkılar · Keşfet’ten',
+      mixed: 'Benzer ve yeni · senin için seçildi',
+      remove: 'Kaldır',
+      removeLabel: 'Senin için seçilen şarkıları kaldır',
+      removeHint: 'Başka bir şey çalana kadar bu sıraya yenisi eklenmez.',
+      notes: {
+        offline: 'Bağlantı yok, bu yüzden bunlar kütüphanenden.',
+        wifi: 'Keşfet Wi-Fi bekliyor, bu yüzden bunlar kütüphanenden.',
+        unavailable: 'Yeni şarkılar için YouTube indiricisi gerekiyor, bu yüzden bunlar kütüphanenden.',
+        waiting: 'Yeni şarkılar hâlâ iniyor; bu arada kütüphanenden çalıyor.',
+      },
+    },
   },
   settings: {
     playback: 'Oynatma',

@@ -26,15 +26,18 @@ import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
-import { TagPrompt } from '../components/TagPrompt';
-import { WriteFilesSheet } from '../components/WriteFilesSheet';
+import { useSelectionActions } from '../components/SelectionActions';
+import { LibraryWelcome } from '../components/welcome/LibraryWelcome';
+import { WrongDownloadsLine } from '../components/WrongDownloadsLine';
 import { NowPlayingBar, usePageSides } from '../components/NowPlayingBar';
+import { topGlass, useLaidOver, useUnderBars } from '../components/UnderBars';
 import { PlaylistCover } from '../components/PlaylistCover';
-import { BROWSE_ROW_HEIGHT, BrowseRow } from '../components/BrowseRow';
+import { BrowseRow, useBrowseRowHeight } from '../components/BrowseRow';
 import { AlbumListing } from '../components/AlbumListing';
 import { AlbumMenu, WITHOUT_SELECT, type AlbumAction } from '../components/AlbumMenu';
 import { CoverFlow, type Rack, type Sleeve } from '../components/CoverFlow';
-import { albumsOf, type Album } from '../lib/media/albums';
+import { albumsOf, findAlbum, nameOfKey, narrowAlbums, type Album } from '../lib/media/albums';
+import { chooseRecordCover, lookUpRecord } from '../lib/metadata/albumActions';
 import {
   artistsOf,
   asArtistSort,
@@ -52,10 +55,10 @@ import {
 } from '../lib/media/folders';
 import { holdsAll, markOf, tracksUnder, withGroupToggled } from '../lib/media/selection';
 import { creditReader } from '../lib/db/credits';
-import { addTagToTracks } from '../lib/db/tags';
 import { canWriteFiles } from '../lib/filetags';
+import { Segmented } from '../components/Segmented';
 import { SwipeRow } from '../components/SwipeRow';
-import { TRACK_ROW_HEIGHT, TrackRow } from '../components/TrackRow';
+import { TrackRow, useTrackRowHeight } from '../components/TrackRow';
 import { refreshLibrary } from '../lib/library/index';
 import { keepMap } from '../lib/library/reconcile';
 import { useLibrary } from '../lib/library/useLibrary';
@@ -78,6 +81,8 @@ import { lastPlayedAt, playCounts } from '../lib/db/history';
 import { artistKey, spreadShuffle } from '../lib/media/shuffle';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
+import { motionReduced } from '../lib/ui/motion';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
 /** A stable empty library, so the searching below is not re-run over a new one. */
 const NOTHING: EnrichedTrack[] = [];
@@ -112,7 +117,8 @@ type Heading = {
   title: string;
   detail: string;
   tracks: EnrichedTrack[];
-  cover: EnrichedTrack | null;
+  /** What the heading's one cover is found among: see `useAlbumArtwork`. */
+  cover: EnrichedTrack[];
 };
 
 /** No headings, for the view that is a list of tracks and has none. */
@@ -146,6 +152,9 @@ export default function LibraryScreen() {
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
+  // Both grow with the size of writing; the lists below lay themselves out by them.
+  const trackRowHeight = useTrackRowHeight();
+  const browseRowHeight = useBrowseRowHeight();
   const downloadRevision = useDownloadLibraryRevision();
   /*
     The library is not this screen's own. It is read once for the whole app
@@ -260,6 +269,17 @@ export default function LibraryScreen() {
    * with nothing on screen to end it.
    */
   const racked = albumView && rack && !selecting;
+  /*
+    In a theme of glass the search, the switch and the order are laid over
+    the list, which runs on under them and is seen through them, and the
+    tabs and the bar of what is playing over its foot: see `UnderBars`. Not
+    over the rack, which is no list and has nothing to pass under them; it
+    begins under the top as it always has.
+  */
+  const top = useLaidOver();
+  const over = top.laid && !racked;
+  const topRoom = over ? top.height : 0;
+  const under = useUnderBars({ player: true });
 
   // Written down for the same reason the view is: an order is chosen once and
   // then lived in, and having to choose it again on every launch would make it
@@ -300,17 +320,11 @@ export default function LibraryScreen() {
             spoken: t.library.screen.groupSortedBy[folderSort],
           }
         : { short: t.library.screen.sortShort[sort], spoken: t.library.screen.sortedBy[sort] };
-  const [tagging, setTagging] = useState(false);
-  /**
-   * The tracks being written into their files, or null when that is not open.
-   *
-   * The tracks themselves and not their ids, taken when the sheet is opened:
-   * what is written is what the library showed at that moment, and the sheet
-   * must not find the run changing under it while it works.
-   */
-  const [writingTo, setWritingTo] = useState<EnrichedTrack[] | null>(null);
   const columns = useListColumns();
   const { playQueue, playNext, addToQueue } = usePlayerActions();
+  // The same two functions for every row, which a remembered row needs.
+  const playNextTrack = useCallback((track: EnrichedTrack) => void playNext(track), [playNext]);
+  const queueTrack = useCallback((track: EnrichedTrack) => void addToQueue(track), [addToQueue]);
   /*
     Everything there is, shuffled the way the player shuffles a queue: spread
     so that an artist does not come up twice running, and not a plain draw.
@@ -330,8 +344,9 @@ export default function LibraryScreen() {
     ran again for a menu opening or a track change as readily as for a keystroke.
   */
   const { tracks: found, matchedTags } = useMemo(
-    () => search(library, query),
-    [library, query]
+    // With the words a nameless artist is drawn with, so that they find those tracks too.
+    () => search(library, query, [t.common.unknownArtist, 'Unknown artist']),
+    [library, query, t]
   );
 
   /*
@@ -347,13 +362,20 @@ export default function LibraryScreen() {
   /*
     The records the search results belong to.
 
-    Built from the results rather than from the whole library, so searching
-    narrows the albums the same way it narrows the tracks — which is what
-    anybody typing an artist's name into a library of albums expects.
+    The library's own records, narrowed to the results, so searching narrows
+    the albums the same way it narrows the tracks — which is what anybody
+    typing an artist's name into a library of albums expects. Narrowed and not
+    built from the results: which record a track is on can take the rest of
+    the library to know, and a record must keep its key while it is searched.
   */
+  const asked = query.trim().length > 0;
+  const records = useMemo(
+    () => (albumView || asked ? albumsOf(library) : []),
+    [albumView, library, asked]
+  );
   const albums = useMemo(
-    () => (albumView ? sortAlbums(albumsOf(results), sort, played) : []),
-    [albumView, played, results, sort]
+    () => (albumView ? sortAlbums(narrowAlbums(records, results), sort, played) : []),
+    [albumView, played, records, results, sort]
   );
 
   /**
@@ -366,10 +388,11 @@ export default function LibraryScreen() {
   const matchedAlbums = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (albumView || needle.length === 0) return [];
-    return albumsOf(results)
-      .filter((entry) => entry.key.includes(needle))
+    return narrowAlbums(records, results)
+      // By its name: the key carries its artist as well.
+      .filter((entry) => nameOfKey(entry.key).includes(needle))
       .slice(0, 3);
-  }, [albumView, query, results]);
+  }, [albumView, query, records, results]);
 
   /*
     The whole library under its artists, and under its folders.
@@ -421,8 +444,8 @@ export default function LibraryScreen() {
           .filter(Boolean)
           .join(' · '),
         tracks: album.tracks,
-        // One cover, not four: a record has its own, and the first track's is it.
-        cover: album.tracks[0] ?? null,
+        // One cover, not four: a record has its own, found among its tracks.
+        cover: album.tracks,
       }));
     }
     if (view === 'artists') {
@@ -431,7 +454,7 @@ export default function LibraryScreen() {
         title: artist.name,
         detail: `${t.common.tracks(artist.tracks.length)} · ${t.common.albums(artist.albums.length)}`,
         tracks: artist.tracks,
-        cover: artist.cover,
+        cover: artist.sleeve,
       }));
     }
     // The library folder itself has no path from itself, so it is looked for
@@ -448,7 +471,7 @@ export default function LibraryScreen() {
       tracks: folder.tracks,
       // One cover, as for a record. Four would be four files opened per row
       // to say nothing more about a folder than one does.
-      cover: folder.tracks[0] ?? null,
+      cover: folder.tracks,
     }));
   }, [albums, orderedArtists, orderedFolders, query, t, view]);
 
@@ -534,8 +557,27 @@ export default function LibraryScreen() {
     const key = albumMenu?.key;
     setAlbumMenu(null);
     if (key == null) return;
-    if (action === 'select') chooseUnder(key);
-    else findRest(key);
+    if (action === 'select') return chooseUnder(key);
+    if (action === 'rest') return findRest(key);
+
+    // The whole record, and not the part of it a search has narrowed the
+    // list to: what is looked up or given a cover is the record.
+    const record = findAlbum(albumsOf(library), key);
+    if (!record) return;
+    const say = (message: string) => {
+      setNote(message);
+      setTimeout(() => setNote(null), 2500);
+    };
+    // Its progress is the line under the library's count, as any lookup's is.
+    if (action === 'lookUp') void lookUpRecord(record, library);
+    else {
+      chooseRecordCover(record).then(
+        (chosen) => {
+          if (chosen != null) say(t.library.albumTools.coverChosen(chosen));
+        },
+        (error: unknown) => say(error instanceof Error ? error.message : t.common.pictureFailed)
+      );
+    }
   };
 
   /*
@@ -803,6 +845,11 @@ export default function LibraryScreen() {
   const aside = searching && !landscape;
   const reveal = useRef(new Animated.Value(1)).current;
   useEffect(() => {
+    // Straight there where the decoration is to hold still.
+    if (motionReduced()) {
+      reveal.setValue(aside ? 0 : 1);
+      return;
+    }
     Animated.timing(reveal, {
       toValue: aside ? 0 : 1,
       duration: 190,
@@ -864,7 +911,7 @@ export default function LibraryScreen() {
           onAct: () => void playNext(item),
         }}
         right={{
-          label: t.common.addToQueue,
+          label: t.library.screen.swipeQueue,
           colour: c.successSoft,
           tint: c.success,
           onAct: () => void addToQueue(item),
@@ -876,12 +923,16 @@ export default function LibraryScreen() {
           // The per-track menu would be reached by the same gesture that picks a
           // row, so while choosing it steps aside.
           onLongPress={selecting ? toggleSelected : openMenu}
+          // The pull either way, as actions a screen reader can name; held
+          // back while choosing, as the pull itself is.
+          onPlayNext={selecting ? undefined : playNextTrack}
+          onAddToQueue={selecting ? undefined : queueTrack}
           selectable={selecting}
           selected={selected.has(item.id)}
         />
       </SwipeRow>
     ),
-    [addToQueue, c, columns, current?.id, onRowPress, openMenu, playNext, selected, selecting, styles, t, toggleSelected]
+    [addToQueue, c, columns, current?.id, onRowPress, openMenu, playNext, playNextTrack, queueTrack, selected, selecting, styles, t, toggleSelected]
   );
 
   /*
@@ -895,11 +946,12 @@ export default function LibraryScreen() {
 
   const drag = useDragSelect({
     ids: useMemo(() => results.map((track) => track.id), [results]),
-    rowHeight: TRACK_ROW_HEIGHT,
+    rowHeight: trackRowHeight,
     columns,
     enabled: selecting,
     selected,
     onChange: setSelected,
+    top: topRoom,
   });
 
   /*
@@ -933,31 +985,34 @@ export default function LibraryScreen() {
     stopSelecting();
   }, [addToQueue, chosen, stopSelecting]);
 
-  const tagSelected = useCallback(
-    (tag: string) => {
-      addTagToTracks([...selected], tag);
-      setTagging(false);
-      stopSelecting();
+  /*
+    Tagging, writing to files, erasing and everything else the Tags screen
+    can do to a selection, from the same sheet (`SelectionActions`), so that
+    the two places cannot come to do them differently. Erasing goes through
+    the track menu's own way, which takes the files out of the queue too.
+
+    After an edit the selection stays, so that one thing can follow another
+    on the same tracks; after a delete or a reset it is over. Backing out of
+    Android's question about a delete leaves it as it was.
+  */
+  const chosenIds = useMemo(() => [...selected], [selected]);
+  const actions = useSelectionActions({
+    trackIds: chosenIds,
+    addToList,
+    erase,
+    onChanged: (how) => {
+      if (how === 'cleared') stopSelecting();
       void load();
     },
-    [load, selected, stopSelecting]
-  );
-
-  /**
-   * Erases the chosen tracks, once the system has asked and the user agreed.
-   *
-   * The selection is only cleared when something was actually deleted. Backing
-   * out of the confirmation should leave the run intact, ready to be narrowed
-   * or acted on differently, rather than making the user pick it all again.
-   */
-  const deleteSelected = useCallback(async () => {
-    const ids = [...selected];
-    if (ids.length === 0) return;
-    // Through the menu's own way of erasing, which also takes the files out
-    // of the queue and reloads this screen. Erased directly, a selection left
-    // its rows standing in the queue, naming files the player could not open.
-    if (await erase(ids)) stopSelecting();
-  }, [erase, selected, stopSelecting]);
+    onSaid: (line) => {
+      setNote(line);
+      // Longer than the list picker's line: these can be a sentence or two.
+      setTimeout(() => setNote(null), 4000);
+    },
+    // Nothing else here says how a run ended; the line under the count only
+    // follows it while it goes.
+    sayRuns: true,
+  });
 
   // Re-read on focus so metadata gathered on the other screen shows up here.
   useFocusEffect(
@@ -982,7 +1037,7 @@ export default function LibraryScreen() {
             ? t.library.screen.needsAccess
             : screen.message}
         </Text>
-        <Pressable android_ripple={pressed} style={styles.button} onPress={() => void load(true)}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void load(true)}>
           <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
         </Pressable>
       </View>
@@ -1010,34 +1065,21 @@ export default function LibraryScreen() {
     more views on offer than fit beside the box; see `stacked`.
   */
   const views = (
-    <View
-      accessibilityRole="tablist"
+    <Segmented
+      role="tab"
+      size="compact"
       accessibilityLabel={t.library.screen.viewSwitch}
-      style={[styles.views, !stacked && viewsWidth ? { width: viewsWidth } : null]}
+      // On a row of its own, the views share the width evenly instead of each taking what its word needs.
+      layout={stacked ? 'fill' : 'fit'}
+      style={!stacked && viewsWidth ? { width: viewsWidth } : null}
+      optionStyle={!stacked && offered.length > 2 ? styles.viewTight : null}
       // Only beside the box is there a width worth knowing: on a row of its
       // own the switch is as wide as the screen and is never moved aside.
-      onLayout={stacked ? undefined : measureViews}>
-      {offered.map((candidate) => (
-        <Pressable
-          android_ripple={pressed}
-          key={candidate}
-          accessibilityRole="tab"
-          accessibilityLabel={t.library.views[candidate]}
-          accessibilityState={{ selected: candidate === view }}
-          style={[
-            styles.view,
-            stacked ? styles.viewWide : offered.length > 2 && styles.viewTight,
-            candidate === view && styles.viewOn,
-          ]}
-          onPress={() => chooseView(candidate)}>
-          <Text
-            style={[styles.viewLabel, candidate === view && styles.viewLabelOn]}
-            numberOfLines={1}>
-            {t.library.views[candidate]}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
+      onLayout={stacked ? undefined : measureViews}
+      options={offered.map((candidate) => ({ value: candidate, label: t.library.views[candidate] }))}
+      value={view}
+      onChange={chooseView}
+    />
   );
   // A switch with one position is not a choice, and is not drawn.
   const switchable = offered.length > 1;
@@ -1091,7 +1133,9 @@ export default function LibraryScreen() {
           // What the safe area used to do for the whole screen, asked for by
           // the one part of it that is actually under the clock.
           landscape && { paddingTop: insets.top + 8 },
-        ]}>
+          over && styles.headerOver,
+        ]}
+        onLayout={top.onLayout}>
         {switchable && stacked ? views : null}
         <View style={styles.headerRow}>
         {/*
@@ -1164,6 +1208,7 @@ export default function LibraryScreen() {
             <Text style={styles.bulkCount}>{t.library.screen.selected(selected.size)}</Text>
             <View style={styles.bulkActions}>
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={styles.bulkAction}
                 onPress={allChosen ? () => setSelected(new Set()) : selectAll}>
@@ -1172,6 +1217,7 @@ export default function LibraryScreen() {
                 </Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
                 disabled={selected.size === 0}
@@ -1179,6 +1225,7 @@ export default function LibraryScreen() {
                 <Text style={styles.bulkLabel}>{t.common.addToQueue}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
                 disabled={selected.size === 0}
@@ -1186,10 +1233,11 @@ export default function LibraryScreen() {
                 <Text style={styles.bulkLabel}>{t.library.screen.addToList}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
                 disabled={selected.size === 0}
-                onPress={() => setTagging(true)}>
+                onPress={() => actions.run('addTag')}>
                 <Text style={styles.bulkLabel}>{t.library.screen.addTag}</Text>
               </Pressable>
               {/* Not offered where it cannot be done: Android 10, or a native
@@ -1201,16 +1249,27 @@ export default function LibraryScreen() {
                 disabled={selected.size === 0}
                 accessibilityRole="button"
                 accessibilityLabel={t.library.screen.writeToFilesSpoken}
-                onPress={() => setWritingTo(chosen())}>
+                onPress={() => actions.run('write')}>
                 <Text style={styles.bulkLabel}>{t.library.screen.writeToFiles}</Text>
               </Pressable>
               ) : null}
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
                 disabled={selected.size === 0}
-                onPress={() => void deleteSelected()}>
+                onPress={() => actions.run('delete')}>
                 <Text style={styles.bulkDestructive}>{t.common.delete}</Text>
+              </Pressable>
+              {/* Everything, these included, from looking up to resetting. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityHint={t.details.selection.moreHint}
+                android_ripple={pressed}
+                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                disabled={selected.size === 0}
+                onPress={actions.open}>
+                <Text style={styles.bulkLabel}>{t.details.selection.more}</Text>
               </Pressable>
             </View>
           </View>
@@ -1220,7 +1279,7 @@ export default function LibraryScreen() {
             selection made among them can be added to a list like any other. */}
         {albumView && (note == null || racked) ? null : (
         <View style={styles.meta}>
-          <Text style={styles.metaText} numberOfLines={1}>
+          <Text style={styles.metaText} numberOfLines={note != null ? 3 : 1}>
             {/* Whatever the list picker last did is said here, since adding
                 to a list otherwise looks like nothing happening. */}
             {note ??
@@ -1249,12 +1308,18 @@ export default function LibraryScreen() {
           ) : null}
         </View>
         )}
+        {/* The offer to look the files up, a lookup under way, or the one tip:
+            for a newcomer, and out of the way while tracks are being chosen. */}
+        {selecting ? null : <LibraryWelcome tracks={library.length} confirmed={screen.confirmed} />}
+        {/* Downloads that may be the wrong song: beside the copies line, and out of the way in the same way. */}
+        {selecting ? null : <WrongDownloadsLine confirmed={screen.confirmed} />}
       </View>
 
       {racked ? (
         <CoverFlow ref={shelf} albums={albums} onOpen={openAlbum} onHold={onSleeveHeld} />
       ) : grouped ? (
         <FlatList
+                  removeClippedSubviews={CLIP_SUBVIEWS}
           data={shownHeadings}
           // Remounted for the view as well as for the columns: the three share
           // this list, and one scrolled half way down is no place to start
@@ -1264,21 +1329,20 @@ export default function LibraryScreen() {
           columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
           keyExtractor={(heading) => heading.id}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
           // Exact with one column and left to be measured with two, for the
           // reason given at length on the track list below.
           getItemLayout={
             columns > 1
               ? undefined
               : (_data, index) => ({
-                  length: BROWSE_ROW_HEIGHT,
-                  offset: BROWSE_ROW_HEIGHT * index,
+                  length: browseRowHeight,
+                  offset: topRoom + browseRowHeight * index,
                   index,
                 })
           }
           initialNumToRender={12 * columns}
           windowSize={7}
-          removeClippedSubviews={columns === 1}
           renderItem={renderHeading}
           ListEmptyComponent={
             albumView ? (
@@ -1301,6 +1365,7 @@ export default function LibraryScreen() {
         onLayout={drag.onWrapperLayout}
         {...drag.panHandlers}>
       <FlatList
+              removeClippedSubviews={CLIP_SUBVIEWS}
         data={results}
         onLayout={(event) => drag.onWidth(event.nativeEvent.layout.width)}
         /*
@@ -1313,7 +1378,7 @@ export default function LibraryScreen() {
         columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
         keyExtractor={(track) => track.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
         onScroll={(event) => {
           restoreTo.current = event.nativeEvent.contentOffset.y;
           drag.onScroll(event.nativeEvent.contentOffset.y);
@@ -1342,8 +1407,8 @@ export default function LibraryScreen() {
           columns > 1
             ? undefined
             : (_data, index) => ({
-                length: TRACK_ROW_HEIGHT,
-                offset: headerHeight + TRACK_ROW_HEIGHT * index,
+                length: trackRowHeight,
+                offset: topRoom + headerHeight + trackRowHeight * index,
                 index,
               })
         }
@@ -1352,13 +1417,13 @@ export default function LibraryScreen() {
         windowSize={7}
         // Left to the list to measure, clipping guesses at what is off screen
         // from the same frames, and guesses wrong in the same way.
-        removeClippedSubviews={columns === 1}
         ListHeaderComponent={
           <View
             style={tagShuffles.length > 0 || matchedAlbums.length > 0 ? styles.tagActions : null}
             onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
             {matchedAlbums.map((entry) => (
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 key={`album:${entry.key}`}
                 style={styles.tagAction}
@@ -1366,7 +1431,7 @@ export default function LibraryScreen() {
                   router.push({ pathname: '/playlist', params: { album: entry.key } })
                 }>
                 <View style={styles.albumActionIcon}>
-                  <PlaylistCover tracks={entry.tracks} chosen={entry.tracks[0]} size={22} />
+                  <PlaylistCover tracks={entry.tracks} chosen={null} sleeve={entry.tracks} size={22} />
                 </View>
                 <Text style={styles.tagActionLabel} numberOfLines={1}>
                   {entry.name}
@@ -1376,6 +1441,7 @@ export default function LibraryScreen() {
             ))}
             {tagShuffles.map(({ tag, tracks: tagged }) => (
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 key={tag}
                 style={styles.tagAction}
@@ -1416,6 +1482,7 @@ export default function LibraryScreen() {
             // Sideways nothing above this keeps clear of the clock; upright
             // the safe area around the screen already has.
             top={landscape ? insets.top : 0}
+            bottom={under.bottom}
             onPlay={playFrom}
             // Its own record is the one place "go to album" has nowhere to go.
             onLongPress={openFromAlbum}
@@ -1429,28 +1496,7 @@ export default function LibraryScreen() {
         <NowPlayingBar column={landscape} />
       </Behind>
 
-      <TagPrompt
-        visible={tagging}
-        count={selected.size}
-        onSubmit={tagSelected}
-        onClose={() => setTagging(false)}
-      />
-
-      <WriteFilesSheet
-        visible={writingTo != null}
-        tracks={writingTo ?? []}
-        playingId={current?.id ?? null}
-        onClose={(wroteAny) => {
-          setWritingTo(null);
-          // Only when something was written. Backing out of the question, or
-          // a run in which nothing changed, leaves the selection as it was to
-          // be narrowed or acted on some other way.
-          if (wroteAny) {
-            stopSelecting();
-            void load();
-          }
-        }}
-      />
+      {actions.element}
 
       {menuElement}
       <AlbumMenu
@@ -1481,6 +1527,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   listWrapper: { flex: 1 },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   headerTight: { paddingBottom: 8 },
+  // Over the list in a theme of glass; nothing at all in any other.
+  headerOver: topGlass(c),
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   /*
     The slot clips; the switch inside is pinned to the width it measured.
@@ -1492,19 +1540,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     above holding it down.
   */
   viewsSlot: { overflow: 'hidden', flexShrink: 0 },
-  views: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 9, padding: 2, ...outlined(c) },
-  // As small as two legible words: it is read once on the way past and pressed
-  // rarely, and every point it takes is one the search box does not get.
-  view: { alignItems: 'center', paddingVertical: 7, paddingHorizontal: 11, borderRadius: 7 },
   // Three or four words beside the box, sideways: each gives up a little of
   // its margin so the box keeps a width worth typing in.
   viewTight: { paddingHorizontal: 8 },
-  // On a row of its own, where the views share the width evenly instead of
-  // each taking what its word needs.
-  viewWide: { flex: 1 },
-  viewOn: { backgroundColor: c.selected },
-  viewLabel: { color: c.textMuted, fontSize: 12.5 },
-  viewLabelOn: { color: c.onSelected, fontWeight: '600' },
   // The cover stands in for the play button the tag rows carry, so the two
   // kinds of shortcut line up rather than each finding their own left edge.
   albumActionIcon: { width: 22, height: 22, borderRadius: 4, overflow: 'hidden' },

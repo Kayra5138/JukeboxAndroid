@@ -26,9 +26,21 @@ internal object Tags {
   external fun read(path: String): Array<String>?
 
   /**
+   * The words the file open on [fd] carries for its song, as names and values
+   * one after the other: `text` for a field of words, `sylt` for each entry of
+   * a timed ID3 frame. `["error", why]` for a file that cannot be read; an
+   * empty array for one with no words in it.
+   *
+   * Unlike [read], a descriptor of the user's own file and not a path to a
+   * copy, since nothing is written. The descriptor is handed over -- from
+   * `ParcelFileDescriptor.detachFd` -- and closed on the native side.
+   */
+  external fun lyrics(fd: Int): Array<String>?
+
+  /**
    * Writes into the file at [path]. [fields] is title, artist, album, genre,
-   * year, track and disc in that order, null where the file is to keep what
-   * it has. Answers `changed:` and the names of what was altered, or `error:`
+   * year, track, disc and album artist in that order, null where the file is
+   * to keep what it has. Answers `changed:` and the names of what was altered, or `error:`
    * and why.
    */
   external fun write(

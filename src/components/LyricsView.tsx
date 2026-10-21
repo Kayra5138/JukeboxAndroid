@@ -202,6 +202,17 @@ export function LyricsView({
       ? translation.note
       : null;
 
+  /*
+    Where the words came from, under the last of them: the song's own file, a
+    .lrc beside it, or LRCLIB. Below rather than above so that it costs the
+    words nothing while they are being followed, and so that nothing above the
+    sung line changes height when it appears. Words somebody chose themselves
+    need no saying where they came from.
+  */
+  const source = state.lyrics.source;
+  const origin =
+    source === 'file' || source === 'lrc' || source === 'lookup' ? t.lyrics.from[source] : null;
+
   if (lines.length === 0) {
     return (
       <ScrollView style={{ height }} contentContainerStyle={styles.plainBody}>
@@ -214,6 +225,7 @@ export function LyricsView({
             ) : null}
           </View>
         ))}
+        {origin ? <Text style={styles.origin}>{origin}</Text> : null}
       </ScrollView>
     );
   }
@@ -253,15 +265,26 @@ export function LyricsView({
                 rows.current[index] = node;
               }}
               collapsable={false}>
+              {/*
+                The words are what a screen reader says, with the line's
+                translation after them, and the jump to that moment of the song
+                is the hint. Named for the jump alone, as it once was, every
+                line was "seek to so many seconds" and the words themselves
+                could not be heard at all.
+              */}
               <Text
                 accessibilityRole="button"
-                accessibilityLabel={t.lyrics.seekTo(t.format.decimal(line.at + offsetSec, 1))}
+                accessibilityLabel={rendering ? `${line.text}. ${rendering}` : line.text}
+                accessibilityHint={t.lyrics.seekTo(t.format.decimal(line.at + offsetSec, 1))}
+                accessibilityState={{ selected: index === active }}
                 onPress={() => onSeek(line.at + offsetSec)}
                 style={[styles.line, index === active && styles.lineNow]}>
                 {line.text}
               </Text>
               {rendering ? (
                 <Text
+                  // Already said with the line above it.
+                  importantForAccessibility="no"
                   onPress={() => onSeek(line.at + offsetSec)}
                   style={[styles.translated, index === active && styles.translatedNow]}>
                   {rendering}
@@ -270,6 +293,7 @@ export function LyricsView({
             </View>
           );
         })}
+        {origin ? <Text style={styles.origin}>{origin}</Text> : null}
       </View>
     </ScrollView>
   );
@@ -286,8 +310,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingHorizontal: 8,
   },
   lineNow: { color: c.text, fontWeight: '600' },
+  // The faintest colour still meant to be read: a translation is read, and
+  // the colour for what cannot be pressed came to less than three to one.
   translated: {
-    color: c.textDisabled,
+    color: c.textFaint,
     fontSize: 13.5,
     lineHeight: 20,
     textAlign: 'center',
@@ -296,6 +322,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   translatedNow: { color: c.accent },
   aside: { color: c.textFaint, fontSize: 12, textAlign: 'center', paddingBottom: 10 },
+  origin: { color: c.textFaint, fontSize: 11.5, textAlign: 'center', paddingTop: 18 },
   plainBody: { paddingVertical: 8 },
   plain: { color: c.textSecondary, fontSize: 15, lineHeight: 26, textAlign: 'center' },
   plainTranslated: {

@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values/strings.xml и values/jukebox_widget_strings.xml по-русски, имя в
+     имя. Обращение на «ты», как и в самом приложении. Имена собственные
+     остаются как есть: Jukebox, YouTube, Android, Wi-Fi, MP3, FLAC, ID3.
+     Термины те же, что на экранах приложения: Медиатека, Плейлисты, Поиск,
+     Открытия, трек, песня, обложка. Строки с translatable="false" здесь не
+     повторяются. -->
+<resources>
+  <!-- Виджет на главном экране. Его название (Jukebox) не переводится. -->
+  <string name="jukebox_widget_description">Слушай, ставь на паузу и переключай треки, не открывая приложение.</string>
+  <string name="jukebox_widget_art">Обложка альбома</string>
+  <string name="jukebox_widget_previous">Предыдущий трек</string>
+  <string name="jukebox_widget_toggle">Воспроизведение или пауза</string>
+  <!-- Как кнопка называется для TalkBack: что сделает нажатие. -->
+  <string name="jukebox_widget_play">Слушать</string>
+  <string name="jukebox_widget_pause">Пауза</string>
+  <string name="jukebox_widget_next">Следующий трек</string>
+  <string name="jukebox_widget_idle">Ничего не играет</string>
+  <string name="jukebox_widget_progress">Ход воспроизведения</string>
+  <string name="jukebox_widget_card_label">Сейчас играет</string>
+  <string name="jukebox_widget_card_description">Большая обложка с кнопками управления, перемешиванием и повтором.</string>
+  <string name="jukebox_widget_large_label">Далее</string>
+  <string name="jukebox_widget_large_description">Что играет, кнопки управления и следующие треки из очереди. Нажми на трек, чтобы включить его.</string>
+  <string name="jukebox_widget_shortcut_label">Перемешать</string>
+  <string name="jukebox_widget_shortcut_description">Вся музыка или недавно прослушанное вперемешку одним нажатием.</string>
+  <string name="jukebox_widget_shuffle">Перемешать очередь</string>
+  <string name="jukebox_widget_repeat_off">Повтор</string>
+  <string name="jukebox_widget_repeat_all">Повторять все</string>
+  <string name="jukebox_widget_repeat_one">Повторять трек</string>
+  <string name="jukebox_widget_up_next">Далее</string>
+  <string name="jukebox_widget_up_next_empty">Дальше ничего нет</string>
+  <string name="jukebox_widget_open">Открывает плеер</string>
+
+  <!-- Уведомление о воспроизведении. -->
+  <string name="jukebox_playback_channel">Сейчас играет</string>
+
+  <!-- Трек, который не удалось воспроизвести. -->
+  <string name="jukebox_playback_missing">Этот файл не найден.</string>
+  <string name="jukebox_playback_denied">Android не разрешил прочитать этот файл.</string>
+  <string name="jukebox_playback_unreadable">Не удалось прочитать этот файл.</string>
+  <string name="jukebox_playback_unsupported">Файлы этого типа нельзя воспроизвести на этом устройстве.</string>
+  <string name="jukebox_playback_failed">Не удалось воспроизвести этот трек.</string>
+
+  <!-- Уведомление о загрузках. -->
+  <string name="jukebox_downloads_channel">Загрузка музыки</string>
+  <string name="jukebox_downloads_title">Jukebox · Загрузки</string>
+  <string name="jukebox_downloads_preparing">Подготовка загрузки…</string>
+  <string name="jukebox_downloads_downloading">Скачивается: %1$s</string>
+  <string name="jukebox_downloads_converting">Конвертация: %1$s</string>
+  <string name="jukebox_downloads_finding">Поиск: %1$s</string>
+  <string name="jukebox_downloads_resting">Небольшая пауза перед следующей…</string>
+
+  <!-- Android Auto. -->
+  <string name="jukebox_auto_home">Главная</string>
+  <string name="jukebox_auto_tracks">Треки</string>
+  <string name="jukebox_auto_albums">Альбомы</string>
+  <string name="jukebox_auto_lists">Плейлисты</string>
+  <string name="jukebox_auto_continue">Продолжить</string>
+  <string name="jukebox_auto_shuffle_recent">Перемешать недавние</string>
+  <string name="jukebox_auto_shuffle_all">Перемешать всё</string>
+  <string name="jukebox_auto_sort">Порядок</string>
+  <string name="jukebox_auto_sort_now">Сейчас в этом порядке</string>
+  <string name="jukebox_auto_sort_name">Название</string>
+  <string name="jukebox_auto_sort_artist">Исполнитель</string>
+  <string name="jukebox_auto_sort_added">Недавно добавленные</string>
+  <string name="jukebox_auto_sort_most">Самые прослушиваемые</string>
+  <string name="jukebox_auto_sort_recent">Недавно прослушанные</string>
+  <string name="jukebox_auto_sort_changed">Недавно изменённые</string>
+  <string name="jukebox_auto_sort_size">Самые длинные</string>
+  <!-- one: 1, 21, 101…; few: 2–4, 22–24…; many: 0, 5–20, 11–14…; other: дробные. -->
+  <plurals name="jukebox_count_tracks">
+    <item quantity="one">%d трек</item>
+    <item quantity="few">%d трека</item>
+    <item quantity="many">%d треков</item>
+    <item quantity="other">%d трека</item>
+  </plurals>
+  <plurals name="jukebox_count_songs">
+    <item quantity="one">%d песня</item>
+    <item quantity="few">%d песни</item>
+    <item quantity="many">%d песен</item>
+    <item quantity="other">%d песни</item>
+  </plurals>
+
+  <string name="jukebox_unknown_title">Неизвестно</string>
+  <string name="jukebox_unknown_artist">Неизвестный исполнитель</string>
+  <string name="jukebox_equalizer_carried">Эквалайзер телефона</string>
+
+  <!-- Поиск на YouTube и загрузка оттуда. -->
+  <string name="jukebox_youtube_verification">YouTube требует подтверждения для этого видео. Попробуй другую запись.</string>
+  <string name="jukebox_youtube_unavailable">Это видео недоступно или закрыто.</string>
+  <string name="jukebox_youtube_outdated">YouTube изменился, и загрузчик в этой версии пока не может с ним работать. Проверь, нет ли новой версии, в разделе «Загрузки» или обнови Jukebox.</string>
+  <string name="jukebox_youtube_network">Не удалось связаться с YouTube. Проверь подключение и повтори.</string>
+  <string name="jukebox_youtube_refused">YouTube отклонил эту загрузку. Попробуй позже или обнови Jukebox.</string>
+  <string name="jukebox_youtube_timed_out">YouTube слишком долго не отвечал. Попробуй снова.</string>
+  <string name="jukebox_youtube_live">Трансляции и ещё не вышедшие видео скачать нельзя.</string>
+  <string name="jukebox_youtube_too_long">Выбери запись короче двух часов.</string>
+  <string name="jukebox_youtube_not_a_song">Найденное видео — трансляция или слишком длинное для этой песни.</string>
+  <string name="jukebox_youtube_no_audio">YouTube не выдал аудиофайл.</string>
+  <string name="jukebox_youtube_engine">Не удалось подготовить движок YouTube.</string>
+  <string name="jukebox_youtube_invalid_video">Некорректное видео YouTube.</string>
+  <string name="jukebox_youtube_query">Введи песню, исполнителя или ссылку на YouTube (до 500 символов).</string>
+  <string name="jukebox_youtube_video_link">Используй ссылку на видео YouTube или ищи по названию песни.</string>
+  <string name="jukebox_youtube_not_a_video">Используй ссылку на видео, а ссылки на плейлисты открывай в режиме «Плейлисты».</string>
+  <string name="jukebox_youtube_playlist_query">Введи название плейлиста или вставь ссылку на плейлист YouTube.</string>
+  <string name="jukebox_youtube_playlist_link">Вставь ссылку на плейлист YouTube.</string>
+  <string name="jukebox_youtube_no_playlist">В этой ссылке нет плейлиста.</string>
+  <string name="jukebox_download_folder">Выбери папку внутри папки Music.</string>
+  <string name="jukebox_download_queue_full">Очередь заполнена. Подожди, пока завершится какая-нибудь загрузка.</string>
+  <string name="jukebox_download_batch">Выбирай не больше 500 треков за раз.</string>
+  <string name="jukebox_download_waiting_wifi">Ждёт Wi-Fi. Автоматическая загрузка продолжится позже.</string>
+  <string name="jukebox_download_paused">Загрузка приостановлена. Открой «Открытия», чтобы повторить.</string>
+  <string name="jukebox_download_interrupted">Загрузка прервана. Нажми «Повторить».</string>
+  <string name="jukebox_download_stopped">Android остановил загрузку в фоне. Открой «Поиск» и повтори.</string>
+  <string name="jukebox_download_service">Не удалось запустить службу загрузок.</string>
+  <string name="jukebox_download_open_search">Открой «Поиск» и повтори загрузку.</string>
+  <string name="jukebox_download_open_discover">Открой «Открытия», чтобы возобновить загрузки.</string>
+  <string name="jukebox_download_retry_discover">Открой «Открытия», чтобы повторить эту загрузку.</string>
+  <string name="jukebox_download_not_here">Сначала скачай эту песню, а потом сохраняй.</string>
+  <string name="jukebox_download_no_match">На YouTube не найдено подходящей записи.</string>
+  <string name="jukebox_download_failed">Не удалось скачать. Попробуй ещё раз.</string>
+
+  <!-- Добавление файла в медиатеку. -->
+  <string name="jukebox_import_refused">Системная медиатека не приняла новый файл.</string>
+  <string name="jukebox_import_not_written">Не удалось записать в системную медиатеку.</string>
+  <string name="jukebox_import_not_published">Не удалось добавить аудиофайл в систему.</string>
+  <string name="jukebox_import_too_large">Этот файл слишком большой для песни.</string>
+  <string name="jukebox_import_empty">Файл оказался пустым.</string>
+  <string name="jukebox_import_cut_short">Файл скачался не полностью.</string>
+
+  <!-- Изображения. -->
+  <string name="jukebox_picture_not_opened">Не удалось открыть изображение.</string>
+  <string name="jukebox_picture_not_one">Этот файл — не изображение.</string>
+  <string name="jukebox_picture_not_read">Не удалось прочитать изображение.</string>
+  <string name="jukebox_picture_not_saved">Не удалось сохранить изображение.</string>
+  <string name="jukebox_picture_none">Нет изображения для сохранения.</string>
+  <string name="jukebox_picture_gallery">Галерея не приняла изображение.</string>
+  <string name="jukebox_cover_source">Скачивать можно только обложки из каталогов, YouTube или Wikimedia.</string>
+  <string name="jukebox_cover_redirect">Нет перенаправления для обложки.</string>
+  <string name="jukebox_cover_unavailable">Обложка альбома недоступна.</string>
+  <string name="jukebox_cover_too_large">Обложка альбома слишком большая.</string>
+  <string name="jukebox_cover_invalid">Некорректная обложка альбома.</string>
+  <string name="jukebox_cover_not_saved">Не удалось сохранить обложку альбома.</string>
+  <string name="jukebox_cover_redirects">Слишком много перенаправлений для обложки альбома.</string>
+
+  <!-- Файлы, выбранные пользователем. -->
+  <string name="jukebox_file_not_opened">Не удалось открыть этот файл.</string>
+  <string name="jukebox_file_not_writable">Не удалось записать в это место.</string>
+  <string name="jukebox_file_too_big_for_equalizer">Этот файл слишком большой для настройки эквалайзера.</string>
+  <string name="jukebox_backup_too_large">Эта резервная копия слишком большая, чтобы её прочитать.</string>
+  <string name="jukebox_backup_not_one">Этот файл — не резервная копия Jukebox.</string>
+  <string name="jukebox_delete_needs_11">Для удаления нужен Android 11 или новее.</string>
+
+  <!-- Запись сведений о треке в его файл. -->
+  <string name="jukebox_tags_needs_11">Для записи в файлы нужен Android 11 или новее.</string>
+  <string name="jukebox_tags_no_build">Эта сборка не умеет записывать в файлы.</string>
+  <string name="jukebox_tags_unreadable">Не удалось прочитать файл.</string>
+  <string name="jukebox_tags_not_written">Не удалось записать новые сведения в рабочую копию.</string>
+  <string name="jukebox_tags_not_mp3">Не удалось прочитать его как MP3.</string>
+  <string name="jukebox_tags_not_flac">Не удалось прочитать его как FLAC.</string>
+  <string name="jukebox_tags_copy_not_writable">Не удалось открыть рабочую копию для записи.</string>
+  <string name="jukebox_tags_neither">Это не MP3 и не FLAC.</string>
+  <string name="jukebox_tags_kind_changed">Копия больше не того же типа, что исходный файл.</string>
+  <string name="jukebox_tags_length_changed">Длительность копии не совпадает с оригиналом, поэтому звук в ней мог быть повреждён.</string>
+  <!-- %1$s — одно из семи названий ниже, в именительном падеже. -->
+  <string name="jukebox_tags_field_wrong">Поле «%1$s» читается из копии не так, как должно.</string>
+  <string name="jukebox_tags_field_title">название</string>
+  <string name="jukebox_tags_field_artist">исполнитель</string>
+  <string name="jukebox_tags_field_album">альбом</string>
+  <string name="jukebox_tags_field_album_artist">исполнитель альбома</string>
+  <string name="jukebox_tags_field_genre">жанр</string>
+  <string name="jukebox_tags_field_year">год</string>
+  <string name="jukebox_tags_field_track">номер трека</string>
+  <string name="jukebox_tags_field_disc">номер диска</string>
+  <string name="jukebox_tags_cover_unasked">Записана обложка, которую никто не запрашивал.</string>
+  <string name="jukebox_tags_pictures_wrong">Изображения в копии не те, что должны там быть.</string>
+  <string name="jukebox_tags_details_added">В копии есть сведения, которых не было в оригинале.</string>
+  <string name="jukebox_tags_details_lost">Запись привела бы к потере или изменению сведений, которыми это приложение не управляет (%1$s).</string>
+  <string name="jukebox_tags_old_tag_changed">Тег старого формата в конце файла был добавлен или удалён.</string>
+  <string name="jukebox_tags_version_wrong">Тег записан как ID3v2.%1$d, а нужен был ID3v2.%2$d.</string>
+  <string name="jukebox_tags_sound_original_unknown">Не удалось определить, где в оригинале начинается и заканчивается звук.</string>
+  <string name="jukebox_tags_sound_copy_unknown">Не удалось определить, где в копии начинается и заканчивается звук.</string>
+  <string name="jukebox_tags_sound_described">Описание звука в копии не совпадает с описанием в оригинале.</string>
+  <string name="jukebox_tags_sound_length">Звук в копии не той же длины, что в оригинале.</string>
+  <string name="jukebox_tags_sound_differs">Звук в копии отличается от звука в оригинале.</string>
+  <string name="jukebox_tags_cover_missing">Обложка не найдена.</string>
+  <string name="jukebox_tags_cover_too_large">Обложка слишком большая, чтобы поместить её в файл.</string>
+  <string name="jukebox_tags_cover_unreadable">Обложку не удаётся прочитать как изображение.</string>
+  <string name="jukebox_tags_not_in_library">Этого трека нет в медиатеке.</string>
+  <string name="jukebox_tags_cache">Не удалось воспользоваться кэшем приложения. Файл не изменён.</string>
+  <string name="jukebox_tags_gone">Этого трека больше нет на устройстве.</string>
+  <string name="jukebox_tags_no_room_for_copy">Недостаточно свободного места, чтобы сначала поработать с копией файла.</string>
+  <string name="jukebox_tags_copy_incomplete">Не удалось скопировать файл целиком.</string>
+  <string name="jukebox_tags_not_opened">Не удалось открыть файл.</string>
+  <string name="jukebox_tags_not_opened_for_writing">Не удалось открыть файл для записи.</string>
+  <string name="jukebox_tags_denied">Android не разрешил изменить этот файл.</string>
+  <string name="jukebox_tags_no_room_for_file">Недостаточно свободного места там, где хранится файл.</string>
+  <string name="jukebox_tags_copy_not_read_back">Не удалось перечитать рабочую копию.</string>
+  <!-- Две строки ниже стоят в скобках следующих трёх, поэтому со строчной буквы. -->
+  <string name="jukebox_tags_not_as_written">он читается не так, как был записан</string>
+  <string name="jukebox_tags_cut_short">запись была прервана</string>
+  <!-- %1$s — причина; %2$s — где лежит готовая копия. -->
+  <string name="jukebox_tags_partly_kept">Файл перезаписан лишь частично и может не воспроизводиться (%1$s). Полная копия с новыми сведениями сохранена здесь: %2$s. Скопируй её поверх оригинала с компьютера или в файловом менеджере.</string>
+  <string name="jukebox_tags_partly_lost">Файл перезаписан лишь частично и может не воспроизводиться (%1$s). Сохранить готовую копию тоже не удалось.</string>
+  <string name="jukebox_tags_maybe_partly">Возможно, файл остался перезаписанным лишь частично (%1$s). Включи его, чтобы проверить.</string>
+  <!-- %1$s — целое предложение из числа выше, с точкой. -->
+  <string name="jukebox_tags_untouched">%1$s Файл не изменён.</string>
+  <!-- %1$s — сообщение системы, без точки. -->
+  <string name="jukebox_tags_untouched_after">%1$s. Файл не изменён.</string>
+  <!-- Всплывающее сообщение, когда воспроизведение включают во время звонка. -->
+  <string name="jukebox_under_a_call">Идёт звонок. Музыка играет тихо.</string>
+</resources>

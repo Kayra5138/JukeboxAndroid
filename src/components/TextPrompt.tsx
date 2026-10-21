@@ -68,18 +68,24 @@ export function TextPrompt({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
+      {/* Neither the backdrop nor the sheet is a stop for a screen reader; see
+          `OptionSheet`. Cancel and the back gesture are the ways out. */}
+      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {/* Swallows taps so touching the sheet does not count as touching the
             backdrop behind it. */}
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <Text style={styles.heading}>{heading}</Text>
+        <Pressable style={styles.sheet} onPress={() => {}} accessible={false}>
+          <Text accessibilityRole="header" style={styles.heading}>{heading}</Text>
           {hint ? <Text style={styles.hint}>{hint}</Text> : null}
           <TextInput
             style={styles.input}
             value={value}
             onChangeText={setValue}
             placeholder={placeholder}
-            placeholderTextColor={c.textDisabled}
+            placeholderTextColor={c.textFaint}
+            // Named by the heading for a screen reader: the hint is gone as
+            // soon as there is anything in the box, a name given to rename
+            // included, and the box would be only "edit box".
+            accessibilityLabel={heading}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType={keyboardType}
@@ -92,10 +98,11 @@ export function TextPrompt({
             onSubmitEditing={submit}
           />
           <View style={styles.actions}>
-            <Pressable android_ripple={pressed} style={styles.button} onPress={onClose}>
+            <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
               <Text style={styles.buttonLabel}>{t.common.cancel}</Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               android_ripple={pressed}
               style={[styles.button, styles.confirm, !value.trim() && styles.disabled]}
               disabled={!value.trim()}

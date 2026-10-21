@@ -8,6 +8,7 @@ import { useDiscoverActions } from '../../lib/discover/DiscoverProvider';
 import type { DiscoverPreview } from '../../lib/discover/view';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlineWidth, usePressed } from '../../lib/theme/index';
+import { barGlass } from '../UnderBars';
 
 /**
  * What is coming out of the speaker when it is a preview.
@@ -65,6 +66,8 @@ export function PreviewBar({
       <Pressable
         android_ripple={pressed}
         style={styles.stop}
+        // Drawn at 44; this much further is the 48 a finger is owed.
+        hitSlop={2}
         accessibilityRole="button"
         accessibilityLabel={said.stop}
         onPress={() => play(preview.id)}>
@@ -83,6 +86,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderTopColor: c.border,
     backgroundColor: c.surface,
+    // As the bar's, in a theme of glass: laid over a list, and washed to be read over it.
+    ...barGlass(c),
     paddingHorizontal: 14,
     paddingVertical: 10,
   },

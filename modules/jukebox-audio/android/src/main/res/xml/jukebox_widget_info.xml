@@ -6,7 +6,9 @@
      out from the least height instead, as (height + 30) / 70 rounded up, and
      at ninety-two that came to two: the widget arrived twice as tall as it was
      drawn to be. Forty is the most that still counts as one row. It may be
-     made taller by hand, and the layout is chosen by the height it is given. -->
+     made taller by hand, and the layout is chosen by the height it is given:
+     the card at two rows and the large one with the queue at four, the same
+     as the two providers that start at those sizes (see JukeboxWidget). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
   android:description="@string/jukebox_widget_description"
   android:initialLayout="@layout/jukebox_widget_compact"
@@ -14,6 +16,7 @@
   android:minHeight="40dp"
   android:minResizeHeight="40dp"
   android:previewLayout="@layout/jukebox_widget_compact"
+  android:previewImage="@drawable/jukebox_widget_preview_row"
   android:resizeMode="horizontal|vertical"
   android:targetCellWidth="4"
   android:targetCellHeight="1"

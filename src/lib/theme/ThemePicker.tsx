@@ -42,20 +42,33 @@ const HEADINGS: Record<ThemeGroup, keyof Strings['themes'] | null> = {
  * tap changes it. Given [marked] and [onPick] it is the same pictures for
  * ticking any number of — the themes a draw is made from — and then
  * following the phone is left out, being a choice and not a theme.
+ *
+ * Given [only], it offers those and no others, in the registry's order and
+ * groups: the first start shows a handful, one of each kind, and leaves the
+ * rest to Settings.
  */
 export function ThemePicker({
   marked,
   onPick,
+  only,
 }: {
   /** The themes to ring, in place of the one in use. */
   marked?: readonly ThemeChoice[];
   /** What a tap does, in place of choosing the theme. */
   onPick?: (theme: ThemeChoice) => void;
+  /** The choices to offer, where not all of them. */
+  only?: readonly ThemeChoice[];
 } = {}) {
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
-  const { chosen, groups } = useThemeOffers();
+  const offers = useThemeOffers();
+  const { chosen } = offers;
+  const groups = only
+    ? offers.groups
+        .map((entry) => ({ ...entry, offers: entry.offers.filter((offer) => only.includes(offer.id)) }))
+        .filter((entry) => entry.offers.length > 0)
+    : offers.groups;
   const many = marked !== undefined;
 
   return (
@@ -65,7 +78,12 @@ export function ThemePicker({
         return (
           <View key={group} style={styles.group}>
             {heading ? <Text style={styles.heading}>{t.themes[heading]}</Text> : null}
-            <View style={styles.tiles}>
+            {/*
+              One choice among all of them, for choosing the theme, and said
+              so: each group is a set of radio buttons to a screen reader,
+              with the one in use checked.
+            */}
+            <View style={styles.tiles} accessibilityRole={many ? undefined : 'radiogroup'}>
               {offers.map((offer) => {
                 if (many && offer.id === 'system') return null;
                 const on = many ? marked.includes(offer.id) : offer.id === chosen;
@@ -73,9 +91,9 @@ export function ThemePicker({
                   <Pressable
                     android_ripple={pressed}
                     key={offer.id}
-                    accessibilityRole={many ? 'checkbox' : 'button'}
+                    accessibilityRole={many ? 'checkbox' : 'radio'}
                     accessibilityLabel={t.themes[offer.nameKey]}
-                    accessibilityState={many ? { checked: on } : { selected: on }}
+                    accessibilityState={{ checked: on }}
                     style={styles.tile}
                     onPress={() => (onPick ?? chooseTheme)(offer.id)}>
                     <View style={[styles.ring, on && styles.ringOn]}>

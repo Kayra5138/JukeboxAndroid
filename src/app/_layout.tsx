@@ -1,5 +1,6 @@
 import { DiscoverProvider } from '../lib/discover/DiscoverProvider';
 import { useEffect, type ReactNode } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, View } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -7,15 +8,25 @@ import * as SystemUI from 'expo-system-ui';
 
 import { DownloadsButton } from '../components/DownloadsButton';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { GlassHeader } from '../components/GlassHeader';
+import { BarsOver } from '../components/UnderBars';
+import { Setup } from '../components/welcome/Setup';
 import { keepCarCopy } from '../lib/db/carCopy';
+import { keepSpreadingCovers } from '../lib/media/coverSpread';
 import { loadLanguage, useT } from '../lib/i18n/index';
 import { loadLyricsTarget } from '../lib/lyrics/useTarget';
+import { keepLookupsGoing } from '../lib/metadata/background';
+import { Autoplay } from '../lib/player/autoplay/Autoplay';
 import { NowPlayingHost } from '../lib/player/NowPlayingSheet';
 import { PlayerProvider } from '../lib/player/PlayerProvider';
 import { keepScrobbling } from '../lib/scrobble/index';
+import { watchErrors } from '../lib/support/errorLogStore';
+import { keepCheckingForUpdates } from '../lib/support/updateStore';
 import { loadTheme, makeStyles, page, useColours, useTheme } from '../lib/theme/index';
 import { glassOf, glassPage, setBack, WindowBehind } from '../lib/theme/Veil';
 import { ThemeSurroundings } from '../lib/theme/Surroundings';
+import { useWelcomeShown } from '../lib/ui/welcomeStore';
+import { HEADER_BAR } from '../lib/ui/bars';
 import { DownloadsProvider } from '../lib/youtube/DownloadsProvider';
 
 /*
@@ -28,11 +39,18 @@ import { DownloadsProvider } from '../lib/youtube/DownloadsProvider';
 loadLanguage();
 loadTheme();
 loadLyricsTarget();
+/*
+  Before anything can go wrong, every error nobody caught is written down for
+  the report screen (see `support/errorLog.ts`), and then goes wherever it
+  went before.
+*/
+watchErrors();
 
 export default function RootLayout() {
   const theme = useTheme();
   const t = useT();
   const c = theme.colours;
+  const welcome = useWelcomeShown();
 
   // What the car and the widget read is a copy, kept up to date from here.
   useEffect(() => keepCarCopy(), []);
@@ -43,6 +61,26 @@ export default function RootLayout() {
     which is nearly everybody -- this reads one setting and stops.
   */
   useEffect(() => keepScrobbling(), []);
+
+  /*
+    Whether there is a newer Jukebox, asked of GitHub at most once a day as
+    the app comes to the front, and not at all with the switch off: see
+    `support/update.ts`. What it finds is shown on Settings and nowhere else.
+  */
+  useEffect(() => keepCheckingForUpdates(), []);
+
+  /*
+    A record's cover handed to the tracks of it that have none, whenever the
+    library changes: see `media/coverSpread.ts`. Nothing is asked of the
+    library for it; it waits for the library to be read by the screens.
+  */
+  useEffect(() => keepSpreadingCovers(), []);
+
+  /*
+    A lookup of details, covers or lyrics carried on behind the screen, with a
+    notification while it is: see `metadata/background.ts`.
+  */
+  useEffect(() => keepLookupsGoing(), []);
 
   /*
     The window itself, behind every screen. It is what shows through for the
@@ -63,11 +101,11 @@ export default function RootLayout() {
   const glass = glassOf(c);
   /*
     How every screen but the first is opened in a theme of glass: over the
-    one below and not in place of it, with a bar that is the same wash as its
-    page and has no line under it. Nothing at all in any other theme. The
-    game is left out: its board is the whole screen and is nobody's glass.
+    one below and not in place of it, with its bar drawn in the page (see
+    `Paged`). Nothing at all in any other theme. The game is left out: its
+    board is the whole screen and is nobody's glass.
   */
-  const over = glass > 0 ? { ...overGlass, headerStyle: glassPage(c) } : null;
+  const over = glass > 0 ? overGlass : null;
   const navigation = {
     ...(theme.base === 'dark' ? DarkTheme : DefaultTheme),
     colors: {
@@ -101,6 +139,11 @@ export default function RootLayout() {
       <DownloadsProvider>
       <DiscoverProvider>
         {/*
+          Under both the player and Discover, which it takes songs from when
+          the queue is about to run out. Draws nothing.
+        */}
+        <Autoplay />
+        {/*
           The now-playing screen is a layer over the navigator rather than a route
           within it, so whatever is underneath stays on screen while it is open.
         */}
@@ -109,6 +152,8 @@ export default function RootLayout() {
           opened in a window of its own has all of it behind it to veil.
         */}
         <WindowBehind>
+        {/* Out of a screen reader's reach while the first start's setup is over it. */}
+        <View style={rootStyles.app} importantForAccessibility={welcome ? 'no-hide-descendants' : 'auto'}>
         <NowPlayingHost>
           {/* Named for the clock, not the page: light writing over a dark theme. */}
           <StatusBar style={theme.base === 'dark' ? 'light' : 'dark'} />
@@ -135,9 +180,14 @@ export default function RootLayout() {
             <Stack.Screen name="settings-library" options={{ title: t.settings.sections.library, ...over }} />
             <Stack.Screen name="settings-downloads" options={{ title: t.settings.sections.downloads, ...over }} />
             <Stack.Screen name="settings-data" options={{ title: t.settings.sections.data, ...over }} />
+            {/* From the foot of the Settings tab, above the first start. */}
+            <Stack.Screen name="report" options={{ title: t.support.report.title, ...over }} />
             <Stack.Screen name="metadata" options={{ title: t.nav.tags, ...over }} />
             <Stack.Screen name="folders" options={{ title: t.nav.libraryFolder, ...over }} />
+            <Stack.Screen name="left-out" options={{ title: t.library.leftOut.title, ...over }} />
             <Stack.Screen name="samesongs" options={{ title: t.nav.sameSong, ...over }} />
+            <Stack.Screen name="duplicates" options={{ title: t.library.copies.title, ...over }} />
+            <Stack.Screen name="wrong-downloads" options={{ title: t.library.wrong.title, ...over }} />
             <Stack.Screen name="equalizer" options={{ title: t.nav.equalizer, ...over }} />
             <Stack.Screen name="transitions" options={{ title: t.nav.crossfade, ...over }} />
             <Stack.Screen name="effects" options={{ title: t.nav.effects, ...over }} />
@@ -162,6 +212,13 @@ export default function RootLayout() {
           */}
           <DownloadsButton />
         </NowPlayingHost>
+        </View>
+        {/*
+          Over everything, the player included, and not a route: it has to be
+          in front of whatever the app was showing when Settings asked for it,
+          and to leave that where it was once it is put away.
+        */}
+        {welcome ? <Setup /> : null}
         </WindowBehind>
       </DiscoverProvider>
       </DownloadsProvider>
@@ -210,9 +267,22 @@ function stackOf(state: Routes | undefined, key: string): Routes | null {
  * deep nobody can tell what the third is showing; so only the one directly
  * below is ever seen, through the one on top.
  */
-function Paged({ children, name, routeKey }: { children: ReactNode; name: string; routeKey: string }) {
+function Paged({
+  children,
+  name,
+  routeKey,
+  title,
+  onBack,
+}: {
+  children: ReactNode;
+  name: string;
+  routeKey: string;
+  title: string;
+  onBack: (() => void) | null;
+}) {
   const c = useColours();
   const styles = usePage();
+  const insets = useSafeAreaInsets();
   // The navigator's own account of what is open, which every screen is told of when it changes: an
   // address would not do, since a screen can be opened over another of the same address.
   const stack = stackOf(useRootNavigationState() as Routes | undefined, routeKey);
@@ -227,6 +297,10 @@ function Paged({ children, name, routeKey }: { children: ReactNode; name: string
   // Whether everything from here up to the top is glass, which is whether this can be seen through at all.
   const seenThrough = under > 0 && routes.slice(at + 1, index + 1).every((route) => !NEVER_GLASS.has(route.name));
   const ground = mine ? styles.over : styles.page;
+  // Its bar drawn in the page, so that it goes back with the page: see `GlassHeader`.
+  const barred = mine && !HEADERLESS.has(name);
+  // And laid over the page, where the screen's list runs on under it: see `UnderBars`.
+  const beneath = barred && SCROLLS_UNDER.has(name);
   // Never folded away, for the reason `Behind` is not: see there.
   return (
     <View
@@ -240,17 +314,73 @@ function Paged({ children, name, routeKey }: { children: ReactNode; name: string
               ? [ground, setBack(c)]
               : [ground, styles.unseen]
       }>
-      {children}
+      {barred ? <GlassHeader title={title} onBack={onBack} over={beneath} /> : null}
+      {beneath ? (
+        <View style={styles.below}>
+          <BarsOver top={HEADER_BAR + insets.top}>{children}</BarsOver>
+        </View>
+      ) : barred ? (
+        <View style={styles.below}>{children}</View>
+      ) : (
+        children
+      )}
     </View>
   );
 }
 
 /** Made once, so that the navigator is handed the same thing each time it asks. */
-const paged = ({ children, route }: { children: ReactNode; route: { key: string; name: string } }) => (
-  <Paged name={route.name} routeKey={route.key}>
+const paged = ({
+  children,
+  route,
+  navigation,
+  options,
+}: {
+  children: ReactNode;
+  route: { key: string; name: string };
+  navigation: { canGoBack: () => boolean; goBack: () => void };
+  options: { title?: string };
+}) => (
+  <Paged
+    name={route.name}
+    routeKey={route.key}
+    title={options.title ?? ''}
+    onBack={navigation.canGoBack() ? navigation.goBack : null}>
     {children}
   </Paged>
 );
+
+/**
+ * Screens of glass that have no bar at all, and draw their own heading: the
+ * game, and a list, whose name is over its tracks.
+ */
+const HEADERLESS = new Set(['(tabs)', 'tiles', 'playlist']);
+
+/**
+ * Screens of glass whose list runs on under their bar, and is seen through
+ * it: each keeps the room at the top of what it scrolls that `useUnderBars`
+ * tells it to. Named here and not found out, because a screen that has not
+ * been made to keep that room would begin under its own bar; any other is
+ * laid out below the bar, as it always was.
+ */
+const SCROLLS_UNDER = new Set([
+  'settings-look',
+  'settings-sound',
+  'settings-player',
+  'settings-library',
+  'settings-downloads',
+  'settings-data',
+  'report',
+  'left-out',
+  'equalizer',
+  'transitions',
+  'effects',
+  'album-rest',
+  'themes',
+  'discover-settings',
+  'samesongs',
+  'duplicates',
+  'wrong-downloads',
+]);
 
 /**
  * How a screen of glass is opened: over the one below and not in place of
@@ -263,7 +393,9 @@ const overGlass = {
   presentation: 'transparentModal',
   animation: 'slide_from_right',
   contentStyle: { backgroundColor: 'transparent' },
-  headerShadowVisible: false,
+  // Drawn in the page instead, by `Paged`: the navigator's bar is a layer of
+  // its own, and stayed sharp over a screen that had been set back.
+  headerShown: false,
 } as const;
 
 const usePage = makeStyles((c) =>
@@ -271,5 +403,8 @@ const usePage = makeStyles((c) =>
     page: { flex: 1, ...page(c) },
     over: { flex: 1, ...glassPage(c) },
     unseen: { opacity: 0 },
+    below: { flex: 1 },
   })
 );
+
+const rootStyles = StyleSheet.create({ app: { flex: 1 } });

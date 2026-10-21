@@ -165,9 +165,19 @@ export function Behind({
     parent and handing it to the new view: every screen detached from the
     window and attached again each time a sheet opened, and a dialog that is
     detached is dismissed. Kept, it is given its filter where it stands.
+
+    Out of a screen reader's reach as well while it is covered, in every theme
+    and not only the blurred ones. Android has no other way to keep a reader
+    inside a sheet that is drawn in the same window as the screen it covers:
+    left as it was, a swipe past the last row of the sheet walked on into the
+    screen underneath, reading out things nobody could see or touch. A sheet in
+    a window of its own is a window of its own and is not affected.
   */
   return (
-    <View collapsable={false} style={radius > 0 ? [style, veils(radius)] : style}>
+    <View
+      collapsable={false}
+      style={radius > 0 ? [style, veils(radius)] : style}
+      importantForAccessibility={veiled ? 'no-hide-descendants' : 'auto'}>
       {children}
     </View>
   );

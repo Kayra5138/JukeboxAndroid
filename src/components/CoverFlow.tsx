@@ -9,13 +9,14 @@ import {
   type Ref,
 } from 'react';
 import { Image } from './Picture';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
 import { useT } from '../lib/i18n/index';
-import { useTrackArtwork, warmArtwork } from '../lib/media/artwork';
+import { useAlbumArtwork, warmAlbumArtwork } from '../lib/media/artwork';
 import type { Album } from '../lib/media/albums';
 import { laid, makeStyles } from '../lib/theme/index';
+import { motionReduced } from '../lib/ui/motion';
 
 /**
  * A rack of records you flick through, with the one in front turned to face
@@ -169,8 +170,14 @@ const TURN_BY = 0.45;
 /** Depth of the perspective. Smaller is a wider lens and a harsher fan. */
 const PERSPECTIVE = 900;
 
-/** Room the name of what is in front takes, and how far it sits off the floor. */
-const CAPTION_HEIGHT = 52;
+/**
+ * Room the name of what is in front takes, and how far it sits off the floor.
+ *
+ * The room grows with the size of writing the phone is set to: at 52 whatever
+ * the setting, the two lines of the caption were cut from about one and a
+ * half times the ordinary size. Some thirty-three points of it are the lines.
+ */
+const captionHeight = (fontScale: number) => Math.round(19 + 33 * Math.min(Math.max(fontScale, 1), 2));
 const CAPTION_LIFT = 18;
 
 /** The margin the rack keeps from the edges of whatever it is given. */
@@ -258,6 +265,7 @@ export function CoverFlow({
 }) {
   const t = useT();
   const styles = useStyles();
+  const { fontScale } = useWindowDimensions();
   /*
     Its own size, not the window's. The rack sits under a header and over a tab
     bar, and centring on the window put the front record low enough to sit on
@@ -318,7 +326,8 @@ export function CoverFlow({
     const nearest = Math.round(at.current);
     if (Math.abs(at.current - nearest) < SQUARE_ENOUGH) return;
     rail.current?.scrollTo(
-      { x: nearest * step, animated: true }
+      // Where the decoration holds still the record is simply put square.
+      { x: nearest * step, animated: !motionReduced() }
     );
   }, [step]);
 
@@ -379,7 +388,7 @@ export function CoverFlow({
    */
   const reach = (index: number) => {
     if (index === Math.round(at.current)) open();
-    else rail.current?.scrollTo({ x: index * step, animated: true });
+    else rail.current?.scrollTo({ x: index * step, animated: !motionReduced() });
   };
 
   /**
@@ -406,11 +415,11 @@ export function CoverFlow({
   */
   useEffect(() => {
     const from = Math.round(at.current) || 0;
-    const covers = [albums[from]?.tracks[0]];
+    const covers = [albums[from]?.tracks];
     for (let out = 1; out < albums.length; out += 1) {
-      covers.push(albums[from + out]?.tracks[0], albums[from - out]?.tracks[0]);
+      covers.push(albums[from + out]?.tracks, albums[from - out]?.tracks);
     }
-    return warmArtwork(covers);
+    return warmAlbumArtwork(covers);
   }, [albums]);
 
   useImperativeHandle(ref, () => ({
@@ -647,7 +656,7 @@ export function CoverFlow({
         </View>
       </Animated.ScrollView>
 
-      <View style={styles.caption} pointerEvents="none">
+      <View style={[styles.caption, { height: captionHeight(fontScale) }]} pointerEvents="none">
         <Text style={styles.name} numberOfLines={1}>
           {current.name}
         </Text>
@@ -704,7 +713,9 @@ const Slots = memo(function Slots({
   return (
     <View style={[styles.slots, styles.slotsWide, { width: albums.length * step }]}>
       {albums.map((album, index) => (
-        <Pressable key={album.key} style={slot} onPress={() => onReach(index)} />
+        // Not stops for a screen reader: one for every record in the library,
+        // with nothing to say. The records themselves are named and do the same.
+        <Pressable key={album.key} style={slot} accessible={false} onPress={() => onReach(index)} />
       ))}
     </View>
   );
@@ -745,7 +756,7 @@ const Card = memo(function Card({
 }) {
   const t = useT();
   const styles = useStyles();
-  const artwork = useTrackArtwork(album.tracks[0] ?? null);
+  const artwork = useAlbumArtwork(album.tracks);
   const press = () => {
     if (inFront) onOpen();
   };
@@ -810,7 +821,7 @@ const Card = memo(function Card({
           // Only the one in front says so, because only it does: a neighbour
           // is brought forward by the slot it stands in, not opened.
           accessibilityLabel={inFront ? t.library.rack.open(album.name) : album.name}
-          accessibilityHint={inFront ? t.library.rack.openHint : undefined}
+          accessibilityHint={inFront ? t.library.rack.openHint : t.library.rack.bringForward}
           // Named, as a row's is: nobody finds a held sleeve by trying.
           accessibilityActions={
             held ? [{ name: 'longpress', label: t.library.albumMenu }] : undefined
@@ -944,7 +955,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: CAPTION_LIFT,
-    height: CAPTION_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 3,

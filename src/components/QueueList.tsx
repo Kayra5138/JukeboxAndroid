@@ -18,20 +18,42 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
   type CellRendererProps,
   type GestureResponderEvent,
 } from 'react-native';
 
 import { PlayIcon } from './Icons';
+import { MoreButton } from './MoreButton';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
+import { dividerAt, queueIndex, queueMove, shownIndex } from '../lib/player/autoplay/section';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
 import { laid, makeStyles, outlined, useColours, withAlpha } from '../lib/theme/index';
 import { glassOf } from '../lib/theme/Veil';
+import { announce } from '../lib/ui/announce';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
 import type { Track } from '../lib/types';
+import { CLIP_SUBVIEWS } from '../lib/ui/lists';
 
-export const QUEUE_ROW_HEIGHT = 56;
+/**
+ * How tall a row is: 56 at the phone's ordinary size of writing, and taller as
+ * that size is turned up. The two lines of a row take some thirty-one points
+ * of it, and those grow with the writing while the rest does not; a row that
+ * stayed 56 cut its second line in half from a little over 1.8 times the size.
+ *
+ * One height for every row all the same, worked out from the setting rather
+ * than measured, because the list lays itself out by arithmetic and a drag
+ * finds the slot under the finger the same way. Held to twice the size, which
+ * is as large as Android's setting goes.
+ */
+export function queueRowHeight(fontScale: number): number {
+  const scale = Math.min(Math.max(fontScale, 1), 2);
+  return Math.round(25 + 31 * scale);
+}
+
+/** That height, for the rows and the slots they stand in; see `queueRowHeight`. */
+const RowHeightContext = createContext(queueRowHeight(1));
 
 /**
  * One row, drawn again only when something about that row changed.
@@ -52,11 +74,19 @@ const QueueRow = memo(function QueueRow({
   onLift,
   onMenu,
   onRemove,
+  onStep,
+  first,
+  last,
 }: {
   track: Track;
   index: number;
   playing: boolean;
   lifted: boolean;
+  /** Moves the row one place, for a screen reader; absent where the list has no order of its own. */
+  onStep?: (index: number, by: 1 | -1) => void;
+  /** Whether the row is at either end, where one of the two moves has nowhere to go. */
+  first?: boolean;
+  last?: boolean;
   onPress: (index: number) => void;
   /** Absent on a list that holds no order of its own; the row cannot be lifted. */
   onLift?: (index: number, pageY: number) => void;
@@ -68,6 +98,7 @@ const QueueRow = memo(function QueueRow({
   const artwork = useTrackArtwork(track);
   const t = useT();
   const styles = useStyles();
+  const height = use(RowHeightContext);
 
   /*
     Two things a held row can mean, and one finger to say it with.
@@ -89,19 +120,24 @@ const QueueRow = memo(function QueueRow({
 
   return (
     <Pressable
-      style={[styles.row, lifted && styles.rowLifted]}
+      style={[styles.row, { height }, lifted && styles.rowLifted]}
       accessibilityRole="button"
       accessibilityState={{ selected: playing }}
       // A long press is not something a screen reader's user can be expected
-      // to find by trying. Named, it is in the reader's own list of actions.
-      accessibilityActions={onMenu ? [{ name: 'longpress', label: t.library.trackMenu }] : undefined}
-      onAccessibilityAction={
-        onMenu
-          ? (event) => {
-              if (event.nativeEvent.actionName === 'longpress') onMenu(index);
-            }
-          : undefined
-      }
+      // to find by trying. Named, it is in the reader's own list of actions —
+      // and so is moving the row, which by hand is a drag by the handle and
+      // which a reader has no way to do at all.
+      accessibilityActions={[
+        ...(onMenu ? [{ name: 'longpress', label: t.library.trackMenu }] : []),
+        ...(onStep && !first ? [{ name: 'moveUp', label: t.common.moveUp }] : []),
+        ...(onStep && !last ? [{ name: 'moveDown', label: t.common.moveDown }] : []),
+      ]}
+      onAccessibilityAction={(event) => {
+        const name = event.nativeEvent.actionName;
+        if (name === 'longpress') onMenu?.(index);
+        else if (name === 'moveUp') onStep?.(index, -1);
+        else if (name === 'moveDown') onStep?.(index, 1);
+      }}
       onPress={() => onPress(index)}
       onLongPress={onMenu ? () => onMenu(index) : liftFrom}
       delayLongPress={onMenu ? undefined : LIFT_AFTER_MS}>
@@ -125,6 +161,7 @@ const QueueRow = memo(function QueueRow({
         does nothing and a handle that will not lift are two promises the
         screen cannot keep.
       */}
+      {onMenu ? <MoreButton onPress={() => onMenu(index)} /> : null}
       {onRemove ? (
         <Pressable
           style={styles.remove}
@@ -151,10 +188,10 @@ const QueueRow = memo(function QueueRow({
           // The row says everything there is to say; this is how it is moved
           // by hand, which is not something to stop at on the way past.
           accessible={false}>
-          <Text style={styles.grip}>≡</Text>
+          <Text style={styles.grip} importantForAccessibility="no">≡</Text>
         </Pressable>
       ) : onLift ? (
-        <Text style={styles.grip}>≡</Text>
+        <Text style={styles.grip} importantForAccessibility="no">≡</Text>
       ) : null}
     </Pressable>
   );
@@ -166,12 +203,30 @@ const LIFT_AFTER_MS = 220;
 /** Out to the row's own edges, and no further left than the cross's own reach. */
 const GRIP_SLOP = { top: 18, bottom: 18, left: 2, right: 16 };
 
-const REMOVE_SLOP = { top: 8, bottom: 8, left: 12, right: 10 };
+/*
+  The cross is a few points wide; this brings what will take a press for it to
+  48 each way. Further to the left than the right, because to the right is the
+  handle, and the two are not to reach for the same spot.
+*/
+const REMOVE_SLOP = { top: 10, bottom: 10, left: 16, right: 10 };
 
 /** What the copy in the hand does when pressed, which it cannot be. */
 const nothing = () => {};
 
 type Drag = { from: number | null; to: number | null };
+
+/**
+ * The heading over the picked songs, as a row of the list.
+ *
+ * A row like any other as far as the list is concerned, and as tall: the list
+ * lays itself out, and a drag finds the slot under the finger, by multiplying
+ * a row's number by one height, and a heading of another height would put
+ * every row after it in the wrong place. It is never lifted. The rows on
+ * screen are told apart from the queue's positions by `section.ts`.
+ */
+const DIVIDER = { divider: true } as const;
+type Row = Track | typeof DIVIDER;
+const isDivider = (row: Row): row is typeof DIVIDER => 'divider' in row;
 
 /** How often the list is nudged while a row is held at an edge. */
 const PULL_TICK_MS = 16;
@@ -208,12 +263,13 @@ const PlateContext = createContext(0);
  * with is part of the element type: hand it a new function when the drag moves
  * and every row is unmounted and rebuilt, which blanks the covers.
  */
-function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>) {
+function QueueCell({ index, style, children, ...rest }: CellRendererProps<Row>) {
   const { from, to } = use(DragContext);
   const styles = useStyles();
   const dragging = from === index;
   const shift = from !== null && to !== null ? rowShift(index, from, to) : 0;
   const rows = use(PlateContext);
+  const height = use(RowHeightContext);
   const plate = rows > 0 ? [styles.plate, index === 0 && styles.plateTop, index === rows - 1 && styles.plateFoot] : null;
 
   // `onFocusCapture` is not forwarded: it exists to highlight separators around
@@ -223,10 +279,10 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Track>
       onLayout={rest.onLayout}
       style={[
         style,
-        styles.slot,
+        { height },
         plate,
         dragging && styles.hidden,
-        shift !== 0 && { transform: [{ translateY: shift * QUEUE_ROW_HEIGHT }] },
+        shift !== 0 && { transform: [{ translateY: shift * height }] },
       ]}>
       {children}
     </Animated.View>
@@ -265,6 +321,9 @@ export function QueueList({
   header,
   footer,
   plate = false,
+  divider,
+  inset = 0,
+  foot = 0,
 }: {
   queue: Track[];
   currentIndex: number;
@@ -281,6 +340,24 @@ export function QueueList({
   footer?: ReactNode;
   /** Stand the rows on a plate, where screens are glass: see `PlateContext`. Nothing in any other theme. */
   plate?: boolean;
+  /**
+   * A heading drawn above the row at queue position `at`, the height of a
+   * row: the songs picked to keep the music going. Every position handed back
+   * is the queue's, never a row's on screen.
+   */
+  divider?: { at: number; element: ReactNode };
+  /**
+   * How much of the list's top a heading of glass is laid over, so that the
+   * rows can pass under it and still start clear of it at rest; see
+   * `UnderBars`. Nought, and nothing changed, where nothing is.
+   */
+  inset?: number;
+  /**
+   * The same at the list's foot: how much of its bottom a bar of glass is
+   * laid over, so that the rows pass under it and the last of them can still
+   * be scrolled clear of it. Nought, and nothing changed, where nothing is.
+   */
+  foot?: number;
 }) {
   const styles = useStyles();
   const c = useColours();
@@ -290,7 +367,18 @@ export function QueueList({
   const fromRef = useRef<number | null>(null);
   const toRef = useRef<number | null>(null);
   const grabbedAt = useRef(0);
-  const scroll = useRef<FlatList<Track>>(null);
+  const scroll = useRef<FlatList<Row>>(null);
+  /*
+    The rows on screen: the queue, and the heading among it where there is
+    one. Everything below that counts rows — the drag, the scroll, the slots —
+    counts these; everything that leaves the list is turned back into a queue
+    position first.
+  */
+  const shownDivider = divider ? dividerAt(divider.at, queue.length) : -1;
+  const rows = useMemo<Row[]>(
+    () => (shownDivider < 0 ? queue : [...queue.slice(0, shownDivider), DIVIDER, ...queue.slice(shownDivider)]),
+    [queue, shownDivider]
+  );
   /*
     What the list is showing, and where it is on the screen.
 
@@ -308,8 +396,14 @@ export function QueueList({
   const anchored = useRef(false);
   const viewport = useRef(0);
   const content = useRef(0);
-  const lengthRef = useRef(queue.length);
-  lengthRef.current = queue.length;
+  const lengthRef = useRef(rows.length);
+  lengthRef.current = rows.length;
+  const { fontScale } = useWindowDimensions();
+  const rowHeight = queueRowHeight(fontScale);
+  // Read by the responder, which is made once and would otherwise keep the
+  // height of the size of writing the list was first drawn at.
+  const rowHeightRef = useRef(rowHeight);
+  rowHeightRef.current = rowHeight;
   const currentRef = useRef(currentIndex);
   currentRef.current = currentIndex;
   /*
@@ -323,9 +417,19 @@ export function QueueList({
   */
   const [headerHeight, setHeaderHeight] = useState(0);
   const headerRef = useRef(0);
+  /*
+    The room kept over everything for a heading laid over the list, which
+    every row's place starts below just as it does below a header. Not a part
+    of the header, since that is measured and this is told; a ref for the
+    handlers as well.
+  */
+  const insetRef = useRef(inset);
+  insetRef.current = inset;
+  const footRef = useRef(foot);
+  footRef.current = foot;
   /* The latest of what the screen passed in, for the same handlers. */
-  const handlers = useRef({ onSelect, onRemove, onLongPress });
-  handlers.current = { onSelect, onRemove, onLongPress };
+  const handlers = useRef({ onSelect, onRemove, onLongPress, onMove, count: queue.length, divider: shownDivider });
+  handlers.current = { onSelect, onRemove, onLongPress, onMove, count: queue.length, divider: shownDivider };
 
   /*
     Where the playing row is about to be renumbered to by an edit made here.
@@ -390,7 +494,7 @@ export function QueueList({
     offset.setValue(travelled);
     const carried = travelled + (scrolled.current - grabbedScroll.current);
     const landing = Math.min(
-      Math.max(start + Math.round(carried / QUEUE_ROW_HEIGHT), 0),
+      Math.max(start + Math.round(carried / rowHeightRef.current), 0),
       lengthRef.current - 1
     );
     if (landing !== toRef.current) {
@@ -411,11 +515,15 @@ export function QueueList({
    * same ground.
    */
   const pullFrom = (at: number) => {
-    const step = edgePull(at, frameTop.current, viewport.current);
+    // The edges are those of what can be seen: a finger over the heading laid
+    // over the top, or the bar laid over the foot, is over rows that cannot,
+    // and is pulling towards them.
+    const seen = () => viewport.current - insetRef.current - footRef.current;
+    const step = edgePull(at, frameTop.current + insetRef.current, seen());
     if (step === 0) return stopPulling();
     if (pulling.current) return;
     pulling.current = setInterval(() => {
-      const speed = edgePull(fingerAt.current, frameTop.current, viewport.current);
+      const speed = edgePull(fingerAt.current, frameTop.current + insetRef.current, seen());
       if (speed === 0 || fromRef.current === null) return stopPulling();
       const next = withinScroll(scrolled.current + speed, content.current, viewport.current);
       if (next === scrolled.current) return;
@@ -469,12 +577,14 @@ export function QueueList({
           const start = fromRef.current;
           const landing = toRef.current;
           if (start === null || landing === null) return clearDrag();
-          if (start === landing) return clearDrag();
+          // Rows on screen, as a move in the queue: the heading is in the one and not the other.
+          const move = queueMove(start, landing, handlers.current.divider);
+          if (!move) return clearDrag();
 
           // A drag past the playing row renumbers it; the reader is looking at
           // the row they just dropped and is owed no scroll.
           const playing = currentRef.current;
-          if (playing >= 0) expectIndex(indexAfterMove(playing, start, landing));
+          if (playing >= 0) expectIndex(indexAfterMove(playing, move.from, move.to));
 
           /*
             The reorder and the end of the drag have to reach the screen
@@ -489,7 +599,7 @@ export function QueueList({
             React Native draws on its own thread, so there is no ordering that
             reliably hides such a frame; it has to not exist.
           */
-          onMove?.(start, landing);
+          onMove?.(move.from, move.to);
           clearDrag();
         },
         onPanResponderTerminate: clearDrag,
@@ -524,7 +634,7 @@ export function QueueList({
     grabbedAt.current = pageY;
     fingerAt.current = pageY;
     grabbedScroll.current = scrolled.current;
-    setLiftedTop(headerRef.current + index * QUEUE_ROW_HEIGHT - scrolled.current);
+    setLiftedTop(insetRef.current + headerRef.current + index * rowHeightRef.current - scrolled.current);
     fromRef.current = index;
     toRef.current = index;
     offset.setValue(0);
@@ -533,15 +643,22 @@ export function QueueList({
     // Refs, setters and an animated value, none of which is ever replaced.
   }, [offset]);
 
-  const select = useCallback((index: number) => handlers.current.onSelect(index), []);
-
-  const menu = useCallback((index: number) => {
-    // A hold that lands as a drag is ending, or with a row still in the hand,
-    // belongs to the drag.
-    if (fromRef.current === null) handlers.current.onLongPress?.(index);
+  // A row says its number on screen; the screen is told the queue's.
+  const select = useCallback((row: number) => {
+    const index = queueIndex(row, handlers.current.divider);
+    if (index >= 0) handlers.current.onSelect(index);
   }, []);
 
-  const remove = useCallback((index: number) => {
+  const menu = useCallback((row: number) => {
+    const index = queueIndex(row, handlers.current.divider);
+    // A hold that lands as a drag is ending, or with a row still in the hand,
+    // belongs to the drag.
+    if (fromRef.current === null && index >= 0) handlers.current.onLongPress?.(index);
+  }, []);
+
+  const remove = useCallback((row: number) => {
+    const index = queueIndex(row, handlers.current.divider);
+    if (index < 0) return;
     // Only a row above the playing one renumbers it, so only that case needs
     // predicting. Removing the playing row leaves the index where it is —
     // except when it was the last row, and then the jump to nothing is worth
@@ -554,15 +671,45 @@ export function QueueList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+    A row moved one place by a screen reader, which cannot drag. The same move
+    a drag ends in, with the same care for the playing row's number, and then
+    said aloud: the reader's attention stays where the row was, which now holds
+    a different track, so where the moved one went has to be told.
+  */
+  const t = useT();
+  const step = useCallback(
+    (row: number, by: 1 | -1) => {
+      const { onMove: move, count } = handlers.current;
+      // One place in the queue, whatever stands between on screen.
+      const index = queueIndex(row, handlers.current.divider);
+      if (index < 0) return;
+      const landing = index + by;
+      if (!move || landing < 0 || landing >= count) return;
+      const playing = currentRef.current;
+      if (playing >= 0) expectIndex(indexAfterMove(playing, index, landing));
+      move(index, landing);
+      announce(t.player.queue.movedTo(landing + 1, count));
+    },
+    // expectIndex only touches refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [t]
+  );
+
   // A timer outliving the list it scrolls would be reaching for a ref nobody
   // is reading any more.
   useEffect(() => () => stopPulling(), []);
 
-  /** Open on the track being played; the rest of the queue is a scroll away. */
+  /**
+   * Open on the track being played; the rest of the queue is a scroll away.
+   *
+   * The room kept for a heading laid over the list does not come into it: it
+   * moves the row and the top of what can be seen alike.
+   */
   const anchorToCurrent = (animated: boolean) => {
     if (fromRef.current !== null) return;
     scroll.current?.scrollToOffset({
-      offset: Math.max(0, headerRef.current + (currentIndex - 1) * QUEUE_ROW_HEIGHT),
+      offset: Math.max(0, headerRef.current + (shownIndex(currentIndex, shownDivider) - 1) * rowHeight),
       animated,
     });
   };
@@ -597,12 +744,13 @@ export function QueueList({
   */
   const keys = useMemo(() => {
     const seen = new Map<string, number>();
-    return queue.map((track) => {
-      const nth = seen.get(track.id) ?? 0;
-      seen.set(track.id, nth + 1);
-      return `${track.id}#${nth}`;
+    return rows.map((row) => {
+      if (isDivider(row)) return 'picked';
+      const nth = seen.get(row.id) ?? 0;
+      seen.set(row.id, nth + 1);
+      return `${row.id}#${nth}`;
     });
-  }, [queue]);
+  }, [rows]);
 
   return (
     /*
@@ -615,15 +763,21 @@ export function QueueList({
       ref={frame}
       style={styles.fill}
       {...responder.panHandlers}>
+      <RowHeightContext value={rowHeight}>
       <DragContext value={{ from, to }}>
-      <PlateContext value={plate && glassOf(c) > 0 ? queue.length : 0}>
+      <PlateContext value={plate && glassOf(c) > 0 ? rows.length : 0}>
         <FlatList
+                  removeClippedSubviews={CLIP_SUBVIEWS}
           ref={scroll}
-          data={queue}
+          data={rows}
           keyExtractor={(_track, index) => keys[index] ?? String(index)}
           CellRendererComponent={QueueCell}
           scrollEnabled={from === null}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={
+            inset > 0 || foot > 0
+              ? [styles.list, inset > 0 && { paddingTop: inset }, foot > 0 && { paddingBottom: LIST_FOOT + foot }]
+              : styles.list
+          }
           ListHeaderComponent={
             header ? (
               <View
@@ -637,8 +791,8 @@ export function QueueList({
           }
           ListFooterComponent={footer ? <>{footer}</> : null}
           getItemLayout={(_data, index) => ({
-            length: QUEUE_ROW_HEIGHT,
-            offset: headerHeight + QUEUE_ROW_HEIGHT * index,
+            length: rowHeight,
+            offset: inset + headerHeight + rowHeight * index,
             index,
           })}
           /*
@@ -661,18 +815,25 @@ export function QueueList({
             content.current = contentHeight;
             anchorWhenReady();
           }}
-          renderItem={({ item, index }) => (
-            <QueueRow
-              track={item}
-              index={index}
-              playing={index === currentIndex}
-              lifted={from === index}
-              onPress={select}
-              onLift={onMove ? lift : undefined}
-              onMenu={onLongPress ? menu : undefined}
-              onRemove={onRemove ? remove : undefined}
-            />
-          )}
+          renderItem={({ item, index }) => {
+            if (isDivider(item)) return <View style={{ height: rowHeight }}>{divider?.element}</View>;
+            const position = queueIndex(index, shownDivider);
+            return (
+              <QueueRow
+                track={item}
+                index={index}
+                playing={position === currentIndex}
+                lifted={from === index}
+                onPress={select}
+                onLift={onMove ? lift : undefined}
+                onStep={onMove ? step : undefined}
+                first={position === 0}
+                last={position === queue.length - 1}
+                onMenu={onLongPress ? menu : undefined}
+                onRemove={onRemove ? remove : undefined}
+              />
+            );
+          }}
         />
       </PlateContext>
       </DragContext>
@@ -685,33 +846,38 @@ export function QueueList({
         there. Its own slot stays where it was and stays empty; this is what
         the finger is actually carrying.
       */}
-      {from !== null && queue[from] ? (
+      {from !== null && rows[from] && !isDivider(rows[from]) ? (
         <Animated.View
           pointerEvents="none"
+          // A copy of a row the list still has; a screen reader is told of that one.
+          importantForAccessibility="no-hide-descendants"
           style={[
             styles.held,
-            { top: liftedTop, height: QUEUE_ROW_HEIGHT, transform: [{ translateY: offset }] },
+            { top: liftedTop, height: rowHeight, transform: [{ translateY: offset }] },
           ]}>
           <QueueRow
-            track={queue[from]}
+            track={rows[from]}
             index={from}
-            playing={from === currentIndex}
+            playing={queueIndex(from, shownDivider) === currentIndex}
             lifted
             onPress={nothing}
           />
         </Animated.View>
       ) : null}
+      </RowHeightContext>
     </View>
   );
 }
+
+/** The room under the last row, so that it is not hard against whatever ends the list. */
+const LIST_FOOT = 24;
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   /* Left standing so the rows around it still have somewhere to slide to. */
   hidden: { opacity: 0 },
   held: { position: 'absolute', left: 0, right: 0, zIndex: 2, elevation: 2 },
   fill: { flex: 1 },
-  list: { paddingBottom: 24 },
-  slot: { height: QUEUE_ROW_HEIGHT },
+  list: { paddingBottom: LIST_FOOT },
   /*
     A strip of the plate: the colour a raised card comes to on the page, most
     of the way to solid, so that it is plainly in front of what is behind and
@@ -730,7 +896,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: QUEUE_ROW_HEIGHT,
     paddingHorizontal: 16,
   },
   /*

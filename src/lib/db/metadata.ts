@@ -1,5 +1,6 @@
 import { db } from './index.ts';
 import {
+  chooseCoversIn,
   fillCoversIn,
   markCoverSearchedIn,
   placeTracksIn,
@@ -24,12 +25,29 @@ export type TrackMetadata = {
   title: string | null;
   artist: string | null;
   album: string | null;
+  /**
+   * Whoever the record named in `album` is by, or null where nobody said.
+   *
+   * Optional, as the two below are, so that whatever makes a row without
+   * having anything to say of it need not say so; left out is written as
+   * nothing. An edit may hold an empty string, which is somebody saying the
+   * record has no album artist whatever the file claims: see `mergeMetadata`.
+   */
+  albumArtist?: string | null;
   genre: string | null;
   year: number | null;
   artworkUrl: string | null;
   /** Where it sits on its record, when the catalogue said. */
   trackNumber: number | null;
   discNumber: number | null;
+  /**
+   * When somebody took this track's cover off by hand, or null.
+   *
+   * Nothing gives the track a cover from the rest of its record while this is
+   * set: it was taken off on purpose. Saving the row again with a cover chosen
+   * clears it, and so does discarding the edit.
+   */
+  coverRemovedAt?: number | null;
   /**
    * When a cover was searched for and none was found, or null.
    *
@@ -47,11 +65,13 @@ type Row = {
   title: string | null;
   artist: string | null;
   album: string | null;
+  album_artist: string | null;
   genre: string | null;
   year: number | null;
   artwork_url: string | null;
   track_number: number | null;
   disc_number: number | null;
+  cover_removed_at: number | null;
   cover_searched_at: number | null;
 };
 
@@ -63,17 +83,28 @@ function toMetadata(row: Row): TrackMetadata {
     title: row.title,
     artist: row.artist,
     album: row.album,
+    albumArtist: row.album_artist,
     genre: row.genre,
     year: row.year,
     artworkUrl: row.artwork_url,
     trackNumber: row.track_number,
     discNumber: row.disc_number,
+    coverRemovedAt: row.cover_removed_at,
     coverSearchedAt: row.cover_searched_at,
   };
 }
 
 export function saveMetadata(entry: TrackMetadata): void {
   saveMetadataTo(db(), entry, Date.now());
+}
+
+/** Several rows at once, as one transaction: an edit made to many tracks together. */
+export function saveMetadataMany(entries: TrackMetadata[]): void {
+  const database = db();
+  const now = Date.now();
+  database.withTransactionSync(() => {
+    for (const entry of entries) saveMetadataTo(database, entry, now);
+  });
 }
 
 /** One track's row, for a screen that needs to keep fields it does not show. */
@@ -87,10 +118,35 @@ export function readAllMetadata(): Map<string, TrackMetadata> {
   return new Map(rows.map((row) => [row.track_id, toMetadata(row)]));
 }
 
+/**
+ * The cover the app holds for one track: its row's own where that is one of
+ * the app's pictures, the one its record gave it otherwise, and failing both
+ * whatever address the row has. A note that nothing was found has no cover.
+ */
 export function readArtwork(trackId: string): string | null {
-  return db().getFirstSync<{ artwork_url: string | null }>(
-    'SELECT artwork_url FROM track_metadata WHERE track_id = ?', trackId
-  )?.artwork_url ?? null;
+  const row = db().getFirstSync<{ own: string | null; shared: string | null }>(
+    `SELECT (SELECT artwork_url FROM track_metadata WHERE track_id = ? AND status != 'not_found') AS own,
+            (SELECT artwork_url FROM shared_covers WHERE track_id = ?
+               AND NOT EXISTS (SELECT 1 FROM track_metadata
+                               WHERE track_id = ? AND cover_removed_at IS NOT NULL)) AS shared`,
+    trackId,
+    trackId,
+    trackId
+  );
+  if (!row) return null;
+  return row.own?.startsWith('file://') ? row.own : (row.shared ?? row.own ?? null);
+}
+
+/**
+ * Every cover a track was given by the rest of its record, by track: what
+ * `fillCovers` put in `shared_covers` for tracks with no row of their own.
+ */
+export function readSharedCovers(): Map<string, string> {
+  return new Map(
+    db()
+      .getAllSync<{ track_id: string; artwork_url: string }>('SELECT track_id, artwork_url FROM shared_covers')
+      .map((row) => [row.track_id, row.artwork_url])
+  );
 }
 
 /** One cover going onto a run of tracks, with the record it came from. */
@@ -109,9 +165,26 @@ export type CoverFill = { trackIds: string[]; uri: string; album: string | null 
  *
  * One transaction for all of them, because the usual call is one cover going
  * onto every track of a record at once.
+ *
+ * A track nobody has looked up, or nobody could find, takes its cover too,
+ * kept apart from the rows so that having a cover does not make it count as
+ * looked up (see `fillCoversIn`). A track somebody took the cover off takes
+ * nothing.
  */
 export function fillCovers(fills: CoverFill[]): string[] {
   return fillCoversIn(db(), fills);
+}
+
+/**
+ * Puts one cover on every one of [trackIds], over whatever cover each had,
+ * and answers which took it. [keep] are left as they are.
+ *
+ * For a cover somebody chose for a whole record, and for the one a lookup of
+ * the record found, which is asked for in so many words and so outranks the
+ * covers single lookups found track by track.
+ */
+export function chooseCovers(trackIds: string[], uri: string, keep?: ReadonlySet<string>): string[] {
+  return chooseCoversIn(db(), trackIds, uri, Date.now(), keep);
 }
 
 /** Write down that a cover was searched for these tracks and there was none. */
@@ -149,6 +222,30 @@ export function saveGenre(trackId: string, genre: string | null): void {
     artworkUrl: null,
     trackNumber: null,
     discNumber: null,
+  });
+}
+
+/**
+ * The genre of each of [trackIds] made its first tag again, after tags were
+ * added to or taken off many tracks at once.
+ *
+ * Only where a lookup or an edit has made a row already. {@link saveGenre}
+ * makes one where there is none, as it should for one track whose tags
+ * somebody arranged; for a run of tracks given a label it would make every
+ * one of them an edit, and a track that is an edit is never looked up.
+ */
+export function refreshGenres(trackIds: string[]): void {
+  const database = db();
+  database.withTransactionSync(() => {
+    for (const trackId of trackIds) {
+      database.runSync(
+        `UPDATE track_metadata
+         SET genre = (SELECT tag FROM track_tags WHERE track_id = ? ORDER BY position LIMIT 1)
+         WHERE track_id = ? AND status != 'not_found'`,
+        trackId,
+        trackId
+      );
+    }
   });
 }
 
@@ -207,6 +304,15 @@ export function manualTrackIds(): Set<string> {
   return new Set(
     db()
       .getAllSync<{ track_id: string }>(`SELECT track_id FROM track_metadata WHERE status = 'manual'`)
+      .map((row) => row.track_id)
+  );
+}
+
+/** Track ids somebody took the cover off by hand, which nothing is to give one again. */
+export function coverRemovedIds(): Set<string> {
+  return new Set(
+    db()
+      .getAllSync<{ track_id: string }>('SELECT track_id FROM track_metadata WHERE cover_removed_at IS NOT NULL')
       .map((row) => row.track_id)
   );
 }

@@ -104,7 +104,7 @@ export type DiscoverStatus = {
 };
 
 export type DiscoverNotice = {
-  kind: 'kept' | 'excluded' | 'restored' | 'refreshed' | 'keepFailed';
+  kind: 'kept' | 'excluded' | 'restored' | 'refreshed' | 'keepFailed' | 'wrongFile';
   text: string;
   /** The song it is about, where it is about one. */
   id?: string;
@@ -327,6 +327,9 @@ function noticeOf(s: State, t: Strings): DiscoverNotice | null {
       break;
     case 'keepFailed':
       text = said.keepFailed(notice.title);
+      break;
+    case 'wrongFile':
+      text = said.wrongFile(notice.title ?? '');
       break;
     case 'excluded':
       text = notice.artist ? said.excludedArtist(notice.artist) : said.excluded(notice.title);

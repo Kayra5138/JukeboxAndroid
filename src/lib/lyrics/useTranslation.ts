@@ -76,9 +76,12 @@ export function useTranslation(
   /*
     The lines are rebuilt on every render by whoever parsed them, so the array
     itself is a new object each time and cannot be a dependency. Their content
-    is what matters, and it only changes when the track or the lyrics do.
+    is what matters, and that is what is compared: the words themselves, not
+    only how many there are. A track's words can change under it — LRCLIB's
+    replaced by a .lrc found beside the song — and two versions of a song are
+    as likely as not the same number of lines.
   */
-  const signature = lines.length;
+  const signature = lines.join('\n');
 
   useEffect(() => {
     if (!trackId || !enabled || lines.length === 0) {

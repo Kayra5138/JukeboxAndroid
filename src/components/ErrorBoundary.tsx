@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
+import { noteError } from '../lib/support/errorLogStore';
 import { makeStyles, outlined, page, usePressed } from '../lib/theme/index';
 
 /**
@@ -29,6 +30,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('A screen could not be drawn', error, info.componentStack);
+    // For the report screen, scrubbed: see `support/errorLog.ts`.
+    noteError('render', error);
   }
 
   render() {

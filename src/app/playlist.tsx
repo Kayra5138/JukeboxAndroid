@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,13 +12,16 @@ import {
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AlbumTools } from '../components/AlbumTools';
 import { LIST_COVER_SIZE, ListHeading } from '../components/ListHeading';
 import { NowPlayingBar } from '../components/NowPlayingBar';
+import { useUnderBars } from '../components/UnderBars';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { QueueList } from '../components/QueueList';
 import { TextPrompt } from '../components/TextPrompt';
 import { TrackPicker } from '../components/TrackPicker';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
+import { useListFiles } from '../components/useListFiles';
 import { AUTO_LISTS, autoListTrackIds, type AutoListId } from '../lib/db/autoLists';
 import { playCounts } from '../lib/db/history';
 import {
@@ -34,7 +38,7 @@ import {
 import { allTags, tagCounts } from '../lib/db/tags';
 import { creditReader } from '../lib/db/credits';
 import { useT } from '../lib/i18n/index';
-import { albumsOf, type Album } from '../lib/media/albums';
+import { albumsOf, findAlbum, type Album } from '../lib/media/albums';
 import { artistsOf } from '../lib/media/artists';
 import { foldersOf } from '../lib/media/folders';
 import JukeboxAudio from '../../modules/jukebox-audio';
@@ -47,6 +51,7 @@ import { suggestForPlaylist, type Candidate, type Suggestion } from '../lib/play
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
+import { useAnnounce } from '../lib/ui/announce';
 
 /** How many suggestions are worth showing before the section becomes a list. */
 const SUGGESTIONS = 8;
@@ -78,13 +83,26 @@ type Loaded = {
    */
   albums: Album[];
   suggestions: { track: EnrichedTrack; reasons: string[] }[];
+  /** The record, when the list is one; what is done to it as a whole is done to this. */
+  record?: Album | null;
+  /**
+   * The tracks one cover is found among, for a record or an artist: see
+   * `useAlbumArtwork`. Absent for a list, which shows its first four.
+   */
+  sleeve?: EnrichedTrack[] | null;
 };
 
 export default function PlaylistScreen() {
-  const { id, auto, album, artist, folder } = useLocalSearchParams<{
+  const { id, auto, album, track: from, artist, folder } = useLocalSearchParams<{
     id?: string;
     auto?: AutoListId;
+    /** A record's key, as `media/albums.ts` makes them. */
     album?: string;
+    /**
+     * The track a record was opened from, which says which of two records of
+     * one name is meant when the key alone cannot (see `findAlbum`).
+     */
+    track?: string;
     /** An artist's key, as `media/artists.ts` makes them. */
     artist?: string;
     /** A folder's path, as `media/folders.ts` keys them. */
@@ -93,12 +111,14 @@ export default function PlaylistScreen() {
   const router = useRouter();
   const downloadRevision = useDownloadLibraryRevision();
   const insets = useSafeAreaInsets();
+  // In a theme of glass the bar of what is playing is laid over the foot of the list, which runs on under it.
+  const under = useUnderBars({ player: true });
   const landscape = useLandscape();
   const t = useT();
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
-  const { playQueue, addToQueue } = usePlayerActions();
+  const { playQueue } = usePlayerActions();
 
   const listId = id ? Number(id) : null;
   const [data, setData] = useState<Loaded | null>(null);
@@ -107,6 +127,8 @@ export default function PlaylistScreen() {
   const [choosingCover, setChoosingCover] = useState(false);
   const [adding, setAdding] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
+  useAnnounce(note);
   /** Why the last reading of the list did not finish, when it did not. */
   const [failed, setFailed] = useState<string | null>(null);
   /** The whole library, kept for the picker rather than scanned again for it. */
@@ -144,16 +166,18 @@ export default function PlaylistScreen() {
       the order is the record's, not a choice to be edited.
     */
     if (album) {
-      const found = albumsOf(library).find((candidate) => candidate.key === album);
+      const found = findAlbum(albumsOf(library), album, from);
       setData({
         name: found?.name ?? t.lists.list.album,
         tag: null,
         hint: found ? [found.artist, found.year].filter(Boolean).join(' · ') || null : null,
-        cover: found?.tracks[0] ?? null,
+        cover: null,
         picture: null,
         tracks: found?.tracks ?? [],
         albums: [],
         suggestions: [],
+        record: found,
+        sleeve: found?.tracks ?? null,
       });
       return;
     }
@@ -174,11 +198,13 @@ export default function PlaylistScreen() {
         name: found?.name ?? t.lists.list.artist,
         tag: null,
         hint: null,
-        cover: found?.cover ?? null,
+        cover: null,
         picture: null,
         tracks: found?.tracks ?? [],
         albums: found?.albums ?? [],
         suggestions: [],
+        // A record's sleeve where they have one, found among its tracks.
+        sleeve: found?.sleeve ?? null,
       });
       return;
     }
@@ -274,7 +300,7 @@ export default function PlaylistScreen() {
       // Nothing to suggest for a list that fills itself.
       suggestions: tag ? [] : suggestions(ordered, library),
     });
-  }, [album, artist, auto, folder, listId, t]);
+  }, [album, artist, auto, folder, from, listId, t]);
 
   /*
     Reading the list can fail: the media store can refuse, and the lists come
@@ -319,6 +345,33 @@ export default function PlaylistScreen() {
     onAdded: setNote,
   });
 
+  /*
+    Writing the list out as a playlist file. Its sheets are windows of their
+    own; nothing here changes, so there is nothing to read again after.
+  */
+  const files = useListFiles();
+
+  /*
+    The back gesture closes whichever sheet of this screen's own is open,
+    rather than leaving the screen from under it. It is the way out that a
+    screen reader's user reaches for first, and left to the navigator it took
+    them back to the lists with the sheet they were in never closed.
+
+    Registered after the menu's, so a list picker the menu opened is the
+    first thing back closes.
+  */
+  const sheetOpen = choosingCover || confirmingDelete || adding;
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
+      setChoosingCover(false);
+      setConfirmingDelete(false);
+      setAdding(false);
+      return true;
+    });
+    return () => listener.remove();
+  }, [sheetOpen]);
+
   const tracks = data?.tracks ?? [];
 
   const play = useCallback(
@@ -347,10 +400,10 @@ export default function PlaylistScreen() {
     return (
       <View style={[styles.screen, styles.centred, styles.failed]}>
         <Text style={styles.failedBody}>{failed}</Text>
-        <Pressable android_ripple={pressed} style={styles.failedButton} onPress={() => void load()}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.failedButton} onPress={() => void load()}>
           <Text style={styles.failedLabel}>{t.common.tryAgain}</Text>
         </Pressable>
-        <Pressable onPress={() => router.back()}>
+        <Pressable accessibilityRole="button" onPress={() => router.back()}>
           <Text style={styles.backLabel}>{t.library.back}</Text>
         </Pressable>
       </View>
@@ -373,6 +426,19 @@ export default function PlaylistScreen() {
   */
   const stored = listId != null;
   const editable = stored && data.tag == null;
+  /*
+    What can be written out as a playlist: a list somebody made, and one
+    made from listening, as it stands today. A record, an artist or a folder
+    is already its files, in an order the files themselves give.
+  */
+  const exportable =
+    !files.available
+      ? null
+      : listId != null
+        ? ({ kind: 'list', id: listId } as const)
+        : auto && AUTO_LISTS.includes(auto)
+          ? ({ kind: 'auto', id: auto, name: data.name } as const)
+          : null;
 
   return (
     <View style={styles.screen}>
@@ -452,11 +518,15 @@ export default function PlaylistScreen() {
                 cover={
                   <Pressable
                     disabled={!stored || tracks.length === 0}
+                    // A picture and nothing else, so it is named for what a press does.
+                    accessibilityRole="button"
+                    accessibilityLabel={t.lists.list.cover}
                     onPress={() => setChoosingCover(true)}>
                     <PlaylistCover
                       tracks={tracks}
                       chosen={data.cover}
                       picture={data.picture}
+                      sleeve={data.sleeve}
                       size={LIST_COVER_SIZE}
                     />
                   </Pressable>
@@ -466,45 +536,51 @@ export default function PlaylistScreen() {
                 hint={data.hint}
                 note={
                   note ? (
-                    <Pressable onPress={() => setNote(null)}>
+                    <Pressable accessibilityRole="button" onPress={() => setNote(null)}>
                       <Text style={styles.note}>{note}</Text>
                     </Pressable>
                   ) : null
                 }
                 onPlay={() => play(0)}
                 onShuffle={shuffle}>
+                {/* Adding the whole of it to the queue is the heading's third button now. */}
                 <View style={styles.links}>
-                  <Pressable
-                    disabled={tracks.length === 0}
-                    onPress={() => tracks.forEach((track) => void addToQueue(track))}>
-                    <Text style={[styles.link, tracks.length === 0 && styles.actionOff]}>
-                      {t.common.addToQueue}
-                    </Text>
-                  </Pressable>
                   {album ? (
                     <Pressable
-                      onPress={() => router.push({ pathname: '/album-rest', params: { album } })}>
+                      style={styles.linkHit}
+                      accessibilityRole="button"
+                      onPress={() =>
+                        router.push({ pathname: '/album-rest', params: { album: data.record?.key ?? album } })
+                      }>
                       <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
+                    </Pressable>
+                  ) : null}
+                  {data.record ? <AlbumTools album={data.record} /> : null}
+                  {exportable ? (
+                    <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => files.exportList(exportable)}>
+                      <Text style={styles.link}>{t.lists.files.export}</Text>
                     </Pressable>
                   ) : null}
                   {stored ? (
                     <>
                       {editable ? (
-                        <Pressable onPress={() => setAdding(true)}>
+                        <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setAdding(true)}>
                           <Text style={styles.link}>{t.lists.list.addTracks}</Text>
                         </Pressable>
                       ) : null}
-                      <Pressable onPress={() => setRenaming(true)}>
+                      <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setRenaming(true)}>
                         <Text style={styles.link}>{t.common.rename}</Text>
                       </Pressable>
                       <Pressable
+                        style={styles.linkHit}
+                        accessibilityRole="button"
                         disabled={tracks.length === 0}
                         onPress={() => setChoosingCover(true)}>
                         <Text style={[styles.link, tracks.length === 0 && styles.actionOff]}>
                           {t.lists.list.cover}
                         </Text>
                       </Pressable>
-                      <Pressable onPress={() => setConfirmingDelete(true)}>
+                      <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setConfirmingDelete(true)}>
                         <Text style={styles.destructive}>{t.lists.list.deleteList}</Text>
                       </Pressable>
                     </>
@@ -526,7 +602,7 @@ export default function PlaylistScreen() {
                 */}
                 {data.albums.length > 0 ? (
                   <>
-                    <Text style={styles.section}>{t.format.upper(t.lists.list.albums)}</Text>
+                    <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.albums)}</Text>
                     <View style={styles.records}>
                       {data.albums.map((entry) => (
                         <Pressable
@@ -543,7 +619,8 @@ export default function PlaylistScreen() {
                           }>
                           <PlaylistCover
                             tracks={entry.tracks}
-                            chosen={entry.tracks[0] ?? null}
+                            chosen={null}
+                            sleeve={entry.tracks}
                             size={RECORD_SIZE}
                           />
                           <Text style={styles.recordName} numberOfLines={2}>
@@ -555,7 +632,7 @@ export default function PlaylistScreen() {
                     </View>
                     {/* Only needed because something now stands between the
                         buttons and the rows they play. */}
-                    <Text style={styles.section}>{t.format.upper(t.lists.list.tracks)}</Text>
+                    <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.tracks)}</Text>
                   </>
                 ) : null}
               </ListHeading>
@@ -578,13 +655,14 @@ export default function PlaylistScreen() {
             </View>
           }
           footer={
-            <View style={{ paddingBottom: insets.bottom + 32 }}>
+            <View style={{ paddingBottom: insets.bottom + 32 + under.bottom }}>
               {data.suggestions.length > 0 ? (
                 <View style={styles.suggested}>
-                  <Text style={styles.section}>{t.format.upper(t.lists.list.mightBelong)}</Text>
+                  <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.mightBelong)}</Text>
                   <Text style={styles.hint}>{t.lists.list.mightBelongHint}</Text>
                   {data.suggestions.map((entry) => (
                     <Pressable
+                      accessibilityRole="button"
                       android_ripple={pressed}
                       key={entry.track.id}
                       style={styles.suggestion}
@@ -618,10 +696,18 @@ export default function PlaylistScreen() {
 
       {choosingCover ? (
         <View style={styles.layer}>
-          <Pressable style={styles.backdrop} onPress={() => setChoosingCover(false)} />
+          {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
+              of its own, touching outside it is one of the ways out, and it has to be findable. */}
+          <Pressable
+            style={styles.backdrop}
+            accessibilityRole="button"
+            accessibilityLabel={t.common.close}
+            onPress={() => setChoosingCover(false)}
+          />
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
             <Text style={styles.sheetHeading}>{t.format.upper(t.lists.list.cover)}</Text>
             <Pressable
+              accessibilityRole="button"
               android_ripple={pressed}
               style={styles.coverChoice}
               onPress={() => {
@@ -644,6 +730,7 @@ export default function PlaylistScreen() {
               <Text style={styles.link}>{t.lists.list.choosePicture}</Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
               android_ripple={pressed}
               style={styles.coverChoice}
               onPress={() => {
@@ -656,6 +743,7 @@ export default function PlaylistScreen() {
             <ScrollView style={styles.coverScroll}>
               {tracks.map((track) => (
                 <Pressable
+                  accessibilityRole="button"
                   android_ripple={pressed}
                   key={track.id}
                   style={styles.coverChoice}
@@ -702,15 +790,17 @@ export default function PlaylistScreen() {
 
       {confirmingDelete ? (
         <View style={StyleSheet.absoluteFill}>
-          <Pressable style={styles.backdrop} onPress={() => setConfirmingDelete(false)} />
+          {/* Not a stop for a screen reader: Cancel is right below it, and says so. */}
+          <Pressable style={styles.backdrop} accessible={false} onPress={() => setConfirmingDelete(false)} />
           <View style={styles.confirm}>
             <Text style={styles.confirmHeading}>{t.lists.list.deleteQuestion(data.name)}</Text>
             <Text style={styles.hint}>{t.lists.list.deleteHint}</Text>
             <View style={styles.confirmActions}>
-              <Pressable android_ripple={pressed} style={styles.confirmButton} onPress={() => setConfirmingDelete(false)}>
+              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.confirmButton} onPress={() => setConfirmingDelete(false)}>
                 <Text style={styles.link}>{t.common.cancel}</Text>
               </Pressable>
               <Pressable
+                accessibilityRole="button"
                 android_ripple={pressed}
                 style={styles.confirmButton}
                 onPress={() => {
@@ -725,6 +815,7 @@ export default function PlaylistScreen() {
       ) : null}
 
       {menu.element}
+      {files.element}
     </View>
   );
 }
@@ -791,7 +882,13 @@ const useStyles = makeStyles((c) => StyleSheet.create({
 
   actionOff: { opacity: 0.35 },
 
-  links: { flexDirection: 'row', flexWrap: 'wrap', gap: 20, paddingTop: 16 },
+  /*
+    Each a finger's height, though drawn as a line of words: as words alone a
+    press had sixteen points to land on. The room above them was sixteen and
+    is now inside the first row of them, so they sit where they did.
+  */
+  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
+  linkHit: { minHeight: 48, justifyContent: 'center' },
   link: { color: c.accent, fontSize: 13.5 },
   destructive: { color: c.danger, fontSize: 13.5 },
 

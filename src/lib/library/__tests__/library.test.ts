@@ -9,6 +9,7 @@ import type { TrackMetadata } from '../../db/metadata.ts';
 import type { Tag } from '../../db/tags.ts';
 import type { Track } from '../../types.ts';
 import { CACHE_VERSION, decodeLibrary, encodeLibrary } from '../cache.ts';
+import { hidingRule, type Hiding } from '../hiding.ts';
 import { watchOverlay } from '../overlay.ts';
 import { keepIdentity, keepMap, sameTrack } from '../reconcile.ts';
 import { createLibraryStore, type LibraryDeps, type LibraryState } from '../store.ts';
@@ -17,9 +18,9 @@ import { createLibraryStore, type LibraryDeps, type LibraryState } from '../stor
 const reading = (tracks: Track[]): Track[] => tracks.map((entry) => ({ ...entry }));
 
 const THREE = [
-  track({ id: '1', title: 'One', artist: 'A', size: 100 }),
-  track({ id: '2', title: 'Two', artist: 'A', size: 200 }),
-  track({ id: '3', title: 'Three', artist: 'B', size: 300 }),
+  track({ id: '1', title: 'One', artist: 'A', size: 100, albumArtist: null }),
+  track({ id: '2', title: 'Two', artist: 'A', size: 200, albumArtist: null }),
+  track({ id: '3', title: 'Three', artist: 'B', size: 300, albumArtist: null }),
 ];
 
 describe('keeping the tracks that have not changed', () => {
@@ -104,8 +105,8 @@ describe('keeping what is read beside the library', () => {
 describe('the library as it is written down', () => {
   it('comes back as it went in', () => {
     const tracks = [
-      track({ id: '7', title: 'Şarkı "bir"', artist: null, album: 'Albüm', trackNumber: 3, folder: 'Music/x d/', filename: 'a.mp3', addedAt: 1_700_000_000_000, size: 4_123_456 }),
-      track({ id: '8', size: null }),
+      track({ id: '7', title: 'Şarkı "bir"', artist: null, album: 'Albüm', albumArtist: 'Sanatçı', trackNumber: 3, folder: 'Music/x d/', filename: 'a.mp3', addedAt: 1_700_000_000_000, size: 4_123_456 }),
+      track({ id: '8', size: null, albumArtist: null }),
     ];
     assert.deepEqual(decodeLibrary(encodeLibrary('Music', tracks), 'Music'), tracks);
   });
@@ -113,6 +114,11 @@ describe('the library as it is written down', () => {
   it('reads a track written without its size as one whose size is not known', () => {
     const [back] = decodeLibrary(encodeLibrary('Music', [track({ id: '7' })]), 'Music') ?? [];
     assert.equal(back?.size, null);
+  });
+
+  it('reads a track the native side sent no album artist for as one whose record names nobody', () => {
+    const [back] = decodeLibrary(encodeLibrary('Music', [track({ id: '7' })]), 'Music') ?? [];
+    assert.equal(back?.albumArtist, null);
   });
 
   it('is nothing when there is nothing, or nothing that can be read', () => {
@@ -244,6 +250,8 @@ function world(start: { tracks?: Track[]; kept?: string | null; root?: string } 
     keeps: 0,
     /** A scan waits on this when it is set, so a test can act while one is under way. */
     gate: null as Promise<void> | null,
+    /** What is left out of the library, as the settings would make it. */
+    hiding: null as Hiding | null,
   };
   const deps: LibraryDeps = {
     permitted: async () => w.permitted,
@@ -259,6 +267,7 @@ function world(start: { tracks?: Track[]; kept?: string | null; root?: string } 
       return reading(w.tracks);
     },
     stamp: async () => w.stamp,
+    hiding: () => w.hiding,
     merge: (tracks) => {
       w.merges += 1;
       return mergeMetadata(tracks, { readAllMetadata: () => w.metadata, allTags: () => w.tags });
@@ -559,6 +568,87 @@ describe('the one library', () => {
     // found the stamp as it was, and so read nothing.
     assert.equal(w.scans, 1);
     assert.equal(store.state().kind, 'library');
+  });
+});
+
+describe('what the library leaves out', () => {
+  const MIXED = [
+    track({ id: '1', title: 'One', folder: 'Music/Albums/', durationSec: 240 }),
+    track({ id: '2', title: 'Note', folder: 'Music/WhatsApp/Voice Notes/', durationSec: 95 }),
+    track({ id: '3', title: 'Ping', folder: 'Music/Rings/', durationSec: 4 }),
+  ];
+
+  it('is left out of what is shown, without reading the device again when it changes', async () => {
+    const { w, store, tracks } = world({ tracks: reading(MIXED) });
+    await store.refresh();
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1', '2', '3']);
+    w.hiding = hidingRule({ root: 'Music', leftOut: ['Music/WhatsApp'], shortest: 10 });
+    await store.refresh();
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1']);
+    assert.equal(w.scans, 1);
+  });
+
+  it('comes back as it was, the same tracks, when it is let in again', async () => {
+    const { w, store, tracks } = world({ tracks: reading(MIXED) });
+    await store.refresh();
+    const first = tracks();
+    w.hiding = hidingRule({ root: 'Music', leftOut: [], shortest: 30 });
+    await store.refresh();
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1', '2']);
+    w.hiding = null;
+    await store.refresh();
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1', '2', '3']);
+    assert.equal(tracks()[0], first[0]);
+    assert.equal(w.scans, 1);
+  });
+
+  it('tells nobody when a look finds the same rule, or a new one that leaves out nothing there', async () => {
+    const { w, store, seen } = world({ tracks: reading(MIXED) });
+    w.hiding = hidingRule({ root: 'Music', leftOut: ['Music/Rings'], shortest: 0 });
+    await store.refresh();
+    const merges = w.merges;
+    seen.length = 0;
+    await store.refresh();
+    w.hiding = hidingRule({ root: 'Music', leftOut: ['Music/Rings', 'Music/Elsewhere'], shortest: 0 });
+    await store.refresh();
+    assert.equal(seen.length, 0);
+    assert.equal(w.merges, merges);
+  });
+
+  it('is left out of what was written down too, while that is all there is to show', async () => {
+    const kept = encodeLibrary('Music', MIXED);
+    const { w, store, tracks } = world({ kept, tracks: reading(MIXED) });
+    w.hiding = hidingRule({ root: 'Music', leftOut: ['Music/WhatsApp'], shortest: 10 });
+    let open!: () => void;
+    w.gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    const looking = store.refresh();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1']);
+    w.gate = null;
+    open();
+    await looking;
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1']);
+  });
+
+  it('is never left out of what is written down, which is the whole of the folder', async () => {
+    const { w, store } = world({ tracks: reading(MIXED) });
+    w.hiding = hidingRule({ root: 'Music', leftOut: ['Music/WhatsApp'], shortest: 10 });
+    await store.refresh();
+    assert.deepEqual(decodeLibrary(w.kept, 'Music')?.map((entry) => entry.id), ['1', '2', '3']);
+  });
+
+  it('leaves nothing out where the rule cannot be asked', async () => {
+    const { w, store, tracks } = world({ tracks: reading(MIXED) });
+    w.hiding = {
+      key: 'broken',
+      shows: () => {
+        throw new Error('no');
+      },
+    };
+    await store.refresh();
+    assert.deepEqual(tracks().map((entry) => entry.id), ['1', '2', '3']);
   });
 });
 

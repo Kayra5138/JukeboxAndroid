@@ -18,11 +18,11 @@ export const settings: Strings['settings'] = {
   categories: {
     look: 'Tema, albümlerin raf görünümü, hareket ve kütüphanenin sunduğu görünümler.',
     sound: 'Ekolayzer ve efektler, ses düzeyini eşitleme, çapraz geçiş, hız ve perde.',
-    player: 'Atlama düğmelerinin süresi ve şarkı sözlerinin çevrildiği dil.',
+    player: 'Atlama düğmelerinin süresi, sıra bitince ne çalacağı ve şarkı sözlerinin çevrildiği dil.',
     library: 'Müziğinin bulunduğu klasör, etiketler ve kapaklar, aynı şarkı olabilecek dosyalar.',
     waiting: (count) => `${format.number(count)} karar bekliyor`,
     downloads: 'İndirme kuyruğu ve yüzen düğmesi, Keşfet ve YouTube indiricisini güncel tutma.',
-    data: 'Her şeyi yedekle ya da bir yedeği içe aktar; ListenBrainz (deneysel).',
+    data: 'Her şeyi yedekle ya da bir yedeği içe aktar; yeni sürüm denetimi ve ListenBrainz (deneysel).',
   },
 
   language: {
@@ -82,6 +82,32 @@ export const settings: Strings['settings'] = {
       'Telefonu yan tutarken liste okumak yerine kapakların arasında gezin. Açmak için öndeki kapağa dokun.',
   },
   heart: { title: 'Kalp', note: 'Oynatıcıda bir kalp. Hiçbir şey kaydetmez.' },
+  listButton: {
+    title: 'Listeye ekle düğmesi',
+    note:
+      'Oynatıcıda, çalan şarkıyı menüsüne girmeden listelerinden birine ekleyen bir düğme.',
+  },
+  autoplay: {
+    title: 'Benzer şarkılarla devam et',
+    note: 'Sıra bitmek üzereyken, dinlediklerine benzeyen şarkılar sıranın sonuna eklenir.',
+    sheetNote: 'Şarkılar sıra bitmeden birkaç şarkı önce eklenir; ekran kilitli olsa da sıradaki diğer şarkılar gibi çalar. Tekrarlama açıkken hiç eklenmez.',
+    off: {
+      label: 'Kapalı',
+      note: 'Hiçbir şey eklenmez; sıra bitince müzik durur.',
+    },
+    library: {
+      label: 'Kütüphanenden',
+      note: 'Etiketlere, sanatçılara ve birlikte dinlediklerine göre seçilir. İnternet gerekmez.',
+    },
+    fresh: {
+      label: 'Yeni şarkılar',
+      note: 'Henüz sende olmayan şarkıları Keşfet bulur. Keşfet gibi interneti ve YouTube indirmesini kullanır, onun Wi-Fi ayarına uyar.',
+    },
+    mixed: {
+      label: 'Karışık',
+      note: 'Kütüphanenden iki şarkı, ardından bir yeni şarkı. Yeniler Keşfet gibi interneti ve YouTube indirmesini kullanır, onun Wi-Fi ayarına uyar.',
+    },
+  },
   downloads: {
     note: 'İndirilmekte olanlar, sırada bekleyenler ve tamamlananlar.',
     button: {
@@ -98,6 +124,16 @@ export const settings: Strings['settings'] = {
     title: 'Animasyonları azalt',
     note:
       'Kare atlayan telefonlar için. Oynatıcı yükselerek açılmak yerine doğrudan belirir, oyun da can kazanıldığında ya da kaybedildiğinde ekranı aydınlatmaz. Tuşlar yine düşer; o süsleme değil, oyunun kendisi.',
+  },
+  moreButton: {
+    title: 'Satırlarda üç nokta',
+    note:
+      'Her şarkı satırının sonunda durur ve basılı tutunca açılan menünün aynısını açar. Kapalıyken de satıra basılı tutabilirsin.',
+  },
+  tabs: {
+    title: 'Sekmeler',
+    searchNote: 'Keşfet ve YouTube indirmeleri bu sekmede; sekme kapanınca onlar da görünmez.',
+    aside: 'Kütüphane ve Ayarlar her zaman görünür.',
   },
 
   views: {

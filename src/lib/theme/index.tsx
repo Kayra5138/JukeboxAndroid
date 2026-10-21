@@ -308,8 +308,15 @@ export function ThemeScope({
  * the field again at every change of track, under the finger typing in it.
  */
 export function hintKey(c: Palette, hint: string): string {
-  return `${hint}|${c.text}|${c.textDisabled}|${c.surface}`;
+  return `${hint}|${c.text}|${c.textFaint}|${c.surface}`;
 }
+
+/*
+  Hints are written in `textFaint`, the faintest colour meant to be read and
+  so held to 4.5:1 by the tests, and not in `textDisabled`, which is for what
+  cannot be pressed and came to some two and a half to one on a light page.
+  A hint is the only word of instruction an empty box has.
+*/
 
 /**
  * A file's styles, made from the colours of whatever theme is in use.

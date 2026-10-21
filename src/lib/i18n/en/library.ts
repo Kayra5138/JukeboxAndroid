@@ -2,6 +2,8 @@ import { common } from './common.ts';
 import { format } from './format.ts';
 import { oneOrMany } from '../write.ts';
 
+const filesCounted = (count: number) => `${format.number(count)} ${oneOrMany(count, 'file', 'files')}`;
+
 /** The library tab and what it is made of: rows, albums, artists, folders. */
 export const library = {
   /** The four ways of looking at it, as its switch and Settings name them. */
@@ -70,6 +72,10 @@ export const library = {
 
     /** The two panels a row uncovers when it is pulled aside. */
     swipePlayNext: 'Play next',
+    /** Short, unlike the menu's: the panel is a pull wide, and a long line is cut off before it is read. */
+    swipeQueue: 'Add to queue',
+    /** Said once the whole of a list or album has been put at the end of the queue. */
+    queuedAll: (count: number) => `${common.tracks(count)} added to the queue`,
 
     needsAccess: 'Jukebox needs access to the audio on this device.',
     nothingIn: (folder: string) => `Nothing in ${folder}.`,
@@ -95,6 +101,8 @@ export const library = {
   rack: {
     open: (album: string) => `Open ${album}`,
     openHint: 'Shows the tracks on the album',
+    /** What pressing a record beside the one in front does, for a screen reader. */
+    bringForward: 'Brings this record to the front',
   },
 
   /** `AlbumMenu`: what a held album offers. */
@@ -104,6 +112,33 @@ export const library = {
       label: 'Find the rest of this album',
       hint: 'The tracks on it that you do not have yet',
     },
+    lookUp: {
+      label: 'Look up this album',
+      hint: 'Its details and cover, asked about the album as a whole',
+    },
+    cover: {
+      label: 'Choose album cover',
+      hint: 'A picture from your gallery, for every track on it',
+    },
+  },
+
+  /** What the album's own page says about looking it up and giving it a cover. */
+  albumTools: {
+    lookingUp: (done: number, total: number) =>
+      `Looking this album up… ${format.number(done)} of ${format.number(total)}`,
+    stop: 'Stop looking up',
+    /** Once it is over: how many tracks were found, and how many were given a cover. */
+    lookedUp: (found: number, covers: number) =>
+      found === 0 && covers === 0
+        ? 'Nothing new was found for this album.'
+        : covers === 0
+          ? `Found details for ${common.tracks(found)}.`
+          : found === 0
+            ? `Found a cover for ${common.tracks(covers)}.`
+            : `Found details for ${common.tracks(found)} and a cover for ${common.tracks(covers)}.`,
+    offline: 'Nothing answered. Check the connection and try again.',
+    failed: 'The lookup stopped unexpectedly.',
+    coverChosen: (count: number) => `The cover is on ${common.tracks(count)} now.`,
   },
 
   /**
@@ -199,5 +234,157 @@ export const library = {
     note: 'Jukebox plays everything below the folder you pick, including subfolders. Choosing a subfolder is the way to leave ringtones and game audio out.',
     /** The row for the whole of the music folder; [path] is that folder. */
     everything: (path: string) => `${path}  (everything)`,
+  },
+
+  /**
+   * The screen that leaves folders out of the library, opened from Settings →
+   * Library, and that row of Settings.
+   */
+  leftOut: {
+    /** The screen's title in the bar, and the row's name on Settings → Library. One short line. */
+    title: 'Folders left out',
+    /** Under the row's name on Settings → Library, while nothing is left out. Room for two lines. */
+    none: 'None. Switch off folders of voice notes, recordings or ringtones.',
+    /** The same while some are; [count] is never nought. One line. */
+    some: (count: number) =>
+      `${format.number(count)} ${oneOrMany(count, 'folder', 'folders')} left out of the library`,
+    /** At the top of the screen, as much room as it needs. */
+    note: 'A folder switched off is left out of the library, with every folder inside it. Nothing is deleted: its plays, tags and places in your lists are kept, and come back when it is switched on again.',
+    /** Under a folder whose own switch is on but which is inside one switched off. One short line. */
+    within: 'Left out with the folder it is in',
+    /**
+     * What a screen reader says for a folder's switch, in place of reading the
+     * row: its path from the library folder, and how many tracks it holds.
+     */
+    spoken: (path: string, count: number) =>
+      `${path}, ${format.number(count)} ${oneOrMany(count, 'track', 'tracks')}`,
+    /** And what switching it does, said after. */
+    hint: 'On, the folder is in the library; off, it is left out',
+    /** In place of the list, where the library folder holds no folders with music in them. */
+    empty: (root: string) => `There are no folders with music in them inside ${root}.`,
+  },
+
+  /** The choice on Settings → Library of leaving out files too short to be music. */
+  shortFiles: {
+    /** The row's name. One short line, with the choice beside it. */
+    title: 'Hide short files',
+    /** Under the row's name, and under the list of choices. Room for two lines. */
+    note: 'Leaves out voice notes, ringtones and notification sounds by their length. Nothing is deleted.',
+    /**
+     * The row's value, beside its name: short. [seconds] is 10, 30 or 60;
+     * nought is said with `common.off` instead.
+     */
+    under: (seconds: number) => `Under ${format.number(seconds)} s`,
+    /** The same as a choice in the list the row opens, which has the room to say it in full. */
+    shorterThan: (seconds: number) => `Shorter than ${format.number(seconds)} seconds`,
+  },
+
+  /**
+   * Songs the library holds more than once: the Copies screen, its row on
+   * Settings → Library, and the quiet line on the Library tab.
+   */
+  copies: {
+    /** The screen's title in the bar, and the row's name on Settings → Library. One short line. */
+    title: 'Copies of the same song',
+    /**
+     * Under the row's name on Settings → Library, and the line on the Library
+     * tab. [count] is how many songs, never nought. One line.
+     */
+    some: (count: number) =>
+      oneOrMany(count, '1 song is in your library more than once', `${format.number(count)} songs are in your library more than once`),
+    /** Beside that line on the Library tab: the word that opens the screen. */
+    review: 'Review',
+    /** For a screen reader, what pressing the line does. */
+    reviewHint: 'Opens the copies, to choose which to keep',
+    /** At the top of the screen, as much room as it needs. */
+    note: 'These files look like one recording saved more than once: the same name, or the same artist and title, and the same length to within two seconds. One copy of each is kept. Before the others are deleted, their listens, tags, lyrics and places in lists are moved to it.',
+    empty: 'No song is in your library more than once.',
+    /** The button over the list; [count] is how many songs. */
+    cleanAll: (count: number) => `Clean up all ${format.number(count)}`,
+    /** Asked in the screen before that: [files] is how many are deleted, [songs] how many keep one copy. */
+    confirmAll: (files: number, songs: number) =>
+      `Delete ${filesCounted(files)}? One copy of each of the ${format.number(songs)} ${oneOrMany(songs, 'song', 'songs')} is kept, and every deleted file’s listens, tags, lyrics and places in lists are moved to it first. Android asks once more before anything is deleted.`,
+    /** The button that says yes to that. */
+    confirm: (files: number) => `Delete ${filesCounted(files)}`,
+    /** Under each song's copies; [count] is how many go. */
+    deleteOthers: (count: number) =>
+      oneOrMany(count, 'Delete the other copy', `Delete the other ${format.number(count)} copies`),
+    /** Beside it: the files are different songs, and are not shown here again. */
+    different: 'These are different',
+    /** For a screen reader, the copies of one song as a choice. */
+    choose: 'Which copy to keep',
+    /** For a screen reader, what choosing a copy does. */
+    keepHint: 'Keeps this copy and deletes the others',
+    /** Over each copy: the one kept and the ones that go. One word each, shown in capitals. */
+    keeps: 'Keep',
+    goes: 'Delete',
+    /** Under the copies: why the one kept was suggested. */
+    why: {
+      listens: 'Suggested because it has the most listens.',
+      described: 'Suggested because it has details or a cover.',
+      folder: 'Suggested because it is in the library folder.',
+      larger: 'Suggested because it is the larger file.',
+      older: 'Suggested because it is the older file.',
+      alike: 'The copies are alike; any one will do.',
+    },
+    /** The same, once another copy has been chosen. */
+    yourChoice: 'Kept as you chose.',
+    /** What a copy has to its name, in as few words as say it. */
+    holds: (copy: { listens: number; described: boolean; cover: boolean; outside: boolean }) => {
+      const parts = [copy.listens > 0 ? oneOrMany(copy.listens, '1 listen', `${format.number(copy.listens)} listens`) : 'no listens'];
+      if (copy.described) parts.push('details');
+      if (copy.cover) parts.push('cover');
+      if (copy.outside) parts.push('outside the library folder');
+      return parts.join(' · ');
+    },
+    deleted: (count: number) => oneOrMany(count, '1 file deleted.', `${format.number(count)} files deleted.`),
+    notDeleted: 'The files were not deleted. Their listens and the rest are with the copy kept now.',
+    failed: (error: string) => `Some history could not be moved, and those files were left alone. ${error}`,
+  },
+
+  /**
+   * Downloads that were filed under one song's name from a video whose title
+   * names another: the Wrong downloads screen, its row on Settings → Library
+   * and its line on the Library tab. Before the app was more careful, a video
+   * could be taken for a song on its length alone.
+   */
+  wrong: {
+    /** The screen's title in the bar, and the row's name on Settings → Library. One short line. */
+    title: 'Downloads that may be the wrong song',
+    /**
+     * Under the row's name on Settings → Library, and the line on the Library
+     * tab. [count] is how many files, never nought. One line.
+     */
+    some: (count: number) =>
+      oneOrMany(count, '1 download may be another song than its name says', `${format.number(count)} downloads may be other songs than their names say`),
+    /** Beside that line on the Library tab: the word that opens the screen. */
+    review: 'Review',
+    /** For a screen reader, what pressing the line does. */
+    reviewHint: 'Opens those downloads, to put each one right',
+    /** At the top of the screen, as much room as it needs. */
+    note: 'Each of these was downloaded as one song and given that song’s name, but the video it came from is called something else, so it may be another song. Play it to hear which, then give it the video’s name, delete it, or say it is right as it is. Nothing is changed until you choose.',
+    empty: 'No download looks like the wrong song.',
+    /** Captions over the two names on each card, shown in capitals. */
+    filedAs: 'Filed as',
+    videoWas: 'The video was',
+    /** Under the names: the file's length, like 3:42, and how often it has been listened to. */
+    facts: (length: string, listens: number) =>
+      `${length} · ${listens > 0 ? oneOrMany(listens, '1 listen', `${format.number(listens)} listens`) : 'no listens'}`,
+    /** For a screen reader, what pressing the names does. */
+    playHint: 'Plays this file',
+    /** The three buttons on each card. Short; they share a row. */
+    rename: 'Name it what it is',
+    delete: 'Delete',
+    right: 'It is right',
+    /** The sheet that opens from the first, with the name taken from the video's title. */
+    sheetNote: 'Taken from the video’s title. Change it if it is not quite right. It is saved as your own edit, which no lookup writes over.',
+    titleField: 'Title',
+    artistField: 'Artist',
+    /** Said on the screen after each button has done its work. */
+    renamed: (title: string) => `Renamed to “${title}”.`,
+    deleted: 'Deleted.',
+    notDeleted: 'The file was not deleted.',
+    keptRight: 'Kept as it is. It will not be asked about again.',
+    failed: (error: string) => `That could not be done. ${error}`,
   },
 };

@@ -8,6 +8,8 @@
  * sleeves and striped on others.
  */
 
+import { inkOn } from '../theme/colour.ts';
+
 /** `#rgb` and `#rrggbb`, which is everything the colour reader produces. */
 function parse(colour: string): [number, number, number] | null {
   const hex = colour.trim().replace('#', '');
@@ -128,4 +130,17 @@ export function laneShades(
   }
   const base = good.length > 0 ? good[good.length - 1]! : '#6f7cff';
   return keyShades([lift(base, toward)]);
+}
+
+/**
+ * The ink for words written on a key's face — the button that starts a run
+ * and the one that starts it again are painted in it.
+ *
+ * White, as the rest of the game's writing is, except on a face too light for
+ * white to be read on, where it is black. The face is the record's colour and
+ * can be anything a sleeve is: a pale yellow cover made a pale yellow button
+ * with white on it, which nobody could read.
+ */
+export function inkOnFace(face: string): string {
+  return inkOn(lift(face, 0), '#ffffff', '#000000');
 }

@@ -34,6 +34,7 @@ function listing(fields: Partial<ItunesMatch> = {}): ItunesMatch {
     title: 'Love the Way You Lie (feat. Rihanna)',
     artist: 'Eminem',
     album: 'Recovery',
+    albumArtist: 'Eminem',
     genre: 'Hip-Hop/Rap',
     year: 2012,
     artworkUrl: 'https://example.test/cover.jpg',
@@ -76,6 +77,7 @@ describe('looking up who a track is', () => {
       title: 'Love the Way You Lie',
       artist: 'Eminem feat. Rihanna',
       album: 'Recovery',
+      albumArtist: 'Eminem',
       // The recording's year, not the reissue's.
       year: 2010,
       trackNumber: 15,

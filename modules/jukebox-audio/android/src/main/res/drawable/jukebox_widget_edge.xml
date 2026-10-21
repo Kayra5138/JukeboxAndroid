@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The fine light edge round every widget. It was drawn into the gradient's
+     bitmap; drawn here it is one sharp line at whatever size the widget is,
+     and follows the same rounding as the clip. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+  android:shape="rectangle">
+  <solid android:color="@android:color/transparent" />
+  <stroke android:width="1dp" android:color="#2EFFFFFF" />
+  <corners android:radius="@dimen/jukebox_widget_radius" />
+</shape>
