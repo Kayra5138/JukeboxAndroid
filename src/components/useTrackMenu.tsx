@@ -60,7 +60,7 @@ export function useTrackMenu({
   veiled: boolean;
 } {
   const router = useRouter();
-  const { playNext, addToQueue, removeFromQueue } = usePlayerActions();
+  const { playNext, addToQueue, playQueue, removeFromQueue } = usePlayerActions();
   const { queue } = usePlayerState();
   const [menu, setMenu] = useState<{ track: Track; hidden?: readonly TrackAction[] } | null>(
     null
@@ -120,6 +120,8 @@ export function useTrackMenu({
       // route is then a type error here instead of a dead end at the tap.
       if (action === 'playNext') void playNext(track);
       else if (action === 'addToQueue') void addToQueue(track);
+      else if (action === 'playSimilar') void playQueue([track], 0, { similar: true });
+      else if (action === 'playOnly') void playQueue([track], 0);
       else if (action === 'delete') void erase([track.id]);
       else if (action === 'addToPlaylist') setAddingTo([track.id]);
       else if (action === 'tiles') {
@@ -145,7 +147,7 @@ export function useTrackMenu({
         router.push({ pathname: '/details', params: { trackId: track.id } });
       }
     },
-    [addToQueue, erase, playNext, router]
+    [addToQueue, erase, playNext, playQueue, router]
   );
 
   /*

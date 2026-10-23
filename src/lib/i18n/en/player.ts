@@ -41,12 +41,13 @@ export const player = {
       remove: 'Remove',
       removeLabel: 'Remove the songs picked for you',
       removeHint: 'No more are added to this queue until you play something else.',
-      /** One line under the heading, where new songs were wanted and the library stood in for them. */
+      /** One line under the heading, where new songs were wanted and the library stood in for them, or a similar queue was filled at random. */
       notes: {
         offline: 'No connection, so these are from your library.',
         wifi: 'Discover is waiting for Wi-Fi, so these are from your library.',
         unavailable: 'New songs need the YouTube downloader, so these are from your library.',
         waiting: 'New songs are still downloading; your library fills in meanwhile.',
+        random: 'Too little is known about this song, so some of these are from your library at random.',
       },
     },
   },

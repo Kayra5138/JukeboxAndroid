@@ -16,6 +16,7 @@ import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { makeStyles, outlineWidth, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 import { useLandscape } from '../lib/ui/layout';
+import { BlurArea, Frost, GlassScene, useFrosted, useSceneTarget } from './Frosted';
 import { barGlass, FootDock } from './UnderBars';
 
 /** One track's cover, looked up per card so the neighbours arrive with theirs. */
@@ -43,11 +44,14 @@ function Cover({ track, column }: { track: Track; column: boolean }) {
  */
 export function WithNowPlaying({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const landscape = useLandscape();
+  // The page an area the bar blurs, in a theme of glass: see `Frosted`.
   return (
-    <View style={[landscape ? around.sideways : around.upright, style]}>
-      <View style={around.page}>{children}</View>
-      <NowPlayingBar column={landscape} />
-    </View>
+    <GlassScene>
+      <View style={[landscape ? around.sideways : around.upright, style]}>
+        <BlurArea style={around.page}>{children}</BlurArea>
+        <NowPlayingBar column={landscape} />
+      </View>
+    </GlassScene>
   );
 }
 
@@ -114,6 +118,9 @@ function PlayingBar({ column }: { column: boolean }) {
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
+  // What scrolls under it, out of focus behind it, along the foot in a theme of glass: see `Frosted`.
+  const target = useSceneTarget();
+  const frosted = useFrosted(column ? null : target);
 
   /*
     By position rather than through the transport, which does not mean the same
@@ -177,6 +184,7 @@ function PlayingBar({ column }: { column: boolean }) {
     <View
       style={[
         column ? styles.column : styles.bar,
+        frosted && styles.clear,
         // Down the side it reaches the top of the screen, where the clock is.
         // Across the bottom the screen it sits on has already kept clear.
         /*
@@ -201,6 +209,7 @@ function PlayingBar({ column }: { column: boolean }) {
       {/* Not offered to a screen reader, which would find a button the size of
           the bar with nothing to say for itself. The card says it, and does
           the same thing. */}
+      {frosted && target ? <Frost target={target} edge="top" /> : null}
       <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={openPlayer} />
       {/*
         The controls are deliberately left out of the strip. They are the one
@@ -290,6 +299,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  clear: { backgroundColor: 'transparent' },
   column: {
     /*
       Centred down its own length. Not `flex: 1` — this is a child of a row, so

@@ -34,6 +34,7 @@ export const player: Strings['player'] = {
         wifi: '“发现”正在等待 Wi-Fi，因此这些来自音乐库。',
         unavailable: '新歌需要 YouTube 下载器，因此这些来自音乐库。',
         waiting: '新歌仍在下载，在此期间先播放音乐库中的歌曲。',
+        random: '关于这首歌的信息太少，因此部分歌曲是从音乐库中随机选取的。',
       },
     },
   },

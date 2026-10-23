@@ -94,6 +94,15 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
 - In the player, the artist's name and the album under the title open that
   artist and that record.
 - A queue you can reorder, trim and jump around in.
+- **What a tap plays** is yours to choose: the rest of the list (as it always
+  was), the rest of it shuffled, similar songs, or only that song. On Tracks
+  and in search results, and on albums and lists too if you say so. Similar
+  songs are a batch picked at once from your library, Discover or both, as
+  you set; after them the queue goes on as **Keep playing similar songs**
+  says. Where too little is known about a song (no tags, no artist even in its
+  file name) the batch is filled from your library at random, and says so.
+  Any song's menu has **Play with similar songs** and **Play only this** for
+  once.
 - **Keep playing similar songs** when the queue runs out, from your library,
   new songs from Discover, or both mixed (off unless you choose). They are
   added a few songs early, so crossfade and the lock screen work as for any
@@ -422,8 +431,9 @@ from the song itself.
   it later. The notification, the widget and Android Auto follow the same
   choice. Everything but English was translated by AI; see
   [Development](#development) if a line reads wrong.
-- **A short setup on the first start**: the language, the look, Discover and
-  whether to keep playing similar songs, each step skippable. Somebody
+- **A short setup on the first start**: the language, the look, Discover,
+  what a tap on a song plays and whether to keep playing similar songs, each
+  step skippable. Somebody
   updating is shown, once, only the steps added since they last saw it.
 - **The first start again**, from the foot of Settings: the setup, the offer
   to find covers and the tips, as on the day it was installed, with your
@@ -441,9 +451,9 @@ from the song itself.
   glass and a high-contrast one.
 - **Glass both ways.** In the glass themes a screen opens over the one it
   came from, which shows through out of focus, and lists scroll under the top
-  bar, the tab bar, the mini player and the queue's handle and show through
-  them; the bars are dense enough that their words stay readable whatever
-  passes under.
+  bar, the tab bar and the mini player and show through them, out of focus on
+  Android 12 and newer; the bars are dense enough that their words stay
+  readable whatever passes under.
 - **Glass and gloss.** Night glass and Frosted glass are panes over a slow
   sky, by night and by day; Aero is the polished look of an old desktop, sky
   over grass with a band of gloss on everything; Cover glass is the night
@@ -559,7 +569,7 @@ To build it. To run it, see [Install](#install).
 
 ```bash
 npm install
-npm test                 # 2,247 tests, pure logic
+npm test                 # 2,262 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android

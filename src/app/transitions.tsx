@@ -161,6 +161,8 @@ export default function TransitionsScreen() {
           as it is out of a finger's: a reader would otherwise walk into
           settings that cannot be changed and change them anyway. */}
       <View
+        // Never folded away and made again as it is turned off and on: see `TrackStrip`.
+        collapsable={false}
         style={off ? styles.dimmed : undefined}
         pointerEvents={off ? 'none' : 'auto'}
         importantForAccessibility={off ? 'no-hide-descendants' : 'auto'}>

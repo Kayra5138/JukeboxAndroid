@@ -158,6 +158,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: '下一首播放', hint: '在当前歌曲之后立即播放' },
     addToQueue: { label: common.addToQueue, hint: '添加到末尾' },
+    playSimilar: { label: '播放并接相似歌曲', hint: '先播这首，然后加入一批相似歌曲' },
+    playOnly: { label: '只播放这首', hint: '播放队列里只有这一首' },
     album: { label: '前往专辑', hint: '按顺序查看这张专辑的其余歌曲' },
     addToPlaylist: { label: '添加到歌单', hint: '你的某个歌单，或新建一个' },
     tiles: { label: '玩钢琴块', hint: '琴键随这首歌的节奏落下' },

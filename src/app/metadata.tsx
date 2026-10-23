@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Image } from '../components/Picture';
 import {
   ActivityIndicator,
@@ -123,6 +124,9 @@ export default function MetadataScreen() {
     through it, beginning this far down what it scrolls.
   */
   const top = useLaidOver();
+  // The list out of focus behind the top, where it is laid over it: see `Frosted`.
+  const scene = useOwnScene();
+  const frosted = useFrosted(top.laid ? scene.target : null);
   const topRoom = useRef(0);
   topRoom.current = top.height;
   const t = useT();
@@ -403,8 +407,10 @@ export default function MetadataScreen() {
 
   return (
     <View style={[styles.screen, sides]}>
+      <GlassScene scene={scene}>
       <Behind veiled={menu.veiled} style={styles.fill}>
-      <View style={[styles.header, top.laid && styles.headerOver]} onLayout={top.onLayout}>
+      <View style={[styles.header, top.laid && styles.headerOver, frosted && styles.headerClear]} onLayout={top.onLayout}>
+        {frosted && scene.target ? <Frost target={scene.target} edge="bottom" /> : null}
         {progress ? (
           <View style={styles.stack}>
             <Text style={styles.body}>
@@ -507,6 +513,8 @@ export default function MetadataScreen() {
           })
         }
         {...panResponder.panHandlers}>
+        {/* What scrolls under the counts and the buttons, which blur it: see `Frosted`. */}
+        <BlurArea style={styles.fill}>
         <FlatList
                   removeClippedSubviews={CLIP_SUBVIEWS}
           data={visible}
@@ -517,8 +525,10 @@ export default function MetadataScreen() {
           getItemLayout={(_data, index) => ({ length: rowHeight, offset: top.height + rowHeight * index, index })}
           renderItem={renderRow}
         />
+        </BlurArea>
       </View>
       </Behind>
+      </GlassScene>
       {menu.element}
       {actions.element}
     </View>
@@ -620,6 +630,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   // Over the list in a theme of glass; nothing at all in any other.
   headerOver: topGlass(c),
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  headerClear: { backgroundColor: 'transparent' },
   stack: { gap: 10 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   row: {

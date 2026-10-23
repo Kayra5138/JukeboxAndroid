@@ -13,6 +13,7 @@ import {
   View,
   type LayoutChangeEvent,
 } from 'react-native';
+import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 
 import { PlayIcon, ShuffleIcon } from '../components/Icons';
@@ -79,6 +80,7 @@ import {
 } from '../lib/media/sort';
 import { lastPlayedAt, playCounts } from '../lib/db/history';
 import { artistKey, spreadShuffle } from '../lib/media/shuffle';
+import { usePlayTapped, type TapPlace } from '../lib/player/usePlayTapped';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { motionReduced } from '../lib/ui/motion';
@@ -278,6 +280,10 @@ export default function LibraryScreen() {
   */
   const top = useLaidOver();
   const over = top.laid && !racked;
+  // The list out of focus behind the top, where it is laid over it: see `Frosted`.
+  const scene = useOwnScene();
+  const target = scene.target;
+  const frosted = useFrosted(over ? target : null);
   const topRoom = over ? top.height : 0;
   const under = useUnderBars({ player: true });
 
@@ -631,6 +637,16 @@ export default function LibraryScreen() {
     [playQueue]
   );
 
+  /** A row tapped: what that plays is a choice of its own (`player/tap.ts`). */
+  const playTapped = usePlayTapped();
+  const tap = useCallback(
+    async (tracks: EnrichedTrack[], index: number, place: TapPlace) => {
+      await ensureNotificationPermission();
+      await playTapped(tracks, index, place);
+    },
+    [playTapped]
+  );
+
   /**
    * A sleeve's place as the open record needs it: from the corner of the
    * library's own share of the window, which is what that record is drawn
@@ -698,6 +714,10 @@ export default function LibraryScreen() {
     (tracks: EnrichedTrack[], index: number) => void start(tracks, index),
     [start]
   );
+  const tapInAlbum = useCallback(
+    (tracks: EnrichedTrack[], index: number) => void tap(tracks, index, 'page'),
+    [tap]
+  );
 
   const toggleSelected = useCallback((track: EnrichedTrack) => {
     setSelected((current) => {
@@ -715,9 +735,9 @@ export default function LibraryScreen() {
         return;
       }
       const index = resultsRef.current.indexOf(track);
-      if (index >= 0) void start(resultsRef.current, index);
+      if (index >= 0) void tap(resultsRef.current, index, 'tracks');
     },
-    [selecting, start, toggleSelected]
+    [selecting, tap, toggleSelected]
   );
 
   /** Leaves the mode and forgets the run; one never outlives the other. */
@@ -1106,6 +1126,7 @@ export default function LibraryScreen() {
       */
       edges={landscape ? (sides.right > 0 ? RIGHT_EDGE : NO_EDGES) : UPRIGHT_EDGES}>
       {/* All of the screen the list picker is laid over, when it is. */}
+      <GlassScene scene={scene}>
       <Behind veiled={menuVeiled} style={landscape ? styles.sideways : styles.upright}>
         <View
           ref={middle}
@@ -1134,8 +1155,10 @@ export default function LibraryScreen() {
           // the one part of it that is actually under the clock.
           landscape && { paddingTop: insets.top + 8 },
           over && styles.headerOver,
+          frosted && styles.headerClear,
         ]}
         onLayout={top.onLayout}>
+        {frosted && target ? <Frost target={target} edge="bottom" /> : null}
         {switchable && stacked ? views : null}
         <View style={styles.headerRow}>
         {/*
@@ -1315,6 +1338,8 @@ export default function LibraryScreen() {
         {selecting ? null : <WrongDownloadsLine confirmed={screen.confirmed} />}
       </View>
 
+      {/* What scrolls under the search and the bar of what is playing, which blur it: see `Frosted`. */}
+      <BlurArea style={styles.listArea}>
       {racked ? (
         <CoverFlow ref={shelf} albums={albums} onOpen={openAlbum} onHold={onSleeveHeld} />
       ) : grouped ? (
@@ -1462,6 +1487,7 @@ export default function LibraryScreen() {
       />
       </View>
       )}
+      </BlurArea>
         </View>
 
         {/*
@@ -1484,6 +1510,7 @@ export default function LibraryScreen() {
             top={landscape ? insets.top : 0}
             bottom={under.bottom}
             onPlay={playFrom}
+            onTap={tapInAlbum}
             // Its own record is the one place "go to album" has nowhere to go.
             onLongPress={openFromAlbum}
             onFindRest={findRest}
@@ -1495,6 +1522,7 @@ export default function LibraryScreen() {
             width and the height goes to the list. */}
         <NowPlayingBar column={landscape} />
       </Behind>
+      </GlassScene>
 
       {actions.element}
 
@@ -1529,6 +1557,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   headerTight: { paddingBottom: 8 },
   // Over the list in a theme of glass; nothing at all in any other.
   headerOver: topGlass(c),
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  headerClear: { backgroundColor: 'transparent' },
+  /** Where the lists are: the room under the top, or all of it where the top is laid over them. */
+  listArea: { flex: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   /*
     The slot clips; the switch inside is pinned to the width it measured.

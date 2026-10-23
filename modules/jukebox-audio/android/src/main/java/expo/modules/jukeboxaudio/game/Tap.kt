@@ -86,9 +86,26 @@ internal object Tap {
   fun ready() {
     val made = sounds
       ?: arrayOf(knock(HIT), knock(EMPTY), knock(LAPSE), rise(), knock(LET_GO)).also { sounds = it }
-    if (tracks == null) tracks = Array(made.size) { build(made[it]) }
+    /*
+      The mixer may refuse a track — too many open across the phone, or no
+      fast path to be had — and then the game is played without its knocks
+      rather than not at all, or the app closed. The tracks it did give are
+      handed back, so that trying again later has them to give again.
+    */
+    if (tracks == null) {
+      val opened = mutableListOf<AudioTrack>()
+      try {
+        for (sound in made) opened += build(sound)
+        tracks = opened.toTypedArray()
+      } catch (refused: Exception) {
+        android.util.Log.w("JukeboxTap", "the mixer would not open the game's sounds", refused)
+        opened.forEach { runCatching { it.release() } }
+      }
+    }
     val loop = humming ?: breath().also { humming = it }
-    if (hum == null) hum = build(loop)
+    if (hum == null) hum = runCatching { build(loop) }
+      .onFailure { android.util.Log.w("JukeboxTap", "the mixer would not open the held sound", it) }
+      .getOrNull()
   }
 
   /**

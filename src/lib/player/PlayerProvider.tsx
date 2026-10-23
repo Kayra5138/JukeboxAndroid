@@ -46,8 +46,13 @@ import type { Track } from '../types.ts';
 export type PlaybackFailure = { trackId: string | null; message: string };
 
 type PlayerActions = {
-  /** Replace the queue with `tracks` and start playing at `startIndex`. */
-  playQueue: (tracks: Track[], startIndex: number) => Promise<void>;
+  /**
+   * Replace the queue with `tracks` and start playing at `startIndex`. With
+   * `similar`, its first batch of songs like it is picked at once, from where
+   * the tap's setting says and whatever "Keep playing similar songs" says;
+   * after that, that setting keeps it going: see `tap.ts`.
+   */
+  playQueue: (tracks: Track[], startIndex: number, options?: { similar?: boolean }) => Promise<void>;
   toggle: () => Promise<void>;
   next: () => Promise<void>;
   previous: () => Promise<void>;
@@ -134,6 +139,19 @@ type PlayerState = {
   autoFrom: number;
   /** The picks were taken out of this queue by hand, and it is given no more until another replaces it. */
   autoDismissed: boolean;
+  /**
+   * This queue was begun as similar songs to a track and has not had them
+   * yet: its first batch comes from where the tap's own setting says, and
+   * after that it goes on as any queue does. See `tap.ts`.
+   */
+  keepSimilar: boolean;
+  /**
+   * Which queue this is: a number that goes up every time the queue is
+   * replaced rather than edited. Two queues can look alike in every other
+   * way — a song alone, at its start — and what is kept going has to know
+   * that a new one is not the one it already saw to.
+   */
+  queueId: number;
   /** The game has the player: see `lend`. */
   onLoan: boolean;
 };
@@ -244,6 +262,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [autoFrom, setAutoFrom] = useState(-1);
   const dismissedRef = useRef(false);
   const [autoDismissed, setAutoDismissed] = useState(false);
+  const similarRef = useRef(false);
+  const [keepSimilar, setKeepSimilar] = useState(false);
+  const [queueId, setQueueId] = useState(0);
   const [onLoan, setOnLoan] = useState(false);
   /**
    * Whether the note of which songs were picked has been read back yet. Until
@@ -329,6 +350,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setAutoDismissed(dismissed);
   }, []);
 
+  const markSimilar = useCallback((similar: boolean) => {
+    similarRef.current = similar;
+    setKeepSimilar(similar);
+  }, []);
+
   /** Follow the playing row through an edit made somewhere else in the queue. */
   const shiftCurrent = useCallback((to: (position: number) => number) => {
     if (currentIndexRef.current < 0) return;
@@ -394,9 +420,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const restored = restoreTail(state.queue.map((track) => track.id), note);
       placeAuto(restored.autoFrom);
       dismissPicks(restored.dismissed);
+      markSimilar(restored.similar);
       tailRead.current = true;
     },
-    [dismissPicks, flushSession, markPlaying, placeAuto, placeCurrent, startSession]
+    [dismissPicks, flushSession, markPlaying, markSimilar, placeAuto, placeCurrent, startSession]
   );
 
   /**
@@ -649,7 +676,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   */
   useEffect(() => {
     if (!tailRead.current) return;
-    const words = writeTail(tailOf(queue, autoFrom, autoDismissed));
+    const words = writeTail(tailOf(queue, autoFrom, autoDismissed, keepSimilar));
     if (words === tailWritten.current) return;
     tailWritten.current = words;
     try {
@@ -657,10 +684,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } catch (failure) {
       console.warn('Could not write down which songs were picked', failure);
     }
-  }, [queue, autoFrom, autoDismissed]);
+  }, [queue, autoFrom, autoDismissed, keepSimilar]);
 
   const replaceQueue = useCallback(
-    async (tracks: Track[], startIndex: number, autoPlay: boolean) => {
+    async (tracks: Track[], startIndex: number, autoPlay: boolean, similar = false) => {
       flushSession(false);
       queueRef.current = tracks;
       setQueue(tracks);
@@ -672,6 +699,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Nothing in it was picked, and having said no to the last queue's picks is not saying no to this one's.
       placeAuto(-1);
       dismissPicks(false);
+      markSimilar(similar);
+      setQueueId((id) => id + 1);
       // Somebody's own queue outranks whatever the note said about the last one.
       tailRead.current = true;
       if (track) startSession(track, autoPlay);
@@ -693,11 +722,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         refused('take the queue', failure);
       }
     },
-    [dismissPicks, flushSession, placeAuto, placeCurrent, refused, startSession]
+    [dismissPicks, flushSession, markSimilar, placeAuto, placeCurrent, refused, startSession]
   );
 
   const playQueue = useCallback(
-    (tracks: Track[], startIndex: number) => replaceQueue(tracks, startIndex, true),
+    (tracks: Track[], startIndex: number, options?: { similar?: boolean }) =>
+      replaceQueue(tracks, startIndex, true, options?.similar === true),
     [replaceQueue]
   );
 
@@ -979,9 +1009,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     shuffled: boolean;
     speed: number;
     pitch: number;
-    /** Where the picks began in the queue set aside, and whether they had been taken out. */
+    /** Where the picks began in the queue set aside, whether they had been taken out, and whether it was kept going with similar songs. */
     autoFrom: number;
     dismissed: boolean;
+    similar: boolean;
   } | null>(null);
 
   const lend = useCallback(
@@ -996,6 +1027,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           ...params.current,
           autoFrom: autoFromRef.current,
           dismissed: dismissedRef.current,
+          similar: similarRef.current,
         };
         setOnLoan(true);
         // What was heard up to here was a listen, and is written down as one
@@ -1041,6 +1073,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       setShuffled(was.shuffled);
       placeAuto(was.autoFrom);
       dismissPicks(was.dismissed);
+      markSimilar(was.similar);
       // A place that could not be found again is the start of the track,
       // which is not worth failing the handing back over.
       if (was.positionSec > 0) await JukeboxAudio.seekToAsync(was.positionSec).catch(() => {});
@@ -1051,7 +1084,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     // so it is kept from here.
     const track = queueRef.current[currentIndexRef.current];
     if (track) startSession(track, isPlayingRef.current);
-  }, [askPlayerFor, dismissPicks, placeAuto, replaceQueue, startSession]);
+  }, [askPlayerFor, dismissPicks, markSimilar, placeAuto, replaceQueue, startSession]);
 
   /**
    * Rearranges the queue, and does it again on every press.
@@ -1149,6 +1182,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
             await JukeboxAudio.skipToIndexAsync(at);
             await JukeboxAudio.playAsync();
           }
+          /*
+            A queue begun as similar songs has had them: from here it is a queue
+            like any other, and what keeps it going is "Keep playing similar
+            songs", not what the tap chose. Taken off only once they are in, so
+            that a batch the player refused is asked for again in the same way.
+          */
+          if (similarRef.current) markSimilar(false);
           return 'added';
         } catch (failure) {
           refused('add the songs picked to follow', failure);
@@ -1159,7 +1199,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       inserting.current = done;
       return done;
     },
-    [placeAuto, refused]
+    [markSimilar, placeAuto, refused]
   );
 
   const removePicked = useCallback(() => {
@@ -1257,9 +1297,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       error,
       autoFrom,
       autoDismissed,
+      keepSimilar,
+      queueId,
       onLoan,
     }),
-    [current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error, autoFrom, autoDismissed, onLoan]
+    [current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error, autoFrom, autoDismissed, keepSimilar, queueId, onLoan]
   );
 
   return (

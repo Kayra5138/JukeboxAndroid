@@ -63,6 +63,7 @@ export function AlbumListing({
   top,
   bottom = 0,
   onPlay,
+  onTap,
   onLongPress,
   onFindRest,
   onClosed,
@@ -81,6 +82,8 @@ export function AlbumListing({
   /** How much of the foot is under the bars of glass, for the last row to be scrolled clear of. */
   bottom?: number;
   onPlay: (tracks: EnrichedTrack[], index: number) => void;
+  /** A row tapped, where that is not simply [onPlay] from it. */
+  onTap?: (tracks: EnrichedTrack[], index: number) => void;
   /**
    * A row held down. The menu it opens is the library's, drawn by the library
    * over this: a window of its own, so the back button closes the menu and
@@ -295,8 +298,8 @@ export function AlbumListing({
           queue={album.tracks}
           // Nothing in a list is "the playing one"; the mark column stays empty.
           currentIndex={-1}
-          // The whole record from that track, as tapping one anywhere does.
-          onSelect={(index) => onPlay(album.tracks, index)}
+          // What a tap plays is a choice (`player/tap.ts`); the record from that track, unless one was made.
+          onSelect={(index) => (onTap ?? onPlay)(album.tracks, index)}
           onLongPress={
             onLongPress &&
             ((index) => {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { mergeMetadata, type MetadataStore } from '../enriched.ts';
+import { artistShown, mergeMetadata, titleShown, type MetadataStore } from '../enriched.ts';
 import type { TrackMetadata } from '../../db/metadata.ts';
 import type { Tag, TagSource } from '../../db/tags.ts';
 import { track } from '../../__tests__/support.ts';
@@ -272,5 +272,33 @@ describe('a cover a track was given by its record', () => {
     assert.equal(own?.artworkUri, 'file:///own.jpg');
     assert.equal(address?.artworkUri, 'file:///given.jpg');
     assert.equal(edited?.artworkUri, 'file:///given.jpg');
+  });
+});
+
+describe('the name a looked-up track is shown with', () => {
+  const row = (title: string | null, artist: string | null = null) =>
+    found({ trackId: '1', title, artist, album: null });
+
+  it('is the lookup’s, where it is the file’s own with the artist and the upload taken off', () => {
+    const file = track({ id: '1', title: 'Feint - Snake Eyes (Official Video)', artist: null, album: null });
+    assert.equal(titleShown(file, row('Snake Eyes', 'Feint')), 'Snake Eyes');
+    assert.equal(artistShown(file, row('Snake Eyes', 'Feint')), 'Feint');
+    const tagged = track({ id: '1', title: 'AURORA - Runaway', artist: 'AURORA', album: null });
+    assert.equal(titleShown(tagged, row('Runaway', 'Aurora')), 'Runaway');
+    // The file's credit stands, spelt as it was.
+    assert.equal(artistShown(tagged, row('Runaway', 'Aurora')), 'AURORA');
+  });
+
+  it('is the file’s where the lookup’s is another name, without the artist said twice', () => {
+    const file = track({ id: '1', title: 'Feint - Snake Eyes', artist: null, album: null });
+    assert.equal(titleShown(file, row('Snake Eyes (VIP)', 'Feint')), 'Snake Eyes');
+    assert.equal(titleShown(file, row(null, null)), 'Feint - Snake Eyes');
+  });
+
+  it('is what was typed, and the file’s for a track nobody found', () => {
+    const file = track({ id: '1', title: 'Feint - Snake Eyes', artist: null, album: null });
+    assert.equal(titleShown(file, { ...row('Typed'), status: 'manual' }), 'Typed');
+    assert.equal(titleShown(file, { ...row('Snake Eyes'), status: 'not_found' }), 'Feint - Snake Eyes');
+    assert.equal(titleShown(file, null), 'Feint - Snake Eyes');
   });
 });

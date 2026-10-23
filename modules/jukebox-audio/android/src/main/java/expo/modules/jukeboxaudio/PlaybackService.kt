@@ -185,6 +185,26 @@ class PlaybackService : MediaLibraryService() {
   private val artworkReader = Executors.newSingleThreadExecutor()
 
   /**
+   * Work for the reader's thread, which nothing there may throw out of: a
+   * throw on a thread of an executor ends the process, music and all, and the
+   * covers, the queue's record and the library it reads are files and a
+   * database any of which can be missing or full. Handed over after the
+   * reader has been shut down — the service going as a write was asked for —
+   * it is dropped rather than thrown on the main thread.
+   */
+  private fun aside(work: () -> Unit) {
+    runCatching {
+      artworkReader.execute {
+        try {
+          work()
+        } catch (failure: Throwable) {
+          android.util.Log.w("JukeboxPlayback", "work beside the player failed", failure)
+        }
+      }
+    }
+  }
+
+  /**
    * Keeps the home screen widget in step with playback.
    *
    * The widget is drawn by the launcher from a written-down snapshot, so
@@ -206,7 +226,7 @@ class PlaybackService : MediaLibraryService() {
   private fun saveQueue() {
     val player = mediaSession?.player ?: return
     val snapshot = QueueStore.snapshot(player)
-    artworkReader.execute { QueueStore.save(this, snapshot) }
+    aside { QueueStore.save(this, snapshot) }
   }
 
   /**
@@ -232,9 +252,7 @@ class PlaybackService : MediaLibraryService() {
     val place = QueueStore.place(player)
     if (place.isEmpty()) return
     if (pendingPlace.getAndSet(place) != null) return
-    runCatching {
-      artworkReader.execute { pendingPlace.getAndSet(null)?.let { QueueStore.savePlace(this, it) } }
-    }
+    aside { pendingPlace.getAndSet(null)?.let { QueueStore.savePlace(this, it) } }
   }
 
   /**
@@ -391,7 +409,7 @@ class PlaybackService : MediaLibraryService() {
    * has would be worse than a plain square.
    */
   private fun resolveArtwork(trackId: String, downloaded: Uri?) {
-    artworkReader.execute {
+    aside {
       // The cover the app keeps for the track first, as every screen of the
       // app does. It used to arrive here as [downloaded], and no longer does:
       // a queue item's cover is an address for other apps now, not a file.
@@ -401,7 +419,7 @@ class PlaybackService : MediaLibraryService() {
         ?.let { runCatching { Uri.parse(it).path }.getOrNull() }
         ?: downloaded?.takeIf { it.scheme == "file" }?.path?.takeIf { java.io.File(it).isFile }
         ?: expo.modules.jukeboxaudio.downloads.DownloadStore.artwork(this, trackId)?.let { Uri.parse(it).path }
-        ?: return@execute
+        ?: return@aside
 
       // The track may have moved on while the file was being read; a cover
       // belongs to the track it came from, not to whatever is playing now.
@@ -920,7 +938,8 @@ class PlaybackService : MediaLibraryService() {
     val dismissed = intent?.getBooleanExtra(NOTIFICATION_DISMISSED, false) == true
     if (dismissed) {
       val result = super.onStartCommand(intent, flags, startId)
-      stopSelf()
+      // By this start's number: a widget pressed in the same moment has started it again, and is owed the foreground.
+      stopSelf(startId)
       return result
     }
 
@@ -996,10 +1015,10 @@ class PlaybackService : MediaLibraryService() {
           that can take are well inside the time the foreground start allows,
           and foregroundOwed pays it anyway if they are not.
         */
-        artworkReader.execute {
+        aside {
           val (items, index) = runCatching { BrowseTree.resolve(this, shelf) }
             .getOrElse { emptyList<MediaItem>() to 0 }
-          if (items.isEmpty()) return@execute
+          if (items.isEmpty()) return@aside
           val queued = items.map(BrowseTree::queued)
           widgetHandler.post {
             val target = mediaSession?.player ?: return@post

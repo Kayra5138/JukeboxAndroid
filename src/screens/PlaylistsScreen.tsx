@@ -2,6 +2,7 @@ import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { BackHandler, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BlurArea, GlassScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 import { Segmented } from '../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -197,9 +198,12 @@ export default function PlaylistsScreen() {
   return (
     <View style={styles.screen}>
       {/* What the sheet of tags is laid over: all of the screen but it. */}
+      {/* The lists an area the bars over them blur, in a theme of glass: see `Frosted`. */}
+      <GlassScene>
       <Behind veiled={fromTags} style={landscape ? styles.sideways : styles.upright}>
+      <BlurArea style={styles.middle}>
       <ScrollView
-        style={styles.middle}
+        style={styles.fill}
         contentContainerStyle={[
           styles.content,
           {
@@ -310,11 +314,13 @@ export default function PlaylistsScreen() {
           </Pressable>
         </View>
       </ScrollView>
+      </BlurArea>
 
       {/* Starting a track and being left looking at the list reads as the tap
           having gone nowhere. */}
       <NowPlayingBar column={landscape} />
       </Behind>
+      </GlassScene>
 
       <TextPrompt
         visible={naming}
@@ -384,6 +390,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   sideways: { flex: 1, flexDirection: 'row' },
   /* Takes what the rail and the player leave, rather than only what it needs. */
   middle: { flex: 1, minWidth: 0 },
+  fill: { flex: 1 },
   content: { gap: 4 },
 
   newRow: { flexDirection: 'row', gap: 10, paddingBottom: 22 },

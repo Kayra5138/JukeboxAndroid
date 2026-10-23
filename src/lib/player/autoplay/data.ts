@@ -1,6 +1,7 @@
 import { db } from '../../db/index.ts';
 import { tagsFor } from '../../db/tags.ts';
 import { guestsNamedIn, splitCredit } from '../../metadata/credit.ts';
+import { identify } from '../../metadata/identify.ts';
 import { foldForMatch } from '../../metadata/text.ts';
 import type { EnrichedTrack } from '../../media/enriched.ts';
 import type { Track } from '../../types.ts';
@@ -49,13 +50,25 @@ function namesOf(track: { artist?: string | null; title?: string | null; albumAr
 
 export { fold as foldName };
 
+/**
+ * Who a song is by, for a file whose tags say nobody: from its name, where it
+ * is named the way a download is, `Feint - Snake Eyes`, as the lookups read
+ * it (`identify`). A library of downloads is mostly such files, and with no
+ * artist a song shares nothing with anything but its tags — which such a
+ * file has none of either — and nothing was found like it at all.
+ */
+function creditOf(track: Track | EnrichedTrack): string | null {
+  return track.artist ?? identify(track as Track).artist;
+}
+
 /** A track as the library's scoring measures it. Tags for a file outside the library are read from the database. */
 export function candidateOf(track: Track | EnrichedTrack): Candidate {
   const enriched = track as Partial<EnrichedTrack>;
+  const credit = creditOf(track);
   return {
     id: track.id,
-    lead: fold(splitCredit(track.artist)[0]),
-    names: namesOf(track),
+    lead: fold(splitCredit(credit)[0]),
+    names: namesOf({ ...track, artist: credit }),
     albumArtist: fold(track.albumArtist),
     tags: (enriched.tags ?? safely(() => tagsFor(track.id).map((tag) => tag.tag), [])).map((tag) => tag.toLowerCase()),
     genre: enriched.genre ? fold(enriched.genre) : null,

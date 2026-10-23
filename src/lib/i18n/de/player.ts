@@ -36,6 +36,7 @@ export const player: Strings['player'] = {
         wifi: 'Entdecken wartet auf WLAN, deshalb kommen diese aus deiner Bibliothek.',
         unavailable: 'Neue Songs brauchen den YouTube-Downloader, deshalb kommen diese aus deiner Bibliothek.',
         waiting: 'Neue Songs werden noch geladen; so lange springt deine Bibliothek ein.',
+        random: 'Über diesen Song ist zu wenig bekannt, daher sind einige zufällig aus deiner Bibliothek.',
       },
     },
   },

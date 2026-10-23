@@ -6,6 +6,7 @@ import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlineWidth, usePressed } from '../lib/theme/index';
 import { HEADER_BAR } from '../lib/ui/bars';
+import { Frost, useFrosted, useSceneTarget } from './Frosted';
 import { barGlass } from './UnderBars';
 
 /**
@@ -40,8 +41,12 @@ export function GlassHeader({
   const styles = useStyles();
   const pressed = usePressed();
   const insets = useSafeAreaInsets();
+  // What scrolls under it, out of focus behind it: only where it is laid over a list. See `Frosted`.
+  const target = useSceneTarget();
+  const frosted = useFrosted(over ? target : null);
   return (
-    <View style={[styles.bar, over && styles.over, { paddingTop: insets.top, height: HEADER_BAR + insets.top }]}>
+    <View style={[styles.bar, over && styles.over, frosted && styles.clear, { paddingTop: insets.top, height: HEADER_BAR + insets.top }]}>
+      {frosted && target ? <Frost target={target} edge="bottom" /> : null}
       {onBack ? (
         <Pressable
           android_ripple={{ ...pressed, borderless: true, radius: 22 }}
@@ -75,6 +80,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     the way back and the name, as it always has.
   */
   over: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  clear: { backgroundColor: 'transparent' },
   back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 24 },
   title: { flex: 1, minWidth: 0, color: c.text, fontSize: 20, fontWeight: '500', marginLeft: 20, marginRight: 16 },
   titleAlone: { marginLeft: 16 },

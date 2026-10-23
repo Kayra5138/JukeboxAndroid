@@ -172,6 +172,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Riproduci dopo', hint: 'Subito dopo il brano in corso' },
     addToQueue: { label: common.addToQueue, hint: 'In fondo' },
+    playSimilar: { label: 'Riproduci con brani simili', hint: 'Questo, poi un gruppo di brani simili' },
+    playOnly: { label: 'Riproduci solo questo', hint: 'La coda è solo questo brano' },
     album: { label: 'Vai all’album', hint: 'Il resto del disco, in ordine' },
     addToPlaylist: { label: 'Aggiungi a una lista', hint: 'Una delle tue liste, o una nuova' },
     tiles: { label: 'Gioca a Piano Tiles', hint: 'Tasti che cadono a tempo con questo brano' },

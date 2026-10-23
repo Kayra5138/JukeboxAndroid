@@ -17,12 +17,12 @@ import {
  * that is not a component, and it goes on reaching it with the screen off.
  */
 export function Autoplay() {
-  const { queue, currentIndex, repeat, autoFrom, autoDismissed, onLoan } = usePlayerState();
+  const { queue, currentIndex, repeat, autoFrom, autoDismissed, keepSimilar, queueId, onLoan } = usePlayerState();
   const { appendAuto, skipToIndex } = usePlayerActions();
 
   useEffect(() => {
-    autoplayPlayerChanged({ queue, currentIndex, repeat, autoFrom, dismissed: autoDismissed, onLoan });
-  }, [queue, currentIndex, repeat, autoFrom, autoDismissed, onLoan]);
+    autoplayPlayerChanged({ queue, queueId, currentIndex, repeat, autoFrom, dismissed: autoDismissed, similar: keepSimilar, onLoan });
+  }, [queue, queueId, currentIndex, repeat, autoFrom, autoDismissed, keepSimilar, onLoan]);
 
   useEffect(() => {
     const detach = attachAutoplay({

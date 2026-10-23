@@ -1,3 +1,4 @@
+import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../../components/Frosted';
 import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
 import { BarsOver, topGlass, useLaidOver, useUnderBars } from '../../components/UnderBars';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -38,6 +39,9 @@ export default function YouTubeScreen() {
     foot of it: both lists keep clear of the two by that much.
   */
   const top = useLaidOver();
+  // The results out of focus behind the row of modes, where it is laid over them: see `Frosted`.
+  const scene = useOwnScene();
+  const frosted = useFrosted(top.laid ? scene.target : null);
   const under = useUnderBars({ player: true });
   const columns = useListColumns();
   const t = useT();
@@ -163,9 +167,11 @@ export default function YouTubeScreen() {
   return (
     <WithNowPlaying style={styles.screen}>
     <View style={[styles.inside, { paddingTop: insets.top, paddingLeft: sides.left, paddingRight: sides.right }]}>
+      <GlassScene scene={scene}>
       <View
-        style={[styles.modeRow, top.laid && [styles.modeRowOver, { top: insets.top, left: sides.left, right: sides.right }]]}
+        style={[styles.modeRow, top.laid && [styles.modeRowOver, { top: insets.top, left: sides.left, right: sides.right }], frosted && styles.clear]}
         onLayout={top.onLayout}>
+        {frosted && scene.target ? <Frost target={scene.target} edge="bottom" /> : null}
         {/*
           A tab apart from the two beside it, standing for a screen of its own
           rather than a way of searching: filled while it is open, and no wash
@@ -196,6 +202,8 @@ export default function YouTubeScreen() {
           />
         </View>
       </View>
+      {/* What scrolls under the row of modes, which blurs it: see `Frosted`. */}
+      <BlurArea style={styles.fill}>
       <BarsOver top={top.height}>
       {mode === 'discover' ? <DiscoverPanel /> : <FlatList
               removeClippedSubviews={CLIP_SUBVIEWS}
@@ -269,6 +277,8 @@ export default function YouTubeScreen() {
         }}
       />}
       </BarsOver>
+      </BlurArea>
+      </GlassScene>
     </View>
     </WithNowPlaying>
   );
@@ -278,6 +288,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   modeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
   // Laid over the list in a theme of glass, with a little more room above its edge.
   modeRowOver: { ...topGlass(c), paddingBottom: 10 },
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  clear: { backgroundColor: 'transparent' },
+  fill: { flex: 1 },
   downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: 5 },
   downloadHeading: { color: c.textFaint, fontSize: 10, textAlign: 'center', letterSpacing: 1 },
   screen: { flex: 1, ...scene(c) },

@@ -70,6 +70,7 @@ Notes:
 | [React Native](https://github.com/facebook/react-native) | 0.86.2 | MIT |
 | [Expo](https://github.com/expo/expo) | SDK 57 | MIT |
 | [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) | 1.8.1 | Apache-2.0 |
+| [BlurView](https://github.com/Dimezis/BlurView), through `expo-blur`, for what scrolls under a bar of glass | 3.1.0 | [Apache-2.0](https://github.com/Dimezis/BlurView/blob/master/LICENSE) |
 | [minimp3](https://github.com/lieff/minimp3), the MP3 decoder used by the game's chart maker | commit `ea99364f` | [CC0-1.0](https://github.com/lieff/minimp3/blob/master/LICENSE) |
 
 Notes:

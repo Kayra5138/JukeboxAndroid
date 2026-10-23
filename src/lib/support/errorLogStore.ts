@@ -106,14 +106,24 @@ type Hermes = { HermesInternal?: { enablePromiseRejectionTracker?: (options: Rej
 
 let watching = false;
 
+/** More than this many errors this close together, and the app is let close after all: see `watchErrors`. */
+const GIVE_UP_AFTER = { errors: 5, withinMs: 10_000 };
+
 /**
  * Has every uncaught error written down, and in a release build every
  * promise rejected with nobody to catch it, before they go wherever they
  * went before.
  *
- * The handler that was there is called after, as it was: in development it
- * is the red screen, and in a release it is what ends the app on a fatal
- * error. The write is synchronous for that reason — there is no later.
+ * The handler that was there is called after: in development it is the red
+ * screen, as it was. In a release it is what ends the app on a fatal error,
+ * and it is no longer told an error is fatal. Everything drawn is inside the
+ * error boundary, which catches what goes wrong there; what reaches here is
+ * a throw in something that was pressed, a timer or a native event, and
+ * closing the app for it — losing the queue's place and whatever was on
+ * screen — is worse than that one press having done nothing. Unless they
+ * come in a burst ({@link GIVE_UP_AFTER}): an app throwing again and again
+ * is broken, and starting it afresh is the kinder thing. The write is
+ * synchronous for that reason — there may be no later.
  *
  * Rejections only in a release, because in development React Native is
  * already following them with a tracker of its own, and Hermes keeps one.
@@ -123,9 +133,16 @@ export function watchErrors(): void {
   watching = true;
   try {
     const before = ErrorUtils.getGlobalHandler();
+    let recent: number[] = [];
     ErrorUtils.setGlobalHandler((error, fatal) => {
       noteError('js', error);
-      before(error, fatal);
+      if (__DEV__ || !fatal) {
+        before(error, fatal);
+        return;
+      }
+      const now = Date.now();
+      recent = [...recent.filter((at) => now - at < GIVE_UP_AFTER.withinMs), now];
+      before(error, recent.length > GIVE_UP_AFTER.errors);
     });
   } catch {
     // Not in this runtime.

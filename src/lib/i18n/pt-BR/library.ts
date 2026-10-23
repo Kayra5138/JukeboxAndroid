@@ -176,6 +176,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Tocar a seguir', hint: 'Logo depois da faixa atual' },
     addToQueue: { label: common.addToQueue, hint: 'No fim' },
+    playSimilar: { label: 'Tocar com músicas parecidas', hint: 'Esta, depois um grupo de músicas parecidas' },
+    playOnly: { label: 'Tocar só esta', hint: 'A fila fica só com esta música' },
     album: { label: 'Ir para o álbum', hint: 'O resto do álbum, em ordem' },
     addToPlaylist: { label: 'Adicionar a uma lista', hint: 'Uma das suas listas ou uma nova' },
     tiles: { label: 'Jogar piano tiles', hint: 'Teclas caindo no ritmo desta faixa' },

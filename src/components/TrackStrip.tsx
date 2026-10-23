@@ -293,6 +293,17 @@ export function TrackStrip({
   const slot = (index: number, spare: string, shown: boolean) => (
     <View
       key={index >= 0 && queue[index] ? `q${index}` : spare}
+      /*
+        Always a view of its own. Left to React Native, the card in the
+        middle, which a screen reader may read, was folded into its parent,
+        and the two either side, which it may not, were not: so each move of
+        the strip took a card's view away or made one, while moving it. With
+        several moves waiting to be drawn at once — songs that changed while
+        the app was behind the screen — the two went out of step, and the
+        next move asked for a view that had been taken away, which closed
+        the app.
+      */
+      collapsable={false}
       style={{ width }}
       importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'}>
       {index >= 0 && queue[index] ? renderTrack(queue[index]) : null}

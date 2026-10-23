@@ -73,13 +73,22 @@ export function confidentArtistId(search: ArtistSearch): string | null {
  * and neither of those comes with a licence anybody can rely on — so anything
  * that is not a Commons file is treated as no picture rather than followed.
  */
+/** [text] with its per-cent escapes undone; as it is, where one is malformed and undoing them throws. */
+function decodedOr(text: string): string {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+
 export function commonsFileOf(artist: ArtistRelations): string | null {
   for (const relation of artist.relations ?? []) {
     if (relation.type !== 'image') continue;
     const found = COMMONS_FILE.exec(relation.url?.resource ?? '');
     // Underscores and per-cent escapes are how the name travels in a url; the
     // API wants the title as it is written on the page.
-    if (found?.[1]) return decodeURIComponent(found[1]).replace(/_/g, ' ');
+    if (found?.[1]) return decodedOr(found[1]).replace(/_/g, ' ');
   }
   return null;
 }

@@ -164,6 +164,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Sonraki olarak çal', hint: 'Çalan parçanın hemen ardından' },
     addToQueue: { label: common.addToQueue, hint: 'En sona' },
+    playSimilar: { label: 'Benzerleriyle çal', hint: 'Önce bu, sonra bir grup benzer şarkı' },
+    playOnly: { label: 'Sadece bunu çal', hint: 'Sırada yalnızca bu şarkı olur' },
     album: { label: 'Albüme git', hint: 'Albümün geri kalanı, sırasıyla' },
     addToPlaylist: { label: 'Listeye ekle', hint: 'Listelerinden biri ya da yeni bir liste' },
     tiles: { label: 'Piyano karoları oyna', hint: 'Bu parçanın ritmiyle düşen tuşlar' },

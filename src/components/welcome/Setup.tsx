@@ -12,6 +12,8 @@ import { previewsOn, READY_CHOICES, type DiscoverSettings } from '../../lib/disc
 import { chooseLanguage, LANGUAGES, tryLanguage, useLanguage, useT, type Language } from '../../lib/i18n/index';
 import { AUTOPLAY_MODES } from '../../lib/player/autoplay/plan';
 import { setAutoplayMode, useAutoplayMode } from '../../lib/player/autoplay/setting';
+import { TAP_MODES } from '../../lib/player/tap';
+import { setTapMode, useTapChoice } from '../../lib/player/tapSetting';
 import {
   makeStyles,
   outlined,
@@ -137,6 +139,7 @@ export function Setup() {
     language: t.welcome.language.heading,
     look: said.look.heading,
     discover: said.discover.heading,
+    tap: t.settings.tap.title,
     autoplay: t.settings.autoplay.title,
   }[step];
   const counted = steps.length > 1 ? said.step(at + 1, steps.length) : null;
@@ -183,6 +186,7 @@ export function Setup() {
           {step === 'language' ? <LanguageStep /> : null}
           {step === 'look' ? <LookStep /> : null}
           {step === 'discover' ? <DiscoverStep /> : null}
+          {step === 'tap' ? <TapStep /> : null}
           {step === 'autoplay' ? <AutoplayStep /> : null}
         </View>
       </ScrollView>
@@ -378,6 +382,32 @@ function AutoplayStep() {
           <View key={value}>
             {at > 0 ? <View style={styles.rule} /> : null}
             <Choice on={value === mode} label={said[value].label} detail={said[value].note} onPress={() => setAutoplayMode(value)} />
+          </View>
+        ))}
+      </View>
+      <Text style={styles.small}>{said.sheetNote}</Text>
+    </>
+  );
+}
+
+/**
+ * What a tap on a song plays: the four choices Settings → Player offers, each
+ * with its line. Whether it holds on albums and lists too is left to that
+ * page, where it only appears once something other than the list is chosen.
+ */
+function TapStep() {
+  const t = useT();
+  const styles = useStyles();
+  const { mode } = useTapChoice();
+  const said = t.settings.tap;
+  return (
+    <>
+      <Text style={styles.note}>{said.note}</Text>
+      <View style={styles.card} accessibilityRole="radiogroup">
+        {TAP_MODES.map((value, at) => (
+          <View key={value}>
+            {at > 0 ? <View style={styles.rule} /> : null}
+            <Choice on={value === mode} label={said[value].label} detail={said[value].note} onPress={() => setTapMode(value)} />
           </View>
         ))}
       </View>

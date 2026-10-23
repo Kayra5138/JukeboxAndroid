@@ -107,8 +107,8 @@ class DownloadService : Service() {
       DownloadStore.init(this)
       startWorker()
     } catch (error: Exception) {
-      DownloadStore.interrupted(Failure.SERVICE)
-      stopSelf()
+      runCatching { DownloadStore.interrupted(Failure.SERVICE) }
+      stopSelf(startId)
     }
     return START_NOT_STICKY
   }
@@ -119,7 +119,13 @@ class DownloadService : Service() {
       try {
         while (!stopping) {
           when (val next = DownloadStore.next(this)) {
-            is Next.Take -> { held(false); fetch(next.job) }
+            is Next.Take -> {
+              held(false)
+              // One job failing however it fails is that job failed, never the app.
+              try { fetch(next.job) } catch (error: Throwable) {
+                android.util.Log.e("JukeboxDownloads", "a download failed outside its own handling", error)
+              }
+            }
             is Next.Wait -> {
               if (next.awake) held(true) else resting()
               // A short sleep whatever the wait: somebody may ask for something meanwhile.
@@ -128,13 +134,16 @@ class DownloadService : Service() {
             is Next.Idle -> break
           }
         }
+      } catch (error: Throwable) {
+        // Uncaught here would take the process with it. The jobs stay as they are, for the next start.
+        android.util.Log.e("JukeboxDownloads", "the download worker stopped", error)
       } finally {
         held(false)
         main.post {
           running.set(false)
           if (stopping) return@post
           // An enqueue may have arrived after the worker observed an empty queue.
-          if (DownloadStore.wants(this)) startWorker()
+          if (runCatching { DownloadStore.wants(this) }.getOrDefault(false)) startWorker()
           else {
             stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(latestStartId)
           }
@@ -167,8 +176,10 @@ class DownloadService : Service() {
     held(false)
     if (shownResting) return
     shownResting = true
-    getSystemService(NotificationManager::class.java)
-      .notify(NOTIFICATION, notification(R.string.jukebox_downloads_resting))
+    runCatching {
+      getSystemService(NotificationManager::class.java)
+        .notify(NOTIFICATION, notification(R.string.jukebox_downloads_resting))
+    }
   }
   private var shownResting = false
 
@@ -184,8 +195,10 @@ class DownloadService : Service() {
     val finding = DownloadStore.findingTitle() ?: return
     if (finding == shownFinding) return
     shownFinding = finding
-    getSystemService(NotificationManager::class.java)
-      .notify(NOTIFICATION, notification(R.string.jukebox_downloads_finding, finding))
+    runCatching {
+      getSystemService(NotificationManager::class.java)
+        .notify(NOTIFICATION, notification(R.string.jukebox_downloads_finding, finding))
+    }
   }
 
   private fun fetch(job: org.json.JSONObject) {
@@ -233,10 +246,13 @@ class DownloadService : Service() {
         }
       DownloadStore.complete(id, trackId)
     } catch (error: Exception) {
-      val waiting = job.getJSONObject("video").optBoolean("discoverWifiOnly") && DiscoverFiles.networkAllowed(this)["wifi"] != true
-      val wasCancelled = !waiting && (cancelled.get() || error is YoutubeCancelled)
-      DownloadStore.change(id, if (wasCancelled) "cancelled" else "failed",
-        error = if (waiting) Failed(Failure.WAITING_WIFI) else if (wasCancelled) null else failed(error))
+      // Saying what became of it may fail too — the same full disk — and must not throw out of here.
+      runCatching {
+        val waiting = job.getJSONObject("video").optBoolean("discoverWifiOnly") && DiscoverFiles.networkAllowed(this)["wifi"] != true
+        val wasCancelled = !waiting && (cancelled.get() || error is YoutubeCancelled)
+        DownloadStore.change(id, if (wasCancelled) "cancelled" else "failed",
+          error = if (waiting) Failed(Failure.WAITING_WIFI) else if (wasCancelled) null else failed(error))
+      }
     } finally {
       if (wakeLock.isHeld) wakeLock.release()
       currentId = null
@@ -248,11 +264,12 @@ class DownloadService : Service() {
   override fun onTimeout(startId: Int, fgsType: Int) {
     stopping = true
     cancellation?.set(true)
+    // Out of the foreground first: that is what Android is waiting for, and nothing below may stand in its way.
+    stopForeground(STOP_FOREGROUND_REMOVE)
+    stopSelf(latestStartId)
     // What was being fetched has been cut off. What was waiting still is,
     // and is taken up again the next time the service may be started.
-    DownloadStore.interrupted(Failure.STOPPED)
-    stopForeground(STOP_FOREGROUND_REMOVE)
-    stopSelf()
+    runCatching { DownloadStore.interrupted(Failure.STOPPED) }
   }
 
   override fun onDestroy() {

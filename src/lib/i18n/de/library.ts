@@ -168,6 +168,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Als Nächstes spielen', hint: 'Direkt nach dem aktuellen Titel' },
     addToQueue: { label: common.addToQueue, hint: 'Ans Ende' },
+    playSimilar: { label: 'Mit ähnlichen Titeln abspielen', hint: 'Dieser, dann eine Reihe ähnlicher Titel' },
+    playOnly: { label: 'Nur diesen abspielen', hint: 'Die Warteschlange ist nur dieser Titel' },
     album: { label: 'Zum Album', hint: 'Der Rest des Albums, in Reihenfolge' },
     addToPlaylist: { label: 'Zu einer Liste hinzufügen', hint: 'Eine deiner Listen oder eine neue' },
     tiles: { label: 'Piano Tiles spielen', hint: 'Tasten fallen im Takt dieses Titels' },

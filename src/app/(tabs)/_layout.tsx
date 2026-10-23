@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react';
 import { Tabs } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import { SettingsIcon, LibraryIcon, ListsIcon, SearchIcon } from '../../components/Icons';
+import { TabArea } from '../../components/Frosted';
 import { TabBar } from '../../components/TabBar';
 import { BarsOver } from '../../components/UnderBars';
 import { useT } from '../../lib/i18n/index';
@@ -34,6 +36,8 @@ export default function MainTabs() {
         the opposite of what moving it there was for.
       */
       tabBar={(props) => <TabBar {...props} />}
+      // Each tab an area the bar can blur, in a theme of glass: see `Frosted`.
+      screenLayout={tabArea}
       screenOptions={{
       /*
         Still told which side it is on, even though it is drawn here: that is
@@ -76,6 +80,11 @@ export default function MainTabs() {
     </BarsOver>
   );
 }
+
+/** Made once, so that the navigator is handed the same thing each time it asks. */
+const tabArea = ({ children, route }: { children: ReactNode; route: { key: string } }) => (
+  <TabArea routeKey={route.key}>{children}</TabArea>
+);
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   // On the icon's top corner, ringed in the bar's colour so that it reads apart from the gear under it.

@@ -173,6 +173,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Reproducir a continuación', hint: 'Justo después de la pista actual' },
     addToQueue: { label: common.addToQueue, hint: 'Al final' },
+    playSimilar: { label: 'Reproducir con canciones parecidas', hint: 'Esta, y luego un grupo de canciones parecidas' },
+    playOnly: { label: 'Reproducir solo esta', hint: 'La cola es solo esta canción' },
     album: { label: 'Ir al álbum', hint: 'El resto del disco, en orden' },
     addToPlaylist: { label: 'Añadir a una lista', hint: 'Una de tus listas, o una nueva' },
     tiles: { label: 'Jugar a piano tiles', hint: 'Teclas que caen al ritmo de esta grabación' },

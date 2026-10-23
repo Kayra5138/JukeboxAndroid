@@ -113,6 +113,20 @@ export const settings = {
     note:
       'A button on the player that puts the song playing into one of your lists, without going through its menu.',
   },
+  /** How many similar songs a top-up adds, from the library and from Discover: Settings → Player. */
+  autoplaySizes: { title: 'Similar songs at a time', library: 'From your library', fresh: 'New from Discover', note: 'How many are added each time the queue is topped up, for “Keep playing similar songs” and for a song tapped to play with similar ones. Each new song is a download. Mixed takes three quarters of each.' },
+  /** What a tap on a track plays: Settings → Player, the choices offered for it, and the setup's step. */
+  tap: {
+    title: 'When a song is tapped',
+    note: 'What plays after a song you tap on Tracks or in search results.',
+    sheetNote: 'Play and Shuffle above an album or list, Shuffle all and Discover are not changed by this. Any song’s menu has “Play with similar songs” and “Play only this” for once.',
+    list: { label: 'The rest of the list', note: 'The songs after it, in the order they are shown.' },
+    shuffled: { label: 'The rest of the list, shuffled', note: 'This one first, then the others in the list in random order.' },
+    similar: { label: 'Similar songs', note: 'This one, then a batch of songs like it, from your library or Discover as you choose. After those, the queue goes on as “Keep playing similar songs” says.' },
+    only: { label: 'Only that song', note: 'Nothing after it, unless “Keep playing similar songs” adds some.' },
+    source: { title: 'Similar songs from', note: 'Where the first songs after a tapped one come from. After them, “Keep playing similar songs” takes over.' },
+    everywhere: { title: 'On albums and lists too', note: 'Also when a song is tapped on the page of an album, list, artist or folder. Off, those play in their own order.' },
+  },
   /** What plays when the queue is about to run out: Settings → Player, and the choices offered for it. */
   autoplay: {
     title: 'Keep playing similar songs',

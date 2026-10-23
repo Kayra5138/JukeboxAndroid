@@ -34,6 +34,7 @@ export const player: Strings['player'] = {
         wifi: 'Keşfet Wi-Fi bekliyor, bu yüzden bunlar kütüphanenden.',
         unavailable: 'Yeni şarkılar için YouTube indiricisi gerekiyor, bu yüzden bunlar kütüphanenden.',
         waiting: 'Yeni şarkılar hâlâ iniyor; bu arada kütüphanenden çalıyor.',
+        random: 'Bu şarkı hakkında yeterli bilgi yok, bu yüzden bazıları kütüphanenden rastgele seçildi.',
       },
     },
   },

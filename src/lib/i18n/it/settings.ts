@@ -88,6 +88,18 @@ export const settings: Strings['settings'] = {
     note:
       'Un pulsante nel lettore che aggiunge il brano in riproduzione a una delle tue liste, senza passare dal suo menu.',
   },
+  autoplaySizes: { title: 'Brani simili alla volta', library: 'Dalla tua libreria', fresh: 'Nuovi da Discover', note: 'Quanti ne vengono aggiunti a ogni riempimento della coda, per «Continua con canzoni simili» e per un brano riprodotto con brani simili. Ogni brano nuovo è un download. Misto prende tre quarti di ciascuno.' },
+  tap: {
+    title: 'Quando tocchi un brano',
+    note: 'Cosa suona dopo un brano toccato in Tracks o nei risultati di ricerca.',
+    sheetNote: 'Play e Shuffle sopra un album o una lista, Shuffle all e Discover non cambiano. Il menu di ogni brano ha «Riproduci con brani simili» e «Riproduci solo questo» per una volta.',
+    list: { label: 'Il resto della lista', note: 'I brani successivi, nell’ordine mostrato.' },
+    shuffled: { label: 'Il resto della lista, in ordine casuale', note: 'Prima questo, poi gli altri della lista a caso.' },
+    similar: { label: 'Brani simili', note: 'Questo, poi un gruppo di brani simili dalla tua libreria o da Discover, come scegli. Dopo, la coda continua come dice «Continua con canzoni simili».' },
+    only: { label: 'Solo quel brano', note: 'Niente dopo, a meno che «Continua con canzoni simili» ne aggiunga.' },
+    source: { title: 'Brani simili da', note: 'Da dove arrivano i primi brani dopo quello toccato. Dopo, decide «Continua con canzoni simili».' },
+    everywhere: { title: 'Anche in album e liste', note: 'Anche quando tocchi un brano nella pagina di un album, una lista, un artista o una cartella. Spento, suonano nel loro ordine.' },
+  },
   autoplay: {
     title: 'Continua con canzoni simili',
     note: 'Quando la coda sta per finire, in fondo vengono aggiunte canzoni simili a quelle che stavi ascoltando.',

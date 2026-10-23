@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import type { ErrorEntry } from '../errorLog.ts';
-import { issueLink, NEW_ISSUE_URL, phoneLine, reportText, stamp, type ReportFacts } from '../report.ts';
+import { issueLink, NEW_ISSUE_URL, phoneLine, reportText, stamp, wellFormed, type ReportFacts } from '../report.ts';
 
 const facts: ReportFacts = {
   version: '0.33.1',
@@ -61,4 +61,13 @@ test('the oldest errors are left out until the link is short enough', () => {
   assert.ok(url.includes(encodeURIComponent('number 49 ')));
   // Under the real limit, fifty fit or nearly.
   assert.ok(issueLink(facts, errors).url.length <= 7000);
+});
+
+test('half an emoji is put as a replacement character, so that a link can always be made', () => {
+  const half = '😀'.slice(0, 1);
+  assert.equal(wellFormed(`a${half}b`), 'a�b');
+  assert.equal(wellFormed(`a${'😀'.slice(1)}`), 'a�');
+  assert.equal(wellFormed('a😀b'), 'a😀b');
+  assert.throws(() => encodeURIComponent(`a${half}`));
+  assert.doesNotThrow(() => encodeURIComponent(wellFormed(`a${half}`)));
 });

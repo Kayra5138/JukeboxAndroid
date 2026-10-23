@@ -88,6 +88,18 @@ export const settings: Strings['settings'] = {
     note:
       'Um botão no player que adiciona a música que está tocando a uma das suas listas, sem passar pelo menu dela.',
   },
+  autoplaySizes: { title: 'Músicas parecidas por vez', library: 'Da sua biblioteca', fresh: 'Novas do Discover', note: 'Quantas são adicionadas cada vez que a fila é completada, para “Continuar com músicas parecidas” e para uma música tocada com parecidas. Cada música nova é um download. Misto usa três quartos de cada.' },
+  tap: {
+    title: 'Ao tocar numa música',
+    note: 'O que toca depois de uma música que você toca em Tracks ou nos resultados da busca.',
+    sheetNote: 'Play e Shuffle acima de um álbum ou lista, Shuffle all e Discover não mudam com isso. O menu de cada música tem “Tocar com músicas parecidas” e “Tocar só esta” para uma vez.',
+    list: { label: 'O resto da lista', note: 'As músicas seguintes, na ordem mostrada.' },
+    shuffled: { label: 'O resto da lista, embaralhado', note: 'Esta primeiro, depois as outras da lista em ordem aleatória.' },
+    similar: { label: 'Músicas parecidas', note: 'Esta, depois um grupo de músicas parecidas da sua biblioteca ou do Discover, como você escolher. Depois delas, a fila segue como diz “Continuar com músicas parecidas”.' },
+    only: { label: 'Só essa música', note: 'Nada depois, a não ser que “Continuar com músicas parecidas” adicione.' },
+    source: { title: 'Músicas parecidas de', note: 'De onde vêm as primeiras músicas depois de uma que você toca. Depois delas, vale “Continuar com músicas parecidas”.' },
+    everywhere: { title: 'Também em álbuns e listas', note: 'Também ao tocar numa música na página de um álbum, lista, artista ou pasta. Desligado, eles tocam na própria ordem.' },
+  },
   autoplay: {
     title: 'Continuar com músicas parecidas',
     note: 'Quando a fila está para acabar, músicas parecidas com as que você estava ouvindo são adicionadas no fim.',

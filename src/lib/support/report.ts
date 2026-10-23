@@ -98,7 +98,29 @@ function linkWith(facts: ReportFacts, errors: readonly ErrorEntry[] | null): str
     ['phone', phoneLine(facts)],
     ['more', moreText(facts, errors)],
   ];
-  return `${NEW_ISSUE_URL}?${fields.map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('&')}`;
+  return `${NEW_ISSUE_URL}?${fields.map(([key, value]) => `${key}=${encodeURIComponent(wellFormed(value))}`).join('&')}`;
+}
+
+/**
+ * [text] with any half of a surrogate pair standing alone put as U+FFFD.
+ * `encodeURIComponent` throws on one, and an error's message can carry one —
+ * a file name cut short, a title read badly — which made the report screen
+ * fail to draw at all.
+ */
+export function wellFormed(text: string): string {
+  let out = '';
+  for (let at = 0; at < text.length; at++) {
+    const code = text.charCodeAt(at);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = text.charCodeAt(at + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        out += text[at] + text[at + 1];
+        at++;
+      } else out += '\ufffd';
+    } else if (code >= 0xdc00 && code <= 0xdfff) out += '\ufffd';
+    else out += text[at];
+  }
+  return out;
 }
 
 /**

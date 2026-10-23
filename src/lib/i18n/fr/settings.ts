@@ -87,6 +87,18 @@ export const settings: Strings['settings'] = {
     note:
       'Un bouton sur le lecteur qui ajoute le morceau en cours à une de tes listes, sans passer par son menu.',
   },
+  autoplaySizes: { title: 'Titres proches à la fois', library: 'De ta bibliothèque', fresh: 'Nouveaux de Discover', note: 'Combien sont ajoutés à chaque remplissage de la file, pour « Continuer avec des morceaux similaires » et pour un titre écouté avec des titres proches. Chaque nouveau titre est un téléchargement. Le mélange prend les trois quarts de chacun.' },
+  tap: {
+    title: 'Quand on touche un titre',
+    note: 'Ce qui joue après un titre touché dans Tracks ou dans les résultats de recherche.',
+    sheetNote: 'Play et Shuffle au-dessus d’un album ou d’une liste, Shuffle all et Discover ne changent pas. Le menu de chaque titre propose « Écouter avec des titres proches » et « Écouter seulement celui-ci » pour une fois.',
+    list: { label: 'La suite de la liste', note: 'Les titres suivants, dans l’ordre affiché.' },
+    shuffled: { label: 'La suite de la liste, mélangée', note: 'Celui-ci d’abord, puis les autres de la liste au hasard.' },
+    similar: { label: 'Titres proches', note: 'Celui-ci, puis une série de titres proches, de ta bibliothèque ou de Discover selon ton choix. Ensuite, la file continue selon « Continuer avec des morceaux similaires ».' },
+    only: { label: 'Seulement ce titre', note: 'Rien après, sauf si « Continuer avec des morceaux similaires » en ajoute.' },
+    source: { title: 'Titres proches depuis', note: 'D’où viennent les premiers titres après celui touché. Ensuite, « Continuer avec des morceaux similaires » prend le relais.' },
+    everywhere: { title: 'Aussi dans les albums et listes', note: 'Aussi quand on touche un titre sur la page d’un album, d’une liste, d’un artiste ou d’un dossier. Désactivé, ils jouent dans leur ordre.' },
+  },
   autoplay: {
     title: 'Continuer avec des morceaux similaires',
     note: 'Quand la file d’attente touche à sa fin, des morceaux proches de ceux que tu écoutais sont ajoutés à la suite.',

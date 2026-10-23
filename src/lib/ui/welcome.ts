@@ -2,7 +2,7 @@
  * The first start: a few screens, over everything else and before anything
  * else is asked, for the choices worth making on the first day — which
  * language the app is to speak, how it looks, how Discover uses the network,
- * and what plays when the queue runs out — and the way back to them from
+ * what a tap on a song plays and what plays when the queue runs out — and the way back to them from
  * Settings for anybody who wants to see the app as it was when new.
  *
  * Somebody updating is shown the screens that were added since they last
@@ -25,13 +25,16 @@ import { USED_AFTER } from './tips.ts';
  * The language came first and alone, as version nought, before there was a
  * setup to number: everybody who has used the app since has chosen one, or
  * has been reading it long enough not to be asked. The rest came in version
- * one. A screen added later goes where it belongs in the order with the next
- * number, and {@link SETUP_VERSION} follows.
+ * one; what a tap on a song plays, in version two, before what plays when
+ * the queue runs out, which it leads on to. A screen added later goes where
+ * it belongs in the order with the next number, and {@link SETUP_VERSION}
+ * follows.
  */
 export const SETUP_STEPS = [
   { id: 'language', since: 0 },
   { id: 'look', since: 1 },
   { id: 'discover', since: 1 },
+  { id: 'tap', since: 2 },
   { id: 'autoplay', since: 1 },
 ] as const satisfies readonly { id: string; since: number }[];
 

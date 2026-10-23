@@ -202,3 +202,10 @@ test('a locale is matched to a language by tag, then by language alone', () => {
   assert.equal(languageForLocale('', ids), null);
   assert.equal(languageForLocale(undefined, ids), null);
 });
+
+test('somebody who finished the first setup is shown only what a tap plays', () => {
+  assert.deepEqual(stepsFor('update', 1), ['tap']);
+  const { welcome } = place({ words: 'done', seen: '1' });
+  assert.equal(welcome.kind(), 'update');
+  assert.deepEqual(welcome.steps(), ['tap']);
+});

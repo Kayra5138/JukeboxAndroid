@@ -8,6 +8,7 @@ import * as SystemUI from 'expo-system-ui';
 
 import { DownloadsButton } from '../components/DownloadsButton';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import { BlurArea, GlassScene } from '../components/Frosted';
 import { GlassHeader } from '../components/GlassHeader';
 import { BarsOver } from '../components/UnderBars';
 import { Setup } from '../components/welcome/Setup';
@@ -153,7 +154,14 @@ export default function RootLayout() {
         */}
         <WindowBehind>
         {/* Out of a screen reader's reach while the first start's setup is over it. */}
-        <View style={rootStyles.app} importantForAccessibility={welcome ? 'no-hide-descendants' : 'auto'}>
+        {/*
+          Never folded into its parent: a view whose only difference from
+          nothing is what a screen reader may see is folded away when that
+          says nothing, and made again when it does, and doing either to the
+          view everything is in, between frames, is how the drawing of the
+          app and what it was asked to draw came apart (see `TrackStrip`).
+        */}
+        <View collapsable={false} style={rootStyles.app} importantForAccessibility={welcome ? 'no-hide-descendants' : 'auto'}>
         <NowPlayingHost>
           {/* Named for the clock, not the page: light writing over a dark theme. */}
           <StatusBar style={theme.base === 'dark' ? 'light' : 'dark'} />
@@ -314,13 +322,19 @@ function Paged({
               ? [ground, setBack(c)]
               : [ground, styles.unseen]
       }>
-      {barred ? <GlassHeader title={title} onBack={onBack} over={beneath} /> : null}
       {beneath ? (
-        <View style={styles.below}>
-          <BarsOver top={HEADER_BAR + insets.top}>{children}</BarsOver>
-        </View>
+        // The bar blurs what scrolls under it: see `Frosted`.
+        <GlassScene>
+          <GlassHeader title={title} onBack={onBack} over />
+          <BlurArea style={styles.below}>
+            <BarsOver top={HEADER_BAR + insets.top}>{children}</BarsOver>
+          </BlurArea>
+        </GlassScene>
       ) : barred ? (
-        <View style={styles.below}>{children}</View>
+        <>
+          <GlassHeader title={title} onBack={onBack} />
+          <View style={styles.below}>{children}</View>
+        </>
       ) : (
         children
       )}

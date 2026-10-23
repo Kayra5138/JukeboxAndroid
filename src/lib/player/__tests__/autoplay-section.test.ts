@@ -111,20 +111,25 @@ describe('restoreFrom', () => {
 describe('the tail note', () => {
   it('goes round through words', () => {
     const note = tailOf(['a', 'b', 'p1', 'p2'].map((id) => ({ id })), 2, false);
-    assert.deepEqual(note, { ids: ['p1', 'p2'], head: 'a', dismissed: false });
+    assert.deepEqual(note, { ids: ['p1', 'p2'], head: 'a', dismissed: false, similar: false });
     assert.deepEqual(readTail(writeTail(note)), note);
+    const similar = tailOf([{ id: 'a' }], -1, false, true);
+    assert.deepEqual(readTail(writeTail(similar)), { ids: [], head: 'a', dismissed: false, similar: true });
   });
 
   it('reads anything unreadable as nothing', () => {
-    assert.deepEqual(readTail('not json'), { ids: [], head: null, dismissed: false });
-    assert.deepEqual(readTail(null), { ids: [], head: null, dismissed: false });
-    assert.deepEqual(readTail('{"ids":[1,"x"],"dismissed":"yes"}'), { ids: ['x'], head: null, dismissed: false });
+    const nothing = { ids: [], head: null, dismissed: false, similar: false };
+    assert.deepEqual(readTail('not json'), nothing);
+    assert.deepEqual(readTail(null), nothing);
+    assert.deepEqual(readTail('{"ids":[1,"x"],"dismissed":"yes","similar":1}'), { ...nothing, ids: ['x'] });
+    // A note from before there were similar queues.
+    assert.deepEqual(readTail('{"ids":["p"],"head":"a","dismissed":false}'), { ids: ['p'], head: 'a', dismissed: false, similar: false });
   });
 
   it('is believed only of the queue it was written about', () => {
-    const note = { ids: ['p1', 'p2'], head: 'a', dismissed: true };
-    assert.deepEqual(restoreTail(['a', 'b', 'p1', 'p2'], note), { autoFrom: 2, dismissed: true });
-    assert.deepEqual(restoreTail(['z', 'b', 'p1', 'p2'], note), { autoFrom: -1, dismissed: false });
+    const note = { ids: ['p1', 'p2'], head: 'a', dismissed: true, similar: true };
+    assert.deepEqual(restoreTail(['a', 'b', 'p1', 'p2'], note), { autoFrom: 2, dismissed: true, similar: true });
+    assert.deepEqual(restoreTail(['z', 'b', 'p1', 'p2'], note), { autoFrom: -1, dismissed: false, similar: false });
   });
 });
 

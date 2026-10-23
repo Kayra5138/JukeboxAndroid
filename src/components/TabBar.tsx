@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { SlidingMark, type MarkPlace } from './SlidingMark';
 import { useLandscape } from '../lib/ui/layout';
 import { useHiddenTabs } from '../lib/ui/tabs';
+import { Frost, useFrosted, useTabTarget } from './Frosted';
 import { barGlass, barsLaidOver, noteTabBar } from './UnderBars';
 
 /** Wide enough for an icon and a short word under it, and no wider. */
@@ -83,6 +84,9 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   */
   const hidden = useHiddenTabs() as ReadonlySet<string>;
   const open = state.routes[state.index]?.name;
+  // The open tab, out of focus behind the bar: see `Frosted`.
+  const target = useTabTarget(state.routes[state.index]?.key);
+  const frosted = useFrosted(over ? target : null);
   // Taken off while it was open: the library, rather than a tab nobody can see is on.
   useEffect(() => {
     if (open && hidden.has(open)) navigation.navigate('index');
@@ -92,6 +96,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
     <View
       style={[
         landscape ? styles.rail : over ? styles.glassBar : styles.bar,
+        frosted && styles.clear,
         landscape
           ? { width: RAIL_WIDTH + insets.left, paddingLeft: insets.left, paddingTop: insets.top }
           : { paddingBottom: insets.bottom },
@@ -100,6 +105,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
       onLayout={over ? noteTabBar : undefined}
       // Tabs to a screen reader, which then says which of five each one is.
       accessibilityRole="tablist">
+      {frosted && target ? <Frost target={target} edge="top" /> : null}
       {/*
         The mark of the open tab, one for the bar and moved to whichever is
         opened: see `SlidingMark`. Upright it is the patch round the icon and
@@ -238,6 +244,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderTopColor: c.border,
   },
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  clear: { backgroundColor: 'transparent' },
   rail: {
     backgroundColor: c.bar,
     borderRightWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),

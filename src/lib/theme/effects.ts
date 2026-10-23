@@ -188,7 +188,21 @@ const BAR_INK = ['text', 'textMuted', 'textFaint'] as const satisfies readonly (
 /** What could be under a bar at its worst: the two ends of light. */
 const ANYTHING = ['#000000', '#ffffff'] as const;
 
-const BAR_WASHES = new WeakMap<Palette, string>();
+const BAR_WASHES = new WeakMap<Palette, number>();
+
+/** How much of the page's colour a bar's wash is: see {@link barWashOf}. */
+function barWashAlpha(c: Palette): number {
+  let made = BAR_WASHES.get(c);
+  if (made == null) {
+    let alpha = BAR_WASH_LEAST;
+    const reads = (wash: string) =>
+      ANYTHING.every((under) => BAR_INK.every((ink) => contrast(c[ink], laid(wash, under)) >= 4.5));
+    while (alpha < 1 && !reads(withAlpha(c.bg, alpha))) alpha = Math.min(1, alpha + 0.01);
+    made = alpha;
+    BAR_WASHES.set(c, made);
+  }
+  return made;
+}
 
 /**
  * The fill of a bar of glass with something scrolling under it: the page's
@@ -202,16 +216,19 @@ const BAR_WASHES = new WeakMap<Palette, string>();
  * measurements once for each palette.
  */
 export function barWashOf(c: Palette): string {
-  let made = BAR_WASHES.get(c);
-  if (!made) {
-    let alpha = BAR_WASH_LEAST;
-    const reads = (wash: string) =>
-      ANYTHING.every((under) => BAR_INK.every((ink) => contrast(c[ink], laid(wash, under)) >= 4.5));
-    while (alpha < 1 && !reads(withAlpha(c.bg, alpha))) alpha = Math.min(1, alpha + 0.01);
-    made = withAlpha(c.bg, alpha);
-    BAR_WASHES.set(c, made);
-  }
-  return made;
+  return withAlpha(c.bg, barWashAlpha(c));
+}
+
+/**
+ * How much thinner the wash is over a blur. Out of focus, what passes under
+ * has no edges for the writing to be lost against, so the bar shows more of
+ * it for the same reading; a fifth less, found by eye on the phone.
+ */
+const FROSTED_WASH = 0.8;
+
+/** The wash of a bar that blurs what is under it: {@link barWashOf}, thinner. */
+export function frostedWashOf(c: Palette): string {
+  return withAlpha(c.bg, barWashAlpha(c) * FROSTED_WASH);
 }
 
 /** Every colour written in a gradient or a shadow, in the forms a token is written in. */

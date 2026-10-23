@@ -87,6 +87,18 @@ export const settings: Strings['settings'] = {
     note:
       'Oynatıcıda, çalan şarkıyı menüsüne girmeden listelerinden birine ekleyen bir düğme.',
   },
+  autoplaySizes: { title: 'Bir seferde benzer şarkı', library: 'Kütüphanenden', fresh: 'Discover’dan yeni', note: 'Sıra her doldurulduğunda kaç şarkı ekleneceği; “Benzer şarkılarla devam et” ve benzerleriyle çalınan şarkılar için. Her yeni şarkı bir indirme demek. Karışık mod ikisinin dörtte üçünü alır.' },
+  tap: {
+    title: 'Bir şarkıya dokununca',
+    note: 'Tracks’te ya da arama sonuçlarında dokunduğun şarkıdan sonra ne çalacağı.',
+    sheetNote: 'Albüm ya da liste üstündeki Play ve Shuffle, Shuffle all ve Discover bundan etkilenmez. Her şarkının menüsünde bir seferlik “Benzerleriyle çal” ve “Sadece bunu çal” var.',
+    list: { label: 'Listenin geri kalanı', note: 'Ondan sonraki şarkılar, gösterildikleri sırayla.' },
+    shuffled: { label: 'Listenin geri kalanı, karışık', note: 'Önce bu, sonra listedeki diğerleri rastgele sırayla.' },
+    similar: { label: 'Benzer şarkılar', note: 'Önce bu, sonra seçtiğin yerden (kütüphanen ya da Discover) bir grup benzer şarkı. Onlardan sonra sıra “Benzer şarkılarla devam et” ayarına göre sürer.' },
+    only: { label: 'Sadece o şarkı', note: 'Ardından bir şey çalmaz; “Benzer şarkılarla devam et” eklerse başka.' },
+    source: { title: 'Benzer şarkılar nereden', note: 'Dokunduğun şarkıdan sonraki ilk şarkıların nereden geleceği. Onlardan sonrasını “Benzer şarkılarla devam et” belirler.' },
+    everywhere: { title: 'Albümlerde ve listelerde de', note: 'Albüm, liste, sanatçı ya da klasör sayfasında bir şarkıya dokununca da. Kapalıyken onlar kendi sıralarıyla çalar.' },
+  },
   autoplay: {
     title: 'Benzer şarkılarla devam et',
     note: 'Sıra bitmek üzereyken, dinlediklerine benzeyen şarkılar sıranın sonuna eklenir.',

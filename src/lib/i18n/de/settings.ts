@@ -88,6 +88,18 @@ export const settings: Strings['settings'] = {
     note:
       'Eine Taste im Player, die den laufenden Song ohne Umweg über sein Menü zu einer deiner Listen hinzufügt.',
   },
+  autoplaySizes: { title: 'Ähnliche Titel auf einmal', library: 'Aus deiner Bibliothek', fresh: 'Neu aus Discover', note: 'Wie viele bei jedem Auffüllen der Warteschlange hinzukommen, für „Mit ähnlichen Songs weiterspielen“ und für einen mit ähnlichen Titeln gespielten Song. Jeder neue Titel ist ein Download. Gemischt nimmt drei Viertel von beiden.' },
+  tap: {
+    title: 'Beim Antippen eines Titels',
+    note: 'Was nach einem Titel läuft, den du unter Tracks oder in Suchergebnissen antippst.',
+    sheetNote: 'Play und Shuffle über einem Album oder einer Liste, Shuffle all und Discover ändern sich dadurch nicht. Das Menü jedes Titels hat „Mit ähnlichen Titeln abspielen“ und „Nur diesen abspielen“ für einmal.',
+    list: { label: 'Rest der Liste', note: 'Die Titel danach, in der angezeigten Reihenfolge.' },
+    shuffled: { label: 'Rest der Liste, gemischt', note: 'Dieser zuerst, dann die anderen der Liste in zufälliger Reihenfolge.' },
+    similar: { label: 'Ähnliche Titel', note: 'Dieser, dann eine Reihe ähnlicher Titel aus deiner Bibliothek oder aus Discover, wie du es wählst. Danach geht die Warteschlange weiter, wie „Mit ähnlichen Songs weiterspielen“ sagt.' },
+    only: { label: 'Nur dieser Titel', note: 'Danach nichts, außer „Mit ähnlichen Songs weiterspielen“ fügt etwas hinzu.' },
+    source: { title: 'Ähnliche Titel aus', note: 'Woher die ersten Titel nach einem angetippten kommen. Danach übernimmt „Mit ähnlichen Songs weiterspielen“.' },
+    everywhere: { title: 'Auch in Alben und Listen', note: 'Auch beim Antippen auf der Seite eines Albums, einer Liste, eines Künstlers oder Ordners. Aus: Diese spielen in ihrer eigenen Reihenfolge.' },
+  },
   autoplay: {
     title: 'Mit ähnlichen Songs weiterspielen',
     note: 'Kurz bevor die Warteschlange endet, werden Songs angehängt, die dem ähneln, was du gerade gehört hast.',

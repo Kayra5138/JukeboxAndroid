@@ -171,6 +171,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Играть следующим', hint: 'Сразу после текущего трека' },
     addToQueue: { label: common.addToQueue, hint: 'В конец' },
+    playSimilar: { label: 'Слушать с похожими', hint: 'Сначала эта, потом подборка похожих песен' },
+    playOnly: { label: 'Слушать только эту', hint: 'В очереди будет только эта песня' },
     album: { label: 'Перейти к альбому', hint: 'Весь альбом, по порядку' },
     addToPlaylist: { label: 'Добавить в плейлист', hint: 'В один из твоих плейлистов или в новый' },
     tiles: { label: 'Играть в Piano Tiles', hint: 'Клавиши падают в такт этой песне' },

@@ -88,6 +88,18 @@ export const settings: Strings['settings'] = {
     note:
       'Un botón en el reproductor que añade la canción que suena a una de tus listas sin pasar por su menú.',
   },
+  autoplaySizes: { title: 'Canciones parecidas cada vez', library: 'De tu biblioteca', fresh: 'Nuevas de Discover', note: 'Cuántas se añaden cada vez que se rellena la cola, para «Seguir con canciones parecidas» y para una canción reproducida con parecidas. Cada canción nueva es una descarga. Mezcla toma tres cuartos de cada una.' },
+  tap: {
+    title: 'Al tocar una canción',
+    note: 'Qué suena después de una canción que tocas en Tracks o en los resultados de búsqueda.',
+    sheetNote: 'Play y Shuffle sobre un álbum o una lista, Shuffle all y Discover no cambian con esto. El menú de cada canción tiene «Reproducir con canciones parecidas» y «Reproducir solo esta» para una vez.',
+    list: { label: 'El resto de la lista', note: 'Las canciones siguientes, en el orden mostrado.' },
+    shuffled: { label: 'El resto de la lista, aleatorio', note: 'Primero esta, luego las demás de la lista en orden aleatorio.' },
+    similar: { label: 'Canciones parecidas', note: 'Esta, y luego un grupo de canciones parecidas de tu biblioteca o de Discover, como elijas. Después, la cola sigue según «Seguir con canciones parecidas».' },
+    only: { label: 'Solo esa canción', note: 'Nada después, salvo que «Seguir con canciones parecidas» añada algo.' },
+    source: { title: 'Canciones parecidas de', note: 'De dónde vienen las primeras canciones tras una que tocas. Después, manda «Seguir con canciones parecidas».' },
+    everywhere: { title: 'También en álbumes y listas', note: 'También al tocar una canción en la página de un álbum, lista, artista o carpeta. Desactivado, suenan en su propio orden.' },
+  },
   autoplay: {
     title: 'Seguir con canciones parecidas',
     note: 'Cuando la cola está a punto de acabarse, se añaden al final canciones parecidas a las que estabas escuchando.',

@@ -1,5 +1,7 @@
 import { useCallback, useState } from 'react';
 import { AutoplaySetting } from '../components/AutoplaySetting';
+import { AutoplaySizes } from '../components/AutoplaySizes';
+import { TapSetting } from '../components/TapSetting';
 import { HeartSetting } from '../components/HeartSetting';
 import { ListButtonSetting } from '../components/ListButtonSetting';
 import { LyricsFolderSetting } from '../components/LyricsFolderSetting';
@@ -19,7 +21,7 @@ import { usePressed } from '../lib/theme/index';
 
 /**
  * The things about the player that are settled once and not from the player
- * itself: how far its jump buttons go, what plays when the queue runs out,
+ * itself: how far its jump buttons go, what a tap on a track plays, what plays when the queue runs out,
  * what its lyrics are translated into, and whether they are read from .lrc
  * files beside the songs.
  *
@@ -88,8 +90,13 @@ export default function PlayerSettingsScreen() {
           <Text style={styles.muted}>{t.settings.jump.note}</Text>
         </View>
         <View style={styles.rule} />
-        {/* What plays when the queue runs out: see the component, which opens its own list. */}
+        {/* What a tap on a track plays, then what plays when the queue runs out: each opens its own list. */}
+        <TapSetting />
+        <View style={styles.rule} />
         <AutoplaySetting />
+        <View style={styles.rule} />
+        {/* How many either of the two above adds at a time. */}
+        <AutoplaySizes />
         <View style={styles.rule} />
         {/*
           Too many to lay out as chips, so the row says which and opens a

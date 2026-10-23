@@ -314,7 +314,8 @@ export default function EqualizerScreen() {
 
       {/* Dimmed rather than removed when off, so the shape of what was set up
           is still there to come back to. */}
-      <View style={off ? styles.dimmed : undefined} pointerEvents={off ? 'none' : 'auto'}>
+      {/* Never folded away and made again as it is turned off and on: see `TrackStrip`. */}
+      <View collapsable={false} style={off ? styles.dimmed : undefined} pointerEvents={off ? 'none' : 'auto'}>
         {parametric ? (
           <>
             <View style={styles.curve}>

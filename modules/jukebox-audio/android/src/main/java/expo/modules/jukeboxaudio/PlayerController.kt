@@ -215,7 +215,7 @@ class PlayerController(
       controller = ready
       attempts = 0
       ready.addListener(listener)
-      pending.forEach { it(ready) }
+      pending.forEach { carefully(it, ready) }
       pending.clear()
     }, ContextCompat.getMainExecutor(context))
   }
@@ -254,8 +254,21 @@ class PlayerController(
   fun withPlayer(block: (MediaController) -> Unit) = onMain {
     if (released) return@onMain
     val ready = controller
-    if (ready != null) block(ready)
+    if (ready != null) carefully(block, ready)
     else if (pending.size < MAX_PENDING_COMMANDS) pending.add(block)
+  }
+
+  /**
+   * A command run on the main thread, where nothing above it would catch a
+   * throw: posted there, it has left whoever asked for it, and a throw ends
+   * the app. One command the player refuses is that command not done.
+   */
+  private fun carefully(block: (MediaController) -> Unit, player: MediaController) {
+    try {
+      block(player)
+    } catch (failure: Exception) {
+      android.util.Log.e("JukeboxPlayer", "the player refused a command", failure)
+    }
   }
 
   /**
@@ -291,8 +304,13 @@ class PlayerController(
     player.prepareIfIdle()
   }
 
-  fun setQueue(tracks: List<Map<String, Any?>>, startIndex: Int, autoPlay: Boolean) = withPlayer { player ->
+  fun setQueue(tracks: List<Map<String, Any?>>, startIndex: Int, autoPlay: Boolean) {
+    // Made here, on the caller's thread, and not on the main one: each may read the downloads' record for its cover, and a queue can be the whole library.
     val items = tracks.map(::toMediaItem)
+    setItems(items, startIndex, autoPlay)
+  }
+
+  private fun setItems(items: List<MediaItem>, startIndex: Int, autoPlay: Boolean) = withPlayer { player ->
     if (items.isEmpty()) {
       player.clearMediaItems()
       return@withPlayer
@@ -311,9 +329,12 @@ class PlayerController(
    * playback is not interrupted: the player keeps its position, and the
    * notification's next/previous keep matching what the app shows.
    */
-  fun insert(track: Map<String, Any?>, index: Int) = withPlayer { player ->
-    val at = if (index < 0) player.mediaItemCount else index.coerceIn(0, player.mediaItemCount)
-    player.addMediaItem(at, toMediaItem(track))
+  fun insert(track: Map<String, Any?>, index: Int) {
+    val item = toMediaItem(track)
+    withPlayer { player ->
+      val at = if (index < 0) player.mediaItemCount else index.coerceIn(0, player.mediaItemCount)
+      player.addMediaItem(at, item)
+    }
   }
 
   fun move(from: Int, to: Int) = withPlayer { player ->

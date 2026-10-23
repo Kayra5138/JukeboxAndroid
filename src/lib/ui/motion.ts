@@ -38,7 +38,13 @@ AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => {
  * read is one indexed row from SQLite on the same thread.
  */
 export function motionReduced(): boolean {
-  return systemStill || readSetting(SETTINGS.reduceMotion) === 'true';
+  if (systemStill) return true;
+  // Asked from inside nearly every press and fling: a database that will not answer is motion as usual, not a closed app.
+  try {
+    return readSetting(SETTINGS.reduceMotion) === 'true';
+  } catch {
+    return false;
+  }
 }
 
 /**

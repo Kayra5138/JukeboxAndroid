@@ -611,6 +611,16 @@ export function CoverFlow({
           {visible.map((index) => (
             <View
               key={albums[index].key}
+              /*
+                Always a view of its own. The one in front takes touches and
+                the rest do not, which left React Native free to fold the front
+                one into its parent and give the others views — so each detent
+                took a sleeve's view away or made one while moving it to its
+                new place in the painting order, and a fast flick queued enough
+                of those to put the drawing out of step with what it was asked
+                to draw (see `TrackStrip`).
+              */
+              collapsable={false}
               style={[
                 styles.berth,
                 /*

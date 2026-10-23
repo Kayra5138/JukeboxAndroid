@@ -4,6 +4,9 @@ import { describe, it } from 'node:test';
 import {
   apart,
   BATCH,
+  batchFor,
+  DEFAULT_SIZES,
+  sizesFrom,
   interleave,
   isFreshId,
   modeFrom,
@@ -127,5 +130,26 @@ describe('sectionKind', () => {
     assert.equal(sectionKind(['1', 'discover:a']), 'mixed');
     assert.ok(isFreshId('discover:job-1'));
     assert.ok(!isFreshId('1234'));
+  });
+});
+
+describe('how many a top-up adds', () => {
+  it('is what was chosen, and the batches as they always were by default', () => {
+    assert.deepEqual(batchFor('library', DEFAULT_SIZES), BATCH.library);
+    assert.deepEqual(batchFor('fresh', DEFAULT_SIZES), BATCH.fresh);
+    assert.deepEqual(batchFor('mixed', DEFAULT_SIZES), BATCH.mixed);
+    assert.deepEqual(batchFor('library', { library: 20, fresh: 10 }), { library: 20, fresh: 0 });
+    assert.deepEqual(batchFor('fresh', { library: 20, fresh: 10 }), { library: 0, fresh: 10 });
+    // Three quarters of each, and never none of either.
+    assert.deepEqual(batchFor('mixed', { library: 20, fresh: 10 }), { library: 15, fresh: 8 });
+    assert.deepEqual(batchFor('mixed', { library: 4, fresh: 2 }), { library: 3, fresh: 2 });
+  });
+
+  it('reads only the choices offered, and the defaults for anything else', () => {
+    assert.deepEqual(sizesFrom('12,6'), { library: 12, fresh: 6 });
+    assert.deepEqual(sizesFrom('13,6'), { library: 8, fresh: 6 });
+    assert.deepEqual(sizesFrom('12'), { library: 12, fresh: 4 });
+    assert.deepEqual(sizesFrom(null), DEFAULT_SIZES);
+    assert.deepEqual(sizesFrom('nonsense'), DEFAULT_SIZES);
   });
 });

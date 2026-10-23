@@ -169,6 +169,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: 'Lire ensuite', hint: 'Juste après le titre en cours' },
     addToQueue: { label: common.addToQueue, hint: 'À la fin' },
+    playSimilar: { label: 'Écouter avec des titres proches', hint: 'Celui-ci, puis une série de titres proches' },
+    playOnly: { label: 'Écouter seulement celui-ci', hint: 'La file ne contient que ce titre' },
     album: { label: 'Aller à l’album', hint: 'Le reste du disque, dans l’ordre' },
     addToPlaylist: { label: 'Ajouter à une liste', hint: 'Une de tes listes, ou une nouvelle' },
     tiles: { label: 'Jouer aux piano tiles', hint: 'Des touches qui tombent en rythme avec ce morceau' },

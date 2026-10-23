@@ -100,12 +100,20 @@ class LookupService : Service() {
     }
   }
 
+  /**
+   * The last start asked for. The service is put away by it, never by none:
+   * stopped with no number while a later start is on its way, Android would
+   * close the app for the foreground that start was owed and never got.
+   */
+  @Volatile private var latestStartId = 0
+
   private val awake by lazy {
     getSystemService(PowerManager::class.java)
       .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Jukebox:Lookup").apply { setReferenceCounted(false) }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    latestStartId = startId
     if (intent?.action == STOP) {
       onStop?.invoke()
       finish()
@@ -116,7 +124,7 @@ class LookupService : Service() {
       // Promised to Android by startForegroundService, so made even for a run that has already ended.
       startForeground(NOTIFICATION, notification(said ?: Words("", "", "", "", 0, 0)), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
     } catch (_: Exception) {
-      stopSelf()
+      stopSelf(startId)
       return START_NOT_STICKY
     }
     if (said == null) {
@@ -165,7 +173,7 @@ class LookupService : Service() {
     if (running === this) running = null
     if (awake.isHeld) awake.release()
     stopForeground(STOP_FOREGROUND_REMOVE)
-    stopSelf()
+    stopSelf(latestStartId)
   }
 
   /**

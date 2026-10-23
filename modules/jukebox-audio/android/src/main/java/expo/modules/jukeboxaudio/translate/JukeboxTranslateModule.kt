@@ -47,7 +47,8 @@ class JukeboxTranslateModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("JukeboxTranslate")
     OnDestroy {
-      BergamotTranslator.close()
+      // Thrown from here would be thrown out of the app's own teardown.
+      runCatching { BergamotTranslator.close() }
       io.cancel()
     }
 

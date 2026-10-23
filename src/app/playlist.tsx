@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { BlurArea, GlassScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -47,6 +48,7 @@ import { useLibraryTracks } from '../lib/library/useLibrary';
 import { libraryRoot } from '../lib/media/library';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
+import { usePlayTapped } from '../lib/player/usePlayTapped';
 import { suggestForPlaylist, type Candidate, type Suggestion } from '../lib/playlists/suggest';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { Behind, scrimOf } from '../lib/theme/Veil';
@@ -378,6 +380,12 @@ export default function PlaylistScreen() {
     (startIndex: number) => void playQueue(tracks, startIndex),
     [playQueue, tracks]
   );
+  // A row tapped: the list from it, unless Settings → Player says otherwise for pages like this one.
+  const playTapped = usePlayTapped();
+  const tap = useCallback(
+    (startIndex: number) => void playTapped(tracks, startIndex, 'page'),
+    [playTapped, tracks]
+  );
 
   const shuffle = useCallback(() => {
     if (tracks.length === 0) return;
@@ -447,6 +455,8 @@ export default function PlaylistScreen() {
 
           And everything the sheets below are laid over, which is the whole
           of the screen but them. */}
+      {/* The tracks an area the bar of what is playing blurs, in a theme of glass: see `Frosted`. */}
+      <GlassScene>
       <Behind
         veiled={choosingCover || adding || confirmingDelete || menu.veiled}
         style={landscape ? styles.sideways : styles.upright}>
@@ -463,14 +473,14 @@ export default function PlaylistScreen() {
         The sides are kept clear out here rather than in the header, so the
         rows and the copy of a row being dragged are kept clear with it.
       */}
-      <View style={[styles.upright, { paddingLeft: insets.left, paddingRight: insets.right }]}>
+      <BlurArea style={[styles.upright, { paddingLeft: insets.left, paddingRight: insets.right }]}>
         <QueueList
           // On a plate, where screens are glass: the page's own body, with what it was opened over round it.
           plate
           queue={tracks}
           // Nothing in a list is "the playing one"; the mark column stays empty.
           currentIndex={-1}
-          onSelect={play}
+          onSelect={tap}
           // On a record's own page "go to album" would open this page again.
           onLongPress={(index) => {
             const track = tracks[index];
@@ -689,10 +699,11 @@ export default function PlaylistScreen() {
             </View>
           }
         />
-      </View>
+      </BlurArea>
 
       <NowPlayingBar column={landscape} />
       </Behind>
+      </GlassScene>
 
       {choosingCover ? (
         <View style={styles.layer}>

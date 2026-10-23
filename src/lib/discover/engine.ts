@@ -222,7 +222,14 @@ async function readTrack(effect: Extract<Effect, { kind: 'track' }>): Promise<vo
  */
 function stored(song: { id: string; key: string; track: Track }): void {
   if (!song?.track || !song.key || !song.id) return;
-  const item = itemOf(boot(), song.key);
+  // Heard from the phone, where a throw has nowhere to go but the app: the long way still brings the song.
+  let item: ReturnType<typeof itemOf>;
+  try {
+    item = itemOf(boot(), song.key);
+  } catch (error) {
+    console.warn('Discover could not take a song the phone stored', error);
+    return;
+  }
   dispatch({ type: 'track', id: song.key, jobId: song.id, track: pictured(song.track, song.key) });
   const tags = item?.song.tags;
   if (tags?.length) {

@@ -164,6 +164,8 @@ export const library: Strings['library'] = {
   menu: {
     playNext: { label: '次に再生', hint: '再生中の曲の直後に再生' },
     addToQueue: { label: common.addToQueue, hint: 'キューの最後に追加' },
+    playSimilar: { label: '似た曲と一緒に再生', hint: 'この曲のあと、似た曲をまとめて追加' },
+    playOnly: { label: 'この曲だけ再生', hint: 'キューはこの1曲だけになります' },
     album: { label: 'アルバムへ移動', hint: 'アルバムの曲を収録順に表示' },
     addToPlaylist: { label: 'リストに追加', hint: '既存のリストか新しいリストに追加' },
     tiles: { label: 'ピアノタイルで遊ぶ', hint: 'この曲に合わせてタイルが落ちてきます' },

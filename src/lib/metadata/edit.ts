@@ -1,5 +1,5 @@
 import type { TrackMetadata } from '../db/metadata.ts';
-import { albumArtistShown } from '../media/enriched.ts';
+import { albumArtistShown, artistShown, titleShown } from '../media/enriched.ts';
 import type { Track } from '../types.ts';
 import { typedPlace, typedYear } from './single.ts';
 
@@ -25,8 +25,9 @@ export function fieldsOf(track: Track, stored: TrackMetadata | null): Fields {
   const known = stored && stored.status !== 'not_found' ? stored : null;
   const place = known?.trackNumber ?? track.trackNumber;
   return {
-    title: known?.title ?? track.title,
-    artist: known?.artist ?? track.artist ?? '',
+    // As the library shows them, so that the boxes and every list say the same: see `titleShown`.
+    title: titleShown(track, stored),
+    artist: artistShown(track, stored) ?? '',
     // As the library shows it, which takes a lookup's word only for the
     // record the track is shown on: see `albumArtistShown`.
     albumArtist: albumArtistShown(track, stored) ?? '',

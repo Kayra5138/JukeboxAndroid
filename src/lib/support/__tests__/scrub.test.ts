@@ -87,3 +87,9 @@ test('a name the app knows of goes wherever it stands, set off or not, in any ca
   assert.equal(scrub('Lost in Song Lost in', ['Song', 'Lost in Song']), '<…> Lost in');
   assert.equal(scrub('nothing named here', names), 'nothing named here');
 });
+
+test('a message cut short is never cut through an emoji', () => {
+  const cut = scrub(`x${'😀'.repeat(MESSAGE_LIMIT)}`);
+  assert.doesNotThrow(() => encodeURIComponent(cut));
+  assert.ok(cut.endsWith('😀…'));
+});

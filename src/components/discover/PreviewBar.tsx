@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Frost, useFrosted, useSceneTarget } from '../Frosted';
 
 import { PauseIcon } from '../Icons';
 import { Image } from '../Picture';
@@ -39,13 +40,18 @@ export function PreviewBar({
   const styles = useStyles();
   const pressed = usePressed();
   const said = t.discover.preview;
+  // As the bar it stands in for: what scrolls under it, out of focus. See `Frosted`.
+  const target = useSceneTarget();
+  const frosted = useFrosted(column ? null : target);
   return (
     <View
       style={[
         column ? styles.column : styles.bar,
+        frosted && styles.clear,
         column && { width, paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14, paddingRight: 12 + insets.right },
       ]}
       accessibilityLiveRegion="polite">
+      {frosted && target ? <Frost target={target} edge="top" /> : null}
       {preview.coverUrl ? (
         <Image source={{ uri: preview.coverUrl }} style={column ? styles.artWide : styles.art} contentFit="cover" />
       ) : (
@@ -91,6 +97,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+  /** Its fill left to `Frost`, which draws it over the blur. */
+  clear: { backgroundColor: 'transparent' },
   column: {
     justifyContent: 'center',
     borderLeftWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),

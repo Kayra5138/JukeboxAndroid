@@ -43,7 +43,28 @@ export function readSetting(key: string): string | null {
   return row?.value ?? null;
 }
 
-export function writeSetting(key: string, value: string): void {
+/**
+ * Writes a setting, and answers whether it was written.
+ *
+ * Never throws. Nearly every setting is written from a switch or a choice
+ * somebody just made, in the handler of the press itself, where a throw is
+ * an uncaught error; a database that will not take the write is the choice
+ * not kept past this run, which is the lesser harm. Where a write has to
+ * fail with what it is part of — inside a transaction — it is
+ * {@link writeSettingOrThrow}.
+ */
+export function writeSetting(key: string, value: string): boolean {
+  try {
+    writeSettingOrThrow(key, value);
+    return true;
+  } catch (failure) {
+    console.warn(`Could not keep the setting ${key}`, failure);
+    return false;
+  }
+}
+
+/** {@link writeSetting} that lets a failure through, for a write inside a transaction that must roll back with it. */
+export function writeSettingOrThrow(key: string, value: string): void {
   db().runSync(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     key,
@@ -221,6 +242,33 @@ export const SETTINGS = {
    * writes it. About this phone's queue, and so stays behind in a backup.
    */
   autoplayQueued: 'player:autoplay:queued',
+  /**
+   * How many songs each top-up adds, from the library and from Discover, as
+   * `library,fresh`: see `BatchSizes` in `player/autoplay/plan.ts`. For the
+   * end of any queue and for a queue begun as similar songs alike. Absent,
+   * eight and four. A preference, and travels in a backup.
+   */
+  autoplaySizes: 'player:autoplay:sizes',
+  /**
+   * What a tap on a track plays: one of `'list' | 'shuffled' | 'similar' |
+   * 'only'` — the list from that track on, the rest of it shuffled, similar
+   * songs, or the track alone. Absent or anything else, `'list'`; see
+   * `player/tap.ts`. A preference, and travels in a backup.
+   */
+  onTap: 'player:onTap',
+  /**
+   * `'1'` where the above holds on the pages of albums, lists, artists and
+   * folders too, and not only on Tracks and in search results. Absent, it does
+   * not: a record is mostly listened to in its order.
+   */
+  onTapEverywhere: 'player:onTapEverywhere',
+  /**
+   * Where the songs come from in a queue begun as similar songs to the one
+   * tapped: `'library' | 'fresh' | 'mixed'`, as for the end of any queue
+   * (`autoplay` above) but chosen apart from it. Absent or anything else,
+   * `'library'`. A preference, and travels in a backup.
+   */
+  onTapSimilar: 'player:onTap:similar',
   /**
    * The language the app speaks, as the id of one in `i18n/languages.ts`.
    *

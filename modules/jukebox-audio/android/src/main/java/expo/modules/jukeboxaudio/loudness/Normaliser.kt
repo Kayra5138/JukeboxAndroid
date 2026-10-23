@@ -237,9 +237,11 @@ class Normaliser(private val context: Context, private val player: Player) : Pla
 
   /** On the worker: answers whatever is wanted, one file at a time, until nothing is. */
   private fun drain() {
+    var current: String? = null
     try {
       while (true) {
         val next = wanted.firstOrNull { it.id !in settled } ?: break
+        current = next.id
         val stillWanted = { wanted.any { it.id == next.id } }
 
         val found = find(next, cancelled = { !stillWanted() })
@@ -249,6 +251,18 @@ class Normaliser(private val context: Context, private val player: Player) : Pla
 
         settled += next.id
         handler.post { arrived(next.id, found?.first, late = found?.second == true) }
+      }
+    } catch (failure: Throwable) {
+      /*
+        Anything at all — a codec running out of memory on one odd file — is
+        that file settled with no gain, as a file that could not be measured
+        is. Thrown on from here it would end the process; left unsettled it
+        would be tried again by the look below, and fail again, for good.
+      */
+      android.util.Log.w("JukeboxLoudness", "could not measure a file", failure)
+      current?.let { id ->
+        settled += id
+        handler.post { arrived(id, null, late = false) }
       }
     } finally {
       working.set(false)

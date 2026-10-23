@@ -1,11 +1,22 @@
-import { db, readSetting, writeSetting } from './index';
+import { db, readSetting, writeSettingOrThrow } from './index';
 import { createPlaylist, playlist, playlistTrackIds } from './playlists';
 import { reconcilePlaylist, type ImportedItem } from '../youtube/playlistSync';
 import type { DownloadJob, YouTubeVideo } from '../youtube/types';
 
 const KEY = 'youtube:playlist-imports:v1';
 type Import = { sourceId: string; playlistId: number; items: ImportedItem[] };
-const read = (): Import[] => JSON.parse(readSetting(KEY) ?? '[]');
+/**
+ * The lists brought in from YouTube, as written down. A record that will not
+ * parse is none: kept, it broke every sync after it for good.
+ */
+const read = (): Import[] => {
+  try {
+    const value: unknown = JSON.parse(readSetting(KEY) ?? '[]');
+    return Array.isArray(value) ? (value as Import[]) : [];
+  } catch {
+    return [];
+  }
+};
 
 /**
  * Save intent before enqueueing so background completion survives app restarts.
@@ -30,7 +41,7 @@ export function registerYouTubePlaylist(videos: YouTubeVideo[], owned: ReadonlyM
     for (const video of videos) {
       if (!known.has(video.id)) { entry.items.push({ videoId: video.id }); known.add(video.id); }
     }
-    writeSetting(KEY, JSON.stringify(imports));
+    writeSettingOrThrow(KEY, JSON.stringify(imports));
   });
   if (owned.size > 0) {
     // Put in as if fetched: a finished job of each is all the list needs to place it.
@@ -59,7 +70,7 @@ export function syncYouTubePlaylists(jobs: DownloadJob[]): boolean {
       entry.items = update.receipts;
       changed = true;
     }
-    if (changed) writeSetting(KEY, JSON.stringify(imports));
+    if (changed) writeSettingOrThrow(KEY, JSON.stringify(imports));
   });
   return changed;
 }

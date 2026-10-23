@@ -1,6 +1,8 @@
 import type { TrackMetadata } from '../db/metadata.ts';
 import type { Tag } from '../db/tags.ts';
 import type { Track } from '../types.ts';
+import { identify } from '../metadata/identify.ts';
+import { bareTitle, foldForMatch } from '../metadata/text.ts';
 
 /** A library track with whatever an online lookup managed to add. */
 export type EnrichedTrack = Track & {
@@ -85,6 +87,57 @@ export function albumArtistShown(
   return track.album == null || sameRecord(shown, found.album) ? said : null;
 }
 
+/**
+ * Whoever a track is shown as being by, or null.
+ *
+ * The file's word first, and a lookup's only where the file names nobody: a
+ * lookup can find a different recording of the song — a cover, when the
+ * original is in no catalogue — and the singer is exactly what that gets
+ * wrong. Somebody's typed word replaces the file's, as it does everywhere.
+ *
+ * One rule for the library and for the details screen's boxes, which used to
+ * disagree: the boxes took the lookup first, so they read right while every
+ * list went on showing what the file said.
+ */
+export function artistShown(
+  track: Pick<Track, 'artist'>,
+  found: Pick<TrackMetadata, 'status' | 'artist'> | null | undefined
+): string | null {
+  if (!found || found.status === 'not_found') return track.artist;
+  if (found.status === 'manual') return found.artist ?? track.artist;
+  return track.artist ?? found.artist;
+}
+
+
+/**
+ * What a track is shown as being called.
+ *
+ * The file's, unless somebody typed another — or a lookup found the song and
+ * its name is the file's own with the wrapping taken off. A file named the way
+ * a download is, `Feint - Snake Eyes (Official Video)`, carries its artist and
+ * its upload in the title, and a lookup that found Feint's "Snake Eyes" has
+ * found that name, cleaner. A cover is called what the song is called, so
+ * this, unlike the artist, is safe to take from a lookup that matched.
+ *
+ * Where the lookup's name is some other, the file's stands, with the artist
+ * taken off the front of it where that is the artist shown beside it: the
+ * name and the credit saying the same person twice is nothing but noise.
+ */
+export function titleShown(
+  track: Pick<Track, 'title' | 'artist'>,
+  found: Pick<TrackMetadata, 'status' | 'title' | 'artist'> | null | undefined
+): string {
+  if (!found || found.status === 'not_found') return track.title;
+  if (found.status === 'manual') return found.title ?? track.title;
+  const lookedUp = found.title?.trim();
+  if (lookedUp) {
+    const own = identify({ title: track.title, artist: track.artist } as Track).title;
+    // Word for word, brackets and all: `Akuma no Ko (Cover)` is not the file's `Akuma no Ko` made cleaner.
+    if (foldForMatch(own) !== '' && foldForMatch(own) === foldForMatch(lookedUp)) return lookedUp;
+  }
+  return bareTitle(track.title, artistShown(track, found));
+}
+
 /** Whether two names are one record, as `albumKey` compares them. */
 function sameRecord(left: string | null | undefined, right: string | null | undefined): boolean {
   return left != null && right != null && left.trim().toLowerCase() === right.trim().toLowerCase();
@@ -97,9 +150,10 @@ const stored = (url: string | null | undefined): url is string => url != null &&
  * Online data fills gaps rather than overwriting the file.
  *
  * A lookup can legitimately return a *different* recording — a cover, when the
- * original is not in any catalogue — so its title and artist are only trusted
- * where the file offers nothing. Genre and year have no counterpart in the file
- * at all, so they are always taken.
+ * original is not in any catalogue — so its artist is only trusted where the
+ * file offers nothing, and its title only where it is the file's own, cleaner
+ * (`titleShown`). Genre and year have no counterpart in the file at all, so
+ * they are always taken.
  */
 export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTrack[] {
   const known = store.readAllMetadata();
@@ -130,8 +184,8 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
     if (found.status === 'manual') {
       return {
         ...track,
-        title: found.title ?? track.title,
-        artist: found.artist ?? track.artist,
+        title: titleShown(track, found),
+        artist: artistShown(track, found),
         album: albumShown(track, found),
         albumArtist: albumArtistShown(track, found),
         // A cover somebody took off stays off, whatever the record gave the
@@ -150,7 +204,8 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
 
     return {
       ...track,
-      artist: track.artist ?? found.artist,
+      title: titleShown(track, found),
+      artist: artistShown(track, found),
       album: albumShown(track, found),
       albumArtist: albumArtistShown(track, found),
       // Unconditional, unlike the two above: the media store's own album-art

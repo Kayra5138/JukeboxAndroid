@@ -38,7 +38,7 @@ import { useCoveredByRoute } from '../lib/player/overlayRoutes';
 import { LyricsView } from './LyricsView';
 import { AutoplayDivider } from './AutoplayDivider';
 import { QueueList } from './QueueList';
-import { barGlass, barsLaidOver, topGlass } from './UnderBars';
+import { barsLaidOver, topGlass } from './UnderBars';
 import { CoverPage } from './CoverPage';
 import { glassOf, glassPage } from '../lib/theme/Veil';
 import { PlayerDiscoverSide, PlayerDiscoverUndo } from './discover/PlayingActions';
@@ -429,14 +429,18 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const [sideBox, setSideBox] = useState(0);
 
   /*
-    How tall the queue's handle, and sideways its heading, came out: in a
-    theme of glass the open list runs on under them (see `UnderBars`), and
-    starts this far down so that its first row is clear of them at rest.
-    Measured, since both grow with the size of writing. Nought, and never
-    measured, in any other theme.
+    How tall the queue's heading came out, sideways: in a theme of glass the
+    list runs on under it (see `UnderBars`), and starts this far down so that
+    its first row is clear of it at rest. Measured, since it grows with the
+    size of writing. Nought, and never measured, in any other theme.
+
+    Upright the queue's handle is no bar at all, in any theme: just the grip
+    and its words, with the lists above and below it and nothing passing
+    under. It was a band of glass, then the foot of a sheet; neither looked
+    right once the queue was pulled up and the band went with it into the
+    middle of the screen.
   */
   const queueOver = barsLaidOver(c);
-  const [handleHeight, setHandleHeight] = useState(0);
   const [headingHeight, setHeadingHeight] = useState(0);
 
   /*
@@ -672,29 +676,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     : grow.interpolate({ inputRange: [0, 0.6], outputRange: [1, 0] });
   const queueHeight = grow.interpolate({ inputRange: [0, 1], outputRange: [0, queueRoom] });
 
-  /*
-    The open queue in a theme of glass, upright: the box it scrolls in is
-    pulled up behind the handle by the handle's height and made that much
-    taller, so the rows pass under it, and the room it takes in the page is
-    what it always was — the space above, which the queue's room is measured
-    from, does not move by a pixel. Shut, that strip behind the handle is all
-    there is of the box, holding whichever rows sit just above the playing
-    one; they are let in only as it opens, since behind the handle while it is
-    shut are the rows of the shut list, which runs on under it from above.
-  */
-  const under = queueOver && handleHeight > 0;
-  const openBox = under
-    ? {
-        height: Animated.add(queueHeight, handleHeight),
-        marginTop: -handleHeight,
-        // Over the first part of its opening, read off the height it is given.
-        opacity: queueHeight.interpolate({
-          inputRange: [0, Math.max(1, queueRoom * 0.15)],
-          outputRange: [0, 1],
-          extrapolate: 'clamp',
-        }),
-      }
-    : { height: queueHeight };
+  const openBox = { height: queueHeight };
   // Sideways the heading is laid over the queue only, never over the words,
   // which are drawn to a height of their own and know nothing of a heading.
   const headingOver = queueOver && !showLyrics;
@@ -727,29 +709,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
       }
     />
   );
-  /*
-    Shut, the list sits above the handle, and in a theme of glass runs on
-    under it the way the open one does, from the other side: its box reaches
-    the handle's height further down than the room it is given, behind the
-    handle, and keeps that much clear at its foot so that its last row can
-    still be scrolled above it. Nothing is laid over its top.
-
-    The clip is what moves, never the list's box, which is only ever the
-    room plus the handle: what of it shows below the room is `shutReach`,
-    the whole strip at rest and nothing while the open list still shows
-    there, the one given up as the other comes, over the same part of the
-    closing. Without that the rows of both lists would be read through the
-    handle at once as it shut. Opening, the shut list is gone at the first
-    frame, as it always was.
-  */
-  const queueList = queueListWith(0, under ? handleHeight : 0);
-  const shutReach = under
-    ? queueHeight.interpolate({
-        inputRange: [0, Math.max(1, queueRoom * 0.15)],
-        outputRange: [handleHeight, 0],
-        extrapolate: 'clamp',
-      })
-    : 0;
+  const queueList = queueListWith(0);
 
   const settings = (
     <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch}
@@ -1149,8 +1109,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
       {/* Holds the queue at the bottom of the screen until it is pulled up. */}
       <View
-        // In a theme of glass the shut list's box reaches down behind the handle, and is clipped by its own.
-        style={[styles.gap, queueOver && styles.gapOver]}
+        style={styles.gap}
         onLayout={(event) => {
           if (measuredFor.current === height) return;
           measuredFor.current = height;
@@ -1166,38 +1125,11 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           dragging, and polling the player twice a second to stay current. One
           list in two sizes cannot drift from itself.
         */}
-        {!expanded &&
-          (queueOver ? (
-            /*
-              Two boxes, so that the list's own is not resized by what
-              shows of it: the outer is the clip, reaching `shutReach` below
-              the room; the inner is the list, reaching a handle's height
-              below it whatever the clip does. Both are the room exactly
-              until the handle has been measured.
-            */
-            <Animated.View style={[styles.shutClip, { bottom: Animated.multiply(shutReach, -1) }]}>
-              <Animated.View
-                style={[styles.shutList, { bottom: Animated.subtract(shutReach, under ? handleHeight : 0) }]}>
-                {queueList}
-              </Animated.View>
-            </Animated.View>
-          ) : (
-            <View style={StyleSheet.absoluteFill}>{queueList}</View>
-          ))}
+        {!expanded && <View style={StyleSheet.absoluteFill}>{queueList}</View>}
       </View>
 
-      <View style={[styles.queue, { paddingBottom: insets.bottom }]}>
-        <View
-          style={[styles.queueHandle, queueOver && styles.queueHandleOver, barGlass(c)]}
-          onLayout={
-            queueOver
-              ? (event) => {
-                  const measured = Math.round(event.nativeEvent.layout.height * 10) / 10;
-                  setHandleHeight((before) => (before === measured ? before : measured));
-                }
-              : undefined
-          }
-          {...queueHandle.panHandlers}>
+      <View style={[styles.queue, queueOver && styles.queueBare, { paddingBottom: insets.bottom }]}>
+        <View style={styles.queueHandle} {...queueHandle.panHandlers}>
           <Pressable
             android_ripple={pressed}
             onPress={() => toggleQueue(!expanded)}
@@ -1209,7 +1141,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           </Pressable>
         </View>
 
-        <Animated.View style={openBox}>{queueListWith(under ? handleHeight : 0)}</Animated.View>
+        <Animated.View style={openBox}>{queueListWith(0)}</Animated.View>
       </View>
       </Behind>
       {/* Under the two sheets, which cover it while either is up. */}
@@ -1347,13 +1279,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   modeOn: outlined(c, c.accent),
 
   gap: { flex: 1, overflow: 'hidden' },
-  gapOver: { overflow: 'visible' },
-  shutClip: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },
-  shutList: { position: 'absolute', top: 0, left: 0, right: 0 },
   queue: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
+  /** No line across, either, where the handle was a bar of glass: see `queueOver`. */
+  queueBare: { borderTopWidth: 0 },
   queueHandle: { alignItems: 'center' },
-  // Drawn over the open list, which comes after it and is pulled up under it.
-  queueHandleOver: { zIndex: 1 },
   queueHandleHit: {
     alignItems: 'center',
     paddingTop: 10,

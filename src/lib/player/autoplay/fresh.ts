@@ -96,7 +96,9 @@ export function chooseFresh<S extends FreshSong>(
   seeds: readonly FreshSeed[],
   queued: ReadonlySet<string>,
   played: ReadonlySet<string>,
-  fold: (name: string) => string
+  fold: (name: string) => string,
+  /** How many to have Discover get ready at once. */
+  callAtOnce = CALL_AT_ONCE
 ): FreshChoice<S> {
   const listed = new Set(items.map((item) => item.song.recordingMbid));
   const usable = items.filter((item) => !item.heard && !item.lost && !(item.track && (queued.has(item.track.id) || played.has(item.track.id))));
@@ -114,7 +116,7 @@ export function chooseFresh<S extends FreshSong>(
   // The list's own songs first among equals: Discover has looked for them already, and a song on the list is a row somebody may have seen.
   const call = [...unready.map((entry) => ({ song: entry.item.song, score: entry.score, listed: 1 })), ...fromPool.map((entry) => ({ song: entry.song, score: entry.score, listed: 0 }))]
     .sort((a, b) => b.score - a.score || b.listed - a.listed)
-    .slice(0, CALL_AT_ONCE)
+    .slice(0, callAtOnce)
     .map((entry) => entry.song);
 
   const nearReady = rated.filter((entry) => entry.item.track && entry.score > 0).length;

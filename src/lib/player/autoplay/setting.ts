@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { readSetting, SETTINGS, writeSetting } from '../../db/index.ts';
 import { createStore } from '../../ui/store.ts';
 import type { FreshTrouble } from './fresh.ts';
-import { modeFrom, type AutoplayMode } from './plan.ts';
+import { DEFAULT_SIZES, modeFrom, sizesFrom, type AutoplayMode, type BatchSizes } from './plan.ts';
 
 /**
  * What plays when the queue runs out: Settings → Player.
@@ -39,13 +39,40 @@ export function setAutoplayMode(next: AutoplayMode): void {
   writeSetting(SETTINGS.autoplay, next);
 }
 
+/** How many songs each top-up adds: Settings → Player, beside the choice above. */
+const sizes = createStore<BatchSizes>(DEFAULT_SIZES);
+let sizesRead = false;
+
+export function autoplaySizes(): BatchSizes {
+  if (!sizesRead) {
+    sizesRead = true;
+    try {
+      sizes.set(sizesFrom(readSetting(SETTINGS.autoplaySizes)));
+    } catch {
+      // The defaults.
+    }
+  }
+  return sizes.get();
+}
+
+export function useAutoplaySizes(): BatchSizes {
+  return useSyncExternalStore(sizes.subscribe, autoplaySizes);
+}
+
+export function setAutoplaySizes(next: BatchSizes): void {
+  sizesRead = true;
+  sizes.set(next);
+  writeSetting(SETTINGS.autoplaySizes, `${next.library},${next.fresh}`);
+}
+
 /**
- * Why the songs picked last could not be new ones, where they were meant to
- * be: said in one line over them. `waiting` is new songs asked for and not in
- * yet when the queue reached its last song; the rest are `FreshTrouble`'s.
- * Null while there is nothing to say.
+ * Why the songs picked last are not what was meant: said in one line over
+ * them. `waiting` is new songs asked for and not in yet when the queue
+ * reached its last song; `random` is a queue begun as similar songs to one
+ * too little is known about, filled from the library at random; the rest are
+ * `FreshTrouble`'s. Null while there is nothing to say.
  */
-export type AutoplayNote = FreshTrouble | 'waiting';
+export type AutoplayNote = FreshTrouble | 'waiting' | 'random';
 
 const note = createStore<AutoplayNote | null>(null);
 

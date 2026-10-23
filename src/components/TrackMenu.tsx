@@ -11,6 +11,8 @@ import type { Track } from '../lib/types';
 export type TrackAction =
   | 'playNext'
   | 'addToQueue'
+  | 'playSimilar'
+  | 'playOnly'
   | 'addToPlaylist'
   | 'album'
   | 'tiles'
@@ -24,6 +26,9 @@ export type TrackAction =
 const ACTIONS: readonly TrackAction[] = [
   'playNext',
   'addToQueue',
+  // Once, whatever a tap on the row plays (`player/tap.ts`).
+  'playSimilar',
+  'playOnly',
   'album',
   'addToPlaylist',
   'tiles',
@@ -72,7 +77,7 @@ export function TrackMenu({
           heading as one button that closes the menu. The back gesture closes it. */}
       <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {track ? (
-          // Six actions and a heading are taller than a landscape screen, so the
+          // Nine actions and a heading are taller than a landscape screen, so the
           // sheet is bounded and scrolls rather than running off the bottom.
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
             <View style={styles.header}>

@@ -30,7 +30,11 @@ object DownloadStore {
     if (loaded) return
     storage = AtomicFile(File(context.noBackupFilesDir, "youtube-downloads.json"))
     state = AtomicFile(File(context.noBackupFilesDir, "youtube-queue.json"))
-    if (storage.baseFile.exists()) queue.read(storage.openRead().bufferedReader().use { it.readText() })
+    // A record that cannot be read is an empty queue rather than every caller failing for good.
+    if (storage.baseFile.exists()) {
+      runCatching { queue.read(storage.openRead().bufferedReader().use { it.readText() }) }
+        .onFailure { android.util.Log.w("JukeboxDownloads", "the queue's record could not be read; starting empty", it) }
+    }
     runCatching { queue.readState(state.openRead().bufferedReader().use { it.readText() }) }
     /*
       Jobs left behind by the FLAC source, which there is no longer an engine
@@ -44,9 +48,10 @@ object DownloadStore {
     // Android may have killed the worker. Never pretend an interrupted job is
     // still running. What was only waiting still is, and nothing is started
     // from here: that is for whoever opens the app, or asks for something.
-    queue.recover { recoverPublication(context, it) }
+    queue.recover { runCatching { recoverPublication(context, it) }.getOrDefault(false) }
     queue.changed = false
-    persist()
+    // Written again at the next change, if the disk will not take it now.
+    runCatching { persist() }
     loaded = true
     // No worker can exist before this process-local store has been initialized.
     File(context.cacheDir, "youtube").deleteRecursively()
@@ -83,7 +88,14 @@ object DownloadStore {
       // Whoever stands in [awaitFind] is waiting for exactly this.
       if (jobsChanged || stateChanged) monitor.notifyAll()
       if (jobsChanged || stateChanged) runCatching { told?.invoke() }
-      if (jobsChanged) persist()
+      /*
+        Not let fail whatever changed the queue: a full disk refusing the
+        record of a download that failed — because the disk was full — threw
+        out of the worker and closed the app. The queue in memory stands, and
+        is written at the next change that can be.
+      */
+      if (jobsChanged) runCatching { persist() }
+        .onFailure { android.util.Log.w("JukeboxDownloads", "the queue's record could not be written", it) }
       // When the queue last worked only spaces out Discover's own. Losing it costs one early start.
       if (stateChanged) runCatching { persistState() }
     }
@@ -264,11 +276,11 @@ object DownloadStore {
   }
 
   @Synchronized
-  fun artwork(context: Context, trackId: String): String? {
+  fun artwork(context: Context, trackId: String): String? = runCatching {
     init(context)
-    return jobs.lastOrNull { it.optString("trackId") == trackId && it.optString("status") == "done" }
+    jobs.lastOrNull { it.optString("trackId") == trackId && it.optString("status") == "done" }
       ?.optString("artworkUri")?.takeIf { it.startsWith("file://") && File(java.net.URI(it)).isFile }
-  }
+  }.getOrNull()
 
   private fun exists(context: Context, job: JSONObject): Boolean { return try {
     if (!job.isNull("discoverKey")) return DiscoverFiles.track(context, job.getString("id")) != null

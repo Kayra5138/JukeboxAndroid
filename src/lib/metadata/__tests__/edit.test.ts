@@ -27,8 +27,8 @@ describe('a shared edit', () => {
     assert.equal(entry?.status, 'manual');
     assert.equal(entry?.source, 'manual');
     assert.equal(entry?.artist, 'Aimer');
-    // Its own, as the details screen would have shown them.
-    assert.equal(entry?.title, 'Looked-up title');
+    // Its own, as the details screen would have shown them: the file's name, which the lookup's is not a cleaner copy of.
+    assert.equal(entry?.title, 'File title');
     assert.equal(entry?.album, 'Looked-up album');
     assert.equal(entry?.year, 1999);
     assert.equal(entry?.trackNumber, 4);

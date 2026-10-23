@@ -177,6 +177,7 @@ export function scrub(message: unknown, names: readonly string[] = []): string {
   text = eachWord(text, isMade, '<id>');
   text = afterColon(text);
   text = text.replace(/\s+/g, ' ').trim();
-  if (text.length > MESSAGE_LIMIT) text = `${text.slice(0, MESSAGE_LIMIT - 1).trimEnd()}…`;
+  // Cut by character and not by code unit: half an emoji is a lone surrogate, which no link can be made of.
+  if (text.length > MESSAGE_LIMIT) text = `${Array.from(text).slice(0, MESSAGE_LIMIT - 1).join('').trimEnd()}…`;
   return text;
 }

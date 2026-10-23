@@ -64,6 +64,44 @@ export const BATCH: Record<Exclude<AutoplayMode, 'off'>, { library: number; fres
 };
 
 /**
+ * How many a top-up adds of each kind, as somebody chose it under Settings →
+ * Player: the library's songs, and new songs from Discover. The defaults are
+ * the batches above.
+ */
+export type BatchSizes = { library: number; fresh: number };
+
+export const DEFAULT_SIZES: BatchSizes = { library: BATCH.library.library, fresh: BATCH.fresh.fresh };
+
+/**
+ * What can be chosen. The library's are a moment's arithmetic each, so up to
+ * an hour or more of songs at once; new songs are a download each, so fewer.
+ */
+export const SIZE_CHOICES: { readonly [K in keyof BatchSizes]: readonly number[] } = {
+  library: [4, 8, 12, 20],
+  fresh: [2, 4, 6, 10],
+};
+
+/** The sizes as they were stored, `library,fresh`; anything that is not one of the choices is the default. */
+export function sizesFrom(stored: string | null | undefined): BatchSizes {
+  const [library, fresh] = (stored ?? '').split(',').map(Number);
+  return {
+    library: SIZE_CHOICES.library.includes(library!) ? library! : DEFAULT_SIZES.library,
+    fresh: SIZE_CHOICES.fresh.includes(fresh!) ? fresh! : DEFAULT_SIZES.fresh,
+  };
+}
+
+/**
+ * One top-up's batch for [mode], at the sizes chosen. A mixed batch is three
+ * quarters of each, so that the two together are not much longer than either
+ * alone: six and three at the defaults, as it always was.
+ */
+export function batchFor(mode: Exclude<AutoplayMode, 'off'>, sizes: BatchSizes): { library: number; fresh: number } {
+  if (mode === 'library') return { library: sizes.library, fresh: 0 };
+  if (mode === 'fresh') return { library: 0, fresh: sizes.fresh };
+  return { library: Math.max(1, Math.round((sizes.library * 3) / 4)), fresh: Math.max(1, Math.round((sizes.fresh * 3) / 4)) };
+}
+
+/**
  * Library songs that fill in, in the New songs mode, where no new song is
  * ready by the time the queue is down to its last song. Two: enough to give
  * Discover another few minutes, and few enough that the songs that follow are

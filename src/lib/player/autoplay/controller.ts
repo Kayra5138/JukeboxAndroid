@@ -6,12 +6,14 @@ import {
 } from '../../discover/engine';
 import { libraryState } from '../../library/index';
 import { splitCredit } from '../../metadata/credit';
+import { artistKey, spreadShuffle } from '../../media/shuffle';
 import type { Track } from '../../types';
 import { candidateOf, contextNow, foldName, KEPT_FOR_MS, libraryIndex, playedSince } from './data';
-import { chooseFresh, freshTrouble, type FreshSeed } from './fresh';
+import { CALL_AT_ONCE, chooseFresh, freshTrouble, type FreshSeed } from './fresh';
 import { drawBatch, scoreLibrary, seedsOf, type Candidate } from './library';
-import { apart, BATCH, BRIDGE, interleave, isFreshId, LOW_WATER, PREPARE_AHEAD, topUp, type AutoplayMode } from './plan';
-import { autoplayMode, setAutoplayNote, watchAutoplayMode, type AutoplayNote } from './setting';
+import { apart, batchFor, BRIDGE, interleave, isFreshId, LOW_WATER, PREPARE_AHEAD, topUp, type AutoplayMode } from './plan';
+import { autoplayMode, autoplaySizes, setAutoplayNote, watchAutoplayMode, type AutoplayNote } from './setting';
+import { tapChoice, watchTapChoice } from '../tapSetting';
 
 /**
  * Keeping the music going when the queue runs out, done.
@@ -47,11 +49,15 @@ import { autoplayMode, setAutoplayNote, watchAutoplayMode, type AutoplayNote } f
 /** What the player's provider says of the queue. */
 export type PlayerView = {
   queue: readonly Track[];
+  /** Which queue it is: see `queueId` in the player's provider. */
+  queueId: number;
   currentIndex: number;
   repeat: RepeatMode;
   /** Where the songs picked here begin, or -1: see `section.ts`. */
   autoFrom: number;
   dismissed: boolean;
+  /** Begun as similar songs to a track, and kept going with them: see `player/tap.ts`. */
+  similar: boolean;
   onLoan: boolean;
 };
 
@@ -192,18 +198,22 @@ export function autoplayTrackChanged(): void {
 
 /** Discover has changed: a song asked for may be in. Only looked at where new songs are wanted. */
 export function autoplayDiscoverChanged(): void {
-  if (autoplayMode() === 'fresh' || autoplayMode() === 'mixed') soon(1_000);
+  const mode = view ? modeFor(view) : autoplayMode();
+  if (mode === 'fresh' || mode === 'mixed') soon(1_000);
 }
 
 /** Joins this to the player, while there is a player to join it to. */
 export function attachAutoplay(player: AutoplayPort): () => void {
   port = player;
-  const unwatch = watchAutoplayMode(() => {
+  const changed = () => {
     lastAbout = '';
     soon();
-  });
+  };
+  const unwatch = watchAutoplayMode(changed);
+  const unwatchTap = watchTapChoice(changed);
   return () => {
     unwatch();
+    unwatchTap();
     if (port === player) port = null;
     if (timer) clearTimeout(timer);
     timer = null;
@@ -230,14 +240,36 @@ async function look(): Promise<void> {
   }
 }
 
+/**
+ * What the end of [v] is kept going with: what was chosen for the end of
+ * every queue, or, for the first batch of a queue begun as similar songs to a
+ * track, what was chosen for those — apart from the other, and never nothing.
+ * Once that batch is in, the player takes the mark off and the queue goes on
+ * by the first choice, as any queue does: the tap's choice is how a queue
+ * begins, not how it carries on.
+ */
+function modeFor(v: PlayerView): AutoplayMode {
+  return v.similar ? tapChoice().source : autoplayMode();
+}
+
+/**
+ * Repeat as it bears on keeping [v] going. A queue begun as similar songs is
+ * one song until its batch comes, and repeat all on it would play that song
+ * again and again on its own: so it is taken as off until then. Repeat one
+ * is somebody wanting that one song, and holds.
+ */
+function repeatFor(v: PlayerView): RepeatMode {
+  return v.similar && v.repeat === 'all' ? 'off' : v.repeat;
+}
+
 async function see(): Promise<void> {
   const v = view;
   const player = port;
   if (!v || !player) return;
-  const mode = autoplayMode();
+  const mode = modeFor(v);
   const decision = topUp({
     mode,
-    repeat: v.repeat,
+    repeat: repeatFor(v),
     dismissed: v.dismissed,
     onLoan: v.onLoan,
     length: v.queue.length,
@@ -258,7 +290,13 @@ async function see(): Promise<void> {
     return;
   }
 
-  const about = [decision.kind, mode, v.queue.length, v.currentIndex, ended, mode === 'library' ? 0 : discoverReadyCount()].join(':');
+  /*
+    With which queue it is. Without it, every queue of one song begun as
+    similar songs was the same as the last — one song, at its start — and a
+    look that found nothing for the first was taken to be the answer for
+    every one after it, until the app was closed.
+  */
+  const about = [v.queueId, decision.kind, mode, v.queue.length, v.currentIndex, ended, mode === 'library' ? 0 : discoverReadyCount()].join(':');
   if (about === lastAbout) return;
   lastAbout = about;
 
@@ -300,7 +338,7 @@ let warmedAt = 0;
  * `data.ts`), so this is a read at most that often, and then nothing.
  */
 async function warm(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>): Promise<void> {
-  if (v.repeat !== 'off' || v.dismissed || v.onLoan || v.currentIndex < 0) return;
+  if (repeatFor(v) !== 'off' || v.dismissed || v.onLoan || v.currentIndex < 0) return;
   const remaining = v.queue.length - 1 - v.currentIndex;
   if (remaining > LOW_WATER[mode] + PREPARE_AHEAD + 1) return;
   const now = Date.now();
@@ -335,13 +373,16 @@ function pick(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>, adding: boolean
   const seeds = seedTracks.map(({ track, weight }) => ({ candidate: idx.byId.get(track.id) ?? candidateOf(track), weight }));
   const last = v.queue[v.queue.length - 1];
   const after = last ? (idx.byId.get(last.id) ?? candidateOf(last)).lead || null : null;
-  const plan = BATCH[mode];
+  // As many of each as somebody chose: see `batchFor`.
+  const sizes = autoplaySizes();
+  const plan = batchFor(mode, sizes);
 
   let fresh: Track[] = [];
   let trouble: AutoplayNote | null = null;
   if (plan.fresh > 0) {
     const freshSeeds: FreshSeed[] = seeds.map(({ candidate, weight }) => ({ names: candidate.names, tags: candidate.tags, weight }));
-    const choice = chooseFresh(discover.items, discover.pool, freshSeeds, queued, played, foldName);
+    // Asked to get ready at least as many as a batch takes, so that a batch of ten is not waiting on four at a time.
+    const choice = chooseFresh(discover.items, discover.pool, freshSeeds, queued, played, foldName, Math.max(CALL_AT_ONCE, plan.fresh));
     const problem = freshTrouble(discover);
     if (problem !== 'unavailable') {
       // Asked for even with no connection to fetch them on: Discover waits for the one its settings allow, and fetches them then.
@@ -365,7 +406,7 @@ function pick(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>, adding: boolean
   */
   let wanted = plan.library;
   if (mode === 'mixed') wanted += plan.fresh - fresh.length;
-  if (mode === 'fresh' && !fresh.length) wanted = trouble === 'waiting' ? (urgent ? BRIDGE : 0) : BATCH.library.library;
+  if (mode === 'fresh' && !fresh.length) wanted = trouble === 'waiting' ? (urgent ? BRIDGE : 0) : sizes.library;
   let familiar: Candidate[] = [];
   if (wanted > 0) {
     const scored = scoreLibrary(idx.candidates, seeds, contextNow(idx.idf, discover.pool, now), new Set([...queued, ...played]), lastBatch);
@@ -373,6 +414,20 @@ function pick(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>, adding: boolean
   }
   const byId = new Map<string, Track>(tracks.map((track) => [track.id, track]));
   const known = familiar.map((candidate) => byId.get(candidate.id)).filter((track): track is Track => !!track);
+  /*
+    A queue somebody began as similar songs, and too little known about them
+    to find enough: the rest from the library at random, spread so that no
+    artist follows themself, and said so over them. Asked for in so many
+    words, it is not to stand empty because a song has no tags and no artist;
+    the end of an ordinary queue, which nobody asked for, may come out short.
+  */
+  let guessed = false;
+  if (v.similar && known.length < wanted) {
+    const taken = new Set([...queued, ...played, ...known.map((track) => track.id)]);
+    const rest = spreadShuffle(tracks.filter((track) => !taken.has(track.id)), artistKey).slice(0, wanted - known.length);
+    known.push(...rest);
+    guessed = rest.length > 0;
+  }
   /*
     A mixed batch keeps its two-and-one: the library's songs were drawn with
     no artist twice running, and a new song between two of them is not moved.
@@ -384,5 +439,6 @@ function pick(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>, adding: boolean
     ? interleave(known, fresh)
     : apart([...fresh, ...known], (track) => leads.get(track.id) ?? foldName(splitCredit(track.artist)[0]), after);
   // Said only where the library stood in for every new song: one new song in three not being ready is nothing to remark on.
+  if (guessed) return { tracks: ordered, note: 'random' };
   return { tracks: ordered, note: mode !== 'library' && !fresh.length && known.length ? trouble : null };
 }

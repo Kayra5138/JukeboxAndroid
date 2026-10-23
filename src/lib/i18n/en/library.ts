@@ -212,6 +212,8 @@ export const library = {
   menu: {
     playNext: { label: 'Play next', hint: 'Straight after the current track' },
     addToQueue: { label: common.addToQueue, hint: 'At the end' },
+    playSimilar: { label: 'Play with similar songs', hint: 'This one, then a batch of songs like it' },
+    playOnly: { label: 'Play only this', hint: 'The queue is this one song' },
     album: { label: 'Go to album', hint: 'The rest of the record, in order' },
     addToPlaylist: { label: 'Add to a list', hint: 'One of your lists, or a new one' },
     tiles: { label: 'Play piano tiles', hint: 'Keys falling in time with this record' },
