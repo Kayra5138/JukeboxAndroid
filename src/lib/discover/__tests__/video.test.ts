@@ -68,3 +68,14 @@ test('the song is found by its own name when the catalogue adds a note in bracke
   const real = video('Twenty One Pilots - The Line (from Arcane Season 2) [Official Music Video]', 'Twenty One Pilots', 212);
   assert.equal(chooseVideo(line, [real]), real);
 });
+
+test('a version in the song’s brackets has to be in the video’s title', () => {
+  const album = video('AURORA - Let Me Heal You (Lyric Video)', 'AURORA', 240);
+  const demo = video('AURORA - Let Me Heal You (Demo)', 'AURORA', 238);
+  const asked = { title: 'Let Me Heal You (demo)', artist: 'AURORA', durationSec: 240, loose: true };
+  // The album take alone is not the demo, however long it runs: nothing is taken rather than the wrong one.
+  assert.equal(chooseVideo(asked, [album]), null);
+  assert.equal(chooseVideo(asked, [album, demo]), demo);
+  // A catalogue's note in brackets says nothing about which recording, and is still passed over.
+  assert.equal(chooseVideo({ title: 'Let Me Heal You (from the album A Different Kind of Human)', artist: 'AURORA', durationSec: 240 }, [album]), album);
+});

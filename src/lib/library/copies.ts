@@ -1,3 +1,5 @@
+import { withoutBrackets, withoutPackaging } from '../metadata/credit.ts';
+import { identify } from '../metadata/identify.ts';
 import { foldForMatch } from '../metadata/text.ts';
 
 /**
@@ -103,8 +105,108 @@ function agree(one: string | null, other: string | null): boolean {
   return short.length >= 3 && long.includes(short);
 }
 
+/**
+ * Within this many seconds two files are the same length to the frame: the
+ * same audio, saved twice. The same song's name then makes them one whatever
+ * else their tags say — a lookup that filed them under two releases of it,
+ * the series a video named in place of the singer.
+ */
+export const SAME_AUDIO = 0.2;
+
+/** Words in a song's brackets that say it is another recording of it, not the same one written another way. */
+const VERSION = new Set([
+  'demo', 'live', 'acoustic', 'remix', 'mix', 'edit', 'instrumental', 'cover', 'vip', 'extended', 'radio',
+  'unplugged', 'karaoke', 'slowed', 'sped', 'nightcore', 'reprise', 'rework', 'bootleg', 'mashup', 'version',
+  'stripped', 'orchestral', 'piano', 'remake', 'session', 'sessions',
+]);
+
+/** Brackets a title can carry a note in, ordinary and full-width. */
+const BRACKETED = /(?:\(([^)]*)\)|\[([^\]]*)\]|【([^】]*)】|（([^）]*)）)/g;
+
+/**
+ * A song as its name says it, for telling two files of it apart from two
+ * files of different songs: the name with the artist, the upload's notes
+ * (`(Official Video)`), a guest's credit and anything in brackets taken off,
+ * folded (`bare`); whether what was in the brackets says it is another
+ * recording (`versioned`: `(demo)`, `(Acoustic)`, `(Maniac Agenda Mix)`);
+ * and who it is by, from the tag or else from the front of a name written
+ * `Artist - Title` (`by`, folded, without spaces).
+ */
+export type SongName = {
+  bare: string;
+  versioned: boolean;
+  by: string[];
+  /** Whether [by] is the file's own artist tag, rather than guessed from the front of its name. */
+  tagged: boolean;
+};
+
+/**
+ * The words in [title]'s brackets that say which recording of the song it is,
+ * folded: `demo` for `Let Me Heal You (demo)`, `acoustic` for `Duvet
+ * (Acoustic)`; none for `(Official Video)` or `(from the series Arcane)`.
+ */
+export function versionWordsOf(title: string): string[] {
+  const found = new Set<string>();
+  for (const match of withoutPackaging(title).matchAll(BRACKETED)) {
+    const inside = foldForMatch(match.slice(1).find((part) => part !== undefined) ?? '');
+    for (const word of inside.split(' ')) if (VERSION.has(word)) found.add(word);
+  }
+  return [...found];
+}
+
+export function songNameOf(title: string, artist: string | null): SongName {
+  const identity = identify({ title, artist } as Parameters<typeof identify>[0]);
+  const named = withoutPackaging(identity.title);
+  const versioned = versionWordsOf(named).length > 0;
+  return {
+    bare: foldForMatch(withoutBrackets(named)),
+    versioned,
+    // A name with no letter in it is the track's number, `01 - Intro`, not who it is by.
+    by: identity.artists.map((name) => foldForMatch(name).replace(/ /g, '')).filter((name) => /\p{L}/u.test(name)),
+    tagged: Boolean(artist?.trim()),
+  };
+}
+
+/** Whether two lists of who a song is by could be the same people: either unknown, or one name shared or held inside another. */
+function sameBy(one: readonly string[], other: readonly string[]): boolean {
+  if (one.length === 0 || other.length === 0) return true;
+  return one.some((a) => other.some((b) => a === b || (Math.min(a.length, b.length) >= 3 && (a.includes(b) || b.includes(a)))));
+}
+
+/**
+ * Whether two files named [a] and [b], [apart] seconds different in length,
+ * are one song saved twice. [sameAudio] is how close in length counts as the
+ * same audio: a fifth of a second between two files, a second where one side
+ * is a video, whose length is told in whole seconds.
+ *
+ *  - The same audio, and the same song's name: one, as long as the name says
+ *    enough by itself (`namesASong`) or both say who it is by and agree.
+ *    Who it is by may disagree where one of the two was only guessed from
+ *    the file's name — a video that put the series where the singer goes,
+ *    `Jojo bizarre adventure - sono chi no sadame` — but not where both are
+ *    tags: two singers' takes of one song can run the same length. Brackets
+ *    do not count here: two files the same to the frame are not a demo and
+ *    an album take.
+ *  - Within `LENGTH_SLACK`: a name that says enough by itself, by people who
+ *    do not contradict each other, and nothing in either's brackets that
+ *    says it is another recording — `Duvet` is not `Duvet (acoustic)`
+ *    because they run close, and the `Intro` of one record is not the
+ *    `Intro` of the next.
+ */
+export function sameSong(a: SongName, b: SongName, apart: number, sameAudio = SAME_AUDIO): boolean {
+  if (!a.bare || a.bare !== b.bare) return false;
+  const named = namesASong(a.bare);
+  const agreed = sameBy(a.by, b.by);
+  if (apart <= sameAudio) {
+    if (agreed) return named || (a.by.length > 0 && b.by.length > 0);
+    return named && !(a.tagged && b.tagged);
+  }
+  if (apart > LENGTH_SLACK || a.versioned || b.versioned) return false;
+  return named && agreed;
+}
+
 /** How a pair of tracks came to be put side by side, and so what else has to hold for them to be one. */
-type Kind = 'name' | 'tags' | 'bytes';
+type Kind = 'name' | 'tags' | 'bytes' | 'song';
 
 type Seen = {
   track: CopyCandidate;
@@ -112,6 +214,8 @@ type Seen = {
   stem: string;
   /** The tag's title, folded. */
   title: string;
+  /** The song its name says it is: see `songNameOf`. */
+  song: SongName;
 };
 
 /**
@@ -142,6 +246,8 @@ function same(kind: Kind, a: Seen, b: Seen): boolean {
         Math.abs(a.track.durationSec - b.track.durationSec) <= SAME_BYTES_SLACK &&
         ((a.stem !== '' && a.stem === b.stem) || (a.title !== '' && a.title === b.title))
       );
+    case 'song':
+      return sameSong(a.song, b.song, Math.abs(a.track.durationSec - b.track.durationSec));
   }
 }
 
@@ -196,8 +302,9 @@ function unions(size: number) {
 /**
  * The songs the library holds more than once, each as the copies of it.
  *
- * Tracks are filed by three keys -- the file's name, the artist and title in
- * its tags, its size in bytes -- and only tracks under one key, within
+ * Tracks are filed by four keys -- the file's name, the artist and title in
+ * its tags, its size in bytes, the song its name says it is -- and only
+ * tracks under one key, within
  * `LENGTH_SLACK` of each other, are ever compared, so ten thousand tracks
  * are a few thousand comparisons and not fifty million. A pair that passes
  * (`same`) is joined, unless the user has said the two are different songs
@@ -223,6 +330,7 @@ export function findCopies<T extends CopyCandidate>(
     track,
     stem: track.filename ? foldForMatch(nameOfFile(track.filename)) : '',
     title: titleKey(track.title ?? ''),
+    song: songNameOf(track.title ?? '', track.artist),
   }));
 
   const filed = new Map<string, number[]>();
@@ -238,6 +346,7 @@ export function findCopies<T extends CopyCandidate>(
     if (artist && one.title) file(`tags\u0000${artist}\u0000${one.title}`, index);
     const size = one.track.size;
     if (size != null && size > 0) file(`bytes\u0000${size}`, index);
+    if (one.song.bare) file(`song\u0000${one.song.bare}`, index);
   });
 
   /** Every pair that passed, as two indices, the lower first. */

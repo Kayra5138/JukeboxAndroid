@@ -1,13 +1,17 @@
 import { db } from '../db/index.ts';
 import type { Cell } from '../backup/format.ts';
 import type { BackupDb } from '../backup/store.ts';
+import { artworkChanged } from '../media/artworkEvents.ts';
+import { downloads } from '../youtube/native.ts';
+import { downloadsToRejoin, type DownloadRecord } from './downloads.ts';
 import { takeIn, type Memory } from './pass.ts';
-import { describe, type Scanned } from './plan.ts';
+import { describe, type Pair, type Scanned } from './plan.ts';
 import {
   dropPairs,
   forgetFiles,
   notePairs,
   readdress,
+  readFiles,
   suggestions,
   writeFiles,
   type Suggestion,
@@ -45,7 +49,39 @@ let last: Scanned[] | null = null;
 export function recognise(tracks: Scanned[]): void {
   if (tracks.length === 0) return;
   last = tracks;
-  takeIn(open(), tracks, memory, Date.now());
+  const moved = takeIn(open(), tracks, memory, Date.now());
+  void followDownloads(tracks, moved);
+}
+
+/**
+ * Takes the downloads along to their files' new numbers, and with them their
+ * covers, which the phone keeps on the download and looks up by the number:
+ * see `downloads.ts`. After every scan, since a file can have been moved
+ * before this was done, and a download that has followed is not looked for
+ * again. Asks the database only when some download's number is not here.
+ *
+ * Never throws: a cover not found this time is looked for on the next scan.
+ */
+async function followDownloads(tracks: Scanned[], moved: Pair[]): Promise<void> {
+  try {
+    if (!downloads?.rejoinAsync) return;
+    const jobs = (await downloads.getJobsAsync(false)) as unknown as DownloadRecord[];
+    const here = new Set(tracks.map((track) => track.id));
+    const astray = (job: DownloadRecord) =>
+      (job.status === 'done' || job.status === 'missing') && !job.discoverKey && !(job.trackId && here.has(job.trackId));
+    if (moved.length === 0 && !jobs.some(astray)) return;
+    const rejoins = downloadsToRejoin(
+      jobs,
+      tracks,
+      readFiles(open()),
+      new Map(moved.map((pair) => [pair.from, pair.to]))
+    );
+    if (rejoins.length === 0) return;
+    const count = await downloads.rejoinAsync(Object.fromEntries(rejoins.map((rejoin) => [rejoin.job, rejoin.track])));
+    if (count > 0) artworkChanged();
+  } catch (error) {
+    console.warn('Downloads could not be taken along to their files.', error);
+  }
 }
 
 /**
@@ -88,6 +124,7 @@ export function mergeSongs(from: string, to: string): void {
   });
   memory.files = null;
   memory.pairs = null;
+  if (last) void followDownloads(last, [{ from, to }]);
 }
 
 /**

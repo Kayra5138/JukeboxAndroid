@@ -16,7 +16,7 @@ import {
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 
-import { PlayIcon, ShuffleIcon } from '../components/Icons';
+import { PlayIcon, SearchIcon, ShuffleIcon } from '../components/Icons';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
 import { SearchField } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
@@ -25,6 +25,7 @@ import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/them
 import { underGlass } from '../lib/theme/Veil';
 import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
+import { useHiddenTabs } from '../lib/ui/tabs';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
 import { useSelectionActions } from '../components/SelectionActions';
@@ -341,6 +342,32 @@ export default function LibraryScreen() {
   };
   const { current } = usePlayerState();
   const router = useRouter();
+
+  /*
+    At the foot of a search, what is not in the library may be on YouTube:
+    the same words searched for there, on the Search tab, at a press. Not
+    while that tab is taken off the bar, which would send anybody who went
+    there straight back here.
+  */
+  const searchTabShown = !useHiddenTabs().has('search');
+  const wanted = query.trim();
+  const searchElsewhere =
+    wanted && searchTabShown && !selecting ? (
+      <View style={styles.elsewhere}>
+        <Pressable
+          accessibilityRole="button"
+          android_ripple={pressed}
+          style={styles.tagAction}
+          onPress={() => router.navigate({ pathname: '/search', params: { q: wanted, run: String(Date.now()) } })}>
+          <View style={styles.elsewhereIcon}>
+            <SearchIcon size={14} color={c.onPrimary} />
+          </View>
+          <Text style={styles.tagActionLabel} numberOfLines={2}>
+            {t.library.screen.searchYouTube(wanted)}
+          </Text>
+        </Pressable>
+      </View>
+    ) : null;
 
   const library = screen.kind === 'library' ? screen.tracks : NOTHING;
 
@@ -1369,6 +1396,7 @@ export default function LibraryScreen() {
           initialNumToRender={12 * columns}
           windowSize={7}
           renderItem={renderHeading}
+          ListFooterComponent={searchElsewhere}
           ListEmptyComponent={
             albumView ? (
               <Text style={styles.muted}>{t.library.noAlbums}</Text>
@@ -1483,6 +1511,7 @@ export default function LibraryScreen() {
           </View>
         }
         ListEmptyComponent={<Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>}
+        ListFooterComponent={searchElsewhere}
         renderItem={renderItem}
       />
       </View>
@@ -1636,6 +1665,15 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     justifyContent: 'center',
   },
   tagActionLabel: { color: c.text, fontSize: 14, flex: 1 },
+  elsewhere: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  elsewhereIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: c.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tagActionCount: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
   empty: { color: c.textFaint, fontSize: 14, textAlign: 'center', padding: 32 },
 

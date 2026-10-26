@@ -45,6 +45,7 @@ export const search: Strings['search'] = {
 
   playlist: 'プレイリスト',
   openPlaylist: 'プレイリストを開く',
+  backToResults: '検索結果に戻る',
   openPlaylistLabel: (title) => `プレイリスト「${title}」を開く`,
   downloadLabel: (title) => `${title}をダウンロード`,
   download: { mp3: 'MP3をダウンロード', original: '音声をダウンロード' },

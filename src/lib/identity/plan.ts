@@ -160,7 +160,7 @@ export function difference(known: Map<string, FileRow>, scanned: Scanned[]): Dif
  * this is never asked on its own. It is asked of two files already taken for
  * one song by their names.
  */
-function identical(a: FileRow, b: FileRow): boolean {
+export function identical(a: FileRow, b: FileRow): boolean {
   return (
     a.size != null &&
     a.size === b.size &&
@@ -170,7 +170,7 @@ function identical(a: FileRow, b: FileRow): boolean {
 }
 
 /** Whether two files are called the same thing, by file name or by title and artist. */
-function namedAlike(a: FileRow, b: FileRow): boolean {
+export function namedAlike(a: FileRow, b: FileRow): boolean {
   const name = fold(a.filename);
   if (name && name === fold(b.filename)) return true;
   const title = fold(a.title);

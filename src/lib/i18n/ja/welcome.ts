@@ -20,6 +20,15 @@ export const welcome: Strings['welcome'] = {
     done: '完了',
     update:
       'このバージョンで追加された設定です。あとから設定でいつでも変更できます。',
+    folder: {
+      heading: "音楽フォルダ",
+      note: "Jukebox が音楽を読み込み、ダウンロードを保存するフォルダです。",
+      jukebox: { label: (folder: string) => `Jukebox 専用フォルダ (${folder})`, note: "このフォルダの中だけ。ダウンロードはここに保存され、他のアプリが Music に置いた音楽は含まれません。" },
+      music: { label: (folder: string) => `Music 全体 (${folder})`, note: "Music フォルダとその中のフォルダのすべて。これまでどおりです。" },
+      current: "以前に選んだフォルダ。",
+      songs: (count: number) => `${format.number(count)}曲`,
+      more: "設定 → ライブラリ → ライブラリフォルダでいつでも変更でき、ほかのフォルダも選べます。",
+    },
     look: {
       heading: '外観を選択',
       note: 'タップすると試せます。',

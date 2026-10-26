@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { identify } from '../identify.ts';
+import { identify, readings } from '../identify.ts';
 import { track } from './support.ts';
+import type { Track } from '../../types.ts';
 
 describe('identify', () => {
   it('drops the artist a tagger left in the title as well', () => {
@@ -101,5 +102,47 @@ describe('identify', () => {
       'Earth, Wind & Fire',
     ]);
     assert.equal(identify(track({ artist: 'Earth, Wind & Fire', title: 'September' })).query, 'Earth, Wind & Fire September');
+  });
+});
+
+describe('readings of a name written the Japanese way', () => {
+  const read = (title: string, artist: string | null = null) =>
+    readings({ title, artist } as Track).map((one) => `${one.artists.join('+')} | ${one.title}`);
+
+  it('finds the singer in thick brackets and the song in corner brackets', () => {
+    assert.deepEqual(read('【Ado】ルル (RuLe)'), ['Ado | ルル (RuLe)', 'Ado | ルル', 'Ado | RuLe']);
+    assert.deepEqual(read('YOASOBI「勇者」 Official Music Video／TVアニメ『葬送のフリーレン』オープニングテーマ'), ['YOASOBI | 勇者']);
+    assert.deepEqual(read('美波「アメヲマツ、」MV'), ['美波 | アメヲマツ、']);
+    assert.deepEqual(read('『Lemon』- Kenshi Yonezu - Polish cover by baquu'), ['Kenshi Yonezu | Lemon']);
+  });
+
+  it('reads the same name again in Latin letters as a second reading', () => {
+    assert.deepEqual(read('緑黄色社会『花になって』Official Video / Ryokuoushoku Shakai – Be a flower'), [
+      '緑黄色社会 | 花になって',
+      'Ryokuoushoku Shakai | Be a flower',
+    ]);
+    assert.deepEqual(read('青のすみか / キタニタツヤ - Where Our Blue Is / Tatsuya Kitani'), [
+      'キタニタツヤ | 青のすみか',
+      'Tatsuya Kitani | Where Our Blue Is',
+    ]);
+  });
+
+  it('tries both orders where a slash leaves the order in doubt', () => {
+    assert.deepEqual(read('和楽器バンド / 千本桜'), ['和楽器バンド | 千本桜', '千本桜 | 和楽器バンド']);
+  });
+
+  it('takes a name written in two writings apart, and a title given twice', () => {
+    assert.deepEqual(read('米津玄師 Kenshi Yonezu - KICKBACK'), ['米津玄師+Kenshi Yonezu | KICKBACK']);
+    assert.deepEqual(read('Nico Touches The Walls - Hologram (ホログラム)').slice(1), ['Nico Touches The Walls | Hologram', 'Nico Touches The Walls | ホログラム']);
+    assert.deepEqual(read('[Official Video] ALI PROJECT - Kyomu Densen - 凶夢伝染').slice(1), ['ALI PROJECT | Kyomu Densen', 'ALI PROJECT | 凶夢伝染']);
+  });
+
+  it('takes a guest written with no space after feat.', () => {
+    assert.deepEqual(read('RADWIMPS - すずめ feat.十明 [Official Lyric Video]'), ['RADWIMPS+十明 | すずめ']);
+  });
+
+  it('leaves a name written Artist - Title with its one reading', () => {
+    assert.deepEqual(read('Eminem - Berzerk (Official)'), ['Eminem | Berzerk']);
+    assert.deepEqual(read('Itterasshai', 'Ai Higuchi'), ['Ai Higuchi | Itterasshai']);
   });
 });

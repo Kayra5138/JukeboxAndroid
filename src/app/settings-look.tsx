@@ -3,6 +3,7 @@ import { Link, useFocusEffect } from 'expo-router';
 import { Switch, Text, View } from 'react-native';
 
 import { Pressable } from '../components/Pressable';
+import { Segmented } from '../components/Segmented';
 import { SettingsPage, useRows } from '../components/settings/rows';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
@@ -13,6 +14,8 @@ import { rackWanted, useLandscape } from '../lib/ui/layout';
 import { setMoreButtonShown, useMoreButtonShown } from '../lib/ui/moreButton';
 import { OPTIONAL_TABS } from '../lib/ui/tabChoice';
 import { setTabShown, useHiddenTabs } from '../lib/ui/tabs';
+import { setScriptNames, useScriptNames } from '../lib/ui/scriptNames';
+import { refreshLibrary } from '../lib/library/index';
 
 /**
  * How the app looks: its theme, the rack of sleeves, how much of it moves,
@@ -44,6 +47,7 @@ export default function LookSettingsScreen() {
   const [still, setStill] = useState(() => readSetting(SETTINGS.reduceMotion) === 'true');
   /** Held where every row is watching, like the theme; switching it redraws them and this. */
   const dots = useMoreButtonShown();
+  const writing = useScriptNames();
   /** Held where the tab bar watches it, so a switch here changes the bar at once. */
   const hiddenTabs = useHiddenTabs();
   /** The ways of looking at the library that its switch offers. */
@@ -144,6 +148,32 @@ export default function LookSettingsScreen() {
                 />
               </View>
               <Text style={styles.muted}>{t.settings.moreButton.note}</Text>
+            </View>
+            <View style={styles.rule} />
+            {/*
+              Which writing a song's name is shown in, where a lookup found it
+              in two. Two choices, as the jump buttons' steps are laid out.
+            */}
+            <View style={styles.row}>
+              <View style={styles.line}>
+                <Text style={styles.title}>{t.settings.scriptNames.title}</Text>
+                <Segmented
+                  role="radio"
+                  variant="chips"
+                  size="compact"
+                  options={[
+                    { value: 'latin' as const, label: t.settings.scriptNames.latin },
+                    { value: 'original' as const, label: t.settings.scriptNames.original },
+                  ]}
+                  value={writing}
+                  onChange={(next) => {
+                    setScriptNames(next);
+                    // The library reads its names again, in the writing just chosen.
+                    void refreshLibrary();
+                  }}
+                />
+              </View>
+              <Text style={styles.muted}>{t.settings.scriptNames.note}</Text>
             </View>
           </View>
         </View>

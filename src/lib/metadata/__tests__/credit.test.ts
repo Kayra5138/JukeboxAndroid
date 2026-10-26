@@ -229,3 +229,33 @@ describe('withoutPackaging, beyond brackets', () => {
     assert.equal(withoutPackaging('Lose Yourself - Live'), 'Lose Yourself - Live');
   });
 });
+
+it('notes in square brackets, about subtitles, and in Japanese are packaging too', () => {
+  const cases: [string, string][] = [
+    ['Green Day - Boulevard Of Broken Dreams [Official Music Video] [4K Upgrade]', 'Green Day - Boulevard Of Broken Dreams'],
+    ['Song [Eng Sub]', 'Song'],
+    ['Song [Türkçe Çeviri]', 'Song'],
+    ['Song [Legendado]', 'Song'],
+    ['Song (Lyrics) [Romaji/English]', 'Song'],
+    ['Song (Color Coded Lyrics Eng/Rom/Kan)', 'Song'],
+    ['Song [Kan/Rom/Eng]', 'Song'],
+    ['Song [Official M/V]', 'Song'],
+    ['Song M/V', 'Song'],
+    ['Song [Audio Only]', 'Song'],
+    ['Song (Performance Video)', 'Song'],
+    ['Song [歌詞付き]', 'Song'],
+    ['Song 【公式】', 'Song'],
+    ['Song 「MV」', 'Song'],
+    ['DADADADADADADADADADA (打打打打打打打打打打) English subtitles', 'DADADADADADADADADADA (打打打打打打打打打打)'],
+    ['YOASOBI「勇者」 Official Music Video／TVアニメ『葬送のフリーレン』オープニングテーマ', 'YOASOBI 「勇者」'],
+    ['batta「chase」MUSIC VIDEO（TVアニメ「ジョジョの奇妙な冒険」新オープニングテーマ）', 'batta 「chase」'],
+    ['＜ノラガミARAGOTO＞OPテーマ THE ORAL CIGARETTES「狂乱 Hey Kids!!」MusicVideo', 'THE ORAL CIGARETTES 「狂乱 Hey Kids!!」'],
+    ['Endless Starlight 〜命のキラメキ〜（Full ver.）', 'Endless Starlight 〜命のキラメキ〜'],
+    ['[Official Video] ALI PROJECT - Kyomu Densen - 凶夢伝染', 'ALI PROJECT - Kyomu Densen - 凶夢伝染'],
+  ];
+  for (const [title, cleaned] of cases) assert.equal(withoutPackaging(title), cleaned, title);
+  // A song's name in Japanese brackets is the song, not a note.
+  assert.equal(withoutPackaging('『Lemon』- Kenshi Yonezu'), '『Lemon』 - Kenshi Yonezu');
+  assert.equal(withoutPackaging('Video Games'), 'Video Games');
+  assert.equal(withoutPackaging('Song (Official Live Video)'), 'Song (Live)');
+});

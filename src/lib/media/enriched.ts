@@ -36,6 +36,8 @@ export type MetadataStore = {
    * (`fillCovers`), by track. Left out, there are none.
    */
   readSharedCovers?: () => Map<string, string>;
+  /** Which writing a name found in two is shown in: see `ScriptNames`. Left out, Latin letters. */
+  names?: () => ScriptNames;
 };
 
 /**
@@ -101,11 +103,37 @@ export function albumArtistShown(
  */
 export function artistShown(
   track: Pick<Track, 'artist'>,
-  found: Pick<TrackMetadata, 'status' | 'artist'> | null | undefined
+  found: Pick<TrackMetadata, 'status' | 'artist' | 'latinArtist' | 'nativeArtist'> | null | undefined,
+  names: ScriptNames = 'latin'
 ): string | null {
   if (!found || found.status === 'not_found') return track.artist;
   if (found.status === 'manual') return found.artist ?? track.artist;
-  return track.artist ?? found.artist;
+  const said = track.artist ?? found.artist;
+  return inWriting(said, names === 'latin' ? found.latinArtist : found.nativeArtist);
+}
+
+/**
+ * Which writing the library shows a name in, where a lookup found it in two:
+ * Latin letters, or the song's own. A setting, `ui:scriptNames`; Latin
+ * letters unless somebody chose otherwise, since a name nobody can read is
+ * one nobody can find in a list either.
+ */
+export type ScriptNames = 'latin' | 'original';
+
+/** Writing that is not the Latin alphabet's: Japanese, Chinese, Korean. */
+const EAST_ASIAN = /[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}]/u;
+
+/**
+ * [name], or [wanted] in its place where [wanted] is the same name in the
+ * other writing — the one the library is set to show — and [name] is not
+ * written that way already. A name that is in the wanted writing stays as
+ * it is, spelt as the file or the lookup spelt it.
+ */
+function inWriting(name: string | null, wanted: string | null | undefined): string | null {
+  const other = wanted?.trim();
+  if (!other) return name;
+  if (!name) return other;
+  return EAST_ASIAN.test(name) === EAST_ASIAN.test(other) ? name : other;
 }
 
 
@@ -125,17 +153,32 @@ export function artistShown(
  */
 export function titleShown(
   track: Pick<Track, 'title' | 'artist'>,
-  found: Pick<TrackMetadata, 'status' | 'title' | 'artist'> | null | undefined
+  found:
+    | Pick<TrackMetadata, 'status' | 'title' | 'artist' | 'latinTitle' | 'nativeTitle' | 'latinArtist' | 'nativeArtist'>
+    | null
+    | undefined,
+  names: ScriptNames = 'latin'
 ): string {
   if (!found || found.status === 'not_found') return track.title;
   if (found.status === 'manual') return found.title ?? track.title;
+  /*
+    The song's name in the writing the library is set to show, where the
+    lookup found it in that writing and the file has it in the other: `勇者`
+    is shown as `Yuusha`, and set the other way `Itterasshai` is shown as
+    `いってらっしゃい`. A match is the song, so either of its names is.
+  */
+  const preferred = (names === 'latin' ? found.latinTitle : found.nativeTitle)?.trim();
+  if (preferred) {
+    const own = identify({ title: track.title, artist: track.artist } as Track).title;
+    if (EAST_ASIAN.test(own) !== EAST_ASIAN.test(preferred)) return preferred;
+  }
   const lookedUp = found.title?.trim();
   if (lookedUp) {
     const own = identify({ title: track.title, artist: track.artist } as Track).title;
     // Word for word, brackets and all: `Akuma no Ko (Cover)` is not the file's `Akuma no Ko` made cleaner.
     if (foldForMatch(own) !== '' && foldForMatch(own) === foldForMatch(lookedUp)) return lookedUp;
   }
-  return bareTitle(track.title, artistShown(track, found));
+  return bareTitle(track.title, artistShown(track, found, names));
 }
 
 /** Whether two names are one record, as `albumKey` compares them. */
@@ -159,6 +202,7 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
   const known = store.readAllMetadata();
   const tagsByTrack = store.allTags();
   const shared = store.readSharedCovers?.() ?? new Map<string, string>();
+  const names = store.names?.() ?? 'latin';
 
   return tracks.map((track) => {
     const tags = (tagsByTrack.get(track.id) ?? []).map((entry) => entry.tag);
@@ -184,8 +228,8 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
     if (found.status === 'manual') {
       return {
         ...track,
-        title: titleShown(track, found),
-        artist: artistShown(track, found),
+        title: titleShown(track, found, names),
+        artist: artistShown(track, found, names),
         album: albumShown(track, found),
         albumArtist: albumArtistShown(track, found),
         // A cover somebody took off stays off, whatever the record gave the
@@ -204,8 +248,8 @@ export function mergeMetadata(tracks: Track[], store: MetadataStore): EnrichedTr
 
     return {
       ...track,
-      title: titleShown(track, found),
-      artist: artistShown(track, found),
+      title: titleShown(track, found, names),
+      artist: artistShown(track, found, names),
       album: albumShown(track, found),
       albumArtist: albumArtistShown(track, found),
       // Unconditional, unlike the two above: the media store's own album-art

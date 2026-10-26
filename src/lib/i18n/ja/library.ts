@@ -18,6 +18,7 @@ export const library: Strings['library'] = {
   albumMenu: 'アルバムのオプション',
 
   screen: {
+    searchYouTube: (query: string) => `YouTube で「${query}」を検索`,
     viewSwitch: 'ライブラリの表示',
     searchHints: {
       tracks: '曲・アーティスト・タグを検索',
@@ -201,6 +202,11 @@ export const library: Strings['library'] = {
     shorterThan: (seconds) => `${format.number(seconds)}秒未満`,
   },
 
+  autoWrite: {
+    heading: "ファイルに",
+    edits: { title: "保存した内容をファイルに書き込む", note: "曲の詳細を保存すると、1曲でもまとめてでも、「ファイルに書き込む」と同じようにファイルにも書き込みます。Jukebox がダウンロードしていないファイルは、Android が先に確認します。" },
+    lookups: { title: "検索で見つかった内容をファイルに書き込む", note: "検索で一致し、自分で編集していない曲の詳細をファイルに書き込みます。Jukebox のダウンロードはバックグラウンドでもすぐに書き込みます。ほかのファイルは待機し、次にアプリを開いたときにまとめて確認します。再生中の曲は次の機会に回します。" },
+  },
   copies: {
     title: '同じ曲のコピー',
     some: (count) =>

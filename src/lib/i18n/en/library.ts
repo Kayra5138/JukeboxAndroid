@@ -27,6 +27,8 @@ export const library = {
 
   /** `LibraryScreen`. */
   screen: {
+    /** At the foot of a search: the same words, searched for on YouTube on the Search tab. */
+    searchYouTube: (query: string) => `Search YouTube for “${query}”`,
     viewSwitch: 'Library view',
     /** What the box says it looks for, which is not the same thing in every view. */
     searchHints: {
@@ -285,6 +287,12 @@ export const library = {
    * Songs the library holds more than once: the Copies screen, its row on
    * Settings → Library, and the quiet line on the Library tab.
    */
+  /** Settings → Library: details written into the files without the button for it. See `filetags/auto.ts`. */
+  autoWrite: {
+    heading: "In the files",
+    edits: { title: "Write what I save into the file", note: "When you save a song’s details, alone or several at once, they go into the file as well, as Write to file would. Android asks first, for files Jukebox did not download itself." },
+    lookups: { title: "Write what lookups find into the file", note: "A song a lookup matched, and you have not edited, gets its details written into the file. Jukebox’s own downloads are written straight away, even in the background. Other files wait and are asked about together the next time the app is open. A song that is playing waits for the next time." },
+  },
   copies: {
     /** The screen's title in the bar, and the row's name on Settings → Library. One short line. */
     title: 'Copies of the same song',

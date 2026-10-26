@@ -634,6 +634,20 @@ const ALBUM_ARTIST_AND_SHARED_COVERS = `
     WHERE status = 'not_found' AND artwork_url LIKE 'file://%';
 `;
 
+/**
+ * A song's name in the two writings it can have: Latin letters, and its own
+ * — a Japanese song as `Sono Chino Sadame` and as `その血の運命`. Found by a
+ * lookup, beside the name it was found under; which of them the library
+ * shows is a setting (`ui:scriptNames`). Empty for every row there is: they
+ * fill in as tracks are looked up.
+ */
+const NAMES_IN_TWO_WRITINGS = `
+  ALTER TABLE track_metadata ADD COLUMN latin_title TEXT;
+  ALTER TABLE track_metadata ADD COLUMN latin_artist TEXT;
+  ALTER TABLE track_metadata ADD COLUMN native_title TEXT;
+  ALTER TABLE track_metadata ADD COLUMN native_artist TEXT;
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -661,6 +675,7 @@ export const MIGRATIONS: string[] = [
   COVER_SEARCHED,
   EXCLUSIONS_DATED,
   ALBUM_ARTIST_AND_SHARED_COVERS,
+  NAMES_IN_TWO_WRITINGS,
 ];
 
 /**

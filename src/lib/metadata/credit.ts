@@ -184,7 +184,7 @@ export function splitCredit(credit: string | null | undefined, verdict?: Verdict
 const GUEST_IN_BRACKETS = /\s*[([]\s*(?:featuring|feat\.?|ft\.?|with)\s+([^)\]]+)[)\]]/gi;
 
 /** `ft. Rihanna` on the end of a title, up to whatever comes after it. */
-const GUEST_AT_LARGE = /\s+(?:featuring|feat\.?|ft\.?)\s+(.+?)(?=\s+-\s+|\s*[([]|$)/gi;
+const GUEST_AT_LARGE = /\s+(?:featuring\s+|feat\.\s*|ft\.\s*|feat\s+|ft\s+)(.+?)(?=\s+-\s+|\s*[([]|$)/gi;
 
 /**
  * A title without the guests named in it, and who they were.
@@ -232,11 +232,17 @@ const PACKAGING = new Set([
   'video', 'videoclip', 'clip', 'klip', 'musikvideo', 'audio', 'visualizer', 'visualiser',
   'lyric', 'lyrics', 'letra', 'paroles', 'testo', 'sozleri', 'songtext',
   'explicit', 'uncensored', 'clean', 'hd', 'hq', '4k', '1080p', '720p', 'mv', 'pv',
-  'release', 'premiere', 'remaster', 'remastered',
+  'release', 'premiere', 'remaster', 'remastered', 'musicvideo',
+  // Subtitles, in the words an upload says them in: `[Eng Sub]`, `[Legendado]`, `[Türkçe Çeviri]`.
+  'sub', 'subs', 'subbed', 'subtitle', 'subtitles', 'subtitulado', 'subtitulada', 'legendado', 'legenda',
+  'vietsub', 'engsub', 'vostfr', 'ceviri', 'romaji',
   // The channels that put their own name in brackets on every upload.
   'monstercat', 'ncs', 'nocopyrightsounds',
-  // Only alongside the words above: `Music Video`, `Official Music Video`.
-  'music', 'with', 'full', 'song', 'sarki', 'new',
+  // Only alongside the words above: `Music Video`, `Official Music Video`,
+  // `Audio Only`, `Official Animated Video`, `4K Upgrade`, `Color Coded Lyrics`.
+  'music', 'with', 'full', 'song', 'sarki', 'new', 'only', 'animated', 'performance', 'upgrade', 'color',
+  'colour', 'coded', 'eng', 'english', 'rom', 'kan', 'kanji', 'japanese', 'turkce', 'espanol', 'spanish',
+  'portugues', 'francais', 'deutsch', 'and',
 ]);
 
 /** Of those, the ones that say "upload" on their own; the rest only count beside one of these. */
@@ -245,8 +251,30 @@ const STRONG = new Set([
   'video', 'videoclip', 'clip', 'klip', 'musikvideo', 'audio', 'visualizer', 'visualiser',
   'lyric', 'lyrics', 'letra', 'paroles', 'testo', 'sozleri', 'songtext',
   'explicit', 'uncensored', 'hd', 'hq', '4k', '1080p', '720p', 'mv', 'pv', 'release', 'premiere',
-  'remaster', 'remastered',
+  'remaster', 'remastered', 'musicvideo',
+  'sub', 'subs', 'subbed', 'subtitle', 'subtitles', 'subtitulado', 'subtitulada', 'legendado', 'legenda',
+  'vietsub', 'engsub', 'vostfr', 'ceviri', 'romaji',
 ]);
+
+/** Words that say the video has subtitles, which end a title as `Official Video` does: `… English subtitles`. */
+const SUBTITLED = new Set(['sub', 'subs', 'subbed', 'subtitle', 'subtitles', 'legendado', 'vietsub', 'engsub', 'ceviri', 'vostfr']);
+
+/**
+ * The languages a note lists its lyrics in: `[Kan/Rom/Eng]`. Two or more of
+ * these and nothing else is a note about the subtitles, however it is
+ * written.
+ */
+const LANGUAGES = new Set(['eng', 'english', 'rom', 'romaji', 'kan', 'kanji', 'jp', 'jpn', 'japanese', 'kor', 'hangul', 'esp', 'espanol', 'tr', 'turkce']);
+
+/**
+ * A note in Japanese about the upload: `歌詞付き` (with lyrics), `公式`
+ * (official), `フル` (full), what a video is the opening or ending theme of —
+ * `TVアニメ『葬送のフリーレン』オープニングテーマ` — or `MV` in the brackets
+ * Japanese uploads use. Words run together in Japanese, so these are matched
+ * as text and not counted word by word.
+ */
+const JAPANESE_NOTE =
+  /^(?:公式|歌詞付き?|フル(?:バージョン|ver\.?)?|full ?ver(?:sion|\.)?|mv|pv|music ?video|ミュージック ?ビデオ|ミュージックビデオ|lyric ?video|オフィシャル.*)$|(?:アニメ|劇場版|映画|ドラマ|ゲーム|tv).*(?:主題歌|オープニング|エンディング|テーマ|挿入歌|\bop\b|\bed\b)|(?:主題歌|オープニング ?テーマ|エンディング ?テーマ|挿入歌|op ?テーマ|ed ?テーマ)/i;
 
 /**
  * Words that say the recording is another one, and stay when the rest of a
@@ -260,7 +288,10 @@ const RECORDING = new Set(['live', 'acoustic', 'remix', 'instrumental', 'karaoke
  * Version)`, `(TV Size)`, `(feat. Jay-Z)`, `(Part II)`.
  */
 function afterNote(text: string): string | null {
-  const words = foldForMatch(text).split(' ').filter(Boolean);
+  if (JAPANESE_NOTE.test(text.trim())) return '';
+  // `M/V` is `MV`, and a word of its own; folded apart it would be two letters that say nothing.
+  const words = foldForMatch(text.replace(/\bm\s*\/\s*v\b/gi, 'mv')).split(' ').filter(Boolean);
+  if (words.length >= 2 && words.every((word) => LANGUAGES.has(word))) return '';
   if (!words.some((word) => STRONG.has(word))) return null;
   const kept: string[] = [];
   for (const word of words) {
@@ -286,7 +317,10 @@ export function withoutBrackets(title: string): string {
 }
 
 /** Brackets a video's title puts notes in, ordinary and full-width. */
-const BRACKETED = /\s*(?:\(([^)]*)\)|\[([^\]]*)\]|【([^】]*)】|（([^）]*)）)/g;
+const BRACKETED = /\s*(?:\(([^)]*)\)|\[([^\]]*)\]|【([^】]*)】|（([^）]*)）|［([^］]*)］|「([^」]*)」|『([^』]*)』|＜([^＞]*)＞|〈([^〉]*)〉|《([^》]*)》)/g;
+
+/** How many brackets {@link BRACKETED} knows, which is how many of its groups a match carries. */
+const BRACKET_KINDS = 10;
 
 /**
  * A title without what is about where the file came from.
@@ -303,15 +337,24 @@ const BRACKETED = /\s*(?:\(([^)]*)\)|\[([^\]]*)\]|【([^】]*)】|（([^）]*)�
  * whole: better an untidy search than a name taken for packaging.
  */
 export function withoutPackaging(title: string): string {
-  let cleaned = title.replace(BRACKETED, (group: string, ...inside: (string | undefined)[]) => {
-    const text = inside.slice(0, 4).find((part) => part !== undefined) ?? '';
+  let cleaned = title
+    // `M/V` is `MV`.
+    .replace(/\bm\s*\/\s*v\b/gi, 'MV')
+    // Japanese brackets are written against what is outside them, `「chase」MUSIC VIDEO`; spaced, the words outside are words.
+    .replace(/([」』】）］＞〉》])(?=\S)/g, '$1 ')
+    .replace(/(?<=\S)([「『【（［＜〈《])/g, ' $1')
+    // What a video is the theme of, in front: `＜ノラガミARAGOTO＞OPテーマ THE ORAL CIGARETTES「狂乱 Hey Kids!!」`.
+    .replace(/^\s*[＜〈《【\[(（][^＞〉》】\])）]*[＞〉》】\])）]\s*(?:op|ed|オープニング|エンディング)?\s*(?:テーマ|主題歌|挿入歌)\s*/i, '')
+    .replace(BRACKETED, (group: string, ...inside: (string | undefined)[]) => {
+    const text = inside.slice(0, BRACKET_KINDS).find((part) => part !== undefined) ?? '';
     const left = afterNote(text);
     if (left === null) return group;
     return left ? ` (${left.replace(/\b\w/g, (first) => first.toUpperCase())})` : '';
   });
   // The same said after a dash or a bar, as often as it is said.
   for (;;) {
-    const tail = /^(.*\S)\s+[-|–—/]+\s+([^-|–—/]+)$/.exec(cleaned);
+    // A full-width slash or bar sets a note off with no spaces round it: `Official Video／TVアニメ…`.
+    const tail = /^(.*\S)(?:\s+[-|–—/]+\s+|\s*[／｜]\s*)([^-|–—/／｜]+)$/.exec(cleaned);
     if (!tail) break;
     const left = afterNote(tail[2]!);
     if (left !== '') break;
@@ -324,7 +367,12 @@ export function withoutPackaging(title: string): string {
   let cut = words.length;
   while (cut > 1 && PACKAGING.has(foldForMatch(words[cut - 1]!))) cut -= 1;
   const run = words.slice(cut).map((word) => foldForMatch(word));
-  if (run.length >= 2 && run.some((word) => STRONG.has(word)) && run.some((word) => word === 'official' || word === 'resmi' || word === 'lyrics' || word === 'video')) {
+  const saysUpload = (word: string) => word === 'official' || word === 'resmi' || word === 'lyrics' || word === 'video' || SUBTITLED.has(word);
+  if (
+    (run.length >= 2 && run.some((word) => STRONG.has(word)) && run.some(saysUpload)) ||
+    // A word that is nothing else: `…「狂乱 Hey Kids!!」MusicVideo`.
+    (run.length === 1 && (run[0] === 'musicvideo' || run[0] === 'mv'))
+  ) {
     cleaned = words.slice(0, cut).join(' ');
   }
   cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\s+[-|–—/]+\s*$/, '').trim();

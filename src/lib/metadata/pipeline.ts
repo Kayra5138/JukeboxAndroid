@@ -271,6 +271,11 @@ function fromItunes(itunes: ItunesMatch, found: Found | null): Found {
     artworkUrl: itunes.artworkUrl,
     trackNumber: itunes.trackNumber,
     discNumber: itunes.discNumber,
+    // The same song's name in the other writing, where Apple has one: which is shown is the library's setting.
+    latinTitle: itunes.latinTitle ?? null,
+    latinArtist: itunes.latinArtist ?? null,
+    nativeTitle: itunes.nativeTitle ?? null,
+    nativeArtist: itunes.nativeArtist ?? null,
     tags,
   };
 }

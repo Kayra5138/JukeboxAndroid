@@ -302,3 +302,40 @@ describe('the name a looked-up track is shown with', () => {
     assert.equal(titleShown(file, null), 'Feint - Snake Eyes');
   });
 });
+
+describe('the writing a name found in two is shown in', () => {
+  const twice = found({
+    trackId: '1',
+    title: '勇者',
+    artist: 'YOASOBI',
+    latinTitle: 'Yuusha',
+    nativeTitle: '勇者',
+    latinArtist: 'Wagakki Band',
+    nativeArtist: '和楽器バンド',
+  });
+
+  it('is Latin letters unless set otherwise, for a name the file has in the other writing', () => {
+    const file = track({ id: '1', title: 'YOASOBI「勇者」 Official Music Video', artist: null, album: null });
+    assert.equal(titleShown(file, twice), 'Yuusha');
+    assert.equal(titleShown(file, twice, 'original'), '勇者');
+  });
+
+  it('turns a Latin name into the original where that is chosen', () => {
+    const file = track({ id: '1', title: 'Yuusha', artist: 'YOASOBI', album: null });
+    assert.equal(titleShown(file, twice, 'original'), '勇者');
+    assert.equal(titleShown(file, twice), 'Yuusha');
+  });
+
+  it('applies to the artist, and leaves a name with no other writing alone', () => {
+    const file = track({ id: '1', title: 'x', artist: '和楽器バンド', album: null });
+    assert.equal(artistShown(file, twice), 'Wagakki Band');
+    assert.equal(artistShown(file, twice, 'original'), '和楽器バンド');
+    const plain = found({ trackId: '1', title: 'Runaway', artist: 'AURORA' });
+    assert.equal(artistShown(track({ id: '1', title: 'Runaway', artist: 'AURORA', album: null }), plain, 'original'), 'AURORA');
+  });
+
+  it('never overrules what was typed', () => {
+    const file = track({ id: '1', title: '勇者', artist: 'YOASOBI', album: null });
+    assert.equal(titleShown(file, { ...twice, status: 'manual', title: 'Mine' }), 'Mine');
+  });
+});

@@ -79,6 +79,11 @@ export const TABLES = {
     // artist nobody had said, and no cover taken off by hand.
     album_artist: 'T',
     cover_removed_at: 'I',
+    // Absent from a backup made before they existed: a song with one name, until it is looked up again.
+    latin_title: 'T',
+    latin_artist: 'T',
+    native_title: 'T',
+    native_artist: 'T',
   },
   track_tags: { track_id: 'T!', tag: 'T!', position: 'I!', source: 'T!' },
   track_lyrics: {

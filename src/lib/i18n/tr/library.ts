@@ -18,6 +18,7 @@ export const library: Strings['library'] = {
   albumMenu: 'Albüm seçenekleri',
 
   screen: {
+    searchYouTube: (query: string) => `YouTube’da ara: “${query}”`,
     viewSwitch: 'Kütüphane görünümü',
     searchHints: {
       tracks: 'Parça adı, sanatçı ve etiket ara',
@@ -201,6 +202,11 @@ export const library: Strings['library'] = {
     shorterThan: (seconds) => `${format.number(seconds)} saniyeden kısa`,
   },
 
+  autoWrite: {
+    heading: "Dosyalarda",
+    edits: { title: "Kaydettiklerimi dosyaya yaz", note: "Bir şarkının ayrıntılarını tek tek ya da toplu kaydettiğinde, Dosyaya yaz’ın yaptığı gibi dosyaya da yazılır. Jukebox’ın kendi indirmediği dosyalar için Android önce sorar." },
+    lookups: { title: "Aramanın bulduklarını dosyaya yaz", note: "Aramanın eşleştirdiği ve senin düzenlemediğin şarkıların ayrıntıları dosyaya yazılır. Jukebox’ın kendi indirdikleri hemen, arka planda bile yazılır. Diğer dosyalar bekler ve uygulama bir sonraki açıldığında hepsi için birlikte sorulur. Çalan şarkı bir sonrakine kalır." },
+  },
   copies: {
     title: 'Aynı şarkının kopyaları',
     some: (count) =>

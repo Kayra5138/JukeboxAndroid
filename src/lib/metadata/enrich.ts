@@ -12,6 +12,7 @@ import {
 import { lookUpAlbumRest } from '../album/index.ts';
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { artworkChanged } from '../media/artworkEvents.ts';
+import { afterLookedUp } from '../filetags/auto.ts';
 import { scanLibrary } from '../media/library.ts';
 import { saveCredit } from '../db/credits.ts';
 import { saveLookupTags } from '../db/tags.ts';
@@ -73,6 +74,7 @@ export async function enrichLibrary(
             // every picture on screen asks again when this is said.
             artworkChanged();
             onSaved?.(filled);
+            afterLookedUp(filled);
           }
           return filled;
         },
@@ -89,6 +91,7 @@ export async function enrichLibrary(
     saveMetadata: (entry) => {
       saveMetadata(entry);
       onSaved?.([entry.trackId]);
+      if (entry.status === 'matched') afterLookedUp([entry.trackId]);
     },
     saveLookupTags,
     saveCredit,
@@ -132,6 +135,7 @@ export async function enrichAlbum(
     saveMetadata: (entry) => {
       saveMetadata(entry);
       options.onSaved?.([entry.trackId]);
+      if (entry.status === 'matched') afterLookedUp([entry.trackId]);
     },
     saveLookupTags,
     chooseCovers: (trackIds, uri, keep) => {
@@ -139,6 +143,7 @@ export async function enrichAlbum(
       if (chosen.length > 0) {
         artworkChanged();
         options.onSaved?.(chosen);
+        afterLookedUp(chosen);
       }
       return chosen;
     },

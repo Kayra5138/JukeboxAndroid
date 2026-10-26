@@ -12,6 +12,8 @@ import {
   refreshGenres,
   saveMetadataMany,
 } from '../lib/db/metadata';
+import { summarise } from '../lib/filetags';
+import { afterSaved, writeEditsOn } from '../lib/filetags/auto';
 import { addTagToTracks, allTags, removeTagFromTracks, tagsAmong, type TagCount } from '../lib/db/tags';
 import { canWriteFiles } from '../lib/filetags';
 import { useT } from '../lib/i18n/index';
@@ -203,6 +205,24 @@ export function useSelectionActions({
     [ended, onSaid, said]
   );
 
+  /*
+    Into the files as well, where somebody has asked for what they save to
+    go there: one question from the system for the lot, and a line after
+    the one that said what was saved, saying how the files went.
+  */
+  const writeIfAsked = useCallback(
+    (ids: string[]) => {
+      if (!writeEditsOn()) return;
+      void afterSaved(ids).then(
+        (outcomes) => {
+          if (outcomes && outcomes.length > 0) onSaid(summarise(outcomes, t));
+        },
+        (error: unknown) => onSaid(error instanceof Error ? error.message : t.details.general.couldNotWrite)
+      );
+    },
+    [onSaid, t]
+  );
+
   const startEdit = useCallback(async (ids: string[]) => {
     const { chosen } = await filesOf(ids);
     if (chosen.length === 0) return;
@@ -235,8 +255,9 @@ export function useSelectionActions({
       void spreadCovers({ trackIds: ids });
       onSaid(said.edited(entries.length));
       onChanged('edited');
+      writeIfAsked(ids);
     },
-    [editing, onChanged, onSaid, said]
+    [editing, onChanged, onSaid, said, writeIfAsked]
   );
 
   const addTag = useCallback(
@@ -250,8 +271,9 @@ export function useSelectionActions({
       void refreshLibrary();
       onSaid(said.tagAdded(tag, ids.length));
       onChanged('edited');
+      writeIfAsked(ids);
     },
-    [trackIds, onChanged, onSaid, said]
+    [trackIds, onChanged, onSaid, said, writeIfAsked]
   );
 
   const removeTag = useCallback(
@@ -264,8 +286,9 @@ export function useSelectionActions({
       void refreshLibrary();
       onSaid(said.tagRemoved(tag, carrying));
       onChanged('edited');
+      writeIfAsked(ids);
     },
-    [trackIds, untagging, onChanged, onSaid, said]
+    [trackIds, untagging, onChanged, onSaid, said, writeIfAsked]
   );
 
   const reset = useCallback(() => {
@@ -298,6 +321,7 @@ export function useSelectionActions({
             if (chosen == null) return;
             onSaid(t.library.albumTools.coverChosen(chosen));
             onChanged('edited');
+            writeIfAsked(ids);
           },
           (error: unknown) => onSaid(error instanceof Error ? error.message : t.common.pictureFailed)
         );
@@ -312,7 +336,7 @@ export function useSelectionActions({
         });
       }
     },
-    [trackIds, startRun, startEdit, addToList, erase, onChanged, onSaid, said, t]
+    [trackIds, startRun, startEdit, addToList, erase, onChanged, onSaid, said, t, writeIfAsked]
   );
 
   const element = (

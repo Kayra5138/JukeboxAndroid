@@ -1,4 +1,5 @@
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../../components/Frosted';
+import { SearchField } from '../../components/SearchField';
 import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
 import { BarsOver, topGlass, useLaidOver, useUnderBars } from '../../components/UnderBars';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -7,11 +8,11 @@ import { QueueLink } from '../../components/downloads/QueueLink';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { Image } from '../../components/Picture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, BackHandler, FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../../components/Pressable';
 import { Segmented } from '../../components/Segmented';
 import { useT } from '../../lib/i18n/index';
-import { hintKey, makeStyles, outlined, scene, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, outlined, scene, useColours, usePressed } from '../../lib/theme/index';
 import { useListColumns } from '../../lib/ui/layout';
 import { youtubeError } from '../../lib/youtube/errors';
 import { noteError } from '../../lib/support/errorLogStore';
@@ -49,14 +50,10 @@ export default function YouTubeScreen() {
   const styles = useStyles();
   const pressed = usePressed();
   const said = t.search;
-  const params = useLocalSearchParams<{ mode?: string; q?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; q?: string; run?: string }>();
   const [mode, setMode] = useState<'discover' | 'videos' | 'playlist'>('discover');
   useEffect(() => { if (params.mode === 'discover') setMode('discover'); }, [params.mode]);
   const [query, setQuery] = useState('');
-  // A song another screen could not find a recording of, handed over to be
-  // looked for by hand. Written into the box and left there: which of the
-  // results is the right one is the part that needed a person.
-  useEffect(() => { if (params.q) { setMode('videos'); setQuery(params.q); } }, [params.q]);
   const [results, setResults] = useState<YouTubeResult[]>([]);
   const [searched, setSearched] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -79,16 +76,26 @@ export default function YouTubeScreen() {
     if (id) void downloads?.cancelSearchAsync(id).catch(() => {});
   };
 
-  const search = async (override?: string) => {
+  /*
+    The results a list was opened from, to go back to. Opening a list is not a
+    screen of its own — its songs take the results' place — so without this the
+    back key left the tab altogether and the search was gone. Forgotten as soon
+    as anything else is searched for, or the kind of search changes.
+  */
+  const [openedFrom, setOpenedFrom] = useState<{ query: string; results: YouTubeResult[] } | null>(null);
+
+  const search = async (override?: string, fromResults = false) => {
     const text = (override ?? query).trim();
     if (override) setQuery(override);
+    if (!fromResults) setOpenedFrom(null);
     if (!text || !downloads) return;
     stopSearch();
     Keyboard.dismiss();
     setMessage(null);
     setSearched(false);
     setResults([]);
-    const cacheKey = `${mode}:${text}`;
+    // By what is searched for and not by the tab: a search asked for from the library may come while Discover is the one open.
+    const cacheKey = `${mode === 'playlist' ? 'playlist' : 'videos'}:${text}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.at < 5 * 60_000) {
       setResults(cached.videos); setSearched(true); return;
@@ -118,6 +125,41 @@ export default function YouTubeScreen() {
     // it says the same thing; the one way out early does its own tidying.
     if (searchId.current === id) { searchId.current = null; setSearching(false); }
   };
+
+  // A song another screen could not find a recording of, handed over to be
+  // looked for by hand. Written into the box and left there: which of the
+  // results is the right one is the part that needed a person. With [run] —
+  // the library's search, which found nothing of its own worth stopping at —
+  // it is searched for at once as well; [run] is new each time, so the same
+  // words asked for twice are searched twice.
+  useEffect(() => {
+    if (!params.q) return;
+    setMode('videos');
+    setQuery(params.q);
+    if (params.run) void search(params.q);
+  }, [params.q, params.run]);
+
+  /** Back to the results [was], which the open list came from. */
+  const backTo = (was: { query: string; results: YouTubeResult[] }) => {
+    stopSearch();
+    setOpenedFrom(null);
+    setQuery(was.query);
+    setResults(was.results);
+    setSearched(true);
+    setMessage(null);
+  };
+
+  // The back key does the same, while there is somewhere to go back to and this tab is in front.
+  useFocusEffect(
+    useCallback(() => {
+      if (!openedFrom) return;
+      const listener = BackHandler.addEventListener('hardwareBackPress', () => {
+        backTo(openedFrom);
+        return true;
+      });
+      return () => listener.remove();
+    }, [openedFrom])
+  );
 
   const add = async (video: YouTubeVideo, choice: AudioFormat = format) => {
     if (addingRef.current) return;
@@ -179,7 +221,7 @@ export default function YouTubeScreen() {
         */}
         <Pressable accessibilityRole="tab" accessibilityState={{ selected: mode === 'discover' }}
           style={[styles.discoverTab, mode === 'discover' && styles.discoverOn]}
-          onPress={() => { stopSearch(); setMode('discover'); }}>
+          onPress={() => { stopSearch(); setOpenedFrom(null); setMode('discover'); }}>
           <Text style={mode === 'discover' ? styles.discoverLabelOn : styles.discoverLabel}>{said.modes.discover}</Text>
         </Pressable>
         <View style={styles.downloadModes}>
@@ -198,7 +240,7 @@ export default function YouTubeScreen() {
             ]}
             value={mode === 'discover' ? null : mode}
             disabled={adding !== null}
-            onChange={(choice) => { stopSearch(); setMode(choice); setResults([]); setSearched(false); setMessage(null); }}
+            onChange={(choice) => { stopSearch(); setOpenedFrom(null); setMode(choice); setResults([]); setSearched(false); setMessage(null); }}
           />
         </View>
       </View>
@@ -217,14 +259,23 @@ export default function YouTubeScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[styles.content, { paddingTop: 20 + top.height, paddingBottom: 32 + under.bottom }]}
         ListHeaderComponent={<>
+          {openedFrom ? (
+            <Pressable android_ripple={pressed} accessibilityRole="button" hitSlop={8} style={styles.backLink} onPress={() => backTo(openedFrom)}>
+              <Text style={styles.link}>{`‹ ${said.backToResults}`}</Text>
+            </Pressable>
+          ) : null}
           <Text style={styles.intro}>{mode === 'playlist' ? said.intro.playlist : said.intro.videos}</Text>
           <View style={styles.searchRow}>
-            <TextInput key={hintKey(c, mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos)}
+            {/* The library's own box, cross and all. */}
+            <SearchField
+              style={styles.input}
               accessibilityLabel={mode === 'playlist' ? said.inputLabel.playlist : said.inputLabel.videos}
-              style={styles.input} value={query} onChangeText={setQuery}
-              placeholder={mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos} placeholderTextColor={c.textFaint}
-              autoCapitalize="none" autoCorrect={false} maxLength={500}
-              returnKeyType="search" onSubmitEditing={() => void search()} />
+              value={query}
+              onChangeText={setQuery}
+              placeholder={mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos}
+              maxLength={500}
+              onSubmitEditing={() => void search()}
+            />
             <Pressable android_ripple={pressed} accessibilityRole="button" style={[styles.searchButton, !query.trim() && styles.searchButtonOff]}
               disabled={!query.trim()} onPress={() => void search()}>
               <Text style={!query.trim() ? styles.darkTextOff : styles.darkText}>{t.common.search}</Text>
@@ -262,15 +313,38 @@ export default function YouTubeScreen() {
           // In the library already, by a file that came some other way: see `owned.ts`.
           const have = !playlist && !job && owned.has(item.id);
           const locked = have || (job && (isActive(job) || job.status === 'done'));
+          const thumbnail = item.thumbnail ? <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} contentFit="cover" /> : <View style={[styles.thumbnail, styles.thumbnailEmpty]} />;
+          const named = <>
+            <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
+            <Text style={styles.muted} numberOfLines={1}>{[item.channel, playlist ? said.playlist : durationLabel(item.duration)].filter(Boolean).join(' · ')}</Text>
+          </>;
+          /*
+            A list is opened from anywhere on its row: opening it only shows
+            what is in it, so there is nothing a stray tap can set off. A video's
+            row is not, since the one thing it does is start a download.
+          */
+          if (playlist) {
+            return <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.openPlaylistLabel(item.title)}
+              disabled={adding !== null} style={[styles.result, columns > 1 && styles.resultShared]}
+              onPress={() => {
+                setOpenedFrom({ query, results });
+                void search(item.url, true);
+              }}>
+              {thumbnail}
+              <View style={styles.flex}>
+                {named}
+                <View style={styles.downloadButton}><Text style={styles.link}>{said.openPlaylist}</Text></View>
+              </View>
+            </Pressable>;
+          }
           return <View style={[styles.result, columns > 1 && styles.resultShared]}>
-            {item.thumbnail ? <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} contentFit="cover" /> : <View style={[styles.thumbnail, styles.thumbnailEmpty]} />}
+            {thumbnail}
             <View style={styles.flex}>
-              <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-              <Text style={styles.muted} numberOfLines={1}>{[item.channel, playlist ? said.playlist : durationLabel(item.duration)].filter(Boolean).join(' · ')}</Text>
-              <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={playlist ? said.openPlaylistLabel(item.title) : said.downloadLabel(item.title)}
+              {named}
+              <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.downloadLabel(item.title)}
                 disabled={!!locked || adding !== null} style={[styles.downloadButton, locked && styles.disabled]}
-                onPress={() => item.kind === 'playlist' ? void search(item.url) : void add(item)}>
-                <Text style={styles.link}>{playlist ? said.openPlaylist : adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : said.download[format]}</Text>
+                onPress={() => void add(item)}>
+                <Text style={styles.link}>{adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : said.download[format]}</Text>
               </Pressable>
             </View>
           </View>;
@@ -307,7 +381,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   hint: { color: c.textFaint, fontSize: 11.5, lineHeight: 17, marginTop: 10, marginBottom: 4 },
   bad: { color: c.danger, fontSize: 12, lineHeight: 18, marginVertical: 8 },
   searchRow: { flexDirection: 'row', gap: 8 },
-  input: { flex: 1, minWidth: 0, backgroundColor: c.surface, borderRadius: 12, color: c.text, paddingHorizontal: 14, paddingVertical: 13, fontSize: 14.5, minHeight: 48, ...outlined(c) },
+  backLink: { alignSelf: 'flex-start', paddingVertical: 4, marginBottom: 8 },
+  input: { flex: 1, minWidth: 0, borderRadius: 12, minHeight: 48 },
   searchButton: { backgroundColor: c.primary, paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', minHeight: 48, ...outlined(c, c.primary) },
   // Dimmed rather than faded: a translucent white slab is still the brightest
   // thing on the screen, which is the wrong thing for a button that cannot

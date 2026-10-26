@@ -8,6 +8,7 @@ import { useT } from '../lib/i18n/index';
 import { libraryFilesChanged } from '../lib/library/index';
 import {
   DEFAULT_ROOT,
+  JUKEBOX_ROOT,
   ensureAudioPermission,
   libraryRoot,
   listFolders,
@@ -100,6 +101,14 @@ export default function FoldersScreen() {
   const total = folders.reduce((sum, folder) => sum + folder.trackCount, 0);
   // Everything under Music, as the way back from a narrower choice.
   const options: LibraryFolder[] = [{ path: DEFAULT_ROOT, trackCount: total }, ...folders];
+  // Jukebox's own folder, empty or not yet made: where its downloads go, and so always on offer.
+  const own = JUKEBOX_ROOT.toLowerCase();
+  if (!folders.some((folder) => folder.path.toLowerCase() === own)) {
+    options.splice(1, 0, {
+      path: JUKEBOX_ROOT,
+      trackCount: folders.reduce((sum, folder) => (folder.path.toLowerCase().startsWith(`${own}/`) ? sum + folder.trackCount : sum), 0),
+    });
+  }
 
   return (
     <View style={[styles.screen, sides]}>

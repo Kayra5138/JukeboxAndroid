@@ -137,6 +137,7 @@ export const settings: Strings['settings'] = {
     note:
       'Pour les téléphones qui saccadent. Le lecteur apparaît au lieu de glisser vers le haut, et le jeu ne s’illumine plus quand une vie est gagnée ou perdue. Les touches, elles, tombent toujours : c’est le jeu, pas de la décoration.',
   },
+  scriptNames: { title: 'Noms dans d’autres écritures', latin: 'Lettres latines', original: 'Original', note: 'Quand une recherche a trouvé le nom d’un titre en lettres latines et dans sa propre écriture (japonais, chinois, coréen), lequel la bibliothèque affiche. Les titres cherchés avant se complètent à la prochaine recherche.' },
   moreButton: {
     title: 'Trois points sur chaque ligne',
     note:

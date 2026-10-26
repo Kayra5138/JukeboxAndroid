@@ -9,6 +9,17 @@ import { useDiscoverSettings } from '../discover/hooks';
 import { scheduleDiscover } from '../../lib/discover/background';
 import { useDiscoverActions } from '../../lib/discover/DiscoverProvider';
 import { previewsOn, READY_CHOICES, type DiscoverSettings } from '../../lib/discover/policy';
+import { libraryFilesChanged } from '../../lib/library/index';
+import {
+  DEFAULT_ROOT,
+  hasAudioPermission,
+  JUKEBOX_ROOT,
+  libraryRoot,
+  libraryRootChosen,
+  listFolders,
+  setLibraryRoot,
+  type LibraryFolder,
+} from '../../lib/media/library';
 import { chooseLanguage, LANGUAGES, tryLanguage, useLanguage, useT, type Language } from '../../lib/i18n/index';
 import { AUTOPLAY_MODES } from '../../lib/player/autoplay/plan';
 import { setAutoplayMode, useAutoplayMode } from '../../lib/player/autoplay/setting';
@@ -82,6 +93,15 @@ export function Setup() {
   const step: SetupStep | undefined = steps[at];
   const last = at >= steps.length - 1;
 
+  /*
+    A new install reads Jukebox's own folder unless somebody says otherwise,
+    skipping included: written now, before the library is first read, which
+    waits for the setup to be put away.
+  */
+  useEffect(() => {
+    if (kind === 'new' && !libraryRootChosen()) setLibraryRoot(JUKEBOX_ROOT);
+  }, [kind]);
+
   // The phone's own language, on a new install; asked for again, whatever the app speaks now.
   useEffect(() => {
     if (kind !== 'new') return;
@@ -137,6 +157,7 @@ export function Setup() {
 
   const title = {
     language: t.welcome.language.heading,
+    folder: said.folder.heading,
     look: said.look.heading,
     discover: said.discover.heading,
     tap: t.settings.tap.title,
@@ -184,6 +205,7 @@ export function Setup() {
             {title}
           </Text>
           {step === 'language' ? <LanguageStep /> : null}
+          {step === 'folder' ? <FolderStep /> : null}
           {step === 'look' ? <LookStep /> : null}
           {step === 'discover' ? <DiscoverStep /> : null}
           {step === 'tap' ? <TapStep /> : null}
@@ -267,6 +289,97 @@ function LanguageStep() {
       <Text style={styles.small}>{t.welcome.language.made}</Text>
     </>
   );
+}
+
+/**
+ * Which folder the library is: Jukebox's own inside `Music`, which is where
+ * its downloads go, or the whole of `Music` as before there was a choice; and
+ * a folder chosen in Settings before this was asked, where there is one.
+ *
+ * Jukebox's own is chosen as the screen opens, where nobody has chosen any
+ * folder yet, so that going on keeps it; anybody who chose one is shown it
+ * ticked. Each says how many songs it holds, where the app may already read
+ * them: somebody updating with music all over `Music` sees what the change
+ * would leave out before they make it.
+ */
+function FolderStep() {
+  const t = useT();
+  const styles = useStyles();
+  const said = t.welcome.setup.folder;
+  const [chosen, setChosen] = useState(() => (libraryRootChosen() ? libraryRoot() : JUKEBOX_ROOT));
+  const [folders, setFolders] = useState<LibraryFolder[] | null>(null);
+
+  useEffect(() => {
+    if (!libraryRootChosen()) {
+      setLibraryRoot(JUKEBOX_ROOT);
+      libraryFilesChanged();
+    }
+    let live = true;
+    void (async () => {
+      try {
+        if (!(await hasAudioPermission())) return;
+        const found = await listFolders();
+        if (live) setFolders(found);
+      } catch {
+        // Shown without counts.
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const choose = (path: string) => {
+    setChosen(path);
+    setLibraryRoot(path);
+    libraryFilesChanged();
+  };
+
+  /*
+    A folder chosen in Settings before this was asked stays one of the
+    answers, ticked at first, for as long as the screen is up: tapping
+    another and changing one's mind again has to find it still there.
+  */
+  const [own] = useState(() => ([JUKEBOX_ROOT, DEFAULT_ROOT].some((path) => sameFolder(path, chosen)) ? null : chosen));
+  const options = [
+    { path: JUKEBOX_ROOT, label: said.jukebox.label(JUKEBOX_ROOT), detail: said.jukebox.note },
+    { path: DEFAULT_ROOT, label: said.music.label(DEFAULT_ROOT), detail: said.music.note },
+    ...(own ? [{ path: own, label: own, detail: said.current }] : []),
+  ];
+
+  return (
+    <>
+      <Text style={styles.note}>{said.note}</Text>
+      <View style={styles.card} accessibilityRole="radiogroup">
+        {options.map((option, at) => (
+          <View key={option.path}>
+            {at > 0 ? <View style={styles.rule} /> : null}
+            <Choice
+              on={sameFolder(option.path, chosen)}
+              label={option.label}
+              detail={folders ? `${option.detail} ${said.songs(songsUnder(folders, option.path))}` : option.detail}
+              onPress={() => choose(option.path)}
+            />
+          </View>
+        ))}
+      </View>
+      <Text style={styles.small}>{said.more}</Text>
+    </>
+  );
+}
+
+/** Two library folders that are one: the media store does not mind the case of a path. */
+function sameFolder(a: string, b: string): boolean {
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/** How many songs are in [path] and the folders inside it. */
+function songsUnder(folders: readonly LibraryFolder[], path: string): number {
+  const root = path.toLowerCase();
+  return folders.reduce((sum, folder) => {
+    const at = folder.path.toLowerCase();
+    return at === root || at.startsWith(`${root}/`) ? sum + folder.trackCount : sum;
+  }, 0);
 }
 
 /** A handful of themes, each a picture of itself, chosen as they are tapped: the app behind the setup changes too. */

@@ -17,6 +17,7 @@ export const library: Strings['library'] = {
   albumMenu: '专辑选项',
 
   screen: {
+    searchYouTube: (query: string) => `在 YouTube 上搜索“${query}”`,
     viewSwitch: '音乐库视图',
     searchHints: {
       tracks: '搜索歌名、艺人和标签',
@@ -198,6 +199,11 @@ export const library: Strings['library'] = {
     shorterThan: (seconds) => `短于 ${format.number(seconds)} 秒`,
   },
 
+  autoWrite: {
+    heading: "写入文件",
+    edits: { title: "将我保存的内容写入文件", note: "保存歌曲详情时（单首或多首），也会像“写入文件”一样写进文件。对于不是 Jukebox 下载的文件，Android 会先询问。" },
+    lookups: { title: "将搜索找到的内容写入文件", note: "搜索匹配到且你未编辑过的歌曲，其详情会写入文件。Jukebox 自己下载的文件会立即写入，后台也可以。其他文件会等待，下次打开应用时一并询问。正在播放的歌曲等下次再写。" },
+  },
   copies: {
     title: '同一首歌的副本',
     some: (count) =>

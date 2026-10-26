@@ -28,8 +28,9 @@ export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: 
   database.runSync(
     `INSERT INTO track_metadata
        (track_id, status, source, title, artist, album, album_artist, genre, year,
-        artwork_url, track_number, disc_number, cover_removed_at, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        artwork_url, track_number, disc_number, cover_removed_at, fetched_at,
+        latin_title, latin_artist, native_title, native_artist)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(track_id) DO UPDATE SET
        status = excluded.status, source = excluded.source, title = excluded.title,
        artist = excluded.artist, album = excluded.album,
@@ -37,7 +38,9 @@ export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: 
        year = excluded.year, artwork_url = excluded.artwork_url,
        track_number = excluded.track_number, disc_number = excluded.disc_number,
        cover_removed_at = excluded.cover_removed_at,
-       fetched_at = excluded.fetched_at, cover_searched_at = NULL`,
+       fetched_at = excluded.fetched_at, cover_searched_at = NULL,
+       latin_title = excluded.latin_title, latin_artist = excluded.latin_artist,
+       native_title = excluded.native_title, native_artist = excluded.native_artist`,
     entry.trackId,
     entry.status,
     entry.source,
@@ -51,7 +54,11 @@ export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: 
     entry.trackNumber,
     entry.discNumber,
     entry.coverRemovedAt ?? null,
-    now
+    now,
+    entry.latinTitle ?? null,
+    entry.latinArtist ?? null,
+    entry.nativeTitle ?? null,
+    entry.nativeArtist ?? null
   );
   if (entry.coverRemovedAt != null) {
     database.runSync('DELETE FROM shared_covers WHERE track_id = ?', entry.trackId);

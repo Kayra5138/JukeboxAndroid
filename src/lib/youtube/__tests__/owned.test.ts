@@ -48,3 +48,22 @@ test('where two files fit, the song is here twice already, and the first stands 
   );
   assert.equal(owned.get('v'), 'a');
 });
+
+test('a video is owned by the song its name says, however the name is written', () => {
+  const tracks = [
+    { id: 'shoko', filename: 'Shoko Nakagawa - Sono Chi no Sadame.mp3', title: 'Shoko Nakagawa - Sono Chi no Sadame', durationSec: 263.1 },
+    { id: 'burn', filename: 'Burn.mp3', title: 'Burn', artist: 'Ellie Goulding', durationSec: 238.2 },
+  ];
+  const owned = ownedVideos(
+    [
+      { id: 'jojoAAAAAAA', title: 'Jojo bizarre adventure - sono chi no sadame', duration: 263 },
+      { id: 'burnAAAAAAA', title: 'Ellie Goulding - Burn (Official Video)', duration: 238 },
+      // The same name by another singer, a few seconds off: a cover, and not owned.
+      { id: 'coverAAAAAA', title: 'baquu - Sono Chi no Sadame', duration: 266 },
+    ],
+    tracks
+  );
+  assert.equal(owned.get('jojoAAAAAAA'), 'shoko');
+  assert.equal(owned.get('burnAAAAAAA'), 'burn');
+  assert.equal(owned.has('coverAAAAAA'), false);
+});

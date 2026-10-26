@@ -169,6 +169,8 @@ export const settings = {
     note:
       'For a phone that drops frames. The player appears instead of rising, and the game stops lighting up around a life won or lost. The keys themselves still fall — that is the game, not decoration.',
   },
+  /** Which writing a song's name found in two is shown in: Settings → Look. */
+  scriptNames: { title: 'Names in other writings', latin: 'Latin letters', original: 'Original', note: 'Where a lookup found a song\'s name in Latin letters as well as in its own writing (Japanese, Chinese, Korean), which the library shows. Songs looked up before this was added fill in when they are looked up again.' },
   /** Settings → Look: the three dots at the end of each row of tracks. */
   moreButton: {
     title: 'Three dots on each row',

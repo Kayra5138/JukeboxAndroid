@@ -56,6 +56,15 @@ export type TrackMetadata = {
    * and a search that failed under the old names is no answer about the new.
    */
   coverSearchedAt?: number | null;
+  /**
+   * The song's name in Latin letters and in its own writing, where it has
+   * both: `Sono Chino Sadame` and `その血の運命`. Optional and null for every
+   * song that has one name; which is shown is `ui:scriptNames`'s.
+   */
+  latinTitle?: string | null;
+  latinArtist?: string | null;
+  nativeTitle?: string | null;
+  nativeArtist?: string | null;
 };
 
 type Row = {
@@ -73,6 +82,10 @@ type Row = {
   disc_number: number | null;
   cover_removed_at: number | null;
   cover_searched_at: number | null;
+  latin_title?: string | null;
+  latin_artist?: string | null;
+  native_title?: string | null;
+  native_artist?: string | null;
 };
 
 function toMetadata(row: Row): TrackMetadata {
@@ -91,6 +104,10 @@ function toMetadata(row: Row): TrackMetadata {
     discNumber: row.disc_number,
     coverRemovedAt: row.cover_removed_at,
     coverSearchedAt: row.cover_searched_at,
+    latinTitle: row.latin_title ?? null,
+    latinArtist: row.latin_artist ?? null,
+    nativeTitle: row.native_title ?? null,
+    nativeArtist: row.native_artist ?? null,
   };
 }
 

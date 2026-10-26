@@ -20,6 +20,15 @@ export const welcome: Strings['welcome'] = {
     done: '完成',
     update:
       '这个版本新增了几项设置。之后可以随时在“设置”中更改。',
+    folder: {
+      heading: "你的音乐文件夹",
+      note: "Jukebox 从哪个文件夹读取音乐，并把下载保存到哪里。",
+      jukebox: { label: (folder: string) => `Jukebox 专用文件夹 (${folder})`, note: "只包括这个文件夹里的内容。下载保存在这里，其他应用放在 Music 里的音乐不会出现。" },
+      music: { label: (folder: string) => `整个 Music (${folder})`, note: "Music 文件夹及其子文件夹中的一切，和以前一样。" },
+      current: "之前选择的文件夹。",
+      songs: (count: number) => `${format.number(count)} 首歌曲`,
+      more: "随时可在 设置 → 音乐库 → 音乐库文件夹 中更改，也可以在那里选择其他任何文件夹。",
+    },
     look: {
       heading: '选择外观',
       note: '点一下即可试用。',

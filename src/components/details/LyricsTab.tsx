@@ -11,6 +11,7 @@ import { useT } from '../../lib/i18n/index';
 import { isSynced, parseLrc } from '../../lib/lyrics/lrc';
 import { formatOffset, parseOffsetMs } from '../../lib/lyrics/offset';
 import { FormScroll, TextField } from '../FormScroll';
+import { SearchField } from '../SearchField';
 import { TextPrompt } from '../TextPrompt';
 import {
   fetchLyrics,
@@ -374,18 +375,13 @@ export function LyricsTab({ track }: { track: Track }) {
 
         <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.byHand)}</Text>
         <Text style={styles.hint}>{said.byHandHint}</Text>
-        <TextField
-          style={styles.input}
+        <SearchField
           // Named for what the box is for; the hint says what to put in it,
           // and is gone once anything is typed.
           accessibilityLabel={said.byHand}
           value={query}
           onChangeText={setQuery}
           placeholder={said.queryPlaceholder}
-          placeholderTextColor={c.textFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="search"
           onSubmitEditing={() => void runSearch()}
         />
         <Pressable

@@ -19,6 +19,7 @@ export const library: Strings['library'] = {
   albumMenu: 'Albumoptionen',
 
   screen: {
+    searchYouTube: (query: string) => `Auf YouTube nach „${query}“ suchen`,
     viewSwitch: 'Bibliotheksansicht',
     searchHints: {
       tracks: 'Titel, Künstler, Tags suchen',
@@ -205,6 +206,11 @@ export const library: Strings['library'] = {
     shorterThan: (seconds) => `Kürzer als ${format.number(seconds)} Sekunden`,
   },
 
+  autoWrite: {
+    heading: "In den Dateien",
+    edits: { title: "Gespeichertes in die Datei schreiben", note: "Wenn du die Details eines Titels speicherst, einzeln oder für mehrere zugleich, kommen sie auch in die Datei, wie mit In Datei schreiben. Android fragt zuerst bei Dateien, die Jukebox nicht selbst heruntergeladen hat." },
+    lookups: { title: "Gefundenes in die Datei schreiben", note: "Bei einem Titel, den eine Suche gefunden und du nicht bearbeitet hast, werden die Details in die Datei geschrieben. Downloads von Jukebox sofort, auch im Hintergrund. Andere Dateien warten und werden beim nächsten Öffnen der App zusammen erfragt. Ein laufender Titel wartet bis zum nächsten Mal." },
+  },
   copies: {
     title: 'Kopien desselben Songs',
     some: (count) =>

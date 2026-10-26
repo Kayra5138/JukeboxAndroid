@@ -282,6 +282,34 @@ object DownloadStore {
       ?.optString("artworkUri")?.takeIf { it.startsWith("file://") && File(java.net.URI(it)).isFile }
   }.getOrNull()
 
+  /**
+   * Points finished downloads at the files they made as those are numbered
+   * now: [moves] maps a job's id to its file's new id. A file moved, or its
+   * folder renamed, is given a new number, and the download's cover is
+   * looked up by the number. Which file is which is JavaScript's to say (see
+   * `identity/downloads.ts`); a job whose file is still there under the
+   * number it has is left alone, whatever it is told. Answers how many moved.
+   */
+  @Synchronized
+  fun rejoin(context: Context, moves: Map<String, String>): Int = runCatching {
+    init(context)
+    var moved = 0
+    for ((id, trackId) in moves) {
+      val job = jobs.firstOrNull { it.optString("id") == id } ?: continue
+      val status = job.optString("status")
+      if (status != "done" && status != "missing") continue
+      if (trackId.toLongOrNull() == null) continue
+      if (!job.isNull("trackId") && job.isNull("discoverKey") && exists(context, job)) continue
+      job.put("trackId", trackId).put("status", "done")
+      moved++
+    }
+    if (moved > 0) {
+      persist()
+      runCatching { told?.invoke() }
+    }
+    moved
+  }.getOrDefault(0)
+
   private fun exists(context: Context, job: JSONObject): Boolean { return try {
     if (!job.isNull("discoverKey")) return DiscoverFiles.track(context, job.getString("id")) != null
     val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), job.getString("trackId").toLong())
@@ -322,10 +350,38 @@ object DownloadStore {
   @Synchronized
   fun refreshFiles(context: Context) {
     var changed = false
-    jobs.filter { it.optString("status") == "done" }.forEach {
-      if (!exists(context, it)) { it.put("status", "missing").put("trackId", JSONObject.NULL); changed = true }
+    val done = jobs.filter { it.optString("status") == "done" }
+    /*
+      The library's files in one question for all of them, rather than one
+      each: hundreds of finished downloads were hundreds of trips to the media
+      store, and this is asked every time a download finishes. A question
+      that cannot be put falls back to asking one at a time.
+    */
+    val present = presentTracks(context, done.filter { it.isNull("discoverKey") }.mapNotNull { it.optString("trackId").toLongOrNull() })
+    done.forEach {
+      val here = if (it.isNull("discoverKey") && present != null) it.optString("trackId").toLongOrNull() in present else exists(context, it)
+      if (!here) { it.put("status", "missing").put("trackId", JSONObject.NULL); changed = true }
     }
     if (changed) persist()
+  }
+
+  /** Which of [ids] the media store still has; null where it could not be asked. */
+  private fun presentTracks(context: Context, ids: List<Long>): Set<Long>? {
+    val found = HashSet<Long>()
+    val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    for (batch in ids.distinct().chunked(400)) {
+      val cursor = try {
+        context.contentResolver.query(
+          collection,
+          arrayOf(MediaStore.Audio.Media._ID),
+          "${MediaStore.Audio.Media._ID} IN (${batch.joinToString(",")})",
+          null,
+          null
+        )
+      } catch (_: Exception) { null } ?: return null
+      cursor.use { while (it.moveToNext()) found.add(it.getLong(0)) }
+    }
+    return found
   }
 
   /**

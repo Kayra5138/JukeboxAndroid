@@ -1,7 +1,8 @@
 import { rankGenres, type WeightedGenre } from './genres.ts';
 import { pacer, request, sleep, statusOf, USER_AGENT } from './http.ts';
-import { splitCredit } from './credit.ts';
-import { identify } from './identify.ts';
+import { splitCredit, withoutBrackets } from './credit.ts';
+import { readings, type Identity } from './identify.ts';
+import { versionWordsOf } from '../library/copies.ts';
 import { foldForMatch, matchScore } from './text.ts';
 import type { Track } from '../types.ts';
 
@@ -248,8 +249,12 @@ async function searchRecordings(
     `/recording?query=${encodeURIComponent(query)}&fmt=json&limit=5`,
     signal
   );
-  const agreeing = (search.recordings ?? []).filter((recording) =>
-    titlesAgree(recording.title, wantedTitle)
+  const asked = new Set(versionWordsOf(wantedTitle));
+  const agreeing = (search.recordings ?? []).filter(
+    (recording) =>
+      titlesAgree(recording.title, wantedTitle) &&
+      // Another recording than the name asked for: `(Acoustic)`, `(Live)`.
+      !versionWordsOf(recording.title).some((word) => !asked.has(word))
   );
 
   /*
@@ -279,7 +284,72 @@ export async function lookupTrack(
   track: Track,
   signal?: AbortSignal
 ): Promise<MusicBrainzMatch | null> {
-  const { artist, artists, title } = identify(track);
+  // Each way the name can be read, the likeliest first: see `readings`.
+  for (const identity of readings(track)) {
+    const match = await lookUpReading(identity, track, signal);
+    if (match) return match;
+  }
+  return null;
+}
+
+/**
+ * Within this much of a file's length, in milliseconds, a recording of the
+ * same artist is taken for it when its name could not be matched: see
+ * {@link byLength}.
+ */
+const SAME_LENGTH_MS = 1_000;
+
+/**
+ * The one song of an artist's that runs as long as the file, when the name
+ * finds nothing.
+ *
+ * A Japanese song is in the catalogue under its own writing — `その血の運命`
+ * — and a file named in Latin letters, `Sono Chi no Sadame`, matches none
+ * of its words. The artist is found all the same, by an alias, and a
+ * recording is as long as it is to the second: so the artist's recordings
+ * within a second of the file are asked for, and taken where they are all
+ * the one song. Two songs of that length, and nothing is taken; nor a
+ * version the name did not ask for.
+ */
+async function byLength(
+  artistId: string,
+  durationSec: number,
+  wantedTitle: string,
+  signal?: AbortSignal
+): Promise<RecordingResult | null> {
+  const ms = Math.round(durationSec * 1000);
+  const search = await musicBrainzGet<{ recordings?: (RecordingResult & { length?: number })[] }>(
+    `/recording?query=${encodeURIComponent(`arid:${artistId} AND dur:[${ms - SAME_LENGTH_MS} TO ${ms + SAME_LENGTH_MS}]`)}&fmt=json&limit=15`,
+    signal
+  );
+  const asked = new Set(versionWordsOf(wantedTitle));
+  const near = (search.recordings ?? []).filter(
+    (recording) =>
+      recording.length != null &&
+      Math.abs(recording.length - ms) <= SAME_LENGTH_MS &&
+      !versionWordsOf(recording.title).some((word) => !asked.has(word))
+  );
+  const songs = new Set(near.map((recording) => foldForMatch(withoutBrackets(recording.title))));
+  if (songs.size !== 1) return null;
+  return earliest(near);
+}
+
+/** The earliest-dated of [recordings], and the first where none has a date: see `searchRecordings`. */
+function earliest(recordings: RecordingResult[]): RecordingResult | null {
+  const yearOf = (recording: RecordingResult) => {
+    const year = Number(recording['first-release-date']?.slice(0, 4));
+    return Number.isInteger(year) && year > 1900 ? year : Infinity;
+  };
+  let best: RecordingResult | null = null;
+  for (const recording of recordings) if (!best || yearOf(recording) < yearOf(best)) best = recording;
+  return best;
+}
+
+async function lookUpReading(
+  { artist, artists, title }: Identity,
+  track: Track,
+  signal?: AbortSignal
+): Promise<MusicBrainzMatch | null> {
   if (!artist) return null;
 
   // Quoted so the words have to appear together, but escaped first: a title
@@ -337,6 +407,11 @@ export async function lookupTrack(
       title,
       signal
     );
+  }
+  // The artist known and the name not: the name may be in another writing than the catalogue's. See `byLength`.
+  if (!recording && resolved && track.durationSec > 0) {
+    recording = await byLength(resolved.id, track.durationSec, title, signal);
+    if (recording) under = artist;
   }
   if (!recording) return null;
 

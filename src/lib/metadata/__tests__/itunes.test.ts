@@ -50,6 +50,42 @@ describe('itunes lookupTrack', () => {
     assert.equal(bare?.album, 'Akuma no Ko - Single');
     assert.equal(elsewhere?.album, 'Akuma no Ko - Single');
   });
+
+  it('finds a Japanese title credited in Latin letters by the artist’s Latin name elsewhere', async () => {
+    const japan = { trackId: 7, trackName: 'スカイクラッドの観測者', artistName: 'いとうかなこ', collectionName: 'Single' };
+    const cover = { trackId: 8, trackName: 'スカイクラッドの観測者', artistName: 'Roselia', collectionName: 'Covers' };
+    const asked = stubFetch((url) => {
+      if (url.includes('/lookup')) {
+        return { body: { results: [{ trackId: 8, trackName: 'Skyclad No Kansokusha', artistName: 'Roselia' }, { trackId: 7, trackName: 'Skyclad No Kansokusha', artistName: 'ITO KANAKO' }] } };
+      }
+      // Only a search by the title alone in Japan's store finds it: the artist is not written as asked anywhere.
+      if (url.includes('country=JP') && !url.includes('Ito')) return { body: { results: [cover, japan] } };
+      return { body: { results: [] } };
+    });
+
+    const found = await withoutWaiting(() => lookupTrack(track({ artist: 'Ito kanako', title: 'スカイクラッドの観測者' })));
+
+    assert.equal(found?.artist, 'いとうかなこ');
+    assert.equal(found?.latinTitle, 'Skyclad No Kansokusha');
+    assert.equal(found?.latinArtist, 'ITO KANAKO');
+    assert.equal(found?.nativeTitle, 'スカイクラッドの観測者');
+    assert.ok(asked.some((url) => url.includes('lookup?id=8,7') || url.includes('lookup?id=7,8')));
+  });
+
+  it('takes a one-word artist only as one of the names credited, whole', async () => {
+    const entry = (artistName: string) => ({ trackId: 1, trackName: 'Bloody Stream', artistName });
+    stubFetch(() => ({ body: { results: [entry('Coda Piano Trio')] } }));
+    assert.equal(await withoutWaiting(() => lookupTrack(track({ artist: 'Coda', title: 'Bloody Stream' }))), null);
+    stubFetch(() => ({ body: { results: [entry('Coda & Saori Kodama')] } }));
+    const found = await withoutWaiting(() => lookupTrack(track({ artist: 'Coda', title: 'Bloody Stream' })));
+    assert.equal(found?.artist, 'Coda & Saori Kodama');
+  });
+
+  it('accepts a romanised artist spaced another way', async () => {
+    stubFetch(() => ({ body: { results: [{ trackId: 1, trackName: 'Boku no Sensou', artistName: 'Shinsei kamattechan' }] } }));
+    const found = await withoutWaiting(() => lookupTrack(track({ artist: 'SHINSEI KAMATTE CHAN', title: 'Boku no Sensou' })));
+    assert.equal(found?.artist, 'Shinsei kamattechan');
+  });
 });
 
 describe('itunes searchAlbumCover', () => {

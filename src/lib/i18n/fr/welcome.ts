@@ -21,6 +21,15 @@ export const welcome: Strings['welcome'] = {
     done: 'Terminé',
     update:
       'Quelques réglages, nouveaux dans cette version. Tu peux les changer à tout moment dans Paramètres.',
+    folder: {
+      heading: "Ton dossier de musique",
+      note: "Le dossier où Jukebox lit ta musique et enregistre ses téléchargements.",
+      jukebox: { label: (folder: string) => `Le dossier de Jukebox (${folder})`, note: "Seulement ce qui est dans ce dossier. Les téléchargements y sont enregistrés, et la musique que d’autres apps rangent dans Music reste à l’écart." },
+      music: { label: (folder: string) => `Tout Music (${folder})`, note: "Tout ce qui est dans le dossier Music et ses sous-dossiers, comme avant." },
+      current: "Le dossier choisi auparavant.",
+      songs: (count: number) => `${format.number(count)} ${count === 1 ? 'morceau' : 'morceaux'}`,
+      more: "Modifiable à tout moment dans Réglages → Bibliothèque → Dossier de la bibliothèque, où tout autre dossier peut aussi être choisi.",
+    },
     look: {
       heading: 'Choisis une apparence',
       note: 'Touche-en un pour l’essayer.',

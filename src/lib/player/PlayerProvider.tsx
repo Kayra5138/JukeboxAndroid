@@ -12,6 +12,7 @@ import {
 import { AppState } from 'react-native';
 
 import JukeboxAudio, { type RepeatMode } from '../../../modules/jukebox-audio/index.ts';
+import { setCurrentTrackId } from './nowPlaying';
 import {
   landingOf,
   readPlayerState,
@@ -245,6 +246,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const [current, setCurrent] = useState<Track | null>(null);
   const [currentIndex, setCurrentIndex] = useState(-1);
+  // For what has to know it outside React: see `nowPlaying.ts`.
+  useEffect(() => setCurrentTrackId(current?.id ?? null), [current]);
   const [queue, setQueue] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playWhenReady, setPlayWhenReady] = useState(false);

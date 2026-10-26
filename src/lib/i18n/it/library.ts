@@ -19,6 +19,7 @@ export const library: Strings['library'] = {
   albumMenu: 'Opzioni album',
 
   screen: {
+    searchYouTube: (query: string) => `Cerca «${query}» su YouTube`,
     viewSwitch: 'Vista della libreria',
     searchHints: {
       tracks: 'Cerca titoli, artisti e tag',
@@ -210,6 +211,11 @@ export const library: Strings['library'] = {
     shorterThan: (seconds) => `Meno di ${format.number(seconds)} secondi`,
   },
 
+  autoWrite: {
+    heading: "Nei file",
+    edits: { title: "Scrivi nel file ciò che salvo", note: "Quando salvi i dettagli di un brano, da solo o insieme ad altri, finiscono anche nel file, come con Scrivi nel file. Android chiede prima per i file che Jukebox non ha scaricato." },
+    lookups: { title: "Scrivi nel file ciò che trovano le ricerche", note: "I dettagli di un brano trovato da una ricerca, e che non hai modificato, vengono scritti nel file. I download di Jukebox subito, anche in background. Gli altri file aspettano e vengono chiesti insieme alla prossima apertura dell’app. Un brano in riproduzione aspetta la volta successiva." },
+  },
   copies: {
     title: 'Copie della stessa canzone',
     some: (count) =>

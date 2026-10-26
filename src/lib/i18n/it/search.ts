@@ -46,6 +46,7 @@ export const search: Strings['search'] = {
 
   playlist: 'Playlist',
   openPlaylist: 'Apri playlist',
+  backToResults: 'Torna ai risultati',
   openPlaylistLabel: (title) => `Apri la playlist ${title}`,
   downloadLabel: (title) => `Scarica ${title}`,
   download: { mp3: 'Scarica MP3', original: 'Scarica audio' },

@@ -227,6 +227,7 @@ describe('giving tracks their places on a record', () => {
       status: 'matched', source: null, title: null, artist: null, album: null, genre: null,
       year: null, artwork_url: null, disc_number: null, cover_searched_at: null,
       album_artist: null, cover_removed_at: null,
+      latin_title: null, latin_artist: null, native_title: null, native_artist: null,
     };
     assert.deepEqual(whole('new'), { track_id: 'new', ...bare, track_number: 3 });
     assert.deepEqual(whole('missed'), { track_id: 'missed', ...bare, track_number: 5 });

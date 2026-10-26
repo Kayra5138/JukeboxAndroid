@@ -137,6 +137,7 @@ export const settings: Strings['settings'] = {
     note:
       'Kare atlayan telefonlar için. Oynatıcı yükselerek açılmak yerine doğrudan belirir, oyun da can kazanıldığında ya da kaybedildiğinde ekranı aydınlatmaz. Tuşlar yine düşer; o süsleme değil, oyunun kendisi.',
   },
+  scriptNames: { title: 'Diğer yazılardaki adlar', latin: 'Latin harfleri', original: 'Orijinal', note: 'Bir arama şarkının adını hem kendi yazısıyla (Japonca, Çince, Korece) hem Latin harfleriyle bulduysa kütüphanenin hangisini göstereceği. Bu eklenmeden önce aranmış şarkılar yeniden arandığında dolar.' },
   moreButton: {
     title: 'Satırlarda üç nokta',
     note:

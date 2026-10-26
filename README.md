@@ -61,7 +61,10 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
 ### Library and playback
 
 - Pick a folder in Settings and Jukebox plays everything under it, subfolders
-  included.
+  included. Out of the box that is its own folder, `Music/Jukebox`, where its
+  downloads go too, so what other apps keep in `Music` stays out; the first
+  start (and the first start after updating) asks once whether to read all of
+  `Music` instead, with how many songs each holds.
 - Leave folders out (voice notes, call recordings, ringtones) and hide files
   shorter than 10, 30 or 60 seconds. Nothing is deleted, and a folder switched
   back on comes back with its history.
@@ -84,11 +87,18 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   leaves each track as it is, a tick under it clears it on all); add or remove
   a tag; choose one cover; write to files; reset; delete.
 - **Copies of the same song** are found: files whose names or tags say the
-  same song and whose lengths agree to two seconds. A screen lists them with
-  the copy to keep suggested (most listens first), moves each copy's history
-  to it, and deletes the rest with one confirmation from Android.
+  same song and whose lengths agree to two seconds, however each is named —
+  `Ellie Goulding - Burn (Official Video)` from a computer beside a tagged
+  `Burn` — and the same audio to the frame under two names. A version in
+  brackets (`(acoustic)`, `(demo)`, a remix) is another song, and so is the
+  same name by another singer. A screen lists them with the copy to keep
+  suggested (most listens first), moves each copy's history to it, and
+  deletes the rest with one confirmation from Android. Search results and
+  playlist imports know a song is in the library by the same rule.
 - Search finds the tracks no artist was named for by "Unknown artist", to
   select and fix them at once.
+- At the foot of a library search, **Search YouTube** takes the same words to
+  the Search tab and searches for them there.
 - Albums, lists, artists and folders open with **Play**, **Shuffle** and
   **Add to queue** side by side.
 - In the player, the artist's name and the album under the title open that
@@ -192,7 +202,21 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   `(Official Video)`, `(Explicit)`, `【MV】`, `- Official Audio`, `| Lyrics`, a
   bare `Official Music Video` at the end, and the same in French, Spanish,
   Italian, German and Turkish. `(Official Live Video)` is still searched as
-  the live recording.
+  the live recording. Square brackets count as round ones (`[Official Video]`),
+  and so do Japanese ones: `［MV］`, `「…」`, `＜…＞`, subtitle notes such as
+  `(English Subtitles)` and Japanese notes such as `【公式】`.
+- **Japanese, Chinese and Korean songs are found more often.** A video title
+  like `【MV】Title / Artist`, `Artist「Title」` or one that gives a name in
+  two writings (`夜に駆ける (Yoru ni Kakeru)`) is read several ways, and each
+  reading is tried in turn. iTunes is also asked in the Japanese store. When
+  MusicBrainz knows the artist but not the name, the song can still be
+  matched by its length, if only one recording of that artist is that long.
+  A live, remix or instrumental version is never taken for the original.
+- **Names in other writings.** Where a lookup finds a song's name both in
+  Latin letters and in its own writing, Settings → Look chooses which the
+  library shows: Latin letters (the default) or the original. Songs looked up
+  before this fill in when they are looked up again (select them, then
+  More… → Look up details).
 - Emoji that Android's scanner turned into question marks in a title, artist
   or album are put back from the file's own name.
 - Everything is editable, and a later lookup never overwrites what you typed.
@@ -225,7 +249,14 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
 - `Rock` and `rock` are the same tag.
 - All of this is kept in the app and your files are left as they are, unless
   you press **Write to file**: on the General tab for one song, or **Write to
-  files** in the Library's selection for many. It never happens by itself.
+  files** in the Library's selection for many, or switch on one of the two
+  settings under Settings → Library → In the files (both off unless you do):
+  - **Write what I save into the file**: Save on a song's details, and the
+    bulk edits, covers and tags, write into the files as well.
+  - **Write what lookups find into the file**: a song a lookup matched and you
+    have not edited is written too. Jukebox's own downloads at once, even in
+    the background; other files wait and are asked about together, once, the
+    next time the app is open. A song that is playing waits for the next time.
 - Write to file puts what the app shows into the file: title, artist, album
   artist, album, year, track and disc number, the first tag as the genre, and a cover saved in
   the app. MP3 (ID3v2) and FLAC only, on Android 11 or newer. Android asks
@@ -569,7 +600,7 @@ To build it. To run it, see [Install](#install).
 
 ```bash
 npm install
-npm test                 # 2,262 tests, pure logic
+npm test                 # 2,291 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android

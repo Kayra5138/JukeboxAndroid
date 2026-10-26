@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from 'react';
 import {
   Keyboard,
@@ -166,13 +167,23 @@ export function FormScroll({
  * And taking the focus tells the form around it, so the field can be brought
  * out from under a keyboard that was already up.
  */
-export function TextField({ onFocus, onSelectionChange, ...rest }: TextInputProps) {
+export function TextField({
+  onFocus,
+  onSelectionChange,
+  ref,
+  ...rest
+}: TextInputProps & { ref?: Ref<TextInput> }) {
   const input = useRef<TextInput>(null);
   const reveal = use(RevealContext);
 
   return (
     <TextInput
-      ref={input}
+      // Its own, and whoever holds this field's too: a search box blurs it when the keyboard goes.
+      ref={(field) => {
+        input.current = field;
+        if (typeof ref === 'function') ref(field);
+        else if (ref) ref.current = field;
+      }}
       {...rest}
       onFocus={(event) => {
         reveal?.(input.current);

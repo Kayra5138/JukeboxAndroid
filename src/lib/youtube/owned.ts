@@ -1,4 +1,4 @@
-import { nameOfFile as nameOf } from '../library/copies.ts';
+import { nameOfFile as nameOf, sameSong, songNameOf, type SongName } from '../library/copies.ts';
 import { withoutPackaging } from '../metadata/credit.ts';
 import { foldForMatch } from '../metadata/text.ts';
 
@@ -23,11 +23,19 @@ const keyOf = (name: string) => foldForMatch(withoutPackaging(name));
  *    few seconds of each other — the length is what keeps a live version or
  *    a cover from being taken for the song. Where two files fit, they are
  *    the same song twice already, and the first stands for it: a third copy
- *    is the one thing not wanted.
+ *    is the one thing not wanted;
+ *  - by the song its name says it is, as the library's copies are told
+ *    (`sameSong` in `library/copies.ts`): `Jojo bizarre adventure - sono chi
+ *    no sadame` is the `Sono Chi no Sadame` by Shoko Nakagawa the library
+ *    has, when it runs the same length. A video's length is told in whole
+ *    seconds, so the same audio is within one of them here.
  */
 
 export type OwnedVideo = { id: string; title: string; duration: number | null };
-export type OwnedTrack = { id: string; title: string; filename: string | null; durationSec: number };
+export type OwnedTrack = { id: string; title: string; filename: string | null; durationSec: number; artist?: string | null };
+
+/** How close a video's length, in whole seconds, has to be to a file's for the two to be the same audio. */
+const SAME_AUDIO_AS_VIDEO = 1;
 
 /** How far apart two lengths may be, in seconds, and be the same recording. */
 const LENGTH_SLACK = 3;
@@ -60,6 +68,16 @@ export function ownedVideos(videos: readonly OwnedVideo[], tracks: readonly Owne
     file(keyOf(track.title), track);
   }
 
+  // The song each track's name says it is, filed by that name.
+  const bySong = new Map<string, { track: OwnedTrack; song: SongName }[]>();
+  for (const track of tracks) {
+    const song = songNameOf(track.title, track.artist ?? null);
+    if (!song.bare) continue;
+    const held = bySong.get(song.bare);
+    if (held) held.push({ track, song });
+    else bySong.set(song.bare, [{ track, song }]);
+  }
+
   const owned = new Map<string, string>();
   for (const video of videos) {
     const named = byId.get(video.id);
@@ -71,7 +89,17 @@ export function ownedVideos(videos: readonly OwnedVideo[], tracks: readonly Owne
     const alike = [...new Set([...(byName.get(foldForMatch(video.title)) ?? []), ...(byName.get(keyOf(video.title)) ?? [])])].filter(
       (track) => track.durationSec > 0 && Math.abs(track.durationSec - (video.duration as number)) <= LENGTH_SLACK
     );
-    if (alike.length > 0) owned.set(video.id, alike[0].id);
+    if (alike.length > 0) {
+      owned.set(video.id, alike[0].id);
+      continue;
+    }
+    const song = songNameOf(video.title, null);
+    const same = (bySong.get(song.bare) ?? []).find(
+      (entry) =>
+        entry.track.durationSec > 0 &&
+        sameSong(song, entry.song, Math.abs(entry.track.durationSec - (video.duration as number)), SAME_AUDIO_AS_VIDEO)
+    );
+    if (same) owned.set(video.id, same.track.id);
   }
   return owned;
 }

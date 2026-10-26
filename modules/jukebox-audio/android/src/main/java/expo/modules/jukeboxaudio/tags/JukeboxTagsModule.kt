@@ -1,6 +1,7 @@
 package expo.modules.jukeboxaudio.tags
 
 import android.os.Build
+import android.provider.MediaStore
 import expo.modules.jukeboxaudio.R
 import expo.modules.jukeboxaudio.Told
 import expo.modules.kotlin.activityresult.AppContextActivityResultLauncher
@@ -69,6 +70,36 @@ class JukeboxTagsModule : Module() {
      * On the IO dispatcher and not Expo's queue, which is one thread shared
      * by every module: a FLAC is copied twice over in here.
      */
+    /**
+     * Which of [ids] Jukebox may write to without asking anybody: the files
+     * it made itself, its downloads, which the media store files under its
+     * name. Everything else takes [requestWriteAsync] first. Off the main
+     * thread: it is one question to the media store for a few hundred.
+     */
+    AsyncFunction("ownedAsync") Coroutine { ids: List<String> ->
+      withContext(Dispatchers.IO) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return@withContext emptyList<String>()
+        val numbers = ids.mapNotNull { it.toLongOrNull() }.distinct()
+        val owned = mutableListOf<String>()
+        for (batch in numbers.chunked(400)) {
+          runCatching {
+            context.contentResolver.query(
+              AUDIO,
+              arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.OWNER_PACKAGE_NAME),
+              "${MediaStore.MediaColumns._ID} IN (${batch.joinToString(",")})",
+              null,
+              null
+            )?.use { cursor ->
+              while (cursor.moveToNext()) {
+                if (cursor.getString(1) == context.packageName) owned.add(cursor.getLong(0).toString())
+              }
+            }
+          }
+        }
+        owned
+      }
+    }
+
     AsyncFunction("writeAsync") Coroutine { id: String, details: Map<String, Any?> ->
       if (!Tags.ready) throw Told(R.string.jukebox_tags_no_build)
       withContext(Dispatchers.IO) {

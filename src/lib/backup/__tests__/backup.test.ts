@@ -70,6 +70,10 @@ const details = (track: string, status: string, fetched: number, extra: Row = {}
   cover_searched_at: null,
   album_artist: null,
   cover_removed_at: null,
+  latin_title: null,
+  latin_artist: null,
+  native_title: null,
+  native_artist: null,
   ...extra,
 });
 const tag = (track: string, name: string, position: number, source = 'lookup'): Row => ({

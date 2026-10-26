@@ -44,6 +44,7 @@ export const search: Strings['search'] = {
 
   playlist: '播放列表',
   openPlaylist: '打开播放列表',
+  backToResults: '返回结果',
   openPlaylistLabel: (title) => `打开播放列表“${title}”`,
   downloadLabel: (title) => `下载“${title}”`,
   download: { mp3: '下载 MP3', original: '下载音频' },

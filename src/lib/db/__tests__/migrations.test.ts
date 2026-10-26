@@ -543,6 +543,10 @@ describe('one spelling per tag', () => {
     database.exec('ALTER TABLE discover_exclusions DROP COLUMN created_at');
     database.exec('ALTER TABLE track_metadata DROP COLUMN album_artist');
     database.exec('ALTER TABLE track_metadata DROP COLUMN cover_removed_at');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN latin_title');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN latin_artist');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN native_title');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN native_artist');
     return database;
   }
 
@@ -616,6 +620,10 @@ describe('dating what was put away from Discover', () => {
     // And everything added after it, which runs again too.
     database.exec('ALTER TABLE track_metadata DROP COLUMN album_artist');
     database.exec('ALTER TABLE track_metadata DROP COLUMN cover_removed_at');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN latin_title');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN latin_artist');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN native_title');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN native_artist');
     database.exec(`PRAGMA user_version = ${dated}`);
     database.exec(`INSERT INTO discover_exclusions (id, song_key, title, artist, reason, until_at)
       VALUES ('old', 'artist|song', 'Song', 'Artist', 'blocked', NULL)`);
@@ -640,6 +648,10 @@ describe('album artists, covers taken off, and covers shared by a record', () =>
     database.exec('DROP TABLE shared_covers');
     database.exec('ALTER TABLE track_metadata DROP COLUMN album_artist');
     database.exec('ALTER TABLE track_metadata DROP COLUMN cover_removed_at');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN latin_title');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN latin_artist');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN native_title');
+    database.exec('ALTER TABLE track_metadata DROP COLUMN native_artist');
     database.exec(`PRAGMA user_version = ${shared}`);
     database.exec(`INSERT INTO track_metadata (track_id, status, artwork_url, fetched_at) VALUES
       ('missed', 'not_found', 'file:///covers/a.jpg', 5),

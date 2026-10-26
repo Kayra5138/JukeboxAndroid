@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { TextField } from './FormScroll';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
@@ -19,11 +20,19 @@ export function SearchField({
   accessibilityLabel,
   onFocus,
   onBlur,
+  onSubmitEditing,
+  maxLength,
+  style,
 }: {
   value: string;
   onChangeText: (value: string) => void;
   placeholder: string;
   accessibilityLabel?: string;
+  /** The search key on the keyboard, for a box whose search is asked for rather than run as it is typed. */
+  onSubmitEditing?: () => void;
+  maxLength?: number;
+  /** The box as a whole, for where it is laid out. */
+  style?: StyleProp<ViewStyle>;
   /** Told when the box is being typed in, for anything that should stand aside. */
   onFocus?: () => void;
   onBlur?: () => void;
@@ -74,8 +83,13 @@ export function SearchField({
   }, []);
 
   return (
-    <View style={styles.field}>
-      <TextInput
+    <View style={[styles.field, style]}>
+      {/*
+        A form's field, which brings itself out from under the keyboard inside
+        a form that scrolls (the details screen's lyrics) and is an ordinary
+        field anywhere else.
+      */}
+      <TextField
         key={made}
         ref={input}
         style={styles.input}
@@ -83,6 +97,8 @@ export function SearchField({
         onChangeText={onChangeText}
         onFocus={onFocus}
         onBlur={onBlur}
+        onSubmitEditing={onSubmitEditing}
+        maxLength={maxLength}
         placeholder={placeholder}
         placeholderTextColor={c.textFaint}
         accessibilityLabel={accessibilityLabel ?? placeholder}

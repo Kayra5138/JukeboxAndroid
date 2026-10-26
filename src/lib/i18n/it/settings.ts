@@ -138,6 +138,7 @@ export const settings: Strings['settings'] = {
     note:
       'Per un telefono che perde fotogrammi. Il lettore compare invece di salire, e il gioco smette di illuminarsi quando si vince o si perde una vita. I tasti continuano a cadere: quello è il gioco, non una decorazione.',
   },
+  scriptNames: { title: 'Nomi in altre scritture', latin: 'Lettere latine', original: 'Originale', note: 'Se una ricerca ha trovato il nome di un brano in lettere latine e nella sua scrittura (giapponese, cinese, coreano), quale mostra la libreria. I brani cercati prima si completano alla prossima ricerca.' },
   moreButton: {
     title: 'Tre puntini su ogni riga',
     note:

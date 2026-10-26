@@ -138,6 +138,7 @@ export const settings: Strings['settings'] = {
     note:
       'Para teléfonos que pierden fotogramas. El reproductor aparece en lugar de subir, y el juego deja de iluminarse al ganar o perder una vida. Las teclas siguen cayendo: eso es el juego, no decoración.',
   },
+  scriptNames: { title: 'Nombres en otras escrituras', latin: 'Letras latinas', original: 'Original', note: 'Si una búsqueda encontró el nombre de una canción en letras latinas y en su propia escritura (japonés, chino, coreano), cuál muestra la biblioteca. Las canciones buscadas antes se completan al buscarlas de nuevo.' },
   moreButton: {
     title: 'Tres puntos en cada fila',
     note:

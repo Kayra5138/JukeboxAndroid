@@ -269,6 +269,10 @@ class JukeboxDownloadsModule : Module() {
       DownloadService.wake(context)
     }.runOnQueue(io)
 
+    AsyncFunction("rejoinAsync") { moves: Map<String, String> ->
+      DownloadStore.rejoin(context, moves)
+    }.runOnQueue(io)
+
     AsyncFunction("markDescribedAsync") { id: String ->
       DownloadStore.init(context)
       DownloadStore.described(id)

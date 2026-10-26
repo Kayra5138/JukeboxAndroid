@@ -6,6 +6,7 @@ import {
   settle,
   type FileRow,
   type Noted,
+  type Pair,
   type Proposal,
   type Scanned,
 } from './plan.ts';
@@ -42,15 +43,16 @@ const NOTHING: Proposal = { moves: [], asks: [], alike: [] };
  * Writes down the files it has not seen before or that have changed, and if
  * any have appeared, looks among them for the ones that have stopped turning
  * up. A file found again to the byte has its history moved to it; anything
- * less certain is left for the user to decide.
+ * less certain is left for the user to decide. Answers the histories moved,
+ * for what is filed under a file's number outside this database.
  *
  * A scan that returns nothing teaches nothing. That is what an audio
  * permission taken away looks like, and an empty folder chosen by mistake,
  * and neither is every song on the phone having gone. Nothing is forgotten
  * for want of being seen in any case: the descriptions simply stay.
  */
-export function takeIn(database: BackupDb, tracks: Scanned[], memory: Memory, now: number): void {
-  if (tracks.length === 0) return;
+export function takeIn(database: BackupDb, tracks: Scanned[], memory: Memory, now: number): Pair[] {
+  if (tracks.length === 0) return [];
 
   const files = (memory.files ??= readFiles(database));
   const pairs = (memory.pairs ??= readPairs(database));
@@ -72,7 +74,7 @@ export function takeIn(database: BackupDb, tracks: Scanned[], memory: Memory, no
   const due =
     twins.length > 0 &&
     (!memory.weighed || twins.some((pair) => here(pair.from) !== here(pair.to)));
-  if (found.changed.length === 0 && lost.length === 0 && !due) return;
+  if (found.changed.length === 0 && lost.length === 0 && !due) return [];
 
   const proposal =
     found.fresh.length > 0 ? propose(found.gone, found.fresh, tracks.map(describe)) : NOTHING;
@@ -94,4 +96,5 @@ export function takeIn(database: BackupDb, tracks: Scanned[], memory: Memory, no
   memory.files = null;
   memory.pairs = null;
   memory.weighed = true;
+  return settled.moves;
 }

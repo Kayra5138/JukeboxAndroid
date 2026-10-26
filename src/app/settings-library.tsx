@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
-import { Text, View } from 'react-native';
+import { Switch, Text, View } from 'react-native';
 
 import { OptionSheet } from '../components/OptionSheet';
 import { Pressable } from '../components/Pressable';
@@ -12,7 +12,14 @@ import { useWrongDownloads } from '../lib/library/wrongDownloadsStore';
 import { SHORTEST_CHOICES, type Shortest } from '../lib/library/hiding';
 import { libraryHidingChanged } from '../lib/library/index';
 import { leftOutCount, libraryRoot, setShortestFiles, shortestFiles } from '../lib/media/library';
-import { usePressed } from '../lib/theme/index';
+import { canWriteFiles } from '../lib/filetags';
+import {
+  setWriteEdits,
+  setWriteLookups,
+  useWriteEdits,
+  useWriteLookups,
+} from '../lib/filetags/auto';
+import { switchColours, useColours, usePressed } from '../lib/theme/index';
 
 /**
  * Where the music is and what is written in it: the folder, what is left out
@@ -26,6 +33,9 @@ export default function LibrarySettingsScreen() {
   const t = useT();
   const styles = useRows();
   const pressed = usePressed();
+  const c = useColours();
+  const writeEdits = useWriteEdits();
+  const writeLookups = useWriteLookups();
   /*
     Read as the screen is first drawn as well as each time it is come back
     to. Starting from placeholders and correcting them a moment later drew
@@ -198,6 +208,43 @@ export default function LibrarySettingsScreen() {
           </>
         ) : null}
       </View>
+
+      {/*
+        Writing into the files without the button for it. Only where the
+        phone can write to files at all.
+      */}
+      {canWriteFiles() ? (
+        <>
+          <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.library.autoWrite.heading)}</Text>
+          <View style={styles.card}>
+            <View style={styles.row}>
+              <View style={styles.line}>
+                <Text style={styles.title}>{t.library.autoWrite.edits.title}</Text>
+                <Switch
+                  accessibilityLabel={t.library.autoWrite.edits.title}
+                  value={writeEdits}
+                  onValueChange={setWriteEdits}
+                  {...switchColours(c, writeEdits)}
+                />
+              </View>
+              <Text style={styles.muted}>{t.library.autoWrite.edits.note}</Text>
+            </View>
+            <View style={styles.rule} />
+            <View style={styles.row}>
+              <View style={styles.line}>
+                <Text style={styles.title}>{t.library.autoWrite.lookups.title}</Text>
+                <Switch
+                  accessibilityLabel={t.library.autoWrite.lookups.title}
+                  value={writeLookups}
+                  onValueChange={setWriteLookups}
+                  {...switchColours(c, writeLookups)}
+                />
+              </View>
+              <Text style={styles.muted}>{t.library.autoWrite.lookups.note}</Text>
+            </View>
+          </View>
+        </>
+      ) : null}
     </SettingsPage>
   );
 }

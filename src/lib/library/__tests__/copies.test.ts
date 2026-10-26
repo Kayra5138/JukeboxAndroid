@@ -244,3 +244,46 @@ test('then the larger file, but only by a clear margin', () => {
 test('with nothing to tell them apart the lower id is kept, the same every time', () => {
   assert.deepEqual(chooseKeep([weighed('20'), weighed('3'), weighed('100')]), { keep: '3', reason: 'alike' });
 });
+
+
+test('the same audio is one song whatever release each copy was filed under', () => {
+  const a = file('Sunday [R1PL_hVxH9M].mp3', 210.936, { title: 'Sunday', artist: 'The Cranberries', album: 'Everybody Else Is Doing It' });
+  const b = file('Sunday.mp3', 210.936, { title: 'Sunday', artist: 'The Cranberries', album: 'The Cranberries: Gold' });
+  assert.deepEqual(ids(findCopies([a, b])), [['Sunday [R1PL_hVxH9M].mp3', 'Sunday.mp3']]);
+});
+
+test('a name written Artist - Title and the same song tagged are one', () => {
+  const a = file('Ellie Goulding - Burn (Official Video) [CGyEd0aKWZE].mp3', 238.2);
+  const b = file('Burn.mp3', 238.2, { title: 'Burn', artist: 'Ellie Goulding', album: 'Burn (Remix) - EP' });
+  assert.equal(findCopies([a, b]).length, 1);
+  const c = file('Everything Matters.mp3', 213.9, { title: 'Everything Matters', artist: 'AURORA, Pomme' });
+  const d = file('AURORA - Everything Matters (Lyric Video) ft. Pomme.mp3', 215.7);
+  assert.equal(findCopies([c, d]).length, 1);
+});
+
+test('the same audio is one song when a video named the series in place of the singer', () => {
+  const a = file('Shoko Nakagawa - Sono Chi no Sadame.mp3', 263.1);
+  const b = file('Jojo bizarre adventure - sono chi no sadame.mp3', 263.2);
+  assert.equal(findCopies([a, b]).length, 1);
+  // Not when they only run close: that is two performers of one song.
+  const c = file('baquu - Uragirimono no Requiem.mp3', 250);
+  const d = file('Daisuke Hasegawa - Uragirimono no Requiem.mp3', 251.9);
+  assert.deepEqual(findCopies([c, d]), []);
+});
+
+test('a catalogue note in brackets is the same recording, a version in brackets is not', () => {
+  const a = file('Lose Yourself (From 8 Mile Soundtrack).mp3', 321.2, { title: 'Lose Yourself (From "8 Mile" Soundtrack)', artist: 'Eminem' });
+  const b = file('Lose Yourself.mp3', 320.4, { title: 'Lose Yourself', artist: 'Eminem' });
+  assert.equal(findCopies([a, b]).length, 1);
+  const c = file('Duvet.mp3', 300, { title: 'Duvet', artist: 'bôa' });
+  const d = file('Duvet (acoustic).mp3', 301, { title: 'Duvet (acoustic)', artist: 'bôa' });
+  assert.deepEqual(findCopies([c, d]), []);
+  // The same to the frame, though, is the same audio whatever the brackets say.
+  const e = file('Black Water Lilies.mp3', 240, { title: 'Black Water Lilies', artist: 'AURORA' });
+  const f = file('Black Water Lilies (vocal files).mp3', 240, { title: 'Black Water Lilies (vocal files)', artist: 'AURORA' });
+  assert.equal(findCopies([e, f]).length, 1);
+});
+
+test('two untagged files with a plain name that only run close are two songs', () => {
+  assert.deepEqual(findCopies([file('Intro.mp3', 90), file('Intro (1).mp3', 91.5, { title: 'Intro' })]), []);
+});

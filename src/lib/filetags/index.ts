@@ -16,8 +16,9 @@ export type { FileWrite, Outcome } from './plan.ts';
  *
  * Everything else the app knows it keeps to itself, in its database, and a
  * file is never altered. This is the exception, and it only ever happens
- * because somebody pressed a button that says so: not on Save, not after a
- * lookup, not in the background.
+ * because somebody said so: by pressing a button that says so, or by
+ * switching on one of the two settings in `auto.ts`, for what they save and
+ * for what lookups find.
  *
  * This file is only the errands. What is written is decided in `plan.ts`, and
  * how it is done without harming the file is the native side's business.
@@ -38,6 +39,8 @@ export type Run = {
   onProgress?: (done: number, total: number) => void;
   /** Asked between files. A file being written is always finished first. */
   stopped?: () => boolean;
+  /** The files are ones that may be written to without asking: Jukebox's own. See `auto.ts`. */
+  unasked?: boolean;
 };
 
 /**
@@ -60,7 +63,7 @@ export async function writeToFiles(tracks: EnrichedTrack[], run: Run): Promise<O
   const attempted = tracks.filter((track) => !declined.has(track.id));
 
   // With nothing to attempt there is nothing to ask permission for.
-  if (attempted.length > 0) {
+  if (attempted.length > 0 && !run.unasked) {
     const agreed = await module.requestWriteAsync(attempted.map((track) => track.id));
     if (!agreed) return null;
   }

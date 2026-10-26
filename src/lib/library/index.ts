@@ -13,6 +13,7 @@ import { withMetadata } from '../media/merge.ts';
 import { knowNamesFrom } from '../support/errorLogStore.ts';
 import { welcomePassed } from '../ui/welcomeStore.ts';
 import { watchOverlay } from './overlay.ts';
+import { scriptNames } from '../ui/scriptNames.ts';
 import { createLibraryStore, type LibraryState } from './store.ts';
 
 export type { LibraryState } from './store.ts';
@@ -101,7 +102,8 @@ const store = createLibraryStore({
   hiding: libraryHiding,
   merge: withMetadata,
   // A throw from here is caught by the store, and read as "cannot say".
-  overlay: () => (countWrites ??= watchOverlay(db()))(),
+  // With which writing names are shown in: changing that changes what is shown as surely as a write does.
+  overlay: () => (countWrites ??= watchOverlay(db()))() * 2 + (scriptNames() === 'original' ? 1 : 0),
   kept: {
     read: () => kept().getFirstSync<{ words: string }>('SELECT words FROM library WHERE id = 1')?.words ?? null,
     write: (words) => {

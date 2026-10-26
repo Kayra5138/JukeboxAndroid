@@ -45,6 +45,7 @@ export const search: Strings['search'] = {
 
   playlist: 'Oynatma listesi',
   openPlaylist: 'Oynatma listesini aç',
+  backToResults: 'Sonuçlara dön',
   openPlaylistLabel: (title) => `Oynatma listesini aç: ${title}`,
   downloadLabel: (title) => `İndir: ${title}`,
   download: { mp3: 'MP3 indir', original: 'Sesi indir' },

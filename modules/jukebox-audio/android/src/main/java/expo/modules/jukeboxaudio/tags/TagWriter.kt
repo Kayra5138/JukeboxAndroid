@@ -233,9 +233,12 @@ internal object TagWriter {
       RandomAccessFile(copy, "r").use { finished ->
         val made = ChannelBytes(finished.channel)
 
-        resolver.openFileDescriptor(uri, "r")?.use { source ->
+        // Opened, and then asked. The question answers null for a copy whose
+        // sound is the original's, so it is not what says whether the file opened.
+        val source = resolver.openFileDescriptor(uri, "r") ?: throw Refusal(R.string.jukebox_tags_not_opened)
+        source.use {
           Sound.complaint(before.format, Descriptor(source.fileDescriptor), made)?.let { throw Refusal(it) }
-        } ?: throw Refusal(R.string.jukebox_tags_not_opened)
+        }
 
         // ---- the original ----
 

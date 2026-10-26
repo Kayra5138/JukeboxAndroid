@@ -42,6 +42,8 @@ declare class DownloadsModule extends NativeModule<DownloadsEvents> {
   enqueueAsync(video: YouTubeVideo, format: AudioFormat, folder: string): Promise<string>;
   cancelAsync(jobId: string): Promise<void>;
   markDescribedAsync(jobId: string): Promise<void>;
+  /** Points finished downloads, by job id, at their files' new ids; answers how many it moved. Missing from an older build. */
+  rejoinAsync?(moves: Record<string, string>): Promise<number>;
 
   /*
     The one queue. Everything below is missing from a build made before it,

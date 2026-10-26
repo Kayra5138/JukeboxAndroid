@@ -21,6 +21,15 @@ export const welcome: Strings['welcome'] = {
     done: 'Pronto',
     update:
       'Alguns ajustes novos nesta versão. Você pode mudá-los quando quiser em Ajustes.',
+    folder: {
+      heading: "Sua pasta de música",
+      note: "A pasta de onde o Jukebox lê suas músicas e onde salva os downloads.",
+      jukebox: { label: (folder: string) => `A pasta do Jukebox (${folder})`, note: "Só o que está nesta pasta. Os downloads são salvos aqui, e as músicas que outros apps guardam em Music ficam de fora." },
+      music: { label: (folder: string) => `Toda a pasta Music (${folder})`, note: "Tudo o que está na pasta Music e nas pastas dentro dela, como antes." },
+      current: "A pasta escolhida antes.",
+      songs: (count: number) => `${format.number(count)} ${count === 1 ? 'música' : 'músicas'}`,
+      more: "Dá para mudar quando quiser em Ajustes → Biblioteca → Pasta da biblioteca, onde também é possível escolher qualquer outra pasta.",
+    },
     look: {
       heading: 'Escolha uma aparência',
       note: 'Toque em um para experimentar.',

@@ -134,6 +134,7 @@ export const settings: Strings['settings'] = {
     title: '减少装饰动效',
     note: '适合容易掉帧的手机。播放器会直接出现而不是向上滑出，游戏中获得或失去生命时也不再闪光。琴键仍会落下——那是游戏本身，不是装饰。',
   },
+  scriptNames: { title: '其他文字的名称', latin: '拉丁字母', original: '原文', note: '当查找同时找到歌曲的拉丁字母名和原文名（日文、中文、韩文）时，曲库显示哪一个。之前查找过的歌曲在重新查找后补全。' },
   moreButton: {
     title: '每行的三点按钮',
     note:

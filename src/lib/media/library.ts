@@ -22,8 +22,23 @@ import type { Track } from '../types.ts';
  */
 export const DEFAULT_ROOT = 'Music';
 
+/**
+ * The folder of Jukebox's own, inside `Music`: what a new install reads, and
+ * where its downloads go, so that the music other apps put in `Music` — a
+ * messenger's voice notes, another player's podcasts — is not in the library
+ * unasked. Offered once by the setup, to somebody updating as well; anybody
+ * who wants the whole of `Music`, or another folder, chooses it there or in
+ * Settings → Library.
+ */
+export const JUKEBOX_ROOT = 'Music/Jukebox';
+
 export function libraryRoot(): string {
   return readSetting(SETTINGS.libraryRoot) ?? DEFAULT_ROOT;
+}
+
+/** Whether a library folder has ever been chosen, by somebody or by the setup: until then it is all of `Music`. */
+export function libraryRootChosen(): boolean {
+  return readSetting(SETTINGS.libraryRoot) !== null;
 }
 
 export function setLibraryRoot(root: string): void {

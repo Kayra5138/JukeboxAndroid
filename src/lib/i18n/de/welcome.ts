@@ -21,6 +21,15 @@ export const welcome: Strings['welcome'] = {
     done: 'Fertig',
     update:
       'Ein paar Einstellungen, neu in dieser Version. Du kannst sie jederzeit in den Einstellungen ändern.',
+    folder: {
+      heading: "Dein Musikordner",
+      note: "Aus welchem Ordner Jukebox deine Musik liest und wohin es Downloads speichert.",
+      jukebox: { label: (folder: string) => `Der eigene Ordner von Jukebox (${folder})`, note: "Nur, was in diesem Ordner liegt. Downloads werden hier gespeichert, und Musik anderer Apps in Music bleibt draußen." },
+      music: { label: (folder: string) => `Ganz Music (${folder})`, note: "Alles im Ordner Music und in den Ordnern darin, wie bisher." },
+      current: "Der zuvor gewählte Ordner.",
+      songs: (count: number) => `${format.number(count)} ${count === 1 ? 'Titel' : 'Titel'}`,
+      more: "Jederzeit änderbar unter Einstellungen → Bibliothek → Bibliotheksordner, wo auch jeder andere Ordner gewählt werden kann.",
+    },
     look: {
       heading: 'Wähle ein Design',
       note: 'Tipp eins an, um es auszuprobieren.',

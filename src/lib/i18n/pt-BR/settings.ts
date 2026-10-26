@@ -138,6 +138,7 @@ export const settings: Strings['settings'] = {
     note:
       'Para um celular que perde quadros. O player aparece em vez de subir, e o jogo para de se iluminar quando uma vida é ganha ou perdida. As teclas continuam caindo — isso é o jogo, não decoração.',
   },
+  scriptNames: { title: 'Nomes em outras escritas', latin: 'Letras latinas', original: 'Original', note: 'Quando uma busca encontrou o nome de uma música em letras latinas e na sua própria escrita (japonês, chinês, coreano), qual a biblioteca mostra. Músicas buscadas antes se completam quando buscadas de novo.' },
   moreButton: {
     title: 'Três pontos em cada linha',
     note:

@@ -20,6 +20,15 @@ export const welcome: Strings['welcome'] = {
     done: 'Bitti',
     update:
       'Bu sürümde birkaç yeni ayar var. İstediğin zaman Ayarlar’dan değiştirebilirsin.',
+    folder: {
+      heading: "Müzik klasörün",
+      note: "Jukebox’ın müziğini hangi klasörden okuyacağı ve indirdiklerini nereye kaydedeceği.",
+      jukebox: { label: (folder: string) => `Jukebox'ın kendi klasörü (${folder})`, note: "Yalnızca bu klasördekiler. İndirilenler buraya kaydedilir; diğer uygulamaların Music’te tuttuğu müzikler dışarıda kalır." },
+      music: { label: (folder: string) => `Music'in tamamı (${folder})`, note: "Music klasöründeki ve içindeki klasörlerdeki her şey, eskisi gibi." },
+      current: "Daha önce seçilen klasör.",
+      songs: (count: number) => `${format.number(count)} şarkı`,
+      more: "İstediğin zaman Ayarlar → Kütüphane → Kütüphane klasörü’nden değiştirilebilir; orada başka bir klasör de seçilebilir.",
+    },
     look: {
       heading: 'Görünümü seç',
       note: 'Denemek için birine dokun.',

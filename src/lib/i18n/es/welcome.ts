@@ -20,6 +20,15 @@ export const welcome: Strings['welcome'] = {
     done: 'Listo',
     update:
       'Algunos ajustes nuevos en esta versión. Puedes cambiarlos cuando quieras en Ajustes.',
+    folder: {
+      heading: "Tu carpeta de música",
+      note: "La carpeta de la que Jukebox lee tu música y en la que guarda sus descargas.",
+      jukebox: { label: (folder: string) => `La carpeta propia de Jukebox (${folder})`, note: "Solo lo que hay en esta carpeta. Las descargas se guardan aquí, y la música que otras apps guardan en Music queda fuera." },
+      music: { label: (folder: string) => `Toda la carpeta Music (${folder})`, note: "Todo lo que hay en Music y en sus carpetas, como antes." },
+      current: "La carpeta elegida antes.",
+      songs: (count: number) => `${format.number(count)} ${count === 1 ? 'canción' : 'canciones'}`,
+      more: "Se puede cambiar cuando quieras en Ajustes → Biblioteca → Carpeta de la biblioteca, donde también puedes elegir cualquier otra.",
+    },
     look: {
       heading: 'Elige un aspecto',
       note: 'Toca uno para probarlo.',

@@ -182,8 +182,20 @@ export const SETTINGS = {
   reduceMotion: 'ui:reduceMotion',
   /** `'false'` when rows of tracks leave out the three dots that open their menu; anything else shows them. */
   moreButton: 'ui:moreButton',
+  /** Whether what somebody saves about a track is written into its file as well: `filetags/auto.ts`. Off unless 'true'. */
+  writeEdits: 'files:writeEdits',
+  /** Whether what lookups find is written into the files as well. Off unless 'true'. */
+  writeLookups: 'files:writeLookups',
+  /** Tracks whose lookups wait to be written into files that need asking first, as a JSON list of ids. */
+  writeWaiting: 'files:writeWaiting',
   /** The tabs left off the bar, as JSON: `storedHidden` in `ui/tabChoice.ts`. Absent, every tab is there. */
   hiddenTabs: 'ui:hiddenTabs',
+  /**
+   * Which writing a song's name is shown in where a lookup found it in two —
+   * Latin letters (`latin`) or its own (`original`): see `ScriptNames` in
+   * `media/enriched.ts`. Absent, Latin letters. A preference, and travels.
+   */
+  scriptNames: 'ui:scriptNames',
   /**
    * `'true'` while a round button floats over the app whenever something is
    * being downloaded; see `components/DownloadsButton.tsx`.

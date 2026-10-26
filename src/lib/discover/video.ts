@@ -1,3 +1,4 @@
+import { versionWordsOf } from '../library/copies.ts';
 import { withoutBrackets } from '../metadata/credit.ts';
 import { foldForMatch, matchScore, tokens, VARIANT_MARKERS } from '../metadata/text.ts';
 import type { YouTubeVideo } from '../youtube/types.ts';
@@ -81,8 +82,20 @@ export function chooseVideo(
   const length = song.durationSec && song.durationSec > 0 ? song.durationSec : null;
   const artist = foldForMatch(song.artist);
 
+  /*
+    What the song's brackets say about which recording it is, which its name
+    is compared without: a video of `Let Me Heal You` is not `Let Me Heal You
+    (demo)`, and taken for it the album take came down a second time under
+    the demo's name. Each such word has to be in the video's title too.
+  */
+  const version = versionWordsOf(song.title);
+
   const possible = videos.filter((video) => {
     if (!video.duration || video.duration > 1200) return false;
+    if (version.length) {
+      const said = new Set(foldForMatch(video.title).split(/\s+/));
+      if (!version.every((word) => said.has(word))) return false;
+    }
     if (foldForMatch(video.title).split(/\s+/).some((word) => variants.has(word) && !wanted.has(word))) return false;
     return length == null || Math.abs(video.duration - length) <= Math.max(15, length * 0.15);
   });
@@ -94,7 +107,8 @@ export function chooseVideo(
         ? titleWords.every((word) => words.includes(word))
         : foldForMatch(video.title).includes(foldForMatch(song.title));
       if (!titleMatches) return { video, score: 0 };
-      const score = matchScore(`${song.artist} ${withoutBrackets(song.title)}`, { title: video.title, artist: video.channel });
+      // With the recording's own words from the brackets: a demo asked for is not marked down for saying it is one.
+      const score = matchScore(`${song.artist} ${withoutBrackets(song.title)} ${version.join(' ')}`.trim(), { title: video.title, artist: video.channel });
       return { video, score: score >= 0.8 ? score + (/topic|official/i.test(video.channel) ? 0.1 : 0) : 0 };
     })
     .filter((entry) => entry.score > 0)

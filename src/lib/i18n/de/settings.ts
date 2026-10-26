@@ -138,6 +138,7 @@ export const settings: Strings['settings'] = {
     note:
       'Für Geräte, bei denen Animationen ruckeln. Der Player erscheint, statt hochzugleiten, und das Spiel leuchtet nicht mehr auf, wenn ein Leben gewonnen oder verloren wird. Die Tasten selbst fallen weiter – das ist das Spiel, keine Dekoration.',
   },
+  scriptNames: { title: 'Namen in anderen Schriften', latin: 'Lateinisch', original: 'Original', note: 'Wenn eine Suche den Namen eines Titels in lateinischer Schrift und in seiner eigenen (Japanisch, Chinesisch, Koreanisch) gefunden hat, welchen die Bibliothek zeigt. Früher gesuchte Titel füllen sich bei der nächsten Suche.' },
   moreButton: {
     title: 'Drei Punkte in jeder Zeile',
     note:

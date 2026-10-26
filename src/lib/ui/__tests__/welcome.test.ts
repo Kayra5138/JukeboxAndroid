@@ -203,9 +203,14 @@ test('a locale is matched to a language by tag, then by language alone', () => {
   assert.equal(languageForLocale(undefined, ids), null);
 });
 
-test('somebody who finished the first setup is shown only what a tap plays', () => {
-  assert.deepEqual(stepsFor('update', 1), ['tap']);
+test('somebody who finished the first setup is shown what a tap plays and the library folder', () => {
+  assert.deepEqual(stepsFor('update', 1), ['folder', 'tap']);
   const { welcome } = place({ words: 'done', seen: '1' });
   assert.equal(welcome.kind(), 'update');
-  assert.deepEqual(welcome.steps(), ['tap']);
+  assert.deepEqual(welcome.steps(), ['folder', 'tap']);
+});
+
+test('somebody who has seen what a tap plays is asked only for the library folder', () => {
+  assert.deepEqual(stepsFor('update', 2), ['folder']);
+  assert.deepEqual(place({ words: 'done', seen: '2' }).welcome.steps(), ['folder']);
 });

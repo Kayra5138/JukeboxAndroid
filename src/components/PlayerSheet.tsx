@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import {
   AccessibilityInfo,
   Animated,
+  Easing,
   BackHandler,
   PanResponder,
   StyleSheet,
@@ -360,7 +361,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   }, [added]);
   const ON = c.text;
   const OFF = c.textDisabled;
-  const { current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error, autoFrom } =
+  const { current, currentIndex, queue, isPlaying, playWhenReady, repeat, speed, pitch, error, autoFrom } =
     usePlayerState();
   const {
     toggle,
@@ -400,6 +401,23 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   // of some thirty megabytes, which is not something to spend unbidden.
   const [showTranslation, setShowTranslation] = useState(false);
   const grow = useRef(new Animated.Value(0)).current;
+  /*
+    Shuffle is a thing done, not a mode left on: each press deals the queue
+    again. So the button does not stay lit. It lights up for a moment and
+    turns as it deals, and the list shakes once as its songs change places,
+    and then the button is as it was. Nought to one, once for each press.
+  */
+  const dealt = useRef(new Animated.Value(1)).current;
+  const deal = () => {
+    if (motionReduced()) return;
+    dealt.setValue(0);
+    Animated.timing(dealt, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+  };
+  const dealtLight = dealt.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 1, 0] });
+  const dealtTurn = dealt.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const dealtSize = dealt.interpolate({ inputRange: [0, 0.3, 1], outputRange: [1, 1.25, 1] });
+  const dealtShake = dealt.interpolate({ inputRange: [0, 0.2, 0.45, 0.7, 1], outputRange: [0, -14, 10, -5, 0] });
+  const dealtFade = dealt.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, 0.45, 1] });
 
   // Only asked for once the panel is open. Every track change would otherwise
   // send LRCLIB a request for words nobody is going to read.
@@ -682,6 +700,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const headingOver = queueOver && !showLyrics;
 
   const queueListWith = (inset: number, foot = 0) => (
+    <Animated.View style={[styles.dealt, { opacity: dealtFade, transform: [{ translateX: dealtShake }] }]}>
     <QueueList
       inset={inset}
       foot={foot}
@@ -708,6 +727,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           : undefined
       }
     />
+    </Animated.View>
   );
   const queueList = queueListWith(0);
 
@@ -932,13 +952,20 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         <View style={styles.options}>
           <Pressable
             android_ripple={pressed}
-            style={[styles.mode, shuffled && styles.modeOn]}
+            style={styles.mode}
             accessibilityRole="button"
             hitSlop={MODE_SLOP}
             accessibilityLabel={t.player.sheet.shuffleQueue}
-            accessibilityState={{ selected: shuffled }}
-            onPress={() => void shuffleQueue()}>
-            <ShuffleIcon size={modeIcon} color={shuffled ? ON : OFF} />
+            onPress={() => {
+              deal();
+              void shuffleQueue();
+            }}>
+            <Animated.View style={{ transform: [{ rotate: dealtTurn }, { scale: dealtSize }] }}>
+              <ShuffleIcon size={modeIcon} color={OFF} />
+              <Animated.View style={[StyleSheet.absoluteFill, { opacity: dealtLight }]} pointerEvents="none">
+                <ShuffleIcon size={modeIcon} color={ON} />
+              </Animated.View>
+            </Animated.View>
           </Pressable>
           <Pressable
             android_ripple={pressed}
@@ -1277,6 +1304,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     ...outlined(c, 'transparent'),
   },
   modeOn: outlined(c, c.accent),
+  /** Round the queue, for the shake it gives when it is shuffled. */
+  dealt: { flex: 1 },
 
   gap: { flex: 1, overflow: 'hidden' },
   queue: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },

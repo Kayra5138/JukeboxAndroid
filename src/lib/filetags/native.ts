@@ -30,6 +30,8 @@ declare class TagsModule extends NativeModule {
   /** Raises the system's own question. False when the user said no. */
   requestWriteAsync(trackIds: string[]): Promise<boolean>;
   writeAsync(trackId: string, details: FileDetails): Promise<NativeWrite>;
+  /** Which of these Jukebox made itself, and may write to unasked. Missing from an older build. */
+  ownedAsync?(trackIds: string[]): Promise<string[]>;
 }
 
 // Optional, so a development build made before this module existed still opens

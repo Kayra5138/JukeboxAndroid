@@ -100,8 +100,22 @@ object YouTubeEngine {
     YoutubeDL.init(context)
     FFmpeg.getInstance().init(context)
     Place(context).settle()
+    cacheDirectory = File(context.cacheDir, "yt-dlp").absolutePath
     initialized = true
   }
+
+  /**
+   * Where yt-dlp may keep what it worked out, between one song and the next.
+   *
+   * Without one the library runs it with `--no-cache-dir`, and every song
+   * fetched YouTube's player script again (some 2.7 MB) and had QuickJS take
+   * it apart again before the video's address could be read: half a minute
+   * of a whole core for each song, which is what a long list of downloads
+   * spent its heat on. With it, that is done once for each new player, which
+   * YouTube puts out every few days. In the cache, since it is only ever
+   * time saved, and the system may clear it whenever it likes.
+   */
+  @Volatile private var cacheDirectory: String? = null
 
   /** The versions there are to speak of, without unpacking anything: the one installed and the one this build carries. */
   fun versions(context: Context): Map<String, String> =
@@ -127,6 +141,7 @@ object YouTubeEngine {
     addOption("--socket-timeout", "15")
     addOption("--retries", "2")
     addOption("--fragment-retries", "2")
+    cacheDirectory?.let { addOption("--cache-dir", it) }
   }
 
   /** Repeated cancellation closes the race between cancel and ProcessBuilder.start. */

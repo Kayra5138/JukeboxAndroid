@@ -21,6 +21,7 @@ import {
 } from '../../lib/db/metadata';
 import { tagsFor } from '../../lib/db/tags';
 import { canWriteFiles, lineFor, writable, writeToFiles } from '../../lib/filetags';
+import { afterSaved, writeEditsOn } from '../../lib/filetags/auto';
 import { formatDateTime } from '../../lib/format/date';
 import { useT, type Strings } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
@@ -327,7 +328,28 @@ export function GeneralTab({
     // A cover chosen goes to the tracks of the record that have none, and a
     // track moved onto a record by its name takes the record's.
     void spreadCovers({ trackIds: [track.id] });
-  }, [valid, track, fields, cover, reset, onChanged, t]);
+    // Into the file as well, where somebody has asked for that to happen on
+    // Save: what it says comes under the button that would have done it.
+    if (writeEditsOn() && writable(track)) {
+      void (async () => {
+        setWriting(true);
+        setFileNote(null);
+        try {
+          const result = (await afterSaved([track.id]))?.[0]?.result;
+          setFileNote(
+            result
+              ? { text: lineFor(result, t), bad: result.status === 'failed' || result.status === 'skipped' }
+              : { text: said.nothingWritten }
+          );
+          if (result?.status === 'written') onChanged();
+        } catch (error) {
+          setFileNote({ text: error instanceof Error ? error.message : said.couldNotWrite, bad: true });
+        } finally {
+          setWriting(false);
+        }
+      })();
+    }
+  }, [valid, track, fields, cover, reset, onChanged, t, said]);
 
   const discard = useCallback(() => {
     // The row and nothing else. The tags are edited in their own tab, and

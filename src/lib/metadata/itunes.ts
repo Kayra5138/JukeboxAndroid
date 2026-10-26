@@ -1,7 +1,9 @@
 import { isCompilationArtist } from '../media/albums.ts';
 import { sameRecordName, withoutEdition } from './covers.ts';
-import { asThrottle, pacer, request, statusOf } from './http.ts';
-import { identify } from './identify.ts';
+import { asThrottle, isAbortError, pacer, request, statusOf } from './http.ts';
+import { splitCredit } from './credit.ts';
+import { readings, type Identity } from './identify.ts';
+import { versionWordsOf } from '../library/copies.ts';
 import { foldForMatch, matchScore, tokens } from './text.ts';
 import type { Track } from '../types.ts';
 
@@ -54,9 +56,22 @@ export type ItunesMatch = {
   discNumber: number | null;
   score: number;
   storefront: string;
+  /**
+   * The same song as Apple names it in the other writing, where it has one:
+   * a Japanese song's name in Latin letters from a storefront outside Japan
+   * (`Jojo Sono Chino Sadame`, `RuLe`, `Be a flower`), and in its own writing
+   * from Japan's (`その血の運命`). Null where Apple gives only the one name.
+   */
+  latinTitle?: string | null;
+  latinArtist?: string | null;
+  nativeTitle?: string | null;
+  nativeArtist?: string | null;
+  /** Apple's id for the song, which every storefront knows it by. */
+  trackId?: number | null;
 };
 
 type ItunesResult = {
+  trackId?: number;
   trackName?: string;
   artistName?: string;
   collectionName?: string;
@@ -99,12 +114,26 @@ function sameArtist(wanted: string[], candidateArtist: string | undefined): bool
 function sameOne(wanted: string, candidateArtist: string | undefined): boolean {
   if (!candidateArtist) return false;
   if (foldForMatch(wanted) === foldForMatch(candidateArtist)) return true;
+  // Romanised names are spaced as whoever typed them liked: `SHINSEI KAMATTE CHAN`, `Shinsei kamattechan`.
+  if (unspaced(wanted) !== '' && unspaced(wanted) === unspaced(candidateArtist)) return true;
   // Credits vary — `C418` against `C418 & Protostar` — so agreement on the
   // distinctive words is enough.
   const asked = tokens(wanted);
   if (asked.length === 0) return false;
+  /*
+    A name of one word is too little to agree on half of: `Coda` is half of
+    nothing, and was taking `Coda Piano Trio` for itself. It has to be one of
+    the names the entry is credited to, whole: `C418` in `C418 & Protostar`.
+  */
+  if (asked.length === 1) {
+    return splitCredit(candidateArtist).some((name) => unspaced(name) === unspaced(wanted));
+  }
   const credited = new Set(tokens(candidateArtist));
   return asked.filter((word) => credited.has(word)).length / asked.length >= 0.5;
+}
+
+function unspaced(name: string): string {
+  return foldForMatch(name).replace(/\s+/g, '');
 }
 
 function parseYear(releaseDate: string | undefined): number | null {
@@ -142,11 +171,14 @@ async function searchStorefront(
 
   let best: ItunesMatch | null = null;
   let bestOnAlbum = false;
+  const asked = new Set(versionWordsOf(fallbackTitle));
   for (const result of body.results ?? []) {
     if (!result.trackName) continue;
     // When the artist is known, it is the strongest signal available and a
     // mismatch is decisive. Without one, the title has to carry the match.
     if (wantedArtist.length > 0 && !sameArtist(wantedArtist, result.artistName)) continue;
+    // Another recording of the song the name did not ask for: `Prayer X (Acoustic)` for `Prayer X`.
+    if (versionWordsOf(result.trackName).some((word) => !asked.has(word))) continue;
     const score = matchScore(query, {
       title: result.trackName,
       artist: result.artistName,
@@ -169,46 +201,187 @@ async function searchStorefront(
       foldForMatch(result.collectionName) === wantedAlbum;
     if (best && (onAlbum === bestOnAlbum ? score <= best.score : !onAlbum)) continue;
     bestOnAlbum = onAlbum;
-    best = {
-      title: result.trackName ?? fallbackTitle,
-      artist: result.artistName ?? '',
-      album: result.collectionName ?? null,
-      albumArtist: result.collectionName
-        ? (result.collectionArtistName ?? result.artistName ?? null)
-        : null,
-      genre: result.primaryGenreName ?? null,
-      year: parseYear(result.releaseDate),
-      artworkUrl: upscaleArtwork(result.artworkUrl100),
-      // A single is track one of a collection of one, which is true and
-      // useless; it is kept anyway, since the ordering only consults it when
-      // several tracks share an album.
-      trackNumber: position(result.trackNumber),
-      discNumber: position(result.discNumber),
-      score,
-      storefront,
-    };
+    best = matchOf(result, fallbackTitle, score, storefront);
   }
 
   return best;
+}
+
+function matchOf(result: ItunesResult, fallbackTitle: string, score: number, storefront: string): ItunesMatch {
+  return {
+    title: result.trackName ?? fallbackTitle,
+    artist: result.artistName ?? '',
+    album: result.collectionName ?? null,
+    albumArtist: result.collectionName
+      ? (result.collectionArtistName ?? result.artistName ?? null)
+      : null,
+    genre: result.primaryGenreName ?? null,
+    trackId: result.trackId ?? null,
+    year: parseYear(result.releaseDate),
+    artworkUrl: upscaleArtwork(result.artworkUrl100),
+    // A single is track one of a collection of one, which is true and
+    // useless; it is kept anyway, since the ordering only consults it when
+    // several tracks share an album.
+    trackNumber: position(result.trackNumber),
+    discNumber: position(result.discNumber),
+    score,
+    storefront,
+  };
+}
+
+/**
+ * A Japanese song credited in Latin letters, `Ito kanako` – `スカイクラッドの観測者`,
+ * which Japan's storefront sells under `いとうかなこ` and the others under a
+ * romanised title: neither search can agree with both halves of the name.
+ *
+ * Japan's is asked for the title alone, and only an entry of exactly that
+ * name is kept; then the United States' is asked, by Apple's ids, what it
+ * calls their artists, and the one whose Latin name is the artist asked for
+ * is the song. Two requests, made only for a name written half one way and
+ * half the other that nothing else found. Its two writings come with it.
+ */
+async function acrossWritings(
+  wanted: string[],
+  title: string,
+  signal?: AbortSignal
+): Promise<ItunesMatch | null> {
+  if (wanted.length === 0 || !EAST_ASIAN.test(title) || wanted.some((name) => EAST_ASIAN.test(name))) return null;
+  const body = await paced(
+    () =>
+      request<{ results?: ItunesResult[] }>(
+        'iTunes JP',
+        `${ENDPOINT}?term=${encodeURIComponent(title)}&entity=song&limit=10&country=JP`,
+        {},
+        signal
+      ),
+    signal
+  ).catch((error: unknown) => {
+    throw statusOf(error) === 403 ? asThrottle(error) : error;
+  });
+  const asked = new Set(versionWordsOf(title));
+  const named = (body.results ?? []).filter(
+    (result) =>
+      result.trackId &&
+      result.trackName &&
+      foldForMatch(result.trackName) === foldForMatch(title) &&
+      versionWordsOf(result.trackName).every((word) => asked.has(word))
+  );
+  if (named.length === 0) return null;
+  const ids = [...new Set(named.map((result) => result.trackId))].join(',');
+  const elsewhere = await paced(
+    () =>
+      request<{ results?: ItunesResult[] }>(
+        'iTunes US',
+        `https://itunes.apple.com/lookup?id=${ids}&country=US`,
+        {},
+        signal
+      ),
+    signal
+  ).catch((error: unknown) => {
+    throw statusOf(error) === 403 ? asThrottle(error) : error;
+  });
+  for (const result of named) {
+    const latin = elsewhere.results?.find((one) => one.trackId === result.trackId);
+    if (!latin || !sameArtist(wanted, latin.artistName)) continue;
+    return {
+      ...matchOf(result, title, 1, 'JP'),
+      nativeTitle: result.trackName ?? null,
+      nativeArtist: result.artistName && EAST_ASIAN.test(result.artistName) ? result.artistName : null,
+      latinTitle: latin.trackName && !EAST_ASIAN.test(latin.trackName) ? latin.trackName : null,
+      latinArtist: latin.artistName ?? null,
+    };
+  }
+  return null;
 }
 
 export async function lookupTrack(
   track: Track,
   signal?: AbortSignal
 ): Promise<ItunesMatch | null> {
-  const { artist, artists, query } = identify(track);
-  if (!query) return null;
+  const album = track.album?.trim() ? foldForMatch(track.album) : null;
+  // Each way the name can be read, the likeliest first: see `readings`.
+  for (const identity of readings(track)) {
+    const match = await lookUpReading(identity, track, album, signal);
+    if (match) return withOtherWriting(match, signal);
+  }
+  return null;
+}
 
+async function lookUpReading(
+  { artist, artists, query, title }: Identity,
+  track: Track,
+  album: string | null,
+  signal?: AbortSignal
+): Promise<ItunesMatch | null> {
+  if (!query) return null;
   // The credit as written as well as the names in it: a duo the rules took
   // apart wrongly is still itself to a catalogue that lists it whole.
   const wanted = artist ? [artist, ...artists] : [];
-  const album = track.album?.trim() ? foldForMatch(track.album) : null;
-
   for (const storefront of STOREFRONTS) {
-    const match = await searchStorefront(query, wanted, storefront, track.title, album, signal);
+    const match = await searchStorefront(query, wanted, storefront, title || track.title, album, signal);
     if (match) return match;
   }
-  return null;
+  return title ? acrossWritings(wanted, title, signal) : null;
+}
+
+/** Writing that is not the Latin alphabet's: Japanese, Chinese, Korean. */
+const EAST_ASIAN = /[\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}]/u;
+
+/** Apple's genres for the music whose names are written in two ways. */
+const TWO_WRITINGS = /j-?pop|j-?rock|anime|k-?pop|enka|kayokyoku|vocaloid|visual kei|c-?pop|mandopop|cantopop|japan|korea|anim/i;
+
+/**
+ * [match] with its name in the other writing as well, where it is a song
+ * that has one.
+ *
+ * Asked by Apple's id in the other storefront, which answers with that
+ * storefront's names for the same song: Japan's for its own writing, the
+ * United States' for Latin letters. One request more, made only for a song
+ * whose names or genre say it is written two ways: every other song has one
+ * name, and the request would only say so.
+ */
+async function withOtherWriting(match: ItunesMatch, signal?: AbortSignal): Promise<ItunesMatch> {
+  // Found with both already: see `acrossWritings`.
+  if (!match.trackId || match.latinTitle || match.latinArtist) return match;
+  const eastern = EAST_ASIAN.test(`${match.title} ${match.artist}`);
+  if (!eastern && !TWO_WRITINGS.test(match.genre ?? '')) return match;
+  // Latin letters from outside Japan — Turkey's first, since the United States does not sell every Japanese song — or its own writing from Japan.
+  const storefronts = (match.storefront === 'JP' || eastern ? ['TR', 'US'] : ['JP']).filter((one) => one !== match.storefront);
+  let other: ItunesResult | undefined;
+  for (const storefront of storefronts) {
+    try {
+      const body = await paced(
+        () =>
+          request<{ results?: ItunesResult[] }>(
+            `iTunes ${storefront}`,
+            `https://itunes.apple.com/lookup?id=${match.trackId}&country=${storefront}`,
+            {},
+            signal
+          ),
+        signal
+      );
+      other = body.results?.find((result) => result.trackName);
+    } catch (error) {
+      // The song is found either way; only its second name is missing, and a stop is passed on.
+      if (isAbortError(error)) throw error;
+      return match;
+    }
+    if (other) break;
+  }
+  if (!other?.trackName) return match;
+  const names = [
+    { title: match.title, artist: match.artist },
+    { title: other.trackName, artist: other.artistName ?? match.artist },
+  ];
+  const native = names.find((one) => EAST_ASIAN.test(`${one.title} ${one.artist}`));
+  const latin = names.find((one) => !EAST_ASIAN.test(one.title));
+  return {
+    ...match,
+    nativeTitle: native?.title ?? null,
+    nativeArtist: native && EAST_ASIAN.test(native.artist) ? native.artist : (names.find((one) => EAST_ASIAN.test(one.artist))?.artist ?? null),
+    latinTitle: latin?.title ?? null,
+    latinArtist: names.find((one) => !EAST_ASIAN.test(one.artist))?.artist ?? null,
+  };
 }
 
 type ItunesAlbum = {

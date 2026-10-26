@@ -39,6 +39,18 @@ export const welcome = {
     /** Over the first screen somebody updating sees: they chose a language long ago. */
     update:
       'A few settings, new in this version. You can change them any time in Settings.',
+    /** Which folder the library is read from and downloads saved to: see `media/library.ts`. [folder] is its path, `Music/Jukebox`. */
+    folder: {
+      heading: "Your music folder",
+      note: "Which folder Jukebox reads your music from, and saves its downloads into.",
+      jukebox: { label: (folder: string) => `Jukebox's own folder (${folder})`, note: "Only what is in this folder. Downloads are saved here, and music other apps keep in Music stays out." },
+      music: { label: (folder: string) => `All of Music (${folder})`, note: "Everything in the Music folder and the folders inside it, as before." },
+      /** Under a folder somebody chose in Settings before the setup asked. */
+      current: "The folder chosen before.",
+      /** After each answer's line: how many songs that folder holds. */
+      songs: (count: number) => `${format.number(count)} ${count === 1 ? 'song' : 'songs'}`,
+      more: "Can be changed any time in Settings → Library → Library folder, where any other folder can be chosen too.",
+    },
     look: {
       heading: 'Choose a look',
       note: 'Tap one to try it.',

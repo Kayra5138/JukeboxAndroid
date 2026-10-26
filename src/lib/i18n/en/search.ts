@@ -48,6 +48,8 @@ export const search = {
   /** One result, and what can be done with it. */
   playlist: 'Playlist',
   openPlaylist: 'Open playlist',
+  /** Over the songs of a list opened from the results, and what the back key does there. */
+  backToResults: 'Back to results',
   openPlaylistLabel: (title: string) => `Open playlist ${title}`,
   downloadLabel: (title: string) => `Download ${title}`,
   download: { mp3: 'Download MP3', original: 'Download audio' },
