@@ -7,7 +7,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: '再生中の曲はありません。',
-    heart: 'ハート',
+    heart: "お気に入り",
     repeat: { off: 'リピート', all: '全曲リピート', one: '1曲リピート' },
     back: (seconds) => `${seconds}秒戻る`,
     forward: (seconds) => `${seconds}秒進む`,
@@ -19,6 +19,17 @@ export const player: Strings['player'] = {
     position: '再生位置',
     /* Read aloud: 「1:23、全体3:45」. */
     positionValue: (position, duration) => `${position}、全体${duration}`,
+  },
+  tape: {
+    part: (at, of) => `パート ${format.number(at)} / ${format.number(of)}`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at, of) => `エピソード ${format.number(at)} / ${format.number(of)}`,
+    previousPart: '前のパート',
+    nextPart: '次のパート',
+    parts: (count) => `パート · ${format.number(count)}`,
+    book: (percent, left) => `全体の${format.number(percent)}% · 残り${left}`,
+    speed: (speed) => `速度 ${speed}、タップで次へ`,
+    sleep: 'スリープタイマー',
   },
   queue: {
     remove: (title) => `${title}をキューから外す`,
@@ -71,11 +82,63 @@ export const player: Strings['player'] = {
     howMany: '何分後に一時停止しますか？',
     minutes: '分',
     start: '開始',
+    tape: {
+      about: '一定時間後に一時停止します。最後の30秒は徐々に音量が下がります。',
+      pauseAtEnd: 'このパートの終わりで一時停止',
+      endOfTrack: 'パートの終わり',
+      finish: {
+        title: '再生中のパートを最後まで再生',
+        note: '時間になったら、フェードアウトせずにパートが終わるまで待ちます。',
+        label: 'スリープタイマー終了時に再生中のパートを最後まで再生',
+      },
+    },
+  },
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: '文字起こし',
+    show: '話している内容を表示',
+    none: 'この動画には追える字幕がありません。',
+  },
+  chapters: {
+    heading: (count) => `チャプター · ${format.number(count)}`,
+    untitled: (at) => `チャプター ${format.number(at)}`,
+    at: (at, of) => `チャプター ${format.number(at)} / ${format.number(of)}`,
+    sleepAtEnd: 'このチャプターの終わりで止める',
+    listHint: 'チャプターを一覧表示します',
+  },
+  marks: {
+    screen: 'マーク',
+    heading: 'このカセットのマーク',
+    add: 'この位置をマーク',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count) => `マーク（${format.number(count)}件）`,
+    noteAt: (time) => `${time} にマーク`,
+    noteHint: 'ここに何があるかメモできます。空のままでもかまいません。',
+    notePlaceholder: 'ここにあるもの',
+    save: 'マーク',
+    none: 'このカセットにはまだマークがありません。スリープタイマーの隣のボタンで位置をマークできます。',
+    noneAnywhere: 'まだマークはありません。カセットの再生中にプレーヤーから位置をマークしてメモを残すと、すべてここに表示されます。',
+    noNote: 'メモなし',
+    remove: (time) => `${time} のマークを削除`,
+    editNote: 'メモを編集',
+    goHint: 'この位置に移動します',
+    playHint: 'この位置からカセットを再生します',
+    howTo: 'マークをタップするとその位置へ移動し、長押しするとメモを変更できます。',
+    all: 'すべてのマーク',
+    count: (count) => `${format.number(count)}件のマーク`,
   },
   sleep: {
     endOfTrack: 'この曲が終わったら一時停止',
     thenToTheEnd: (time) => `残り${time}、その後この曲の終わりまで`,
     fadingOut: (time) => `フェードアウト中、残り${time}`,
     pausesIn: (time) => `${time}後に一時停止`,
+    endOfChapter: 'このチャプターが終わると一時停止',
+    chapterIn: (time) => `チャプターの終わりまで ${time}`,
+    tape: {
+      endOfTrack: 'このパートが終わったら一時停止',
+      thenToTheEnd: (time) => `残り${time}、その後このパートの終わりまで`,
+    },
   },
 };

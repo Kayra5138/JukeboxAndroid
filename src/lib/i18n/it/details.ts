@@ -33,6 +33,7 @@ export const details: Strings['details'] = {
   lookUp: 'Cerca online',
   searchFailed: 'La ricerca non è andata a buon fine.',
 
+  unsaved: { title: "Scartare le modifiche?", body: "Quello che hai scritto qui non è stato salvato.", keep: "Continua a modificare", discard: "Scarta" },
   general: {
     fields: {
       title: 'Titolo',

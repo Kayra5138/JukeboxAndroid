@@ -10,6 +10,8 @@ export const common: Strings['common'] = {
   save: 'Kaydet',
   done: 'Bitti',
   ok: 'Tamam',
+  typeNumber: 'Sayı yaz',
+  wholeFrom: (min, max) => `${format.number(min)} ile ${format.number(max)} arasında bir tam sayı`,
   close: 'Kapat',
   back: 'Geri',
   delete: 'Sil',

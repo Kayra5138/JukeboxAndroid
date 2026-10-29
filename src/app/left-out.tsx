@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 
 import { Pressable } from '../components/Pressable';
 import { SettingsPage, useRows } from '../components/settings/rows';

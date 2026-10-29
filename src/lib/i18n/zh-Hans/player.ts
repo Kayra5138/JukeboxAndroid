@@ -7,7 +7,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: '暂无播放',
-    heart: '爱心',
+    heart: "收藏",
     repeat: { off: '循环播放', all: '列表循环', one: '单曲循环' },
     back: (seconds) => `后退 ${seconds} 秒`,
     forward: (seconds) => `前进 ${seconds} 秒`,
@@ -18,6 +18,17 @@ export const player: Strings['player'] = {
     upNext: (count) => `待播 · ${format.number(count)}`,
     position: '播放进度',
     positionValue: (position, duration) => `${position}，共 ${duration}`,
+  },
+  tape: {
+    part: (at, of) => `第 ${format.number(at)} / ${format.number(of)} 部分`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at, of) => `第 ${format.number(at)} / ${format.number(of)} 集`,
+    previousPart: '上一部分',
+    nextPart: '下一部分',
+    parts: (count) => `各部分 · ${format.number(count)}`,
+    book: (percent, left) => `整体的 ${format.number(percent)}% · 剩余 ${left}`,
+    speed: (speed) => `速度 ${speed}，轻点切换`,
+    sleep: '睡眠定时器',
   },
   queue: {
     remove: (title) => `移除“${title}”`,
@@ -69,11 +80,63 @@ export const player: Strings['player'] = {
     howMany: '多少分钟后暂停？',
     minutes: '分钟',
     start: '开始',
+    tape: {
+      about: '一段时间后暂停。最后半分钟音量会逐渐降低。',
+      pauseAtEnd: '播完这部分后暂停',
+      endOfTrack: '播完本部分',
+      finish: {
+        title: '播完当前部分',
+        note: '时间到了以后，等这部分播完再停，而不是淡出。',
+        label: '睡眠定时结束时播完当前部分',
+      },
+    },
+  },
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: '文字稿',
+    show: '显示所说内容',
+    none: '此视频没有可跟随的字幕。',
+  },
+  chapters: {
+    heading: (count) => `章节 · ${format.number(count)}`,
+    untitled: (at) => `第 ${format.number(at)} 章`,
+    at: (at, of) => `第 ${format.number(at)} / ${format.number(of)} 章`,
+    sleepAtEnd: '在本章结束时停止',
+    listHint: '列出章节',
+  },
+  marks: {
+    screen: '标记',
+    heading: '此磁带中的标记',
+    add: '标记此处',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count) => `标记（${format.number(count)} 个）`,
+    noteAt: (time) => `在 ${time} 处标记`,
+    noteHint: '可以写一句备注说明这里有什么，也可以留空。',
+    notePlaceholder: '这里有什么',
+    save: '标记',
+    none: '此磁带还没有标记。可用睡眠定时器旁的按钮标记位置。',
+    noneAnywhere: '还没有标记。播放磁带时，可在播放器中标记位置并写下备注，所有标记都会显示在这里。',
+    noNote: '无备注',
+    remove: (time) => `删除 ${time} 处的标记`,
+    editNote: '编辑备注',
+    goHint: '跳到此处',
+    playHint: '从此处播放磁带',
+    howTo: '点按标记即可跳转，长按可修改备注。',
+    all: '全部标记',
+    count: (count) => `${format.number(count)} 个标记`,
   },
   sleep: {
     endOfTrack: '播完本首后暂停',
     thenToTheEnd: (time) => `剩余 ${time}，之后播完本首`,
     fadingOut: (time) => `正在淡出，剩余 ${time}`,
     pausesIn: (time) => `${time} 后暂停`,
+    endOfChapter: '本章结束时暂停',
+    chapterIn: (time) => `距本章结束 ${time}`,
+    tape: {
+      endOfTrack: '播完本部分后暂停',
+      thenToTheEnd: (time) => `剩余 ${time}，之后播完本部分`,
+    },
   },
 };

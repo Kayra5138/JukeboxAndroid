@@ -22,6 +22,7 @@ import {
 import { tagsFor } from '../../lib/db/tags';
 import { canWriteFiles, lineFor, writable, writeToFiles } from '../../lib/filetags';
 import { afterSaved, writeEditsOn } from '../../lib/filetags/auto';
+import { useUnsavedBack } from './unsaved';
 import { formatDateTime } from '../../lib/format/date';
 import { useT, type Strings } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
@@ -39,6 +40,7 @@ import { makeStyles, useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
 import { useShared } from './styles';
 import { useAnnounce } from '../../lib/ui/announce';
+import { haptic } from '../../lib/ui/haptics';
 
 const FIELDS: { key: keyof Fields; number?: 'year' | 'place' }[] = [
   { key: 'title' },
@@ -238,6 +240,7 @@ export function GeneralTab({
       );
       if (controller.signal.aborted) return;
       if (!found) {
+        haptic('results', 'reject');
         setNote({ text: said.nothingFound, bad: true });
         return;
       }
@@ -291,11 +294,13 @@ export function GeneralTab({
         }
       }
 
+      haptic('results', 'confirm');
       setNote({
         text: said.found(found.sources.map((source) => SOURCE_NAMES[source]), withCover),
       });
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
+      haptic('results', 'reject');
       setNote({ text: t.details.searchFailed, bad: true });
       noteError('lookup', error);
     } finally {
@@ -305,6 +310,7 @@ export function GeneralTab({
 
   const save = useCallback(() => {
     if (!valid) return;
+    haptic('results', 'confirm');
     const kept = readMetadata(track.id);
     saveMetadata({
       // The tags have a tab of their own and are not this one's to change. The
@@ -336,6 +342,8 @@ export function GeneralTab({
         setFileNote(null);
         try {
           const result = (await afterSaved([track.id]))?.[0]?.result;
+          // Save has been felt already; only a write that went wrong is felt again.
+          if (result?.status === 'failed') haptic('results', 'reject');
           setFileNote(
             result
               ? { text: lineFor(result, t), bad: result.status === 'failed' || result.status === 'skipped' }
@@ -343,6 +351,7 @@ export function GeneralTab({
           );
           if (result?.status === 'written') onChanged();
         } catch (error) {
+          haptic('results', 'reject');
           setFileNote({ text: error instanceof Error ? error.message : said.couldNotWrite, bad: true });
         } finally {
           setWriting(false);
@@ -369,6 +378,7 @@ export function GeneralTab({
   const asSaved = fieldsOf(track, stored);
   const unsaved =
     cover.kind !== 'kept' || FIELDS.some((field) => fields[field.key] !== asSaved[field.key]);
+  useUnsavedBack(unsaved, reset);
 
   /**
    * Writes what the app shows for this track into the file.
@@ -386,10 +396,13 @@ export function GeneralTab({
         setFileNote({ text: said.nothingWritten });
         return;
       }
+      if (result.status === 'written') haptic('results', 'confirm');
+      else if (result.status === 'failed' || result.status === 'skipped') haptic('results', 'reject');
       setFileNote({ text: lineFor(result, t), bad: result.status === 'failed' || result.status === 'skipped' });
       // The file's own tags are different now, and the rows below show them.
       if (result.status === 'written') onChanged();
     } catch (error) {
+      haptic('results', 'reject');
       setFileNote({
         text: error instanceof Error ? error.message : said.couldNotWrite,
         bad: true,

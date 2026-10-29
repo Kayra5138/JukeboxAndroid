@@ -16,6 +16,7 @@ import { useLandscape } from '../../lib/ui/layout';
 import { startOver } from '../../lib/ui/welcomeStore';
 import { makeStyles, scene, usePressed, useThemeChoice } from '../../lib/theme/index';
 import { themeOf } from '../../lib/theme/registry';
+import { useLibraryViews } from '../../lib/ui/libraryViews';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 /**
@@ -68,6 +69,7 @@ export default function SettingsScreen() {
   const version = Constants.expoConfig?.version;
   const date = built ? new Date(built) : null;
   const said = t.settings.categories;
+  const views = useLibraryViews();
 
   /*
     First, because the language is the one setting somebody may have to
@@ -103,6 +105,8 @@ export default function SettingsScreen() {
       <CategoryRow href="/settings-look" title={t.settings.sections.look} note={said.look} value={t.themes[themeNameKey]} />
       <CategoryRow href="/settings-sound" title={t.settings.sections.sound} note={said.sound} />
       <CategoryRow href="/settings-player" title={t.settings.sections.player} note={said.player} />
+      {/* Only while the library offers tapes: there is nothing for it to set otherwise. */}
+      {views.includes('tapes') ? <CategoryRow href="/settings-tapes" title={t.settings.sections.tapes} note={said.tapes} /> : null}
     </>
   );
   const latter = (

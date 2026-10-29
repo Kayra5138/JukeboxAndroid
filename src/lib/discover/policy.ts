@@ -3,6 +3,7 @@ import { splitCredit } from '../metadata/credit.ts';
 import { artistBlockId, artistBlockKey, chance } from './taste.ts';
 import { sharePlaces } from './nearness.ts';
 import { leadArtist, leadOfFolded, loosenFolded } from './variants.ts';
+import { wholeIn, type Range } from '../ui/range.ts';
 
 export const DAY = 86_400_000;
 /**
@@ -37,7 +38,12 @@ export type DiscoverSettings = {
 export function previewsOn(settings: { preview?: unknown }): boolean {
   return settings.preview !== false;
 }
-export const READY_CHOICES: readonly number[] = [0, 3, 5, 10];
+/** What can be chosen of Discover's settings: how many songs on the list, how often it is made anew (nought by hand), how many kept ready (nought none). */
+export const DISCOVER_RANGES = {
+  count: { min: 10, max: 50 },
+  refreshDays: { min: 0, max: 30 },
+  ready: { min: 0, max: 10 },
+} as const satisfies Record<string, Range>;
 /**
  * How Discover starts out: the list is refreshed when somebody presses
  * refresh, and the next three songs are kept ready while there is Wi-Fi.
@@ -65,9 +71,9 @@ export function settingsFrom(value: unknown): DiscoverSettings {
     ...others,
     // Kept only where it says something: anything but a plain no is the default, which is yes.
     ...(preview === false ? { preview: false } : {}),
-    count: [10, 20, 30, 40].includes(v.count!) ? v.count! : DEFAULT_SETTINGS.count,
-    refreshDays: [0, 1, 3, 7, 14, 30].includes(v.refreshDays!) ? v.refreshDays! : DEFAULT_SETTINGS.refreshDays,
-    ready: READY_CHOICES.includes(v.ready!) ? v.ready! : autoDownload === true ? 10 : DEFAULT_SETTINGS.ready,
+    count: wholeIn(v.count, DISCOVER_RANGES.count) ?? DEFAULT_SETTINGS.count,
+    refreshDays: wholeIn(v.refreshDays, DISCOVER_RANGES.refreshDays) ?? DEFAULT_SETTINGS.refreshDays,
+    ready: wholeIn(v.ready, DISCOVER_RANGES.ready) ?? (autoDownload === true ? 10 : DEFAULT_SETTINGS.ready),
     wifiOnly: typeof v.wifiOnly === 'boolean' ? v.wifiOnly : DEFAULT_SETTINGS.wifiOnly,
   };
 }

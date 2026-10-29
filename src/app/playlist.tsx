@@ -1,9 +1,8 @@
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter, useIsFocused } from 'expo-router';
 import {
   ActivityIndicator,
-  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +27,7 @@ import { playCounts } from '../lib/db/history';
 import {
   addToPlaylist,
   deletePlaylist,
+  markListPlayed,
   playlist,
   playlistTrackIds,
   removeFromPlaylist,
@@ -54,6 +54,9 @@ import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/them
 import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
 import { useAnnounce } from '../lib/ui/announce';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
+import { isTape } from '../lib/tapes/tape';
 
 /** How many suggestions are worth showing before the section becomes a list. */
 const SUGGESTIONS = 8;
@@ -92,6 +95,8 @@ type Loaded = {
    * `useAlbumArtwork`. Absent for a list, which shows its first four.
    */
   sleeve?: EnrichedTrack[] | null;
+  /** Favorites, which can be renamed and emptied but not deleted. */
+  favorites?: boolean;
 };
 
 export default function PlaylistScreen() {
@@ -285,13 +290,16 @@ export default function PlaylistScreen() {
     setData({
       name: details?.name ?? t.lists.list.list,
       tag,
+      favorites: details?.kind === 'favorites',
       // Said rather than left to be wondered about: a list that is shorter
       // than it was should say where the rest went, and that it is not gone.
       hint: tag
         ? t.lists.list.everythingTagged(tag)
         : away > 0
           ? t.lists.list.away(away)
-          : null,
+          : details?.kind === 'favorites'
+            ? t.lists.favorites.kept
+            : null,
       // A chosen cover only counts while its track is still in the list.
       // Otherwise removing that track would leave the list wearing a picture
       // of something it no longer contains.
@@ -363,28 +371,42 @@ export default function PlaylistScreen() {
     first thing back closes.
   */
   const sheetOpen = choosingCover || confirmingDelete || adding;
-  useEffect(() => {
-    if (!sheetOpen) return;
-    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-      setChoosingCover(false);
-      setConfirmingDelete(false);
-      setAdding(false);
-      return true;
-    });
-    return () => listener.remove();
-  }, [sheetOpen]);
+  const focused = useIsFocused();
+  useBack(sheetOpen && focused, () => {
+    setChoosingCover(false);
+    setConfirmingDelete(false);
+    setAdding(false);
+  });
 
   const tracks = data?.tracks ?? [];
 
+  // Playing a list someone made brings it to the top of the Lists tab.
+  const played = useCallback(() => {
+    if (listId != null) markListPlayed(listId, Date.now());
+  }, [listId]);
+
   const play = useCallback(
-    (startIndex: number) => void playQueue(tracks, startIndex),
-    [playQueue, tracks]
+    (startIndex: number) => {
+      played();
+      void playQueue(tracks, startIndex);
+    },
+    [playQueue, played, tracks]
   );
   // A row tapped: the list from it, unless Settings → Player says otherwise for pages like this one.
   const playTapped = usePlayTapped();
+  /*
+    A folder of tapes — a book's parts, a show's episodes — is played in its
+    order from the one tapped, whatever a tap does to a page of songs, and is
+    not shuffled.
+  */
+  const tapesHere = folder != null && tracks.length > 0 && tracks.every((track) => isTape(track));
   const tap = useCallback(
-    (startIndex: number) => void playTapped(tracks, startIndex, 'page'),
-    [playTapped, tracks]
+    (startIndex: number) => {
+      played();
+      if (tapesHere) void playQueue(tracks, startIndex);
+      else void playTapped(tracks, startIndex, 'page');
+    },
+    [playQueue, playTapped, played, tapesHere, tracks]
   );
 
   const shuffle = useCallback(() => {
@@ -396,8 +418,9 @@ export default function PlaylistScreen() {
       const swap = Math.floor(Math.random() * (index + 1));
       [order[index], order[swap]] = [order[swap], order[index]];
     }
+    played();
     void playQueue(order, 0);
-  }, [playQueue, tracks]);
+  }, [playQueue, played, tracks]);
 
   /*
     Only when there is nothing to show instead, as in the library. A list
@@ -552,7 +575,7 @@ export default function PlaylistScreen() {
                   ) : null
                 }
                 onPlay={() => play(0)}
-                onShuffle={shuffle}>
+                onShuffle={tapesHere ? undefined : shuffle}>
                 {/* Adding the whole of it to the queue is the heading's third button now. */}
                 <View style={styles.links}>
                   {album ? (
@@ -590,9 +613,12 @@ export default function PlaylistScreen() {
                           {t.lists.list.cover}
                         </Text>
                       </Pressable>
-                      <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setConfirmingDelete(true)}>
-                        <Text style={styles.destructive}>{t.lists.list.deleteList}</Text>
-                      </Pressable>
+                      {/* Favorites has no Delete: the heart has to have somewhere to put a song. */}
+                      {data.favorites ? null : (
+                        <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setConfirmingDelete(true)}>
+                          <Text style={styles.destructive}>{t.lists.list.deleteList}</Text>
+                        </Pressable>
+                      )}
                     </>
                   ) : null}
                 </View>
@@ -815,7 +841,10 @@ export default function PlaylistScreen() {
                 android_ripple={pressed}
                 style={styles.confirmButton}
                 onPress={() => {
-                  if (listId != null) deletePlaylist(listId);
+                  if (listId != null) {
+                    deletePlaylist(listId);
+                    haptic('results', 'confirm');
+                  }
                   router.back();
                 }}>
                 <Text style={styles.destructive}>{t.common.delete}</Text>
@@ -859,7 +888,8 @@ function suggestions(
   const held = new Set(members.map((track) => track.id));
   const found: Suggestion[] = suggestForPlaylist({
     members: members.map(candidate),
-    candidates: library.filter((track) => !held.has(track.id)).map(candidate),
+    // Songs, and never a tape: a book or an episode is in no list.
+    candidates: library.filter((track) => !held.has(track.id) && !isTape(track)).map(candidate),
     libraryTagCounts: counts,
     libraryTotal: library.length,
     limit: SUGGESTIONS,

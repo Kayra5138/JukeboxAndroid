@@ -34,11 +34,17 @@ declare class DownloadsModule extends NativeModule<DownloadsEvents> {
   cleanDiscoverAsync(ids: string[], protectedIds: string[]): Promise<string[]>;
   downloadDiscoverBackgroundAsync(id: string): Promise<void>;
   queueDiscoverBackgroundAsync(video: YouTubeVideo & { discoveryTitle: string; discoveryArtist: string }, key: string): Promise<string>;
+  /** A podcast's feed, read on the phone: the show and its episodes. Missing from an older build. */
+  podcastFeedAsync?(address: string): Promise<import('../podcasts/episodes').Show & { episodes: import('../podcasts/episodes').Episode[] }>;
   searchAsync(query: string, searchId: string): Promise<YouTubeVideo[]>;
   playlistAsync(query: string, searchId: string): Promise<YouTubeResult[]>;
   enqueueBatchAsync(videos: YouTubeVideo[], format: AudioFormat, folder: string): Promise<string[]>;
   cancelSearchAsync(searchId: string): Promise<void>;
   getJobsAsync(refreshFiles: boolean): Promise<DownloadJob[]>;
+  /** The feed of the YouTube channel at [address], its page or its feed; null where it is not a channel's. */
+  youtubeFeedAsync?(address: string): Promise<string | null>;
+  /** YouTube channels by name, the nearest first. */
+  searchChannelsAsync?(words: string): Promise<{ id: string; title: string; handle: string | null; image: string | null; followers: number | null }[]>;
   enqueueAsync(video: YouTubeVideo, format: AudioFormat, folder: string): Promise<string>;
   cancelAsync(jobId: string): Promise<void>;
   markDescribedAsync(jobId: string): Promise<void>;
@@ -74,6 +80,8 @@ declare class DownloadsModule extends NativeModule<DownloadsEvents> {
   moveAsync?(id: string, beforeId: string | null): Promise<void>;
   /** Puts a job that failed or was cancelled back in the queue. */
   retryAsync?(id: string): Promise<void>;
+  /** The episodes of the shows in [folders] stopped to wait for Wi‑Fi put back in the queue; [anyNetwork] takes the rule off them all. Answers with whether any went back. */
+  requeueWaitingAsync?(anyNetwork: boolean, folders: string[]): Promise<boolean>;
   setPausedAsync?(paused: boolean): Promise<void>;
   queueStateAsync?(): Promise<{ paused: boolean }>;
   /** Clears what has finished from the list of what was fetched. Nothing on the phone is removed. */

@@ -1,27 +1,32 @@
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 
 import { useT } from '../lib/i18n/index';
 import { makeStyles, switchColours, useColours } from '../lib/theme/index';
-import { setHeartWanted, useHeartWanted } from '../lib/ui/heartWanted';
+import { setFavoritesShown, useFavoritesShown } from '../lib/playlists/favorites';
 
-/** The last row of the player's settings: whether the player has its heart. See `Heart.tsx`. */
-export function HeartSetting() {
-  const wanted = useHeartWanted();
+/**
+ * Favorites, on or off: the list among the lists, the heart on the player
+ * that fills it, and the menu's entry for it, all at once. Off, what is in
+ * the list stays in it for when it comes back.
+ */
+export function FavoritesSetting() {
+  const shown = useFavoritesShown();
   const t = useT();
   const c = useColours();
   const styles = useStyles();
   return (
     <View style={styles.row}>
       <View style={styles.line}>
-        <Text style={styles.title}>{t.settings.heart.title}</Text>
+        <Text style={styles.title}>{t.settings.favoritesShown.title}</Text>
         <Switch
-          value={wanted}
-          accessibilityLabel={t.settings.heart.title}
-          onValueChange={setHeartWanted}
-          {...switchColours(c, wanted)}
+          value={shown}
+          accessibilityLabel={t.settings.favoritesShown.title}
+          onValueChange={setFavoritesShown}
+          {...switchColours(c, shown)}
         />
       </View>
-      <Text style={styles.muted}>{t.settings.heart.note}</Text>
+      <Text style={styles.muted}>{t.settings.favoritesShown.note}</Text>
     </View>
   );
 }

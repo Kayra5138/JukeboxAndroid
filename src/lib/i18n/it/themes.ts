@@ -28,6 +28,8 @@ export const themes: Strings['themes'] = {
   frost: 'Vetro smerigliato',
   aero: 'Aero',
   aurora: 'Vetro copertina',
+  auroraLight: 'Vetro copertina, chiaro',
+  sundown: 'Vetro al tramonto',
 
   lightGroup: 'Chiari',
   darkGroup: 'Scuri',

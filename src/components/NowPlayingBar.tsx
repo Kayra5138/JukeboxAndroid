@@ -12,9 +12,11 @@ import { TrackStrip } from './TrackStrip';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { useOpenPlayer } from '../lib/player/NowPlayingSheet';
-import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
+import { usePlayerActions, usePlayerPosition, usePlayerState } from '../lib/player/PlayerProvider';
+import { isTape } from '../lib/tapes/tape';
 import { makeStyles, outlineWidth, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
+import { haptic } from '../lib/ui/haptics';
 import { useLandscape } from '../lib/ui/layout';
 import { BlurArea, Frost, GlassScene, useFrosted, useSceneTarget } from './Frosted';
 import { barGlass, FootDock } from './UnderBars';
@@ -109,8 +111,23 @@ export function NowPlayingBar({ column = false }: { column?: boolean }) {
   );
 }
 
+/**
+ * How long is left of the tape playing, after its name on the bar: a book is
+ * carried on with a stretch at a time, and how much of this stretch remains
+ * is what is wanted of it at a glance. Its own part, so that the second it
+ * counts in redraws these few letters and not the bar.
+ */
+function TapeLeft() {
+  const t = useT();
+  const { positionSec, durationSec } = usePlayerPosition();
+  if (!durationSec) return null;
+  const minutes = Math.max(1, Math.round((durationSec - positionSec) / 60));
+  return <Text>{` · ${t.library.tapes.left(minutes)}`}</Text>;
+}
+
 function PlayingBar({ column }: { column: boolean }) {
   const { current, currentIndex, queue, repeat, isPlaying } = usePlayerState();
+  const currentId = current?.id ?? null;
   const { toggle, next, previous, skipToIndex } = usePlayerActions();
   const openPlayer = useOpenPlayer();
   const preview = useDiscoverPreview();
@@ -152,11 +169,12 @@ function PlayingBar({ column }: { column: boolean }) {
           </Text>
           <Text style={styles.artist} numberOfLines={column ? 2 : 1}>
             {track.artist ?? t.common.unknownArtist}
+            {track.id === currentId && isTape(track) ? <TapeLeft /> : null}
           </Text>
         </View>
       </Pressable>
     ),
-    [column, openPlayer, styles, t]
+    [column, currentId, openPlayer, styles, t]
   );
 
   /*
@@ -236,8 +254,11 @@ function PlayingBar({ column }: { column: boolean }) {
           style={styles.control}
           hitSlop={slop}
           accessibilityRole="button"
-          accessibilityLabel={t.common.previousTrack}
-          onPress={() => void previous()}>
+          accessibilityLabel={isTape(current) ? t.player.tape.previousPart : t.common.previousTrack}
+          onPress={() => {
+            haptic('player', 'tick');
+            void previous();
+          }}>
           <PreviousIcon size={16} />
         </Pressable>
         {/* Named for what a press will do, as the picture is. */}
@@ -247,7 +268,10 @@ function PlayingBar({ column }: { column: boolean }) {
           hitSlop={slop}
           accessibilityRole="button"
           accessibilityLabel={isPlaying ? t.common.pause : t.common.play}
-          onPress={() => void toggle()}>
+          onPress={() => {
+            haptic('player', 'click');
+            void toggle();
+          }}>
           {isPlaying ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
         </Pressable>
         <Pressable
@@ -255,8 +279,11 @@ function PlayingBar({ column }: { column: boolean }) {
           style={styles.control}
           hitSlop={slop}
           accessibilityRole="button"
-          accessibilityLabel={t.common.nextTrack}
-          onPress={() => void next()}>
+          accessibilityLabel={isTape(current) ? t.player.tape.nextPart : t.common.nextTrack}
+          onPress={() => {
+            haptic('player', 'tick');
+            void next();
+          }}>
           <NextIcon size={16} />
         </Pressable>
       </View>

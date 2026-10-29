@@ -8,7 +8,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: 'No suena nada.',
-    heart: 'Corazón',
+    heart: "Favorito",
     repeat: { off: 'Repetir', all: 'Repetir todo', one: 'Repetir una' },
     back: (seconds) => oneOrMany(seconds, 'Retroceder 1 segundo', `Retroceder ${seconds} segundos`),
     forward: (seconds) => oneOrMany(seconds, 'Avanzar 1 segundo', `Avanzar ${seconds} segundos`),
@@ -19,6 +19,17 @@ export const player: Strings['player'] = {
     upNext: (count) => `A continuación · ${format.number(count)}`,
     position: 'Posición de reproducción',
     positionValue: (position, duration) => `${position} de ${duration}`,
+  },
+  tape: {
+    part: (at, of) => `Parte ${format.number(at)} de ${format.number(of)}`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at, of) => `Episodio ${format.number(at)} de ${format.number(of)}`,
+    previousPart: 'Parte anterior',
+    nextPart: 'Parte siguiente',
+    parts: (count) => `Partes · ${format.number(count)}`,
+    book: (percent, left) => `${format.number(percent)} % del total · quedan ${left}`,
+    speed: (speed) => `Velocidad ${speed}, toca para la siguiente`,
+    sleep: 'Temporizador',
   },
   queue: {
     remove: (title) => `Quitar ${title}`,
@@ -70,11 +81,63 @@ export const player: Strings['player'] = {
     howMany: '¿Pausar dentro de cuántos minutos?',
     minutes: 'Minutos',
     start: 'Iniciar',
+    tape: {
+      about: 'Pausa pasado un rato. El último medio minuto suena cada vez más bajo.',
+      pauseAtEnd: 'Pausar al final de esta parte',
+      endOfTrack: 'Fin de la parte',
+      finish: {
+        title: 'Dejar que termine la parte',
+        note: 'Cuando se acabe el tiempo, esperar a que acabe la parte en lugar de bajar el volumen hasta cortarla.',
+        label: 'Dejar que termine la parte actual cuando se acabe el temporizador',
+      },
+    },
+  },
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: 'Transcripción',
+    show: 'Mostrar lo que se dice',
+    none: 'Este vídeo no tiene subtítulos que seguir.',
+  },
+  chapters: {
+    heading: (count) => `Capítulos · ${format.number(count)}`,
+    untitled: (at) => `Capítulo ${format.number(at)}`,
+    at: (at, of) => `Capítulo ${format.number(at)} de ${format.number(of)}`,
+    sleepAtEnd: 'Parar al final de este capítulo',
+    listHint: 'Muestra los capítulos',
+  },
+  marks: {
+    screen: 'Marcas',
+    heading: 'Marcas en este casete',
+    add: 'Marcar este punto',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count) => oneOrMany(count, 'Marcas, 1 por ahora', `Marcas, ${format.number(count)} por ahora`),
+    noteAt: (time) => `Marca en ${time}`,
+    noteHint: 'Una nota de lo que hay aquí, si quieres. Puedes dejarla vacía.',
+    notePlaceholder: 'Qué hay aquí',
+    save: 'Marcar',
+    none: 'Aún no hay nada marcado en este casete. Marca un punto con el botón junto al temporizador.',
+    noneAnywhere: 'Aún no hay marcas. Mientras suena un casete, marca un punto desde el reproductor y anota qué hay ahí; todas las marcas aparecen aquí.',
+    noNote: 'Sin nota',
+    remove: (time) => `Quitar la marca en ${time}`,
+    editNote: 'Editar la nota',
+    goHint: 'Va a este punto',
+    playHint: 'Reproduce el casete desde este punto',
+    howTo: 'Toca una marca para ir a ella y mantenla pulsada para cambiar su nota.',
+    all: 'Todas las marcas',
+    count: (count) => oneOrMany(count, '1 marca', `${format.number(count)} marcas`),
   },
   sleep: {
     endOfTrack: 'Se pausa cuando termine esta pista',
     thenToTheEnd: (time) => `Quedan ${time}; después, hasta el final de la pista`,
     fadingOut: (time) => `Bajando el volumen, quedan ${time}`,
     pausesIn: (time) => `Se pausa dentro de ${time}`,
+    endOfChapter: 'Se pausa cuando termine este capítulo',
+    chapterIn: (time) => `${time} para el final del capítulo`,
+    tape: {
+      endOfTrack: 'Se pausa cuando termine esta parte',
+      thenToTheEnd: (time) => `Quedan ${time}; después, hasta el final de la parte`,
+    },
   },
 };

@@ -15,6 +15,7 @@ export const backup: Strings['backup'] = {
       : `Резервная копия${app ? ` из версии Jukebox ${app}` : ''}.`,
   listens: (count) => counted(count, 'прослушивание', 'прослушивания', 'прослушиваний'),
   tagged: (count) => counted(count, 'песня с тегами', 'песни с тегами', 'песен с тегами'),
+  followed: (count) => counted(count, 'подписка', 'подписки', 'подписок'),
   withLyrics: (count) => counted(count, 'песня с текстом', 'песни с текстом', 'песен с текстом'),
 
   songs: (found, total) => {

@@ -13,6 +13,7 @@ import { armFinder, awaitsFinding, kickFinder } from './finder';
 import { arrivedSignature, filingKey, jobsSignature } from './signature';
 import { publishJobs, readOnChange, standAsReader } from './watch';
 import { noteFailedDownloads } from '../support/errorLogStore';
+import { partTitleOf, tapeFolderOf } from '../tapes/folders';
 
 /** Being fetched at this moment: the states a download's progress moves in. */
 const FETCHING: readonly string[] = ['preparing', 'downloading', 'converting', 'saving', 'cancelling'];
@@ -37,6 +38,13 @@ type DownloadContext = {
    * of them and none is added to.
    */
   enqueueAll: (videos: YouTubeVideo[], format: AudioFormat) => Promise<void>;
+  /**
+   * Videos fetched as tapes, into a folder of the Tapes folder named [name]:
+   * the show or the book. [firstPart] numbers them from there in the order
+   * given, as the parts of one book are; null leaves them unnumbered, as the
+   * episodes of a show. Kept as they came, never as mp3, and in no list.
+   */
+  enqueueTapes: (videos: YouTubeVideo[], name: string, firstPart: number | null) => Promise<void>;
   cancel: (id: string) => Promise<void>;
   /**
    * Every job there is, Discover's among them, in the order the phone keeps
@@ -235,11 +243,13 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   const nextDescription = jobs.find((job) => job.status === 'done' && !job.described && job.trackId);
   const descriptionId = nextDescription?.id;
   const trackId = nextDescription?.trackId;
+  // A tape is not a song, and is not looked up as one: its names are the video's and its list's. See `lib/tapes`.
+  const describeIt = nextDescription?.video.tape == null;
   useEffect(() => {
     if (!descriptionId || !trackId || !downloads) return;
     const controller = new AbortController();
     void (async () => {
-      await describeTrack(trackId, controller.signal);
+      if (describeIt) await describeTrack(trackId, controller.signal);
       if (controller.signal.aborted) return;
       try {
         await downloads.markDescribedAsync(descriptionId);
@@ -248,7 +258,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
       } catch { /* A later refresh retries the receipt. */ }
     })();
     return () => controller.abort();
-  }, [descriptionId, trackId, refresh]);
+  }, [descriptionId, describeIt, trackId, refresh]);
 
   /*
     Each of the five below that put something in the queue is somebody doing
@@ -290,6 +300,25 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
     extractorWanted();
     // All of them or none, as the phone takes a batch: a queue too full for the record leaves it as it was.
     await downloads.enqueueBatchAsync(videos.map((video) => carried(unlisted(video))), format, libraryRoot());
+    await refresh(true);
+  }, [refresh]);
+
+  const enqueueTapes = useCallback(async (videos: YouTubeVideo[], name: string, firstPart: number | null) => {
+    if (!downloads) throw new Error(strings().search.unavailable.downloads);
+    if (videos.length === 0) return;
+    await ensureNotificationPermission();
+    extractorWanted();
+    const sent = videos.map((video, at) =>
+      // Parts are one record, the list's; a video on its own is a record of its own, in its show's folder.
+      carried({
+        ...unlisted(video),
+        // The list the parts came from kept with each, for the tape's details to say where it came from.
+        tape: firstPart != null
+          ? { name, part: firstPart + at, title: partTitleOf(video.title, name), list: video.sourcePlaylist ?? { id: '', name } }
+          : { name, album: video.title },
+      })
+    );
+    await downloads.enqueueBatchAsync(sent, 'original', tapeFolderOf(libraryRoot(), name));
     await refresh(true);
   }, [refresh]);
 
@@ -335,7 +364,7 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   const cancelAll = useCallback(async () => { await downloads?.cancelAllAsync?.(); await reread(); }, [reread]);
 
   return (
-    <Context value={{ jobs, error, refresh, enqueue, enqueueBatch, enqueueAll, cancel, cancelMany, all, paused, enqueueFind, enqueueFindAll, retry, move, setPaused, clearHistory, cancelAll }}>
+    <Context value={{ jobs, error, refresh, enqueue, enqueueBatch, enqueueAll, enqueueTapes, cancel, cancelMany, all, paused, enqueueFind, enqueueFindAll, retry, move, setPaused, clearHistory, cancelAll }}>
       <Revision value={revision}>{children}</Revision>
     </Context>
   );

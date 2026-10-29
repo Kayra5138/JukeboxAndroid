@@ -5,6 +5,7 @@ import { oneOrMany } from '../write.ts';
 const tracks = (count: number) => `${format.number(count)} ${oneOrMany(count, 'brano', 'brani')}`;
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "Preferiti", kept: "I Preferiti non si possono eliminare. Si possono rinominare, svuotare o nascondere in Impostazioni → Lettore." },
   naming: {
     heading: 'Dai un nome alla lista',
     placeholder: 'Nome della lista',
@@ -19,6 +20,14 @@ export const lists: Strings['lists'] = {
     fromListening: 'Dai tuoi ascolti',
     discover: 'Scopri',
     discoverHint: 'Musica che non hai, a partire da ciò che ascolti',
+    count: (count) => `${format.number(count)} ${oneOrMany(count, 'playlist', 'playlist')}`,
+    more: 'Altro',
+    files: 'File delle playlist',
+    yours: 'Le tue playlist',
+    showAll: (count) => `Mostra tutte (${format.number(count)})`,
+    showFewer: 'Mostra meno',
+    shuffleList: (list) => `Riproduci ${list} in ordine casuale`,
+    holdToShuffle: 'Tieni premuto per la riproduzione casuale',
 
     tagSheet: {
       heading: 'Crea una lista da un tag',
@@ -44,6 +53,10 @@ export const lists: Strings['lists'] = {
     heading: (count) => `Aggiungi ${tracks(count)} a`,
     noLists: 'Ancora nessuna lista.',
     newList: 'Nuova lista…',
+    inIt: (count: number) => (count === 1 ? 'Già presente' : 'Tutti già presenti'),
+    someInIt: (count: number, of: number) => `${format.number(count)} su ${format.number(of)} già presenti`,
+    removed: (count: number, list: string) =>
+      oneOrMany(count, `Tolto da ${list}`, `${format.number(count)} brani tolti da ${list}`),
     already: (list) => `Già in ${list}`,
     added: (count, list) =>
       oneOrMany(count, `1 brano aggiunto a ${list}`, `${format.number(count)} brani aggiunti a ${list}`),

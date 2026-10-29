@@ -17,6 +17,7 @@ import {
 import { useT } from '../lib/i18n/index';
 import { useColours, usePressed } from '../lib/theme/index';
 import { useAnnounce } from '../lib/ui/announce';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * What the app holds about the music besides the music: taking all of it out
@@ -64,8 +65,12 @@ export default function DataSettingsScreen() {
     try {
       // Nothing is said when the user backs out of choosing a place. They
       // know they did, and "cancelled" is not news.
-      if (await exportBackup()) setNote({ text: t.common.saved, bad: false });
+      if (await exportBackup()) {
+        haptic('results', 'confirm');
+        setNote({ text: t.common.saved, bad: false });
+      }
     } catch (trouble) {
+      haptic('results', 'reject');
       setNote({ text: said(trouble, t.settings.exportAll.failed), bad: true });
     }
     setBusy(null);
@@ -82,6 +87,7 @@ export default function DataSettingsScreen() {
         setOpened(found);
       }
     } catch (trouble) {
+      haptic('results', 'reject');
       setNote({ text: said(trouble, t.common.fileUnreadable), bad: true });
     }
     setBusy(null);
@@ -94,8 +100,10 @@ export default function DataSettingsScreen() {
       setRefused(null);
       try {
         await applyBackup(opened, mode);
+        haptic('results', 'confirm');
         setImported(true);
       } catch (trouble) {
+        haptic('results', 'reject');
         // The write is all or nothing, so a failure here has changed nothing.
         setRefused(t.settings.importBackup.refused(said(trouble, t.settings.importBackup.failed)));
       }

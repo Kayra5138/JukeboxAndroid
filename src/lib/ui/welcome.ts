@@ -28,7 +28,8 @@ import { USED_AFTER } from './tips.ts';
  * one; what a tap on a song plays, in version two, before what plays when
  * the queue runs out, which it leads on to; which folder the library is, in
  * version three, straight after the language, since everything after it is
- * about the music in it. A screen added later goes where
+ * about the music in it; which ways of looking at the library its switch
+ * offers, in version four, after the look, when tapes came. A screen added later goes where
  * it belongs in the order with the next number, and {@link SETUP_VERSION}
  * follows.
  */
@@ -36,6 +37,7 @@ export const SETUP_STEPS = [
   { id: 'language', since: 0 },
   { id: 'folder', since: 3 },
   { id: 'look', since: 1 },
+  { id: 'views', since: 4 },
   { id: 'discover', since: 1 },
   { id: 'tap', since: 2 },
   { id: 'autoplay', since: 1 },

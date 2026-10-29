@@ -8,6 +8,7 @@ import {
   artworkName,
   mergeTables,
   referencedArtwork,
+  remapPlaces,
   remapTables,
   summarise,
 } from '../apply.ts';
@@ -16,6 +17,7 @@ import {
   BackupError,
   emptyTables,
   parseBackup,
+  tapesOf,
   type BackupTrack,
   type Row,
   type Tables,
@@ -99,6 +101,7 @@ const list = (id: number, name: string, extra: Row = {}): Row => ({
   cover_track_id: null,
   cover_uri: null,
   tag: null,
+  kind: null,
   ...extra,
 });
 const entry = (playlist: number, track: string, position: number): Row => ({
@@ -108,6 +111,27 @@ const entry = (playlist: number, track: string, position: number): Row => ({
   added_at: 5,
 });
 const tables = (given: Partial<Tables>): Tables => ({ ...emptyTables(), ...given });
+const show = (feed: string, extra: Row = {}): Row => ({
+  feed_url: feed,
+  title: `Show ${feed}`,
+  author: null,
+  image: null,
+  summary: null,
+  subscribed_at: 1,
+  checked_at: null,
+  auto_download: 1,
+  keep: 3,
+  fetch_next: 0,
+  next_count: 3,
+  folder: `Show ${feed}`,
+  ...extra,
+});
+const mark = (track: string, at: number, note: string | null = null): Row => ({
+  track_id: track,
+  position_sec: at,
+  note,
+  created_at: 9,
+});
 
 describe('reading a backup', () => {
   const wrap = (body: object) => JSON.stringify({ format: BACKUP_FORMAT, tables: {}, ...body });
@@ -555,6 +579,16 @@ describe('merging a backup into what is here', () => {
     ]);
   });
 
+  it('pours favorites into favorites, whatever each is called by now', () => {
+    const merged = mergeTables(
+      tables({ playlists: [list(2, 'Favoriler', { kind: 'favorites' })], playlist_tracks: [entry(2, '1', 0)] }),
+      tables({ playlists: [list(7, 'Liked', { kind: 'favorites' })], playlist_tracks: [entry(7, '2', 0)] })
+    );
+    assert.equal(merged.playlists.length, 1);
+    assert.equal(merged.playlists[0]!.name, 'Favoriler');
+    assert.deepEqual(merged.playlist_tracks.map((row) => row.track_id).sort(), ['1', '2']);
+  });
+
   it('adds a list that has no namesake, under a number that is free', () => {
     const merged = mergeTables(
       tables({ playlists: [list(4, 'Mine')], playlist_tracks: [entry(4, '1', 0)] }),
@@ -580,7 +614,7 @@ describe('merging a backup into what is here', () => {
 
   it('says what a backup holds and how much of it can be placed', () => {
     const summary = summarise(full, new Map([['1', '501']]));
-    assert.deepEqual(summary, { songs: 2, found: 1, listens: 2, lists: 2, tagged: 1, lyrics: 1 });
+    assert.deepEqual(summary, { songs: 2, found: 1, listens: 2, lists: 2, tagged: 1, lyrics: 1, followed: 0 });
   });
 });
 
@@ -623,6 +657,8 @@ describe('the database, there and back', () => {
     lyric_translations: [{ track_id: '1', target: 'en', source: 'tr', lines: '["x"]', translated_at: 8 }],
     playlists: [list(3, 'Mine', { cover_track_id: '1' }), list(9, 'rock', { tag: 'rock', cover_uri: `${HOME}c.jpg` })],
     playlist_tracks: [entry(3, '1', 0), entry(3, '2', 1)],
+    podcasts: [show('https://feed', { fetch_next: 1, next_count: 2, checked_at: 4 })],
+    tape_marks: [mark('1', 61.5, 'here'), mark('1', 300)],
   });
 
   it('gives back exactly what was put in', () => {
@@ -766,5 +802,74 @@ describe('the database, there and back', () => {
     const merged = mergeTables(readTables(database), readTables(database));
     restore(database, merged, {}, 'merge');
     assert.deepEqual(readTables(database), everything);
+  });
+});
+
+describe('tapes and the shows followed, in a backup', () => {
+  it('reads a show followed before each way of fetching it was asked as the database has it', () => {
+    const back = parseBackup(JSON.stringify({
+      format: BACKUP_FORMAT,
+      tables: { podcasts: [{ feed_url: 'https://feed', title: 'A show', subscribed_at: 1 }] },
+    }));
+    assert.equal(back.tables.podcasts.length, 1);
+    assert.deepEqual(
+      [back.tables.podcasts[0]!.auto_download, back.tables.podcasts[0]!.keep, back.tables.podcasts[0]!.fetch_next, back.tables.podcasts[0]!.next_count],
+      [1, 3, 0, 3]
+    );
+  });
+
+  it('brings a followed show as it is, and files a mark under the song it is here or leaves it out', () => {
+    const { tables: out, dropped } = remapTables(
+      tables({ podcasts: [show('https://feed')], tape_marks: [mark('old', 10, 'a'), mark('gone', 20)] }),
+      new Map([['old', 'new']]),
+      [],
+      HOME
+    );
+    assert.deepEqual(out.podcasts, [show('https://feed')]);
+    assert.deepEqual(out.tape_marks, [mark('new', 10, 'a')]);
+    assert.equal(dropped, 1);
+  });
+
+  it('keeps how a show is fetched here, one mark for one place in a tape, and two a moment apart', () => {
+    const here = tables({ podcasts: [show('https://feed', { keep: 5 })], tape_marks: [mark('1', 10.2, 'mine')] });
+    const there = tables({
+      podcasts: [show('https://feed', { keep: 1 }), show('https://other')],
+      tape_marks: [mark('1', 10.2, 'theirs'), mark('1', 10.6, 'just after'), mark('1', 40)],
+    });
+    const merged = mergeTables(here, there);
+    assert.deepEqual(merged.podcasts.map((row) => [row.feed_url, row.keep]), [['https://feed', 5], ['https://other', 3]]);
+    assert.deepEqual(merged.tape_marks.map((row) => [row.position_sec, row.note]), [[10.2, 'mine'], [10.6, 'just after'], [40, null]]);
+  });
+
+  it('reads where tapes were left and their switches, and leaves out a place that is not one', () => {
+    assert.equal(tapesOf(undefined), undefined);
+    assert.deepEqual(
+      tapesOf({
+        places: {
+          a: { positionSec: 30, durationSec: 600, at: 5, finished: false },
+          b: { positionSec: 'far', durationSec: 600, at: 5 },
+          c: { positionSec: 600, durationSec: 600, at: 6, finished: true },
+        },
+        smartRewind: false,
+        flags: { skipSilence: true, voiceClarity: 'yes', skipSponsors: false, other: true },
+      }),
+      {
+        places: {
+          a: { positionSec: 30, durationSec: 600, at: 5, finished: false },
+          c: { positionSec: 600, durationSec: 600, at: 6, finished: true },
+        },
+        smartRewind: false,
+        flags: { skipSilence: true, skipSponsors: false },
+      }
+    );
+  });
+
+  it('puts a place under the song it is here, the later of two that are one tape, and none for a song not here', () => {
+    const early = { positionSec: 10, durationSec: 100, at: 1, finished: false };
+    const late = { positionSec: 50, durationSec: 100, at: 2, finished: false };
+    assert.deepEqual(
+      remapPlaces({ x: late, y: early, gone: early }, new Map([['x', 'one'], ['y', 'one']])),
+      { one: late }
+    );
   });
 });

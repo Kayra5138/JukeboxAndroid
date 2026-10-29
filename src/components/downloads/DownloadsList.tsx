@@ -14,6 +14,7 @@ import { FinishedRow, NowRow, SectionHeading, sizesFor, WaitingRow, type Sizes }
 import { useT } from '../../lib/i18n/index';
 import { rowShift } from '../../lib/player/queue';
 import { edgePull, withinScroll } from '../../lib/ui/autoScroll';
+import { haptic } from '../../lib/ui/haptics';
 import { dropOf, listOf, type QueueItem } from '../../lib/youtube/queueView';
 import type { DownloadJob } from '../../lib/youtube/types';
 import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
@@ -51,6 +52,9 @@ function heightOf(item: QueueItem, sizes: Sizes): number {
 
 /** How often the list is nudged while a row is held at an edge. */
 const PULL_TICK_MS = 16;
+
+/** The least time between two slots felt, so a list pulled past at speed does not buzz. */
+const STEP_FELT_MS = 40;
 
 /**
  * How long a new order is shown on the screen's own say-so once the phone
@@ -131,6 +135,7 @@ export function DownloadsList({
 
   const fromRef = useRef<number | null>(null);
   const toRef = useRef<number | null>(null);
+  const steppedAt = useRef(0);
   const heldId = useRef<string | null>(null);
   /* Whether the drag has been given the gesture yet, which takes a first movement. */
   const taken = useRef(false);
@@ -188,6 +193,11 @@ export function DownloadsList({
     if (landing !== toRef.current) {
       toRef.current = landing;
       setTo(landing);
+      const now = Date.now();
+      if (now - steppedAt.current >= STEP_FELT_MS) {
+        steppedAt.current = now;
+        haptic('holds', 'step');
+      }
     }
   };
 
@@ -242,6 +252,7 @@ export function DownloadsList({
     offset.setValue(0);
     setFrom(index);
     setTo(index);
+    haptic('holds', 'lift');
   });
 
   const [front] = useState(() => (id: string) => {
@@ -273,7 +284,10 @@ export function DownloadsList({
     const landing = toRef.current;
     // In one batch with the end of the drag, so that the row is drawn once,
     // already in its new place.
-    if (start !== null && landing !== null && start !== landing) reorder(start, landing);
+    if (start !== null && landing !== null && start !== landing) {
+      haptic('holds', 'click');
+      reorder(start, landing);
+    }
     clearDrag();
   };
 
@@ -289,7 +303,10 @@ export function DownloadsList({
   useEffect(() => {
     if (fromRef.current === null) return;
     // `clearDrag` is not asked after: it touches only refs and setters.
-    if (adrift || heldKey !== heldId.current) clearDrag();
+    if (adrift || heldKey !== heldId.current) {
+      haptic('results', 'reject');
+      clearDrag();
+    }
   }, [adrift, heldKey]);
 
   // A timer outliving the list it scrolls would be reaching for nothing.

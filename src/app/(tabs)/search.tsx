@@ -5,10 +5,10 @@ import { BarsOver, topGlass, useLaidOver, useUnderBars } from '../../components/
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DiscoverPanel } from '../../components/DiscoverPanel';
 import { QueueLink } from '../../components/downloads/QueueLink';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect, useIsFocused } from 'expo-router';
 import { Image } from '../../components/Picture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActivityIndicator, BackHandler, FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../../components/Pressable';
 import { Segmented } from '../../components/Segmented';
 import { useT } from '../../lib/i18n/index';
@@ -22,6 +22,8 @@ import { durationLabel, isActive, jobForVideo, statusLabel, type AudioFormat, ty
 import { ownedVideos } from '../../lib/youtube/owned';
 import { useLibraryTracks } from '../../lib/library/useLibrary';
 import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
+import { useBack } from '../../lib/ui/back';
+import { haptic } from '../../lib/ui/haptics';
 
 const cache = new Map<string, { at: number; videos: YouTubeResult[] }>();
 
@@ -150,16 +152,10 @@ export default function YouTubeScreen() {
   };
 
   // The back key does the same, while there is somewhere to go back to and this tab is in front.
-  useFocusEffect(
-    useCallback(() => {
-      if (!openedFrom) return;
-      const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-        backTo(openedFrom);
-        return true;
-      });
-      return () => listener.remove();
-    }, [openedFrom])
-  );
+  const focused = useIsFocused();
+  useBack(openedFrom != null && focused, () => {
+    if (openedFrom) backTo(openedFrom);
+  });
 
   const add = async (video: YouTubeVideo, choice: AudioFormat = format) => {
     if (addingRef.current) return;
@@ -168,8 +164,12 @@ export default function YouTubeScreen() {
     setMessage(null);
     try {
       await enqueue(video, choice);
+      haptic('results', 'confirm');
     }
-    catch (failure) { setMessage(youtubeError(failure, said.failed.queue, t)); }
+    catch (failure) {
+      haptic('results', 'reject');
+      setMessage(youtubeError(failure, said.failed.queue, t));
+    }
     addingRef.current = false;
     setAdding(null);
   };
@@ -187,8 +187,12 @@ export default function YouTubeScreen() {
     const done = here.size > 0 ? `${said.listCreated(name)} ${said.alreadyHave(here.size)}` : said.listCreated(name);
     try {
       await enqueueBatch(selected, format, here);
+      haptic('results', 'confirm');
       setMessage(done);
-    } catch (failure) { setMessage(youtubeError(failure, said.failed.queuePlaylist, t)); }
+    } catch (failure) {
+      haptic('results', 'reject');
+      setMessage(youtubeError(failure, said.failed.queuePlaylist, t));
+    }
     addingRef.current = false;
     setAdding(null);
   };

@@ -17,6 +17,7 @@ import type { AlbumToLookUp } from './albumLookup';
 import { enrichAlbum, enrichLibrary, type EnrichProgress, type EnrichResult } from './enrich';
 import { noteError } from '../support/errorLogStore';
 import type { Track } from '../types';
+import { isTape } from '../tapes/tape';
 
 /**
  * The one bulk lookup there is, for the whole app.
@@ -251,7 +252,9 @@ export async function lookUpWholeLibrary(): Promise<BulkOutcome | null> {
     publish({ kind: 'details', progress: null, last: outcome, album: null });
     return outcome;
   }
-  return startBulkLookup(tracks, tracks);
+  // The music: a tape is not a song, and is not looked up in a catalogue of songs. See `lib/tapes`.
+  const music = tracks.filter((track) => !isTape(track));
+  return startBulkLookup(music, music);
 }
 
 /**

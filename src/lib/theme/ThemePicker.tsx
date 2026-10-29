@@ -12,6 +12,7 @@ import {
   type ThemeGroup,
 } from './index';
 import { useT, type Strings } from '../i18n/index';
+import { haptic } from '../ui/haptics';
 
 /** The heading over each group. The first has none: it is the app as it comes. */
 const HEADINGS: Record<ThemeGroup, keyof Strings['themes'] | null> = {
@@ -50,12 +51,15 @@ const HEADINGS: Record<ThemeGroup, keyof Strings['themes'] | null> = {
 export function ThemePicker({
   marked,
   onPick,
+  one = false,
   only,
 }: {
   /** The themes to ring, in place of the one in use. */
   marked?: readonly ThemeChoice[];
   /** What a tap does, in place of choosing the theme. */
   onPick?: (theme: ThemeChoice) => void;
+  /** The one marked is the answer to a question of one, as a light or dark theme to follow the phone with is: a tap picks, and is not felt as a box unticked. */
+  one?: boolean;
   /** The choices to offer, where not all of them. */
   only?: readonly ThemeChoice[];
 } = {}) {
@@ -95,7 +99,11 @@ export function ThemePicker({
                     accessibilityLabel={t.themes[offer.nameKey]}
                     accessibilityState={{ checked: on }}
                     style={styles.tile}
-                    onPress={() => (onPick ?? chooseTheme)(offer.id)}>
+                    onPress={() => {
+                      if (many && !one) haptic('choices', on ? 'toggleOff' : 'toggleOn');
+                      else if (!on) haptic('choices', 'click');
+                      (onPick ?? chooseTheme)(offer.id);
+                    }}>
                     <View style={[styles.ring, on && styles.ringOn]}>
                       <View style={styles.swatch}>
                         {offer.samples.map((sample) => (

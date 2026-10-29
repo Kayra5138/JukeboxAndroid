@@ -33,7 +33,12 @@ object AlbumArtwork {
     return ImagePicker.adopt(context, Uri.fromFile(file).toString())
   }
 
-  fun download(context: Context, source: String): String {
+  /**
+   * [anyHost] for a podcast's own picture, which is wherever its publisher
+   * keeps it, put in the feed to be shown by whatever plays the podcast. Every
+   * other picture comes from one of the places named below.
+   */
+  fun download(context: Context, source: String, anyHost: Boolean = false): String {
     val directory = File(context.filesDir, "album-artwork").apply { mkdirs() }
     val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray())
       .joinToString("") { "%02x".format(it) }
@@ -50,7 +55,8 @@ object AlbumArtwork {
       // not a music catalogue. It is named rather than matched by suffix, the
       // same as the rest: a picture this app redistributes has to come from a
       // place whose licence terms are known.
-      if (!(url.protocol == "https" && (url.host.endsWith(".mzstatic.com") || url.host in setOf("i.ytimg.com", "i9.ytimg.com", "img.youtube.com", "upload.wikimedia.org", "thumb.wikimedia.org")) && url.userInfo == null)) {
+      val named = url.host.endsWith(".mzstatic.com") || url.host in setOf("i.ytimg.com", "i9.ytimg.com", "img.youtube.com", "upload.wikimedia.org", "thumb.wikimedia.org")
+      if (!(url.protocol == "https" && (named || anyHost) && url.userInfo == null)) {
         throw Told(R.string.jukebox_cover_source)
       }
       val connection = (url.openConnection() as HttpURLConnection).apply {

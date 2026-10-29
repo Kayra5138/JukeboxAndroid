@@ -1,4 +1,5 @@
 import type { RepeatMode } from '../../../../modules/jukebox-audio/index.ts';
+import { wholeIn, type Range } from '../../ui/range.ts';
 
 /**
  * When the queue is about to run out, what to do about it, and in what order.
@@ -76,17 +77,17 @@ export const DEFAULT_SIZES: BatchSizes = { library: BATCH.library.library, fresh
  * What can be chosen. The library's are a moment's arithmetic each, so up to
  * an hour or more of songs at once; new songs are a download each, so fewer.
  */
-export const SIZE_CHOICES: { readonly [K in keyof BatchSizes]: readonly number[] } = {
-  library: [4, 8, 12, 20],
-  fresh: [2, 4, 6, 10],
+export const SIZE_RANGES: { readonly [K in keyof BatchSizes]: Range } = {
+  library: { min: 1, max: 30 },
+  fresh: { min: 1, max: 10 },
 };
 
-/** The sizes as they were stored, `library,fresh`; anything that is not one of the choices is the default. */
+/** The sizes as they were stored, `library,fresh`; anything outside what can be chosen is the default. */
 export function sizesFrom(stored: string | null | undefined): BatchSizes {
-  const [library, fresh] = (stored ?? '').split(',').map(Number);
+  const [library, fresh] = (stored ?? '').split(',');
   return {
-    library: SIZE_CHOICES.library.includes(library!) ? library! : DEFAULT_SIZES.library,
-    fresh: SIZE_CHOICES.fresh.includes(fresh!) ? fresh! : DEFAULT_SIZES.fresh,
+    library: wholeIn(library, SIZE_RANGES.library) ?? DEFAULT_SIZES.library,
+    fresh: wholeIn(fresh, SIZE_RANGES.fresh) ?? DEFAULT_SIZES.fresh,
   };
 }
 

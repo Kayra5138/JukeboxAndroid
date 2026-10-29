@@ -19,6 +19,7 @@ import {
 } from '../../lib/equalizer/bands';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 
 const TYPES: BandType[] = ['peak', 'lowShelf', 'highShelf'];
 
@@ -184,7 +185,10 @@ export function BandEditor({
           <Pressable
             android_ripple={pressed}
             style={styles.remove}
-            onPress={onRemove}
+            onPress={() => {
+              haptic('choices', 'tick');
+              onRemove();
+            }}
             accessibilityRole="button"
             accessibilityLabel={say.remove(number)}>
             <Text style={styles.removeLabel}>{say.removeThis}</Text>

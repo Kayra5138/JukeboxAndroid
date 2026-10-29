@@ -1,3 +1,4 @@
+import { listsChanged } from '../playlists/listEvents.ts';
 import { moveOnto } from '../playlists/members.ts';
 import { db } from './index.ts';
 
@@ -27,6 +28,8 @@ export type Playlist = {
    * somebody chose, which is the thing a tag can never express.
    */
   tag: string | null;
+  /** `favorites` for the list the heart fills, of which there is one and which cannot be deleted; null for any other. */
+  kind: string | null;
 };
 
 /**
@@ -45,6 +48,7 @@ export function playlists(): Playlist[] {
             p.cover_track_id AS coverTrackId,
             p.cover_uri      AS coverUri,
             p.tag            AS tag,
+            p.kind           AS kind,
             /*
               Counted from whichever side holds the members. The tagged count
               can read a little high on a library that has lost files, since a
@@ -57,7 +61,7 @@ export function playlists(): Playlist[] {
               ELSE (SELECT COUNT(DISTINCT t.track_id) FROM track_tags t WHERE t.tag = p.tag)
             END AS trackCount
      FROM playlists p
-     ORDER BY p.updated_at DESC, p.id DESC`
+     ORDER BY COALESCE(p.used_at, p.updated_at) DESC, p.id DESC`
   );
 }
 
@@ -70,6 +74,7 @@ export function playlist(id: number): Playlist | null {
             p.cover_track_id AS coverTrackId,
             p.cover_uri      AS coverUri,
             p.tag            AS tag,
+            p.kind           AS kind,
             /*
               Counted from whichever side holds the members. The tagged count
               can read a little high on a library that has lost files, since a
@@ -139,10 +144,43 @@ export function setPlaylistImage(id: number, uri: string | null): void {
 /** The list and everything in it, in one change or none. */
 export function deletePlaylist(id: number): void {
   const database = db();
+  // Favorites are not deleted, whoever asks: the heart has to have somewhere to put a song.
+  if (database.getFirstSync<{ kind: string | null }>(`SELECT kind FROM playlists WHERE id = ?`, id)?.kind === 'favorites') return;
   database.withTransactionSync(() => {
     database.runSync(`DELETE FROM playlist_tracks WHERE playlist_id = ?`, id);
     database.runSync(`DELETE FROM playlists WHERE id = ?`, id);
   });
+  listsChanged();
+}
+
+/** The id of Favorites, or null before it has been made. */
+export function favoritesId(): number | null {
+  return db().getFirstSync<{ id: number }>(`SELECT id FROM playlists WHERE kind = 'favorites' ORDER BY id LIMIT 1`)?.id ?? null;
+}
+
+/** Favorites, made under [name] where there is none yet; its id either way. */
+export function ensureFavorites(name: string, at: number): number {
+  const had = favoritesId();
+  if (had != null) return had;
+  const result = db().runSync(
+    `INSERT INTO playlists (name, created_at, updated_at, kind) VALUES (?, ?, ?, 'favorites')`,
+    name.trim(),
+    Math.round(at),
+    Math.round(at)
+  );
+  listsChanged();
+  return result.lastInsertRowId;
+}
+
+/** Whether [trackId] is in the list [id]. */
+export function inPlaylist(id: number, trackId: string): boolean {
+  return (
+    db().getFirstSync<{ one: number }>(
+      `SELECT 1 AS one FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?`,
+      id,
+      trackId
+    ) != null
+  );
 }
 
 /** Track ids in the order the list holds them. */
@@ -153,6 +191,15 @@ export function playlistTrackIds(id: number): string[] {
       id
     )
     .map((row) => row.track_id);
+}
+
+/**
+ * Notes that list [id] was just played, which brings it to the top of the
+ * Lists tab as putting something in it does. Nothing about the list itself
+ * changes, so its `updated_at` is left alone.
+ */
+export function markListPlayed(id: number, at: number): void {
+  db().runSync(`UPDATE playlists SET used_at = ? WHERE id = ?`, Math.round(at), id);
 }
 
 /**
@@ -167,14 +214,21 @@ export function addToPlaylist(id: number, trackIds: string[], at: number): numbe
   const database = db();
   let added = 0;
 
+  // Favorites newest first, as a heart is pressed; every other list in the order things were put in it.
+  const favorites =
+    database.getFirstSync<{ kind: string | null }>(`SELECT kind FROM playlists WHERE id = ?`, id)?.kind === 'favorites';
+
   database.withTransactionSync(() => {
     const row = database.getFirstSync<{ next: number | null }>(
-      `SELECT MAX(position) + 1 AS next FROM playlist_tracks WHERE playlist_id = ?`,
+      favorites
+        ? `SELECT MIN(position) - 1 AS next FROM playlist_tracks WHERE playlist_id = ?`
+        : `SELECT MAX(position) + 1 AS next FROM playlist_tracks WHERE playlist_id = ?`,
       id
     );
     let position = row?.next ?? 0;
 
-    for (const trackId of trackIds) {
+    // Taken from the end where each goes above the last, so that several added at once keep their order at the top.
+    for (const trackId of favorites ? [...trackIds].reverse() : trackIds) {
       const result = database.runSync(
         // Already there is not a failure and not a duplicate. The position of
         // the copy already in the list is where the track belongs, since that
@@ -188,15 +242,18 @@ export function addToPlaylist(id: number, trackIds: string[], at: number): numbe
       );
       if (result.changes > 0) {
         added += 1;
-        position += 1;
+        position += favorites ? -1 : 1;
       }
     }
 
     if (added > 0) {
-      database.runSync(`UPDATE playlists SET updated_at = ? WHERE id = ?`, Math.round(at), id);
+      // Back to nought upwards, which is how positions are kept everywhere else.
+      if (favorites) renumber(id);
+      database.runSync(`UPDATE playlists SET updated_at = ?, used_at = ? WHERE id = ?`, Math.round(at), Math.round(at), id);
     }
   });
 
+  if (added > 0) listsChanged();
   return added;
 }
 
@@ -241,6 +298,7 @@ export function setPlaylistTracks(id: number, trackIds: string[], at: number): v
       id
     );
   });
+  listsChanged();
 }
 
 export function removeFromPlaylist(id: number, trackId: string, at: number): void {
@@ -257,6 +315,7 @@ export function removeFromPlaylist(id: number, trackId: string, at: number): voi
     renumber(id);
     database.runSync(`UPDATE playlists SET updated_at = ? WHERE id = ?`, Math.round(at), id);
   });
+  listsChanged();
 }
 
 /**
@@ -279,6 +338,7 @@ export function reorderPlaylist(id: number, movedId: string, targetId: string, a
     write(id, order);
     database.runSync(`UPDATE playlists SET updated_at = ? WHERE id = ?`, Math.round(at), id);
   });
+  listsChanged();
 }
 
 /**
@@ -337,6 +397,7 @@ export function dropFromEveryList(trackIds: string[]): void {
     `UPDATE playlists SET cover_track_id = NULL WHERE cover_track_id IN (${placeholders})`,
     ...trackIds
   );
+  listsChanged();
 }
 
 /** Rewrites positions as 0..n-1 in the order currently held. */

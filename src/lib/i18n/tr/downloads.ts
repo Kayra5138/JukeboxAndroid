@@ -36,6 +36,7 @@ export const downloads: Strings['downloads'] = {
     search: 'Arama',
     album: (name) => `Albüm: ${name}`,
     playlist: (name) => `Oynatma listesi: ${name}`,
+    tape: (name) => `Kasetler: ${name}`,
   },
   automatic: 'Otomatik · diğerlerini bekliyor',
   retrying: (why) => (why ? `Yeniden denenecek · ${why}` : 'Yeniden denenecek'),

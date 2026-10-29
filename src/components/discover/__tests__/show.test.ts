@@ -259,7 +259,7 @@ test('a track of Discover\'s is known by its id, and is offered nothing that goe
   assert.equal(isDiscoverTrack('discover:job-1'), true);
   assert.equal(isDiscoverTrack('1234'), false);
   assert.equal(isDiscoverTrack(null), false);
-  assert.deepEqual([...NOT_FOR_DISCOVER].sort(), ['addToPlaylist', 'album', 'delete', 'details', 'tiles']);
+  assert.deepEqual([...NOT_FOR_DISCOVER].sort(), ['addToPlaylist', 'album', 'delete', 'details', 'favorite', 'tiles']);
 });
 
 test('a notice is about the playing song only when it names it', () => {

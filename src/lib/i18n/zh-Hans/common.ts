@@ -11,6 +11,8 @@ export const common: Strings['common'] = {
   save: '保存',
   done: '完成',
   ok: '确定',
+  typeNumber: '输入数字',
+  wholeFrom: (min, max) => `${format.number(min)} 到 ${format.number(max)} 之间的整数`,
   close: '关闭',
   back: '返回',
   delete: '删除',

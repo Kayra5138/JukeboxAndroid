@@ -31,6 +31,7 @@ export const details: Strings['details'] = {
   lookUp: '自動取得',
   searchFailed: '検索できませんでした。',
 
+  unsaved: { title: "変更を破棄しますか？", body: "ここで入力した内容は保存されていません。", keep: "編集を続ける", discard: "破棄" },
   general: {
     fields: {
       title: 'タイトル',

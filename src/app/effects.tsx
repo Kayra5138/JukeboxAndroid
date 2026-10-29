@@ -1,4 +1,5 @@
-import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +16,9 @@ import {
   useAudioEffects,
 } from '../lib/player/effects';
 import { makeStyles, outlined, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
+
+/** Where the amounts that start from nothing are felt: at nothing, as they turn off. */
+const OFF = [0] as const;
 
 export default function EffectsScreen() {
   const insets = useSafeAreaInsets();
@@ -122,6 +126,7 @@ export default function EffectsScreen() {
             max={1}
             accent={c.accent}
             snap={(value) => Math.round(value * 20) / 20}
+            notches={OFF}
             format={share}
             onDrag={(value) => change({ voiceMix: value })}
             onSettle={(value) => change({ voiceMix: value })}
@@ -185,6 +190,7 @@ export default function EffectsScreen() {
           max={1}
           accent={c.accent}
           snap={(value) => Math.round(value * 20) / 20}
+          notches={OFF}
           format={shareOrOff}
           onDrag={(value) => change({ crossfeed: value })}
           onSettle={(value) => change({ crossfeed: value })}
@@ -201,6 +207,7 @@ export default function EffectsScreen() {
           max={1}
           accent={c.accent}
           snap={(value) => Math.round(value * 20) / 20}
+          notches={OFF}
           format={shareOrOff}
           onDrag={(value) => change({ rotate: value })}
           onSettle={(value) => change({ rotate: value })}

@@ -105,7 +105,25 @@ object Parametric {
   @Volatile
   private var current = Curve()
 
-  fun curve(): Curve = current
+  /**
+   * Whether a voice is being made clearer, for a tape that asks for it:
+   * the rumble under speech let down and the part of it words are told
+   * apart by lifted a little, over whatever the curve itself does.
+   */
+  @Volatile
+  var voice = false
+
+  /** What clearer speech is laid over the curve with. */
+  private val VOICE = listOf(
+    Band(Type.LOW_SHELF, 150.0, -5.0, 0.7),
+    Band(Type.PEAK, 3_000.0, 4.0, 0.9),
+  )
+
+  fun curve(): Curve {
+    val now = current
+    if (!voice) return now
+    return Curve(enabled = true, bands = (if (now.enabled) now.bands else emptyList()) + VOICE, preampDb = if (now.enabled) now.preampDb else null)
+  }
 
   /** Puts [curve] in force for every player, from their next buffer on. */
   fun publish(curve: Curve) {

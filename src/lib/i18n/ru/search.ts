@@ -1,4 +1,5 @@
 import { format } from './format.ts';
+import { counted } from './plural.ts';
 import type { Strings } from '../en/index.ts';
 
 export const search: Strings['search'] = {
@@ -9,6 +10,93 @@ export const search: Strings['search'] = {
     playlists: 'Плейлисты',
   },
 
+  tapes: {
+    intro:
+      'Аудиокниги, подкасты, лекции и длинные записи с YouTube: скачиваются в папку Tapes твоей медиатеки и продолжаются с того места, где ты остановился. Найди или вставь ссылку на видео или плейлист — или на канал, чтобы подписаться на него.',
+    placeholder: { videos: 'Название, передача или ссылка на YouTube', playlist: 'Книга, серия или ссылка на плейлист' },
+    empty: { videos: 'Найди книгу, передачу, выступление или лекцию.', playlist: 'Найди плейлист, чтобы скачать его как одну кассету: книгу по частям или сезон передачи.' },
+    download: 'Скачать как кассету',
+    downloadBook: (count) => `Скачать все (${format.number(count)}) как одну кассету`,
+    bookHint: 'Они попадут в одну папку с названием плейлиста, пронумерованные по порядку, и будут играть друг за другом.',
+    added: (name) => `Скачивается в Tapes/${name}`,
+    sources: { youtube: 'YouTube', podcasts: 'Подписаться', books: 'Книги', files: 'Телефон' },
+    /** Books from the Internet Archive: see `books/archive.ts`, `BooksPane` and the book screen. */
+    /** Files on the phone brought into the Tapes folder: see `FilesPane`. */
+    files: {
+      intro: 'Книги, записи и лекции, которые уже есть на телефоне, копируются в папку ваших кассет. Выбранные файлы остаются на месте.',
+      choose: 'Выбрать файлы',
+      chooseOther: 'Выбрать другие файлы',
+      folder: 'Имя папки',
+      folderPlaceholder: 'Как называется книга или запись',
+      folderNote: 'Они попадут в папку кассет медиатеки под этим именем, по порядку номеров.',
+      copy: (count) => count === 1 ? 'Скопировать в кассеты' : `Скопировать в кассеты: ${format.number(count)}`,
+      chosen: (count) => `Выбрано: ${counted(count, 'файл', 'файла', 'файлов')}`,
+      copied: (done, of) => done === of ? `Скопировано в кассеты: ${counted(done, 'файл', 'файла', 'файлов')}.` : `Скопировано ${format.number(done)} из ${format.number(of)}; остальные не удалось прочитать.`,
+      failed: 'Ни один файл не удалось скопировать.',
+      pickFailed: 'Не удалось выбрать файлы.',
+      toTapes: 'К кассетам',
+    },
+    books: {
+      intro: 'Книги, перешедшие в общественное достояние, прочитанные вслух волонтёрами LibriVox и бесплатно хранящиеся в Internet Archive. Ищите по названию или автору или вставьте адрес записи на archive.org.',
+      placeholder: 'Название, автор или ссылка на archive.org',
+      nothingFound: 'Книги не найдены.',
+      searchFailed: 'Не удалось выполнить поиск в Internet Archive.',
+      anyLanguage: 'Все языки',
+      popular: 'Самые слушаемые',
+      bookFailed: 'Не удалось прочитать эту книгу из Internet Archive.',
+      stats: (parts, minutes, here) => `${counted(parts, 'часть', 'части', 'частей')} · ${minutes >= 60 ? `${format.number(Math.floor(minutes / 60))} ч ${format.number(minutes % 60)} мин` : `${format.number(minutes)} мин`}${here > 0 ? ` · на телефоне: ${format.number(here)}` : ''}`,
+      fetchAll: 'Загрузить всю книгу',
+      fetchRest: (count) => count === 1 ? 'Загрузить последнюю часть' : `Загрузить остальные: ${format.number(count)}`,
+      size: (mb) => `Всего около ${format.number(mb)} МБ`,
+      parts: (count) => counted(count, 'часть', 'части', 'частей'),
+    },
+    podcasts: {
+      intro: 'Подпишитесь на подкаст или канал YouTube, и новые выпуски сами появятся в кассетах, — или откройте его и загрузите только нужные выпуски. Найдите или вставьте адрес ленты или канала.',
+      /** Under the button on a show not followed: that its episodes can be had without following it. */
+      withoutFollowing: 'Чтобы слушать, подписываться не нужно: загрузите любой выпуск ниже. С подпиской новые придут сами.',
+      /** Where podcasts can be had from: said under the intro. */
+      /** The title of a followed or followable show's own screen, a podcast or a YouTube channel. */
+      showTitle: 'Передача',
+      sources: 'Откуда: любая передача из каталога подкастов Apple, где есть почти все подкасты с открытой лентой, включая большинство из Spotify; любой адрес ленты — с Anchor, Buzzsprout, Libsyn, Podbean, SoundCloud и других; и каналы YouTube.',
+      placeholder: 'Подкаст, канал или ссылка',
+      searchFailed: 'Не удалось найти подкасты. Проверь подключение.',
+      feedFailed: 'Не удалось прочитать ленту этого подкаста.',
+      notChannel: 'Это не адрес канала YouTube, или канал не найден.',
+      channelsHeading: 'Каналы YouTube',
+      podcastsHeading: 'Подкасты',
+      subscribers: (count) => counted(count, 'подписчик', 'подписчика', 'подписчиков'),
+      channelsFailed: 'Не удалось найти каналы на YouTube.',
+      nothingFound: 'Подкасты не найдены.',
+      yours: 'Твои подкасты',
+      noneYet: 'Ты пока не подписан ни на один подкаст.',
+      wifiOnly: 'Новые выпуски только по Wi‑Fi',
+      wifiOnlyNote: 'Выпуски подкастов, на которые ты подписан, сами скачиваются только по Wi‑Fi. Любой выпуск можно скачать вручную.',
+      follow: 'Подписаться',
+      following: 'Ты подписан',
+      unfollow: 'Отписаться',
+      autoDownload: 'Скачивать новейшие выпуски',
+      autoDownloadNote: (keep) => keep === 1 ? 'Последний выпуск остаётся скачанным.' : `Последние ${counted(keep, 'выпуск', 'выпуска', 'выпусков')} остаются скачанными.`,
+      keep: (count) => format.number(count),
+      episodes: (count) => `Выпуски · ${format.number(count)}`,
+      noEpisodes: 'В этой ленте нет выпусков с файлом.',
+      download: 'Скачать',
+      continue: 'Продолжить',
+      start: 'Начать',
+      more: 'Ещё',
+      less: 'Свернуть',
+      stats: (total, here) => `${counted(total, 'выпуск', 'выпуска', 'выпусков')} · на телефоне: ${format.number(here)}`,
+      play: 'Слушать',
+      /** The episodes shown by when they came out: see `podcasts/when.ts`. */
+      when: { label: 'Период', all: 'Все', week: 'За неделю', month: 'За месяц', quarter: 'За 3 месяца' },
+      newest: 'Сначала новые',
+      oldest: 'Сначала старые',
+      noneThen: 'За это время выпусков нет.',
+      fetchNext: 'Загружать следующие выпуски',
+      fetchNextNote: (count) =>
+        count === 1 ? 'Пока вы слушаете старый выпуск, загружается следующий, чтобы он был готов, когда этот закончится.' : `Пока вы слушаете старый выпуск, загружаются ${counted(count, 'следующий', 'следующих', 'следующих')}, чтобы очередной был готов к концу каждого.`,
+      line: (date, length) => [date, length].filter(Boolean).join(' · '),
+    },
+  },
   unavailable: {
     heading: 'Для YouTube нужна новая сборка',
     body: 'Чтобы искать и скачивать музыку, установи обновлённую версию для Android. Медиатека по-прежнему доступна.',

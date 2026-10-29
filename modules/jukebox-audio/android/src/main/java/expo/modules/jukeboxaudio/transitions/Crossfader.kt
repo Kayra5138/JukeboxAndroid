@@ -161,6 +161,10 @@ class Crossfader(
   private var swapMessage: PlayerMessage? = null
 
   private var tail: ExoPlayer? = null
+
+  /** Whether the next track is under way beside this one, when the main player's clock is not the only one that matters. */
+  val mixing: Boolean
+    get() = tail != null
   private var tailFade: FadeGainProvider? = null
 
   /** True from the tail being started, silent, until its volume comes up. */
@@ -205,6 +209,17 @@ class Crossfader(
   fun reschedule() {
     cancelPending()
     if (handingOver) return
+    /*
+      Not out of a tape or into one. A book or an episode runs to its end and
+      the next begins on its own, and the next is taken back to where it was
+      left the moment it comes on, which a second player carrying it in from
+      its start would only fight.
+    */
+    if (expo.modules.jukeboxaudio.Tapes.isTape(context, main.currentMediaItem) ||
+      expo.modules.jukeboxaudio.Tapes.isTape(context, nextItem())) {
+      releaseTail()
+      return
+    }
 
     val duration = main.duration
     val start = crossfadeStartMs(

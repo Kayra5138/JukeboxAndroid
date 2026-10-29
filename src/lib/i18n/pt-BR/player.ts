@@ -8,7 +8,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: 'Nada tocando.',
-    heart: 'Curtir',
+    heart: "Favorita",
     repeat: { off: 'Repetir', all: 'Repetir tudo', one: 'Repetir faixa' },
     back: (seconds) => oneOrMany(seconds, 'Voltar 1 segundo', `Voltar ${seconds} segundos`),
     forward: (seconds) =>
@@ -20,6 +20,17 @@ export const player: Strings['player'] = {
     upNext: (count) => `A seguir · ${format.number(count)}`,
     position: 'Posição da reprodução',
     positionValue: (position, duration) => `${position} de ${duration}`,
+  },
+  tape: {
+    part: (at, of) => `Parte ${format.number(at)} de ${format.number(of)}`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at, of) => `Episódio ${format.number(at)} de ${format.number(of)}`,
+    previousPart: 'Parte anterior',
+    nextPart: 'Próxima parte',
+    parts: (count) => `Partes · ${format.number(count)}`,
+    book: (percent, left) => `${format.number(percent)}% do total · faltam ${left}`,
+    speed: (speed) => `Velocidade ${speed}, toque para a próxima`,
+    sleep: 'Timer de sono',
   },
   queue: {
     remove: (title) => `Remover ${title}`,
@@ -71,11 +82,63 @@ export const player: Strings['player'] = {
     howMany: 'Pausar depois de quantos minutos?',
     minutes: 'Minutos',
     start: 'Iniciar',
+    tape: {
+      about: 'Pausa depois de um tempo. O último meio minuto fica mais baixo.',
+      pauseAtEnd: 'Pausar no fim desta parte',
+      endOfTrack: 'Fim da parte',
+      finish: {
+        title: 'Deixar a parte atual terminar',
+        note: 'Quando o tempo acabar, espera a parte terminar em vez de abaixar o volume até sumir.',
+        label: 'Deixar a parte atual terminar quando o timer acabar',
+      },
+    },
+  },
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: 'Transcrição',
+    show: 'Mostrar o que é dito',
+    none: 'Este vídeo não tem legendas para acompanhar.',
+  },
+  chapters: {
+    heading: (count) => `Capítulos · ${format.number(count)}`,
+    untitled: (at) => `Capítulo ${format.number(at)}`,
+    at: (at, of) => `Capítulo ${format.number(at)} de ${format.number(of)}`,
+    sleepAtEnd: 'Parar no fim deste capítulo',
+    listHint: 'Lista os capítulos',
+  },
+  marks: {
+    screen: 'Marcas',
+    heading: 'Marcas nesta fita',
+    add: 'Marcar este ponto',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count) => oneOrMany(count, 'Marcas, 1 até agora', `Marcas, ${format.number(count)} até agora`),
+    noteAt: (time) => `Marca em ${time}`,
+    noteHint: 'Uma nota do que há aqui, se quiser. Pode deixar em branco.',
+    notePlaceholder: 'O que há aqui',
+    save: 'Marcar',
+    none: 'Nada marcado nesta fita ainda. Marque um ponto com o botão ao lado do timer.',
+    noneAnywhere: 'Nenhuma marca ainda. Enquanto uma fita toca, marque um ponto no player e anote o que há ali; todas as marcas aparecem aqui.',
+    noNote: 'Sem nota',
+    remove: (time) => `Remover a marca em ${time}`,
+    editNote: 'Editar a nota',
+    goHint: 'Vai para este ponto',
+    playHint: 'Toca a fita a partir deste ponto',
+    howTo: 'Toque numa marca para ir até ela e segure para mudar a nota.',
+    all: 'Todas as marcas',
+    count: (count) => oneOrMany(count, '1 marca', `${format.number(count)} marcas`),
   },
   sleep: {
     endOfTrack: 'Pausa quando esta faixa terminar',
     thenToTheEnd: (time) => `Faltam ${time}, depois até o fim da faixa`,
     fadingOut: (time) => `Abaixando o volume, faltam ${time}`,
     pausesIn: (time) => `Pausa em ${time}`,
+    endOfChapter: 'Pausa quando este capítulo terminar',
+    chapterIn: (time) => `${time} até o fim do capítulo`,
+    tape: {
+      endOfTrack: 'Pausa quando esta parte terminar',
+      thenToTheEnd: (time) => `Faltam ${time}, depois até o fim da parte`,
+    },
   },
 };

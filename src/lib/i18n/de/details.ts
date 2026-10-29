@@ -34,6 +34,7 @@ export const details: Strings['details'] = {
   lookUp: 'Nachschlagen',
   searchFailed: 'Die Suche hat nicht geklappt.',
 
+  unsaved: { title: "Änderungen verwerfen?", body: "Was du hier eingegeben hast, ist nicht gespeichert.", keep: "Weiter bearbeiten", discard: "Verwerfen" },
   general: {
     fields: {
       title: 'Titel',

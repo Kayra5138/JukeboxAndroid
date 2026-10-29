@@ -7,9 +7,10 @@ export const settings: Strings['settings'] = {
   lastBuiltUnknown: 'Compilado em: disponível depois de instalar o novo APK',
 
   sections: {
-    look: 'Aparência',
+    look: 'Aparência e toque',
     sound: 'Som',
     player: 'Player',
+    tapes: 'Fitas',
     library: 'Biblioteca',
     downloads: 'Downloads e Descobrir',
     data: 'Seus dados',
@@ -17,9 +18,10 @@ export const settings: Strings['settings'] = {
     experimental: 'Experimental',
   },
   categories: {
-    look: 'O tema, álbuns em prateleira, animações e quais modos a biblioteca oferece.',
+    look: 'O tema, álbuns em prateleira, animações, vibração e quais modos a biblioteca oferece.',
     sound: 'Equalizador e efeitos, volume uniforme, crossfade, velocidade e tom.',
     player: 'Quanto os botões de pular avançam, o que toca quando a fila acaba e o idioma para o qual as letras são traduzidas.',
+    tapes: 'Retrocesso inteligente, quanto os botões de pular de uma fita avançam e baixar podcasts só no Wi‑Fi.',
     library: 'A pasta das suas músicas, tags e capas, e arquivos que podem ser a mesma música.',
     waiting: (count) => `${format.number(count)} para decidir`,
     downloads: 'A fila de downloads e seu botão flutuante, o Descobrir e a atualização do downloader do YouTube.',
@@ -82,7 +84,7 @@ export const settings: Strings['settings'] = {
     note:
       'Com o celular na horizontal, passe pelas capas em vez de ler uma lista. Toque na da frente para abri-la.',
   },
-  heart: { title: 'Curtir', note: 'Um coração no player. Ele não guarda nada.' },
+  favoritesShown: { title: "Favoritas", note: "Uma lista que está sempre lá, as mais novas no topo, enchida por um coração no player e por Adicionar às Favoritas no menu de uma música. Desligada, os três somem e o conteúdo espera." },
   listButton: {
     title: 'Botão de adicionar à lista',
     note:
@@ -139,10 +141,34 @@ export const settings: Strings['settings'] = {
       'Para um celular que perde quadros. O player aparece em vez de subir, e o jogo para de se iluminar quando uma vida é ganha ou perdida. As teclas continuam caindo — isso é o jogo, não decoração.',
   },
   scriptNames: { title: 'Nomes em outras escritas', latin: 'Letras latinas', original: 'Original', note: 'Quando uma busca encontrou o nome de uma música em letras latinas e na sua própria escrita (japonês, chinês, coreano), qual a biblioteca mostra. Músicas buscadas antes se completam quando buscadas de novo.' },
+  haptics: {
+    title: "Vibração",
+    open: "Quanto o app vibra sob o seu dedo, e com que força.",
+    mode: "Vibrar",
+    modes: { off: "Não", essential: "O essencial", all: "Tudo", custom: "Personalizado" },
+    modeNotes: {
+      off: "O app não vibra nunca.",
+      essential: "Só onde mais diz: um toque longo, se algo funcionou ou não, e o jogo.",
+      all: "Toques longos e arrastos, chaves e escolhas, as paradas de um controle, resultados, os botões do player e o jogo.",
+      custom: "Escolha abaixo quais momentos vibram.",
+    },
+    strength: "Intensidade",
+    strengthNote: "Sentida ao soltar. Celulares cujo motor não pode ser ajustado mantêm a própria intensidade.",
+    groupsHeading: "O que vibra",
+    groups: {
+      holds: { title: "Segurar e arrastar", note: "Um toque longo, uma linha erguida para mover, o dedo pelas caixas." },
+      choices: { title: "Chaves e escolhas", note: "Chaves, as abas de uma escolha, uma opção escolhida." },
+      notches: { title: "Paradas e passos", note: "Velocidade normal, 0 dB, o meio de um controle, as colunas de um gráfico." },
+      results: { title: "Resultados", note: "O que você pediu funcionou ou não: encontrado, gravado, adicionado, importado." },
+      player: { title: "Botões do player", note: "Tocar, pular, repetir, o coração, tocar numa linha da letra." },
+      fun: { title: "Jogo e diversão", note: "As teclas do Piano Tiles, e mais." },
+    },
+    phone: "Se a resposta tátil estiver desligada nas configurações do celular, o app também não vibra.",
+  },
   moreButton: {
     title: 'Três pontos em cada linha',
     note:
-      'No fim de cada linha de faixas, abrem o mesmo menu que um toque longo. Tocar e segurar uma linha também funciona sem eles.',
+      'No fim de cada linha de faixas e álbuns, abrem o mesmo menu que um toque longo. Tocar e segurar uma linha também funciona sem eles.',
   },
   tabs: {
     title: 'Abas',
@@ -156,6 +182,7 @@ export const settings: Strings['settings'] = {
       albums: 'Álbuns, montados a partir do que as tags dizem.',
       artists: 'Todos a quem alguma música é creditada. Uma música de dois artistas aparece com os dois.',
       folders: 'As pastas onde os arquivos estão, dentro da pasta da biblioteca.',
+      tapes: 'Audiolivros, podcasts e gravações longas da pasta Tapes da biblioteca, que continuam de onde você parou.',
     },
     onlyHint: 'O único modo ativado, por isso continua ativado',
     toggleHint: 'Mostra ou oculta este modo na biblioteca',
@@ -174,7 +201,7 @@ export const settings: Strings['settings'] = {
   exportAll: {
     title: 'Exportar tudo',
     note:
-      'Seu histórico de reprodução, listas, tags, letras e ajustes, em um arquivo salvo onde você escolher. Não inclui as músicas.',
+      'Seu histórico de reprodução, listas, tags, letras e ajustes, os podcasts que você segue e onde parou em cada fita com o que marcou, em um arquivo salvo onde você escolher. Não inclui as músicas.',
     failed: 'Não foi possível salvar o backup.',
   },
   importBackup: {
@@ -190,6 +217,39 @@ export const settings: Strings['settings'] = {
   },
   equalizer: { note: 'Bandas, graves, surround e loudness' },
   effects: { note: 'Largura, crossfeed, rotação e nível' },
+  /** The tape settings, apart from the music's: see `app/settings-tapes.tsx`. */
+  tapes: {
+    smartRewind: {
+      title: 'Retrocesso inteligente',
+      note: 'Uma fita tocada de novo depois de um tempo começa um pouco antes de onde parou, mais para trás quanto mais tempo passou: três segundos após uma pausa curta, meio minuto após um dia. Desligado, continua exatamente de onde parou.',
+    },
+    skipSilence: { title: 'Pular silêncios', note: 'As pausas no que é dito são puladas e a fita fica um pouco mais curta. A música nunca é tocada.' },
+    voiceClarity: { title: 'Voz mais clara', note: 'O ronco sob a voz é reduzido e a parte que distingue as palavras é levemente realçada, por cima do seu equalizador. Só enquanto toca uma fita.' },
+    skipSponsors: { title: 'Pular patrocínios', note: 'Nas fitas do YouTube, as partes marcadas pelos ouvintes do SponsorBlock (mensagem de patrocinador, autopromoção, pedido para se inscrever) são puladas.' },
+    back: 'Voltar',
+    forward: 'Avançar',
+    jumpNote: 'Quanto os dois botões ao lado do play pulam numa fita, em segundos. A música tem o seu próprio, em Player.',
+    podcasts: 'Podcasts',
+    deletePlayed: {
+      title: 'Apagar episódios ouvidos',
+      off: 'Os episódios dos podcasts que você segue ficam no telefone depois de ouvidos.',
+      after: (days) => oneOrMany(days, 'Um episódio de um podcast que você segue é apagado um dia depois de ouvido até o fim, se o app o baixou. Um com marcas fica.', `Um episódio de um podcast que você segue é apagado ${format.number(days)} dias depois de ouvido até o fim, se o app o baixou. Um com marcas fica.`),
+    },
+    /** The podcasts followed, as an OPML file: see `podcasts/opml.ts`. */
+    opml: {
+      heading: 'Levar seus podcasts',
+      export: 'Salvar os podcasts que você segue',
+      exportNote: 'Como arquivo OPML, que outros apps de podcast conseguem ler.',
+      import: 'Seguir podcasts de um arquivo',
+      importNote: 'Um arquivo OPML de outro app de podcast. Os programas são seguidos sem baixar nada sozinhos; ative isso para cada um na tela dele.',
+      importing: (done, total) => `Lendo ${format.number(done)} de ${format.number(total)}…`,
+      imported: (followed, already, failed) => [oneOrMany(followed, '1 podcast seguido.', `${format.number(followed)} podcasts seguidos.`), already > 0 ? `${format.number(already)} já eram seguidos.` : '', failed > 0 ? `${format.number(failed)} não puderam ser lidos.` : ''].filter(Boolean).join(' '),
+      nothing: 'Esse arquivo não tem podcasts.',
+      failed: 'Não foi possível ler nem gravar o arquivo.',
+      none: 'Você ainda não segue nenhum podcast.',
+      saved: (count) => oneOrMany(count, '1 podcast salvo.', `${format.number(count)} podcasts salvos.`),
+    },
+  },
   jump: {
     title: 'Saltos de',
     note: 'Quanto os dois botões ao lado do play avançam ou voltam na faixa, em segundos.',

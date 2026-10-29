@@ -14,6 +14,8 @@ import { useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
 import { useShared } from './styles';
 import { useAnnounce } from '../../lib/ui/announce';
+import { haptic } from '../../lib/ui/haptics';
+import { useUnsavedBack } from './unsaved';
 
 const SOURCE_NAMES = { musicbrainz: 'MusicBrainz', itunes: 'Apple' } as const;
 
@@ -40,6 +42,8 @@ export function TagsTab({
   onChanged: () => void;
 }) {
   const [tags, setTags] = useState<TagEdit[]>([]);
+  /** The tags as they are kept, to tell an edit from what is saved. */
+  const [kept, setKept] = useState<TagEdit[]>([]);
   const [draft, setDraft] = useState('');
   const [known, setKnown] = useState<string[]>([]);
   const [looking, setLooking] = useState(false);
@@ -55,7 +59,9 @@ export function TagsTab({
   useEffect(() => () => search.current?.abort(), []);
 
   useEffect(() => {
-    setTags(read(track.id));
+    const stored = read(track.id);
+    setTags(stored);
+    setKept(stored);
     // Read with the track rather than at mount, so a tag typed on the way
     // here is one of the spellings offered.
     setKnown(tagCounts().map((entry) => entry.tag));
@@ -72,15 +78,18 @@ export function TagsTab({
       const found = await lookUpTags(track, controller.signal);
       if (controller.signal.aborted) return;
       if (!found) {
+        haptic('results', 'reject');
         setNote({ text: t.details.tags.noneFound, bad: true });
         return;
       }
+      haptic('results', 'confirm');
       setTags((before) => withLookupTags(before, found));
       setNote({
         text: t.details.tags.found(found.tags.length, SOURCE_NAMES[found.source]),
       });
     } catch (error) {
       if (controller.signal.aborted || isAbortError(error)) return;
+      haptic('results', 'reject');
       setNote({ text: t.details.searchFailed, bad: true });
       noteError('lookup', error);
     } finally {
@@ -89,15 +98,23 @@ export function TagsTab({
   }, [track, t]);
 
   const save = useCallback(() => {
+    haptic('results', 'confirm');
     saveManualTags(track.id, tags);
     // Read back rather than taken from the list: saving drops a blank and
     // folds two spellings into one, and the genre has to be what was kept.
     const kept = read(track.id);
     saveGenre(track.id, kept[0]?.tag ?? null);
     setTags(kept);
+    setKept(kept);
     setNote({ text: t.common.saved });
     onChanged();
   }, [track.id, tags, onChanged, t]);
+  // Tags changed and not saved, or one typed and not added, are asked about on the way out.
+  const names = (list: TagEdit[]) => list.map((entry) => entry.tag).join('\u0000');
+  useUnsavedBack(names(tags) !== names(kept) || draft.trim() !== '', () => {
+    setTags(kept);
+    setDraft('');
+  });
 
   return (
     <FormScroll contentContainerStyle={shared.content}>

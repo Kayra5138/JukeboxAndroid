@@ -15,6 +15,7 @@ export const backup: Strings['backup'] = {
   },
   listens: (count) => `${format.number(count)} 条收听记录`,
   tagged: (count) => `${format.number(count)} 首带标签的歌曲`,
+  followed: (count) => `${format.number(count)} 个关注的节目`,
   withLyrics: (count) => `${format.number(count)} 首带歌词的歌曲`,
 
   songs: (found, total) => {

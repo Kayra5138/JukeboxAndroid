@@ -11,6 +11,8 @@ export const common: Strings['common'] = {
   save: 'Guardar',
   done: 'Hecho',
   ok: 'Aceptar',
+  typeNumber: 'Escribir un número',
+  wholeFrom: (min, max) => `Un número entero del ${format.number(min)} al ${format.number(max)}`,
   close: 'Cerrar',
   back: 'Atrás',
   delete: 'Eliminar',

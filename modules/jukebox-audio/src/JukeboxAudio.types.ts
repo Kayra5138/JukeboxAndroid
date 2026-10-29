@@ -78,6 +78,11 @@ export type TrackChangeEvent = {
    */
   completedPrevious: boolean;
   /**
+   * True when the track is the same one starting over by itself, on repeat.
+   * Never sent by a native module that predates it.
+   */
+  repeated?: boolean;
+  /**
    * Whether the player intends to play this track. False when a queue was
    * loaded without being started, which otherwise looks identical to a track
    * beginning — and a listen that never happened would accrue time from the
@@ -133,7 +138,10 @@ export type QueueItem = Pick<
   LibraryTrack,
   'id' | 'uri' | 'title' | 'artist' | 'album' | 'artworkUri'
 > &
-  Partial<Pick<LibraryTrack, 'durationSec' | 'trackNumber' | 'filename' | 'folder'>>;
+  Partial<Pick<LibraryTrack, 'durationSec' | 'trackNumber' | 'filename' | 'folder'>> & {
+    /** Played on from where it was left: see `lib/tapes`. */
+    tape?: boolean;
+  };
 
 /**
  * A queue entry read back out of the player.
@@ -176,6 +184,12 @@ export type JukeboxAudioEvents = {
    * that predates it.
    */
   onRepeatModeChange: (event: { repeat: RepeatMode }) => void;
+  /**
+   * The player's speed or pitch changed, whoever changed them — this app, or
+   * the player putting a tape at its own speed. Never sent by a native module
+   * that predates it.
+   */
+  onPlaybackParamsChange: (event: { speed: number; pitch: number }) => void;
   /**
    * The widget's cover was pressed while the app was running, asking for the
    * player to be opened. An app started by that press is asked with

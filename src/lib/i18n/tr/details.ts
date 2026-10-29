@@ -32,6 +32,7 @@ export const details: Strings['details'] = {
   lookUp: 'Otomatik bul',
   searchFailed: 'Arama yapılamadı.',
 
+  unsaved: { title: "Değişiklikler silinsin mi?", body: "Burada yazdıkların kaydedilmedi.", keep: "Düzenlemeye devam et", discard: "Sil" },
   general: {
     fields: {
       title: 'Başlık',

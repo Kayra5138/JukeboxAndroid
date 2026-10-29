@@ -33,6 +33,8 @@ import { bareTitle } from '../../lib/metadata/text';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
 import { useAnnounce } from '../../lib/ui/announce';
+import { haptic } from '../../lib/ui/haptics';
+import { useUnsavedBack } from './unsaved';
 
 /** One nudge of the timings, in milliseconds. */
 const STEP_MS = 250;
@@ -102,6 +104,11 @@ export function LyricsTab({ track }: { track: Track }) {
   useEffect(() => {
     setEdited(storedText);
   }, [storedText]);
+  // Words pasted in or edited and not kept are asked about on the way out.
+  useUnsavedBack(pasted.trim() !== '' || (edited.trim() !== '' && edited.trim() !== storedText.trim()), () => {
+    setPasted('');
+    setEdited(storedText);
+  });
 
   // Seeded with what the track calls itself, since that is what is being
   // looked for; the point of typing is to be able to change it. Done while
@@ -146,6 +153,7 @@ export function LyricsTab({ track }: { track: Track }) {
           // other words do not belong to these.
           clearLyrics(trackId);
           writeLocalLyrics(trackId, local, Date.now());
+          haptic('results', 'confirm');
           setResults(null);
           setNote(t.lyrics.found[local.source]);
           refresh();
@@ -163,6 +171,7 @@ export function LyricsTab({ track }: { track: Track }) {
         );
         if (controller.signal.aborted) return;
         if (!found) {
+          haptic('results', 'reject');
           setNote(said.nothingMatched);
           return;
         }
@@ -170,11 +179,13 @@ export function LyricsTab({ track }: { track: Track }) {
         // it, and neither belongs to the words that are replacing it.
         clearLyrics(trackId);
         writeLyrics(trackId, found, Date.now());
+        haptic('results', 'confirm');
         setResults(null);
         setNote(said.foundAndSaved);
         refresh();
       } catch (error) {
         if (controller.signal.aborted || isAbortError(error)) return;
+        haptic('results', 'reject');
         setNote(t.details.searchFailed);
       }
     };
@@ -185,6 +196,7 @@ export function LyricsTab({ track }: { track: Track }) {
   const saveEdited = useCallback(() => {
     const body = edited.trim();
     if (body.length === 0) return;
+    haptic('results', 'confirm');
     // Timed or not is decided by what is in the box, the same as a paste.
     writeManualLyrics(
       trackId,
@@ -206,10 +218,16 @@ export function LyricsTab({ track }: { track: Track }) {
       const found = await findLyricsCandidates(query, controller.signal);
       if (!controller.signal.aborted) {
         setResults(found);
-        if (found.length === 0) setNote(said.nothingCameBack);
+        if (found.length === 0) {
+          haptic('results', 'reject');
+          setNote(said.nothingCameBack);
+        } else haptic('results', 'confirm');
       }
     } catch {
-      if (!controller.signal.aborted) setNote(t.details.searchFailed);
+      if (!controller.signal.aborted) {
+        haptic('results', 'reject');
+        setNote(t.details.searchFailed);
+      }
     }
     // After the try rather than in a `finally`, which the compiler does not
     // take; nothing above it can throw past the catch.
@@ -218,6 +236,7 @@ export function LyricsTab({ track }: { track: Track }) {
 
   const choose = useCallback(
     (candidate: LyricsCandidate) => {
+      haptic('results', 'confirm');
       writeManualLyrics(trackId, candidate.lyrics, Date.now());
       setResults(null);
       setNote(t.common.saved);
@@ -229,6 +248,7 @@ export function LyricsTab({ track }: { track: Track }) {
   const savePasted = useCallback(() => {
     const body = pasted.trim();
     if (body.length === 0) return;
+    haptic('results', 'confirm');
     // Timed or not is decided by what was pasted, not by asking: a paste with
     // timestamps in it is a timed set of lyrics whatever it is called.
     writeManualLyrics(
@@ -250,6 +270,7 @@ export function LyricsTab({ track }: { track: Track }) {
 
   const nudge = useCallback(
     (milliseconds: number) => {
+      haptic('choices', 'tick');
       const next = (stored?.offsetMs ?? 0) + milliseconds;
       writeLyricsOffset(trackId, next);
       refresh();
@@ -262,6 +283,7 @@ export function LyricsTab({ track }: { track: Track }) {
       const milliseconds = parseOffsetMs(typed);
       setTypingOffset(false);
       if (milliseconds == null) {
+        haptic('results', 'reject');
         setNote(said.notSeconds);
         return;
       }

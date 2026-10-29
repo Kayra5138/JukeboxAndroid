@@ -212,11 +212,14 @@ class DownloadService : Service() {
     val wakeLock = getSystemService(PowerManager::class.java)
       .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Jukebox:YouTubeDownload")
     try {
-      wakeLock.acquire(35 * 60 * 1000L)
       val video = job.getJSONObject("video")
+      // A tape may take hours to fetch: a book over a slow connection.
+      val tape = video.optJSONObject("tape")
+      wakeLock.acquire(if (tape != null) 4 * 60 * 60 * 1000L else 35 * 60 * 1000L)
       if (video.optBoolean("discoverWifiOnly") && DiscoverFiles.networkAllowed(this)["wifi"] != true) throw YouTubeTrouble(Failure.WAITING_WIFI)
       val progress: (String, Int) -> Unit = { state, percent ->
-        if (video.optBoolean("discoverWifiOnly") && DiscoverFiles.networkAllowed(this)["wifi"] != true) cancelled.set(true)
+        // The rule as it stands now, not as it was when the job was taken: turned off meanwhile, it goes on.
+        if (video.optBoolean("discoverWifiOnly") && DownloadStore.wifiOnly(id) && DiscoverFiles.networkAllowed(this)["wifi"] != true) cancelled.set(true)
         DownloadStore.change(id, state, percent)
         val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastNotification > 1000) {
@@ -241,9 +244,27 @@ class DownloadService : Service() {
         if (stored.isNull("artworkUri")) DiscoverFiles.pictureLater(this, id, video)
         "discover:$id"
       } else LibraryImport.fromDownload(this, file, job.getString("folder"),
-        "${info.getString("title")}.${file.extension}") { trackId ->
+        // A part of a book named by its place in it, and an episode by its day, so that the files stand in the order they go.
+        "${tape?.optInt("part", 0)?.takeIf { it > 0 }?.let { "%02d - ".format(it) }
+          ?: tape?.optString("date")?.takeIf { it.matches(Regex("\\d{4}-\\d{2}-\\d{2}")) }?.let { "$it - " }
+          ?: ""}${info.getString("title")}.${file.extension}",
+        if (tape != null) LibraryImport.TAPE_MAX_BYTES else LibraryImport.MAX_BYTES) { trackId ->
           DownloadStore.reserve(id, trackId, info.optString("artworkUri").takeIf { it.startsWith("file://") })
         }
+      // A tape's chapters, kept by the file it became.
+      info.optJSONArray("chapters")?.let { if (tape != null) TapeChapters.put(this, trackId, it) }
+      // A podcast's episode's chapters and transcript, where its feed gives files of them: asked for now, as it is fetched.
+      if (tape != null) {
+        video.optString("chaptersUrl").takeIf { it.startsWith("http") }?.let { address ->
+          runCatching { TapeChapters.fromPodcast(TapeTranscripts.text(address)) }.getOrNull()?.let { TapeChapters.put(this, trackId, it) }
+        }
+        video.optString("transcriptUrl").takeIf { it.startsWith("http") }?.let { address ->
+          runCatching {
+            val lines = TapeTranscripts.timedLines(TapeTranscripts.text(address), video.optString("transcriptType").ifBlank { null })
+            if (lines.isNotEmpty()) TapeTranscripts.put(this, trackId, TapeTranscripts.keep(lines))
+          }
+        }
+      }
       DownloadStore.complete(id, trackId)
     } catch (error: Exception) {
       // Saying what became of it may fail too — the same full disk — and must not throw out of here.

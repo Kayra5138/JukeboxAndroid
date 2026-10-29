@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * Asks for one line of text.
@@ -21,6 +22,7 @@ export function TextPrompt({
   initial = '',
   keyboardType,
   secret,
+  optional = false,
   onSubmit,
   onClose,
 }: {
@@ -44,6 +46,8 @@ export function TextPrompt({
    * learn it.
    */
   secret?: boolean;
+  /** For an answer that may be left empty, as a note is: the button is live with nothing typed. */
+  optional?: boolean;
   onSubmit: (value: string) => void;
   onClose: () => void;
 }) {
@@ -60,14 +64,34 @@ export function TextPrompt({
     if (visible) setValue(initial);
   }, [visible, initial]);
 
+  /*
+    Into the box and the keyboard up once the sheet's window is showing.
+    Focused as it was made, inside a window still appearing, Android gave it
+    the cursor and no keyboard, and a focus asked again of a box that has it
+    already does nothing: so it is asked once, when the window says it is up.
+  */
+  const box = useRef<TextInput>(null);
+  const later = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (later.current) clearTimeout(later.current);
+  }, []);
+  const shown = () => {
+    if (later.current) clearTimeout(later.current);
+    later.current = setTimeout(() => box.current?.focus(), 80);
+  };
+
   const submit = () => {
     const cleaned = value.trim();
-    if (cleaned.length === 0) return;
+    // The button is not live with nothing typed; the keyboard's own key still is.
+    if (cleaned.length === 0 && !optional) {
+      haptic('results', 'reject');
+      return;
+    }
     onSubmit(cleaned);
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onShow={shown}>
       {/* Neither the backdrop nor the sheet is a stop for a screen reader; see
           `OptionSheet`. Cancel and the back gesture are the ways out. */}
       <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
@@ -77,6 +101,7 @@ export function TextPrompt({
           <Text accessibilityRole="header" style={styles.heading}>{heading}</Text>
           {hint ? <Text style={styles.hint}>{hint}</Text> : null}
           <TextInput
+            ref={box}
             style={styles.input}
             value={value}
             onChangeText={setValue}
@@ -92,7 +117,6 @@ export function TextPrompt({
             secureTextEntry={secret}
             autoComplete={secret ? 'off' : undefined}
             importantForAutofill={secret ? 'no' : undefined}
-            autoFocus
             selectTextOnFocus
             returnKeyType="done"
             onSubmitEditing={submit}
@@ -104,8 +128,8 @@ export function TextPrompt({
             <Pressable
               accessibilityRole="button"
               android_ripple={pressed}
-              style={[styles.button, styles.confirm, !value.trim() && styles.disabled]}
-              disabled={!value.trim()}
+              style={[styles.button, styles.confirm, !optional && !value.trim() && styles.disabled]}
+              disabled={!optional && !value.trim()}
               onPress={submit}>
               <Text style={styles.confirmLabel}>{confirmLabel ?? t.common.save}</Text>
             </Pressable>

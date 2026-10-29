@@ -14,6 +14,9 @@ export const common = {
   save: 'Save',
   done: 'Done',
   ok: 'OK',
+  /** A box for a number: what a screen reader calls typing one, and what it has to be. */
+  typeNumber: 'Type a number',
+  wholeFrom: (min: number, max: number) => `A whole number from ${format.number(min)} to ${format.number(max)}`,
   close: 'Close',
   back: 'Back',
   delete: 'Delete',

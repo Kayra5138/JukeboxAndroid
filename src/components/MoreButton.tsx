@@ -5,8 +5,8 @@ import { makeStyles, usePressed } from '../lib/theme/index';
 import { useMoreButtonShown } from '../lib/ui/moreButton';
 
 /**
- * The three dots at the end of a row of tracks, which open the same menu a
- * hold does.
+ * The three dots at the end of a row of tracks, or of a record, which open
+ * the same menu a hold does.
  *
  * A hold is the faster way, once somebody knows it is there; the dots are
  * how they find out. Drawn as three round views rather than a character,

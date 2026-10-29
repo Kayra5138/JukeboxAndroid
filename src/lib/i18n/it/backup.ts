@@ -19,6 +19,7 @@ export const backup: Strings['backup'] = {
   listens: (count) => `${format.number(count)} ${oneOrMany(count, 'ascolto', 'ascolti')}`,
   tagged: (count) =>
     `${format.number(count)} ${oneOrMany(count, 'canzone con tag', 'canzoni con tag')}`,
+  followed: (count) => oneOrMany(count, '1 programma seguito', `${format.number(count)} programmi seguiti`),
   withLyrics: (count) =>
     `${format.number(count)} ${oneOrMany(count, 'canzone con testo', 'canzoni con testo')}`,
 

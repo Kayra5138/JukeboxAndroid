@@ -12,6 +12,8 @@ export const common: Strings['common'] = {
   save: 'Speichern',
   done: 'Fertig',
   ok: 'OK',
+  typeNumber: 'Zahl eingeben',
+  wholeFrom: (min, max) => `Eine ganze Zahl von ${format.number(min)} bis ${format.number(max)}`,
   close: 'Schließen',
   back: 'Zurück',
   delete: 'Löschen',

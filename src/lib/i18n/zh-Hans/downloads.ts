@@ -34,6 +34,7 @@ export const downloads: Strings['downloads'] = {
     search: '搜索',
     album: (name) => `专辑：${name}`,
     playlist: (name) => `播放列表：${name}`,
+    tape: (name) => `磁带：${name}`,
   },
   automatic: '自动 · 等待其他下载完成',
   retrying: (why) => (why ? `正在重试 · ${why}` : '正在重试'),

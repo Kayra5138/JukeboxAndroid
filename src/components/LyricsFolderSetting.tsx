@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 
 import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';

@@ -27,11 +27,14 @@ import { PlayIcon } from './Icons';
 import { MoreButton } from './MoreButton';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
+import { progressOf, useTapePlace } from '../lib/tapes/places';
+import { isTape } from '../lib/tapes/tape';
 import { dividerAt, queueIndex, queueMove, shownIndex } from '../lib/player/autoplay/section';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
 import { laid, makeStyles, outlined, useColours, withAlpha } from '../lib/theme/index';
 import { glassOf } from '../lib/theme/Veil';
 import { announce } from '../lib/ui/announce';
+import { haptic } from '../lib/ui/haptics';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
 import type { Track } from '../lib/types';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
@@ -99,6 +102,16 @@ const QueueRow = memo(function QueueRow({
   const t = useT();
   const styles = useStyles();
   const height = use(RowHeightContext);
+  // A part of a tape says whether it was heard, or how much of it is left: see `lib/tapes`.
+  const place = useTapePlace(track.id);
+  const progress = progressOf(place);
+  const tapeNote = place == null || !isTape(track)
+    ? null
+    : place.finished
+      ? t.library.tapes.played
+      : progress != null
+        ? t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))
+        : null;
 
   /*
     Two things a held row can mean, and one finger to say it with.
@@ -139,7 +152,14 @@ const QueueRow = memo(function QueueRow({
         else if (name === 'moveDown') onStep?.(index, 1);
       }}
       onPress={() => onPress(index)}
-      onLongPress={onMenu ? () => onMenu(index) : liftFrom}
+      onLongPress={
+        onMenu
+          ? () => {
+              haptic('holds', 'hold');
+              onMenu(index);
+            }
+          : liftFrom
+      }
       delayLongPress={onMenu ? undefined : LIFT_AFTER_MS}>
       <View style={styles.mark}>{playing ? <PlayIcon size={8} /> : null}</View>
       {artwork ? (
@@ -152,7 +172,7 @@ const QueueRow = memo(function QueueRow({
           {track.title}
         </Text>
         <Text style={styles.artist} numberOfLines={1}>
-          {track.artist ?? t.common.unknownArtist}
+          {[track.artist ?? t.common.unknownArtist, tapeNote].filter(Boolean).join(' · ')}
         </Text>
       </View>
       {/*
@@ -169,7 +189,10 @@ const QueueRow = memo(function QueueRow({
           // Named with the track: every row has one of these, and "remove"
           // alone does not say what from.
           accessibilityLabel={t.player.queue.remove(track.title)}
-          onPress={() => onRemove(index)}
+          onPress={() => {
+            haptic('holds', 'tick');
+            onRemove(index);
+          }}
           // The cross is a small mark in a tall row. Reached for and missed,
           // it plays the track instead.
           hitSlop={REMOVE_SLOP}>
@@ -230,6 +253,9 @@ const isDivider = (row: Row): row is typeof DIVIDER => 'divider' in row;
 
 /** How often the list is nudged while a row is held at an edge. */
 const PULL_TICK_MS = 16;
+
+/** The least time between two slots felt, so a list pulled past at speed does not buzz. */
+const STEP_FELT_MS = 40;
 
 const DragContext = createContext<Drag>({ from: null, to: null });
 
@@ -324,6 +350,7 @@ export function QueueList({
   divider,
   inset = 0,
   foot = 0,
+  scatter,
 }: {
   queue: Track[];
   currentIndex: number;
@@ -347,6 +374,12 @@ export function QueueList({
    */
   divider?: { at: number; element: ReactNode };
   /**
+   * Nought to one: how far each row is thrown from its place, each its own
+   * way, and back again at nought. The player's, for a shuffle pressed to
+   * the very end of what it does (`Shuffle.tsx`).
+   */
+  scatter?: Animated.Value;
+  /**
    * How much of the list's top a heading of glass is laid over, so that the
    * rows can pass under it and still start clear of it at rest; see
    * `UnderBars`. Nought, and nothing changed, where nothing is.
@@ -366,6 +399,7 @@ export function QueueList({
   const offset = useRef(new Animated.Value(0)).current;
   const fromRef = useRef<number | null>(null);
   const toRef = useRef<number | null>(null);
+  const steppedAt = useRef(0);
   const grabbedAt = useRef(0);
   const scroll = useRef<FlatList<Row>>(null);
   /*
@@ -500,6 +534,11 @@ export function QueueList({
     if (landing !== toRef.current) {
       toRef.current = landing;
       setTo(landing);
+      const now = Date.now();
+      if (now - steppedAt.current >= STEP_FELT_MS) {
+        steppedAt.current = now;
+        haptic('holds', 'step');
+      }
     }
   };
 
@@ -585,6 +624,7 @@ export function QueueList({
           // the row they just dropped and is owed no scroll.
           const playing = currentRef.current;
           if (playing >= 0) expectIndex(indexAfterMove(playing, move.from, move.to));
+          haptic('holds', 'click');
 
           /*
             The reorder and the end of the drag have to reach the screen
@@ -640,6 +680,7 @@ export function QueueList({
     offset.setValue(0);
     setFrom(index);
     setTo(index);
+    haptic('holds', 'lift');
     // Refs, setters and an animated value, none of which is ever replaced.
   }, [offset]);
 
@@ -818,7 +859,7 @@ export function QueueList({
           renderItem={({ item, index }) => {
             if (isDivider(item)) return <View style={{ height: rowHeight }}>{divider?.element}</View>;
             const position = queueIndex(index, shownDivider);
-            return (
+            const row = (
               <QueueRow
                 track={item}
                 index={index}
@@ -832,6 +873,14 @@ export function QueueList({
                 onMenu={onLongPress ? menu : undefined}
                 onRemove={onRemove ? remove : undefined}
               />
+            );
+            return scatter ? (
+              // Always there where the list can be scattered, so that no row is ever wrapped and unwrapped in place.
+              <Animated.View collapsable={false} style={{ transform: thrown(scatter, index) }}>
+                {row}
+              </Animated.View>
+            ) : (
+              row
             );
           }}
         />
@@ -916,3 +965,20 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   removeLabel: { color: c.textFaint, fontSize: 18, lineHeight: 20 },
   grip: { color: c.textDisabled, fontSize: 18, paddingHorizontal: 4 },
 }));
+
+/**
+ * Where a row goes when the list is scattered: its own way for each row,
+ * worked out from where it is so that it is the same way every time, some
+ * a long way and turning, all of them back where they were at nought.
+ */
+function thrown(scatter: Animated.Value, index: number) {
+  const across = (((index * 73) % 11) - 5) * 46;
+  const down = (((index * 37) % 9) - 4) * 58;
+  const turn = (((index * 53) % 13) - 6) * 14;
+  return [
+    { translateX: scatter.interpolate({ inputRange: [0, 1], outputRange: [0, across] }) },
+    { translateY: scatter.interpolate({ inputRange: [0, 1], outputRange: [0, down] }) },
+    { rotate: scatter.interpolate({ inputRange: [0, 1], outputRange: ['0deg', `${turn}deg`] }) },
+    { scale: scatter.interpolate({ inputRange: [0, 1], outputRange: [1, 0.82 + ((index * 29) % 5) * 0.06] }) },
+  ];
+}

@@ -13,6 +13,7 @@ import { useT } from '../lib/i18n/index';
 import type { EnrichedTrack } from '../lib/media/enriched';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { haptic } from '../lib/ui/haptics';
 
 type Stage =
   | { at: 'asking'; note?: string }
@@ -82,8 +83,11 @@ export function WriteFilesSheet({
         onProgress: (done, total) => setStage({ at: 'writing', done, total }),
         stopped: () => stopping.current,
       });
+      // Nothing felt for a no to the system's question, which is not a result.
+      if (outcomes) haptic('results', outcomes.some((entry) => entry.result.status === 'written') ? 'confirm' : 'reject');
       setStage(outcomes ? { at: 'done', outcomes } : { at: 'asking', note: said.nothingWritten });
     } catch (error) {
+      haptic('results', 'reject');
       setStage({
         at: 'asking',
         note: error instanceof Error ? error.message : said.couldNotStart,

@@ -1,6 +1,7 @@
-import { Link } from 'expo-router';
+import { Link, useIsFocused } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUnderBars } from '../components/UnderBars';
@@ -23,6 +24,7 @@ import {
   type ThemeId,
 } from '../lib/theme/index';
 import { ThemePicker } from '../lib/theme/ThemePicker';
+import { useBack } from '../lib/ui/back';
 
 /**
  * The themes: choosing one, making one, and being surprised by one.
@@ -50,6 +52,9 @@ export default function ThemesScreen() {
   const under = useUnderBars();
   const shuffle = useThemeShuffle();
   const [drawOpen, setDrawOpen] = useState(false);
+  // Back folds the draw away before it leaves.
+  const focused = useIsFocused();
+  useBack(drawOpen && focused, () => setDrawOpen(false));
   const said = t.settings.theme.shuffle;
   /*
     The pair following the phone goes between, and which side of it is being
@@ -191,6 +196,7 @@ export default function ThemesScreen() {
           choosing ? (
             <ThemePicker
               marked={[pair[choosing]]}
+              one
               onPick={(theme) => {
                 if (theme !== 'system') chooseSystemTheme(choosing, theme);
                 setChoosing(null);

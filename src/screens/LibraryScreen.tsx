@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
@@ -7,6 +7,7 @@ import {
   Easing,
   FlatList,
   Keyboard,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,18 +17,20 @@ import {
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 
-import { PlayIcon, SearchIcon, ShuffleIcon } from '../components/Icons';
+import { MarksIcon, PlayIcon, PlusIcon, SearchIcon, SettingsIcon, ShuffleIcon } from '../components/Icons';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
 import { SearchField } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, outlinedClip, scene, useColours, usePressed } from '../lib/theme/index';
 import { underGlass } from '../lib/theme/Veil';
 import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
 import { useHiddenTabs } from '../lib/ui/tabs';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
+import { haptic } from '../lib/ui/haptics';
+import { useBack } from '../lib/ui/back';
 import { useSelectionActions } from '../components/SelectionActions';
 import { LibraryWelcome } from '../components/welcome/LibraryWelcome';
 import { WrongDownloadsLine } from '../components/WrongDownloadsLine';
@@ -67,11 +70,7 @@ import { useLibrary } from '../lib/library/useLibrary';
 import { ensureNotificationPermission, libraryRoot } from '../lib/media/library';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { search, searchNamed } from '../lib/media/search';
-import {
-  viewShown,
-  viewsFrom,
-  type LibraryView,
-} from '../lib/media/views';
+import { viewShown, type LibraryView } from '../lib/media/views';
 import {
   asSortOrder,
   nextSort,
@@ -86,15 +85,25 @@ import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { motionReduced } from '../lib/ui/motion';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { useLibraryViews } from '../lib/ui/libraryViews';
+import { downloads } from '../lib/youtube/native';
+import { inRecordOrder, inSeriesOrder, orderTapes, partsOf } from '../lib/tapes/order';
+import { asTapeFilter, asTapeSort, nextTapeSort, type TapeFilter, type TapeSort } from '../lib/tapes/sort';
+import { TapeItemRow } from '../components/tapes/TapeItemRow';
+import { markTape, useTapePlaces } from '../lib/tapes/places';
+import { useAllMarks } from '../lib/tapes/marks';
+import { isTape } from '../lib/tapes/tape';
+import { SeriesRow, type SeriesShow } from '../components/tapes/SeriesRow';
+import { TAPE_FOLDERS } from '../lib/tapes/rule';
+import { seriesByFolder, seriesOf } from '../lib/podcasts/series';
+import { folderKey } from '../lib/media/folders';
+import { subscriptions, type Subscription } from '../lib/podcasts/store';
 
 /** A stable empty library, so the searching below is not re-run over a new one. */
 const NOTHING: EnrichedTrack[] = [];
 
 /** The same, for a listening history that has not been read yet. */
 const UNPLAYED: ReadonlyMap<string, number> = new Map();
-
-/** The views on offer until the setting has been read, which is the ones it starts with. */
-const OFFERED: LibraryView[] = viewsFrom(null);
 
 /** Nobody named, for the moment before the catalogues' verdicts have been read. */
 const NOBODY: NamesOn = () => [];
@@ -126,6 +135,26 @@ type Heading = {
 
 /** No headings, for the view that is a list of tracks and has none. */
 const NO_HEADINGS: Heading[] = [];
+
+/** The views that are lists of headings rather than of tracks. */
+const GROUPED_VIEWS = ['albums', 'artists', 'folders'] as const;
+
+const NO_TRACKS: EnrichedTrack[] = [];
+
+/** A row of the tapes view: a heading over one of its two parts, a podcast followed, one of its episodes laid out under it, or a tape. */
+type TapeRow =
+  | { kind: 'heading'; id: string; title: string }
+  | { kind: 'series'; id: string; show: SeriesShow; episodes: readonly EnrichedTrack[]; book?: boolean }
+  | { kind: 'episode'; id: string; track: EnrichedTrack }
+  | { kind: 'tape'; id: string; track: EnrichedTrack };
+const NO_TAPE_ROWS: TapeRow[] = [];
+const NO_TAPE_COUNTS = { series: 0, books: 0, tapes: 0 };
+
+/** How many of [episodes] are ticked: all, some or none, for their show's tick box. */
+function tickedOf(episodes: readonly EnrichedTrack[], selected: ReadonlySet<string>): 'all' | 'some' | 'none' {
+  const ticked = episodes.filter((episode) => selected.has(episode.id)).length;
+  return ticked === 0 ? 'none' : ticked === episodes.length ? 'all' : 'some';
+}
 
 /*
   How each order is named on the button, and how it is read out, are
@@ -196,8 +225,8 @@ export default function LibraryScreen() {
    * drawn. See {@link viewShown}.
    */
   const [remembered, setRemembered] = useState<string | null>(null);
-  /** The views the switch offers: the ones left on in Settings. */
-  const [offered, setOffered] = useState<LibraryView[]>(OFFERED);
+  /** The views the switch offers: the ones left on in Settings, or chosen in the setup. */
+  const offered = useLibraryViews();
   /**
    * Who each track names, as the stats read it.
    *
@@ -210,6 +239,8 @@ export default function LibraryScreen() {
   /** The artists' own order, and the folders': neither is the library's. */
   const [artistSort, setArtistSort] = useState<ArtistSort>('name');
   const [folderSort, setFolderSort] = useState<FolderSort>('name');
+  // The tapes' own order: the ones being listened to first, by name, or by what came newest.
+  const [tapeSort, setTapeSort] = useState<TapeSort>(() => asTapeSort(readSetting(SETTINGS.libraryTapeSort)));
   /**
    * When each track was last listened to, read alongside the library itself.
    *
@@ -249,18 +280,24 @@ export default function LibraryScreen() {
   }, []);
 
   // Read on focus rather than once, so coming back from Settings shows the
-  // choice that was just made there.
+  // choice that was just made there. (The views are watched, and need no reading.)
   useFocusEffect(
     useCallback(() => {
       setRack(rackWanted(landscape));
-      setOffered(viewsFrom(readSetting(SETTINGS.libraryViews)));
     }, [landscape])
   );
 
-  const view = viewShown(remembered, offered);
+  /*
+    The view pressed, and the view drawn, which follows it a moment later.
+    The switch shows the press at once; the list under it, a few hundred rows
+    with covers, is drawn behind it without holding the switch up, and with a
+    library of any size that was a hitch felt on every change of view.
+  */
+  const chosenView = viewShown(remembered, offered);
+  const view = useDeferredValue(chosenView);
   const albumView = view === 'albums';
-  /** Whether what is on screen is headings — albums, artists, folders — rather than tracks. */
-  const grouped = view !== 'tracks';
+  /** Whether what is on screen is headings — albums, artists, folders — rather than tracks or tapes. */
+  const grouped = view !== 'tracks' && view !== 'tapes';
   /**
    * Whether the records are on the rack just now.
    *
@@ -302,6 +339,7 @@ export default function LibraryScreen() {
     for the reason given where the settings are named.
   */
   const stepSort = () => {
+    haptic('choices', 'tick');
     if (view === 'artists') {
       const next = nextArtistSort(artistSort);
       setArtistSort(next);
@@ -310,6 +348,10 @@ export default function LibraryScreen() {
       const next = nextFolderSort(folderSort);
       setFolderSort(next);
       writeSetting(SETTINGS.libraryFolderSort, next);
+    } else if (view === 'tapes') {
+      const next = nextTapeSort(tapeSort);
+      setTapeSort(next);
+      writeSetting(SETTINGS.libraryTapeSort, next);
     } else {
       chooseSort(nextSort(sort));
     }
@@ -326,9 +368,11 @@ export default function LibraryScreen() {
             short: t.library.screen.groupSortShort[folderSort],
             spoken: t.library.screen.groupSortedBy[folderSort],
           }
-        : { short: t.library.screen.sortShort[sort], spoken: t.library.screen.sortedBy[sort] };
+        : view === 'tapes'
+          ? { short: t.library.screen.sortShort[tapeSort], spoken: t.library.screen.sortedBy[tapeSort] }
+          : { short: t.library.screen.sortShort[sort], spoken: t.library.screen.sortedBy[sort] };
   const columns = useListColumns();
-  const { playQueue, playNext, addToQueue } = usePlayerActions();
+  const { playQueue, playNext, addToQueue, toggle } = usePlayerActions();
   // The same two functions for every row, which a remembered row needs.
   const playNextTrack = useCallback((track: EnrichedTrack) => void playNext(track), [playNext]);
   const queueTrack = useCallback((track: EnrichedTrack) => void addToQueue(track), [addToQueue]);
@@ -337,10 +381,10 @@ export default function LibraryScreen() {
     so that an artist does not come up twice running, and not a plain draw.
   */
   const shuffleAll = () => {
-    if (library.length === 0) return;
-    void playQueue(spreadShuffle(library, artistKey), 0);
+    if (music.length === 0) return;
+    void playQueue(spreadShuffle(music, artistKey), 0);
   };
-  const { current } = usePlayerState();
+  const { current, playWhenReady } = usePlayerState();
   const router = useRouter();
 
   /*
@@ -370,6 +414,13 @@ export default function LibraryScreen() {
     ) : null;
 
   const library = screen.kind === 'library' ? screen.tracks : NOTHING;
+  /*
+    The music: the library without its tapes, which have a view of their own
+    and are none of the others' business — not a track, not on a record, not
+    an artist's, not shuffled in. See `lib/tapes`. The folders are drawn from
+    the whole library, where the tapes folder is one folder among the rest.
+  */
+  const music = useMemo(() => library.filter((track) => !isTape(track)), [library]);
 
   /*
     Folding the whole library is not something to do on every render. `search`
@@ -390,7 +441,10 @@ export default function LibraryScreen() {
     title it looks at, and re-running it because a menu opened would fold the
     whole library again.
   */
-  const results = useMemo(() => sortTracks(found, sort, played), [found, played, sort]);
+  const results = useMemo(
+    () => sortTracks(found.filter((track) => !isTape(track)), sort, played),
+    [found, played, sort]
+  );
 
   /*
     The records the search results belong to.
@@ -402,13 +456,19 @@ export default function LibraryScreen() {
     the library to know, and a record must keep its key while it is searched.
   */
   const asked = query.trim().length > 0;
-  const records = useMemo(
-    () => (albumView || asked ? albumsOf(library) : []),
-    [albumView, library, asked]
-  );
+  /*
+    Kept once worked out rather than thrown away when the view changes, so
+    going back to the albums, or to the artists below, does not sort the whole
+    library into them again; worked out again only for a different library.
+  */
+  const [visited, setVisited] = useState<ReadonlySet<LibraryView>>(() => new Set());
+  if (!visited.has(view)) setVisited(new Set([...visited, view]));
+  const seenAlbums = visited.has('albums');
+  const wantRecords = seenAlbums || asked;
+  const records = useMemo(() => (wantRecords ? albumsOf(music) : []), [music, wantRecords]);
   const albums = useMemo(
-    () => (albumView ? sortAlbums(narrowAlbums(records, results), sort, played) : []),
-    [albumView, played, records, results, sort]
+    () => (seenAlbums ? sortAlbums(narrowAlbums(records, results), sort, played) : []),
+    [seenAlbums, played, records, results, sort]
   );
 
   /**
@@ -436,17 +496,20 @@ export default function LibraryScreen() {
     count beside it on every keystroke. What is typed narrows the headings
     instead, by name, below.
 
-    Only while it is the view being drawn. Reading every credit in the library
-    is not free, and the other views have no use for the answer.
+    Only once the view has been drawn. Reading every credit in the library
+    is not free, and somebody who never opens the artists has no use for the
+    answer; once it has been, it is kept for coming back to.
   */
+  const seenArtists = visited.has('artists');
+  const seenFolders = visited.has('folders');
   const artists = useMemo(
     // Told the language, for the one heading whose name is the app's own words.
-    () => (view === 'artists' ? artistsOf(library, namesOn, t) : []),
-    [library, namesOn, t, view]
+    () => (seenArtists ? artistsOf(music, namesOn, t) : []),
+    [music, namesOn, t, seenArtists]
   );
   const folders = useMemo(
-    () => (view === 'folders' ? foldersOf(library, libraryRoot()) : []),
-    [library, view]
+    () => (seenFolders ? foldersOf(library, libraryRoot()) : []),
+    [library, seenFolders]
   );
 
   /*
@@ -467,29 +530,36 @@ export default function LibraryScreen() {
     does not sort the library into them again. Put into one shape so the three
     views can share a list: a row does not care which of them it came from.
   */
-  const shownHeadings = useMemo((): Heading[] => {
-    if (view === 'tracks') return NO_HEADINGS;
-    if (view === 'albums') {
-      return albums.map((album) => ({
-        id: album.key,
-        title: album.name,
-        detail: [album.artist, t.common.tracks(album.tracks.length), album.year]
-          .filter(Boolean)
-          .join(' · '),
-        tracks: album.tracks,
-        // One cover, not four: a record has its own, found among its tracks.
-        cover: album.tracks,
-      }));
-    }
-    if (view === 'artists') {
-      return searchNamed(orderedArtists, query, (artist) => artist.name).map((artist) => ({
-        id: artist.key,
-        title: artist.name,
-        detail: `${t.common.tracks(artist.tracks.length)} · ${t.common.albums(artist.albums.length)}`,
-        tracks: artist.tracks,
-        cover: artist.sleeve,
-      }));
-    }
+  /*
+    Each view's own, worked out once it has been opened and kept: the three
+    lists stay standing under one another, so that going from one view to
+    another shows one that is already there rather than building it again.
+  */
+  const albumHeadings = useMemo((): Heading[] => {
+    if (!seenAlbums) return NO_HEADINGS;
+    return albums.map((album) => ({
+      id: album.key,
+      title: album.name,
+      detail: [album.artist, t.common.tracks(album.tracks.length), album.year]
+        .filter(Boolean)
+        .join(' · '),
+      tracks: album.tracks,
+      // One cover, not four: a record has its own, found among its tracks.
+      cover: album.tracks,
+    }));
+  }, [albums, seenAlbums, t]);
+  const artistHeadings = useMemo((): Heading[] => {
+    if (!seenArtists) return NO_HEADINGS;
+    return searchNamed(orderedArtists, query, (artist) => artist.name).map((artist) => ({
+      id: artist.key,
+      title: artist.name,
+      detail: `${t.common.tracks(artist.tracks.length)} · ${t.common.albums(artist.albums.length)}`,
+      tracks: artist.tracks,
+      cover: artist.sleeve,
+    }));
+  }, [orderedArtists, query, seenArtists, t]);
+  const folderHeadings = useMemo((): Heading[] => {
+    if (!seenFolders) return NO_HEADINGS;
     // The library folder itself has no path from itself, so it is looked for
     // by its name, which is what its row says.
     return searchNamed(orderedFolders, query, (folder) => folder.path || folder.name).map((folder) => ({
@@ -506,12 +576,199 @@ export default function LibraryScreen() {
       // to say nothing more about a folder than one does.
       cover: folder.tracks,
     }));
-  }, [albums, orderedArtists, orderedFolders, query, t, view]);
+  }, [orderedFolders, query, seenFolders, t]);
+  const headingsOf: Record<(typeof GROUPED_VIEWS)[number], Heading[]> = {
+    albums: albumHeadings,
+    artists: artistHeadings,
+    folders: folderHeadings,
+  };
+  const shownHeadings = grouped ? headingsOf[view] : NO_HEADINGS;
+
+  /*
+    The tapes: the tracks the search left that are books, podcasts or long
+    recordings, those part way through first. See `lib/tapes`.
+  */
+  const places = useTapePlaces();
+  // Fetching them, on a phone that can fetch.
+  const tapesFetchable = downloads != null;
+  const seenTapes = visited.has('tapes');
+  const tapeResults = useMemo(
+    () => (seenTapes ? orderTapes(found.filter((track) => isTape(track)), places) : NO_TRACKS),
+    [found, places, seenTapes]
+  );
+  const allTapes = useMemo(() => (seenTapes ? library.filter((track) => isTape(track)) : NO_TRACKS), [library, seenTapes]);
+
+  /*
+    The podcasts followed, each one row in place of its episodes, above the
+    other tapes: a series is looked through and managed on its own screen.
+    Read on coming back, since that screen may have followed or let one go.
+  */
+  const [followed, setFollowed] = useState<Subscription[]>([]);
+  useFocusEffect(
+    useCallback(() => {
+      try {
+        setFollowed(subscriptions());
+      } catch {
+        // No podcasts table yet: none followed.
+      }
+    }, [])
+  );
+  const marksMade = useAllMarks().length > 0;
+  // The followed shows whose episodes are laid out under them, by feed.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  // Which of the tapes view's parts are shown: all of them, or one.
+  const [tapeFilter, setTapeFilter] = useState<TapeFilter>(() => asTapeFilter(readSetting(SETTINGS.libraryTapeFilter)));
+  const tapeView = useMemo((): { rows: TapeRow[]; counts: Record<Exclude<TapeFilter, 'all'>, number>; shown: TapeFilter } => {
+    if (!seenTapes) return { rows: NO_TAPE_ROWS, counts: NO_TAPE_COUNTS, shown: 'all' };
+    const series = seriesByFolder(followed);
+    const episodes = new Map<string, EnrichedTrack[]>();
+    const singles: EnrichedTrack[] = [];
+    for (const track of tapeResults) {
+      const show = seriesOf(track, series);
+      if (!show) singles.push(track);
+      else episodes.set(show.feedUrl, [...(episodes.get(show.feedUrl) ?? []), track]);
+    }
+    const asked = query.trim().toLocaleLowerCase();
+    const shows = followed.filter((show) => !asked || episodes.has(show.feedUrl) || show.title.toLocaleLowerCase().includes(asked));
+    // When any of [tracks] was last listened to, and when the newest of them came: what the orders go by.
+    const heardAt = (tracks: readonly EnrichedTrack[]) => tracks.reduce((latest, track) => Math.max(latest, places.get(track.id)?.at ?? 0), 0);
+    const addedAt = (tracks: readonly EnrichedTrack[]) => tracks.reduce((latest, track) => Math.max(latest, track.addedAt ?? 0), 0);
+    type Unit = { title: string; added: number; heard: number; rows: TapeRow[] };
+    /*
+      Each part in the order chosen: by name, by what came newest, or — the
+      first and usual — as the tapes are shown, the ones part way through
+      first, the one listened to last at the top.
+    */
+    const ordered = (units: Unit[]) =>
+      tapeSort === 'name'
+        ? [...units].sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }))
+        : tapeSort === 'added'
+          ? [...units].sort((a, b) => b.added - a.added)
+          : units;
+    /*
+      The other tapes, a folder of several as one row — a book's parts, the
+      videos of one channel — laid out under it when opened, and a tape on
+      its own as itself. A folder whose files are numbered parts is a book,
+      and goes with the books; one channel's videos go with the tapes. Not
+      the Tapes folder itself: what is put loose in it is nothing's parts.
+    */
+    const folders = new Map<string, EnrichedTrack[]>();
+    for (const track of singles) {
+      const key = folderKey(track.folder ?? '').toLocaleLowerCase();
+      folders.set(key, [...(folders.get(key) ?? []), track]);
+    }
+    const placed = new Set<string>();
+    const books: Unit[] = [];
+    const loose: Unit[] = [];
+    for (const track of singles) {
+      const folder = folderKey(track.folder ?? '');
+      const key = folder.toLocaleLowerCase();
+      const together = folders.get(key) ?? [];
+      const name = folder.split('/').pop() ?? '';
+      if (together.length < 2 || !name || (TAPE_FOLDERS as readonly string[]).includes(name.toLocaleLowerCase())) {
+        loose.push({ title: track.title, added: track.addedAt ?? 0, heard: heardAt([track]), rows: [{ kind: 'tape', id: track.id, track }] });
+        continue;
+      }
+      if (placed.has(key)) continue;
+      placed.add(key);
+      const parts = inSeriesOrder(together);
+      const show: SeriesShow = { feedUrl: `folder:${folder}`, title: name, image: null };
+      const row: TapeRow = { kind: 'series', id: `book:${key}`, show, episodes: parts, book: true };
+      const rows = expanded.has(show.feedUrl) ? [row, ...parts.map((part): TapeRow => ({ kind: 'episode', id: part.id, track: part }))] : [row];
+      const numbered = parts.some((part) => /^\d{1,4} - /.test(part.filename ?? ''));
+      (numbered ? books : loose).push({ title: name, added: addedAt(parts), heard: heardAt(parts), rows });
+    }
+    const showUnits: Unit[] = shows.map((show) => {
+      const here = episodes.get(show.feedUrl);
+      const parts = here ? inSeriesOrder(here) : NO_TRACKS;
+      const row: TapeRow = { kind: 'series', id: `series:${show.feedUrl}`, show, episodes: parts };
+      // Laid out newest first, as its own screen lists them.
+      const rows = expanded.has(show.feedUrl) ? [row, ...[...parts].reverse().map((track): TapeRow => ({ kind: 'episode', id: track.id, track }))] : [row];
+      return { title: show.title, added: show.subscribedAt, heard: heardAt(parts), rows };
+    });
+    // Shows have no order of their own to begin with: the one listened to last first, then by name.
+    const seriesOrdered =
+      tapeSort === 'played'
+        ? [...showUnits].sort((a, b) => b.heard - a.heard || a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+        : ordered(showUnits);
+    const all = [
+      { key: 'series' as const, id: 'heading:series', title: t.library.tapes.seriesHeading, units: seriesOrdered },
+      { key: 'books' as const, id: 'heading:books', title: t.library.tapes.booksHeading, units: ordered(books) },
+      { key: 'tapes' as const, id: 'heading:singles', title: t.library.tapes.singlesHeading, units: ordered(loose) },
+    ];
+    const counts = { series: showUnits.length, books: books.length, tapes: loose.length };
+    // The part chosen, while it has anything in it; all of them otherwise, so a filter never leaves the view empty.
+    const shown: TapeFilter = tapeFilter !== 'all' && counts[tapeFilter] > 0 ? tapeFilter : 'all';
+    const parts = all.filter((part) => part.units.length > 0 && (shown === 'all' || part.key === shown));
+    /*
+      In the order they were last listened to, all of them together: one
+      list, the one listened to last at the top whatever it is, the parts
+      not told apart — a show, a book and a tape each say by their row what
+      they are, and the filter shows one kind alone. Those never listened to
+      after, each kind as it is shown.
+    */
+    if (tapeSort === 'played' && shown === 'all' && parts.length > 1) {
+      const together = parts.flatMap((part) => part.units);
+      const rows = together
+        .map((unit, at) => ({ unit, at }))
+        .sort((a, b) => b.unit.heard - a.unit.heard || a.at - b.at)
+        .flatMap(({ unit }) => unit.rows);
+      return { rows, counts, shown };
+    }
+    // Headings only where there is more than one part to tell apart.
+    const rows = parts.flatMap((part): TapeRow[] => [
+      ...(parts.length > 1 ? [{ kind: 'heading', id: part.id, title: part.title } as const] : []),
+      ...part.units.flatMap((unit) => unit.rows),
+    ]);
+    return { rows, counts, shown };
+  }, [expanded, followed, places, query, seenTapes, t, tapeFilter, tapeResults, tapeSort]);
+  const tapeRows = tapeView.rows;
+  const chooseTapeFilter = useCallback((next: TapeFilter) => {
+    haptic('choices', 'click');
+    setTapeFilter(next);
+    writeSetting(SETTINGS.libraryTapeFilter, next);
+  }, []);
+
+  /*
+    The parts of the tapes view to choose between, over the list: all of
+    them, or the followed shows, the books or the other tapes alone, each
+    saying how many it holds as the search leaves them. Only the parts with
+    something in them, and none of it where there is only one part, which
+    leaves nothing to choose.
+  */
+  const tapeFilters = (['series', 'books', 'tapes'] as const).filter((key) => tapeView.counts[key] > 0);
+  const tapeFilterBar =
+    tapeFilters.length > 1 ? (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tapeFiltersOut} contentContainerStyle={styles.tapeFilters}>
+        {(['all', ...tapeFilters] as const).map((key) => {
+          const on = tapeView.shown === key;
+          const count = key === 'all' ? tapeFilters.reduce((sum, one) => sum + tapeView.counts[one], 0) : tapeView.counts[key];
+          return (
+            <Pressable
+              key={key}
+              android_ripple={pressed}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={`${t.library.tapes.filter[key]}, ${count}`}
+              style={[styles.tapeFilter, on && styles.tapeFilterOn]}
+              onPress={() => chooseTapeFilter(key)}>
+              <Text style={on ? styles.tapeFilterLabelOn : styles.tapeFilterLabel}>{t.library.tapes.filter[key]}</Text>
+              <Text style={on ? styles.tapeFilterCountOn : styles.tapeFilterCount}>{count}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    ) : null;
+  const allTapesRef = useRef(allTapes);
+  allTapesRef.current = allTapes;
 
   // Read at press time, as the results are below, so the handlers every row is
   // given stay the same functions across a search or a change of order.
   const headingsRef = useRef(shownHeadings);
   headingsRef.current = shownHeadings;
+  // And the view, for the same reason: the lists of every view opened are standing, and given the same handlers.
+  const viewRef = useRef(view);
+  viewRef.current = view;
 
   /*
     A tap opens the heading, and while tracks are being chosen it chooses the
@@ -525,14 +782,19 @@ export default function LibraryScreen() {
       if (!selecting) {
         router.push({
           pathname: '/playlist',
-          params: view === 'albums' ? { album: id } : view === 'artists' ? { artist: id } : { folder: id },
+          params:
+            viewRef.current === 'albums'
+              ? { album: id }
+              : viewRef.current === 'artists'
+                ? { artist: id }
+                : { folder: id },
         });
         return;
       }
       const under = headingsRef.current.find((heading) => heading.id === id)?.tracks;
       if (under) setSelected((held) => withGroupToggled(held, under));
     },
-    [router, selecting, view]
+    [router, selecting]
   );
 
   const chooseUnder = useCallback((id: string) => {
@@ -561,13 +823,13 @@ export default function LibraryScreen() {
     (id: string) => {
       // The box may be mid-word; what was typed has done its narrowing.
       Keyboard.dismiss();
-      if (view !== 'albums' || selecting) return chooseUnder(id);
+      if (viewRef.current !== 'albums' || selecting) return chooseUnder(id);
       const heading = headingsRef.current.find((entry) => entry.id === id);
       if (heading) {
         setAlbumMenu({ key: id, name: heading.title, detail: heading.detail, racked: false });
       }
     },
-    [chooseUnder, selecting, view]
+    [chooseUnder, selecting]
   );
 
   const onSleeveHeld = useCallback(
@@ -595,7 +857,7 @@ export default function LibraryScreen() {
 
     // The whole record, and not the part of it a search has narrowed the
     // list to: what is looked up or given a cover is the record.
-    const record = findAlbum(albumsOf(library), key);
+    const record = findAlbum(albumsOf(music), key);
     if (!record) return;
     const say = (message: string) => {
       setNote(message);
@@ -620,32 +882,34 @@ export default function LibraryScreen() {
     row whose answer has not changed is not drawn again; one tick redraws the
     row ticked and any other row sharing a track with it.
   */
-  const renderHeading = useCallback(
-    ({ item }: { item: Heading }) => (
-      <BrowseRow
-        id={item.id}
-        title={item.title}
-        detail={item.detail}
-        tracks={item.tracks}
-        cover={item.cover}
-        shared={columns > 1}
-        mark={selecting ? markOf(item.tracks, selected) : undefined}
-        held={view === 'albums' ? t.library.albumMenu : undefined}
-        onPress={onHeadingPress}
-        onLongPress={onHeadingHeld}
-      />
-    ),
-    [columns, onHeadingHeld, onHeadingPress, selected, selecting, t, view]
-  );
+  // One for each view's list, so that changing view gives none of them a new one to draw its rows again with.
+  const renderHeadingOf = useMemo(() => {
+    const rowsOf = (records: boolean) =>
+      ({ item }: { item: Heading }) => (
+        <BrowseRow
+          id={item.id}
+          title={item.title}
+          detail={item.detail}
+          tracks={item.tracks}
+          cover={item.cover}
+          shared={columns > 1}
+          mark={selecting ? markOf(item.tracks, selected) : undefined}
+          held={records ? t.library.albumMenu : undefined}
+          onPress={onHeadingPress}
+          onLongPress={onHeadingHeld}
+        />
+      );
+    return { albums: rowsOf(true), artists: rowsOf(false), folders: rowsOf(false) };
+  }, [columns, onHeadingHeld, onHeadingPress, selected, selecting, t]);
 
   /** Each matched tag with the tracks carrying it, gathered once per search. */
   const tagShuffles = useMemo(
     () =>
       matchedTags.slice(0, 3).map((tag) => ({
         tag,
-        tracks: library.filter((track) => track.tags.includes(tag)),
+        tracks: music.filter((track) => track.tags.includes(tag)),
       })),
-    [library, matchedTags]
+    [music, matchedTags]
   );
 
   // Read at press time rather than closed over, so the row handlers below stay
@@ -767,11 +1031,42 @@ export default function LibraryScreen() {
     [selecting, tap, toggleSelected]
   );
 
+  // A tape plays with the rest of its record after it, the parts of a book or a show's episodes in their order.
+  const onTapePress = useCallback(
+    (track: EnrichedTrack) => {
+      if (selecting) {
+        toggleSelected(track);
+        return;
+      }
+      // The one playing is left where it is, and played on if it was paused: put on again, it would go back a little.
+      if (track.id === current?.id) {
+        if (!playWhenReady) void toggle();
+        return;
+      }
+      // An episode of a followed show plays with the rest of the show, in the order they came out.
+      const show = seriesOf(track);
+      if (show) {
+        const folder = folderKey(track.folder ?? '').toLocaleLowerCase();
+        const episodes = inSeriesOrder(allTapesRef.current.filter((one) => folderKey(one.folder ?? '').toLocaleLowerCase() === folder));
+        void start(episodes, Math.max(0, episodes.findIndex((one) => one.id === track.id)));
+        return;
+      }
+      const { tracks, index } = partsOf(track, allTapesRef.current);
+      void start(tracks, index);
+    },
+    [current?.id, playWhenReady, selecting, start, toggle, toggleSelected]
+  );
+
   /** Leaves the mode and forgets the run; one never outlives the other. */
   const stopSelecting = useCallback(() => {
     setSelecting(false);
     setSelected(new Set());
   }, []);
+  // Back ends a selection, as the button that began it would, rather than leaving the app with it.
+  const focused = useIsFocused();
+  useBack(selecting && focused, stopSelecting);
+  // And empties a search typed into the list: the keyboard is closed by the first press, the words by the next.
+  useBack(query !== '' && focused, () => setQuery(''));
 
   /*
     Asks for the library to be looked at again, and reads what this screen
@@ -841,11 +1136,17 @@ export default function LibraryScreen() {
 
   // A selection is left as it is. It is tracks whichever view it was made in,
   // every view can show it and end it, and choosing an artist and then going to
-  // the tracks to let two of them go is a thing worth being able to do.
-  const chooseView = useCallback((next: LibraryView) => {
-    setRemembered(next);
-    writeSetting(SETTINGS.libraryView, next);
-  }, []);
+  // the tracks to let two of them go is a thing worth being able to do. Not
+  // between the music and the tapes, though: what can be done to the one is
+  // nothing to do to the other, so going across ends it.
+  const chooseView = useCallback(
+    (next: LibraryView) => {
+      if (selecting && (next === 'tapes') !== (view === 'tapes')) stopSelecting();
+      setRemembered(next);
+      writeSetting(SETTINGS.libraryView, next);
+    },
+    [selecting, stopSelecting, view]
+  );
 
   /*
     The switch stepping aside for the search box.
@@ -982,6 +1283,95 @@ export default function LibraryScreen() {
     [addToQueue, c, columns, current?.id, onRowPress, openMenu, playNext, playNextTrack, queueTrack, selected, selecting, styles, t, toggleSelected]
   );
 
+  const expandSeries = useCallback((show: SeriesShow) => {
+    setExpanded((now) => {
+      const next = new Set(now);
+      if (next.has(show.feedUrl)) next.delete(show.feedUrl);
+      else next.add(show.feedUrl);
+      return next;
+    });
+  }, []);
+
+  // A show ticked while choosing is all its episodes ticked, or all let go once every one of them was.
+  const selectSeries = useCallback((episodes: readonly EnrichedTrack[]) => {
+    setSelected((current) => {
+      const next = new Set(current);
+      const all = episodes.every((episode) => next.has(episode.id));
+      for (const episode of episodes) {
+        if (all) next.delete(episode.id);
+        else next.add(episode.id);
+      }
+      return next;
+    });
+  }, []);
+
+  // A show's button: the episode it offers paused where it is playing, played or played on otherwise.
+  const playFromSeries = useCallback(
+    (track: EnrichedTrack) => {
+      if (track.id === current?.id && playWhenReady) void toggle();
+      else onTapePress(track);
+    },
+    [current?.id, onTapePress, playWhenReady, toggle]
+  );
+
+  // A followed show's own screen; a folder of tapes, its page, where it plays in its order.
+  const openSeries = useCallback(
+    (show: SeriesShow) =>
+      show.feedUrl.startsWith('folder:')
+        ? router.push({ pathname: '/playlist', params: { folder: show.feedUrl.slice('folder:'.length) } })
+        : router.push({ pathname: '/podcast', params: { feed: show.feedUrl } }),
+    [router]
+  );
+
+  // A tape's row: no pulling aside, since what is next in the queue is not how a book is listened to.
+  const renderTape = useCallback(
+    ({ item }: { item: TapeRow }) =>
+      item.kind === 'heading' ? (
+        <Text accessibilityRole="header" style={styles.tapesHeading}>{t.format.upper(item.title)}</Text>
+      ) : item.kind === 'series' ? (
+        <SeriesRow
+          show={item.show}
+          episodes={item.episodes}
+          places={places}
+          onPress={openSeries}
+          onPlay={playFromSeries}
+          playingId={playWhenReady ? (current?.id ?? null) : null}
+          expanded={expanded.has(item.show.feedUrl)}
+          onExpand={expandSeries}
+          book={item.book}
+          selectable={selecting}
+          selected={tickedOf(item.episodes, selected)}
+          onSelect={() => selectSeries(item.episodes)}
+        />
+      ) : item.kind === 'episode' ? (
+        // Set in under its show, as one of it.
+        <View style={styles.tapeEpisode}>
+          <TrackRow
+            track={item.track}
+            playing={item.track.id === current?.id}
+            onPress={onTapePress}
+            onLongPress={selecting ? toggleSelected : openMenu}
+            selectable={selecting}
+            selected={selected.has(item.track.id)}
+          />
+        </View>
+      ) : (
+        // A tape on its own, with a button that carries it on as a show's and a book's have.
+        <TapeItemRow
+          track={item.track}
+          place={places.get(item.track.id) ?? null}
+          playingId={playWhenReady ? (current?.id ?? null) : null}
+          current={item.track.id === current?.id}
+          onPress={onTapePress}
+          onPlay={playFromSeries}
+          onLongPress={selecting ? toggleSelected : openMenu}
+          selectable={selecting}
+          selected={selected.has(item.track.id)}
+        />
+      ),
+    [current?.id, expandSeries, expanded, onTapePress, openMenu, openSeries, playFromSeries, playWhenReady, places, selectSeries, selected, selecting, styles, t, toggleSelected]
+  );
+
   /*
     Where the list was left, so returning to the tab returns to the same place.
 
@@ -1016,8 +1406,8 @@ export default function LibraryScreen() {
         ? NOTHING_SHOWN
         : grouped
           ? tracksUnder(shownHeadings)
-          : new Set(results.map((track) => track.id)),
-    [grouped, results, selecting, shownHeadings]
+          : new Set((view === 'tapes' ? tapeResults : results).map((track) => track.id)),
+    [grouped, results, selecting, shownHeadings, tapeResults, view]
   );
   const allChosen = useMemo(() => holdsAll(selected, shown), [selected, shown]);
   const selectAll = useCallback(() => setSelected(new Set(shown)), [shown]);
@@ -1028,9 +1418,25 @@ export default function LibraryScreen() {
   );
 
   const queueSelected = useCallback(() => {
-    for (const track of chosen()) void addToQueue(track);
+    const tracks = chosen();
+    for (const track of view === 'tapes' ? inRecordOrder(tracks) : tracks) void addToQueue(track);
     stopSelecting();
-  }, [addToQueue, chosen, stopSelecting]);
+  }, [addToQueue, chosen, stopSelecting, view]);
+
+  // Tapes chosen are played one record after another, each in its order, and marked heard or not all at once.
+  const playSelected = useCallback(() => {
+    const tracks = inRecordOrder(chosen());
+    stopSelecting();
+    if (tracks.length > 0) void start(tracks, 0);
+  }, [chosen, start, stopSelecting]);
+  const markSelected = useCallback(
+    (finished: boolean) => {
+      const tracks = chosen();
+      stopSelecting();
+      void Promise.all(tracks.map((track) => markTape(track.id, finished, track.durationSec)));
+    },
+    [chosen, stopSelecting]
+  );
 
   /*
     Tagging, writing to files, erasing and everything else the Tags screen
@@ -1124,7 +1530,7 @@ export default function LibraryScreen() {
       // own the switch is as wide as the screen and is never moved aside.
       onLayout={stacked ? undefined : measureViews}
       options={offered.map((candidate) => ({ value: candidate, label: t.library.views[candidate] }))}
-      value={view}
+      value={chosenView}
       onChange={chooseView}
     />
   );
@@ -1221,6 +1627,7 @@ export default function LibraryScreen() {
             also what fits it into less width than the two laid side by side
             would need, and the width here belongs to the search box.
           */}
+          {/* Over the tapes too, which have orders of their own: see `tapes/sort.ts`. */}
           <Animated.View style={[styles.sortSlot, sortSlot]}>
             <Pressable
               android_ripple={pressed}
@@ -1243,7 +1650,11 @@ export default function LibraryScreen() {
             }
             accessibilityState={{ selected: selecting }}
             style={styles.selectButton}
-            onPress={() => (selecting ? stopSelecting() : setSelecting(true))}>
+            onPress={() => {
+              haptic('choices', selecting ? 'toggleOff' : 'toggleOn');
+              if (selecting) stopSelecting();
+              else setSelecting(true);
+            }}>
             <SelectIcon size={22} color={selecting ? c.accent : c.textMuted} />
           </Pressable>
         </View>
@@ -1255,17 +1666,71 @@ export default function LibraryScreen() {
             width with the switch and the box. */}
         {selecting ? (
           <View style={styles.bulkBar}>
-            <Text style={styles.bulkCount}>{t.library.screen.selected(selected.size)}</Text>
+            <Text style={styles.bulkCount}>{(view === 'tapes' ? t.library.tapes.selected : t.library.screen.selected)(selected.size)}</Text>
             <View style={styles.bulkActions}>
               <Pressable
                 accessibilityRole="button"
                 android_ripple={pressed}
                 style={styles.bulkAction}
-                onPress={allChosen ? () => setSelected(new Set()) : selectAll}>
+                onPress={() => {
+                  haptic('choices', 'click');
+                  if (allChosen) setSelected(new Set());
+                  else selectAll();
+                }}>
                 <Text style={styles.bulkLabel}>
                   {allChosen ? t.common.clear : t.common.selectAll}
                 </Text>
               </Pressable>
+              {view === 'tapes' ? (
+                /*
+                  A tape's, not a song's: played, queued, marked heard or
+                  not, or deleted. Tapes are in no list, carry no tags and
+                  are not looked up, so none of that is offered.
+                */
+                <>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={pressed}
+                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    disabled={selected.size === 0}
+                    onPress={playSelected}>
+                    <Text style={styles.bulkLabel}>{t.common.play}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={pressed}
+                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    disabled={selected.size === 0}
+                    onPress={queueSelected}>
+                    <Text style={styles.bulkLabel}>{t.common.addToQueue}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={pressed}
+                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    disabled={selected.size === 0}
+                    onPress={() => markSelected(true)}>
+                    <Text style={styles.bulkLabel}>{t.library.tapes.markPlayed}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={pressed}
+                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    disabled={selected.size === 0}
+                    onPress={() => markSelected(false)}>
+                    <Text style={styles.bulkLabel}>{t.library.tapes.markUnplayed}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    android_ripple={pressed}
+                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    disabled={selected.size === 0}
+                    onPress={() => actions.run('delete')}>
+                    <Text style={styles.bulkDestructive}>{t.common.delete}</Text>
+                  </Pressable>
+                </>
+              ) : (
+              <>
               <Pressable
                 accessibilityRole="button"
                 android_ripple={pressed}
@@ -1321,13 +1786,14 @@ export default function LibraryScreen() {
                 onPress={actions.open}>
                 <Text style={styles.bulkLabel}>{t.details.selection.more}</Text>
               </Pressable>
+              </>
+              )}
             </View>
           </View>
         ) : null}
-        {/* The records have no line of their own to spend the height on, but
-            they are given one for as long as there is something to say: a
-            selection made among them can be added to a list like any other. */}
-        {albumView && (note == null || racked) ? null : (
+        {/* Every view says how much it holds, the records too; only the rack,
+            sideways, has no room for the line unless there is a note to say. */}
+        {racked && note == null ? null : (
         <View style={styles.meta}>
           <Text style={styles.metaText} numberOfLines={note != null ? 3 : 1}>
             {/* Whatever the list picker last did is said here, since adding
@@ -1335,9 +1801,13 @@ export default function LibraryScreen() {
             {note ??
               (view === 'artists'
                 ? t.common.artists(shownHeadings.length)
-                : view === 'folders'
-                  ? `${libraryRoot()} · ${t.library.screen.folders(shownHeadings.length)}`
-                  : `${libraryRoot()} · ${t.common.tracks(library.length)}`)}
+                : view === 'albums'
+                  ? t.common.albums(shownHeadings.length)
+                  : view === 'folders'
+                    ? `${libraryRoot()} · ${t.library.screen.folders(shownHeadings.length)}`
+                    : view === 'tapes'
+                      ? t.library.tapes.count(tapeResults.length)
+                      : `${libraryRoot()} · ${t.common.tracks(music.length)}`)}
           </Text>
           {/*
             The whole library, in a new order, from the line that says how
@@ -1345,7 +1815,7 @@ export default function LibraryScreen() {
             on the line or tracks are being ticked: then the line is saying
             something else, and this is not what a tap there would mean.
           */}
-          {view === 'tracks' && note == null && !selecting && library.length > 1 ? (
+          {view === 'tracks' && note == null && !selecting && music.length > 1 ? (
             <Pressable
               android_ripple={pressed}
               accessibilityRole="button"
@@ -1355,12 +1825,56 @@ export default function LibraryScreen() {
               <ShuffleIcon size={15} color={c.accent} />
               <Text style={styles.shuffleAllLabel}>{t.library.screen.shuffleAll}</Text>
             </Pressable>
+          ) : view === 'tapes' && note == null && !selecting ? (
+            <View style={styles.tapeActions}>
+              {/* Every place marked in a tape, once there is one. */}
+              {marksMade ? (
+                <Pressable
+                  android_ripple={pressed}
+                  accessibilityRole="button"
+                  accessibilityLabel={t.player.marks.screen}
+                  hitSlop={8}
+                  style={styles.shuffleAll}
+                  onPress={() => router.push('/marks')}>
+                  <MarksIcon size={16} color={c.accent} />
+                </Pressable>
+              ) : null}
+              {/* The tape settings, the same page as the Settings tab's. */}
+              <Pressable
+                android_ripple={pressed}
+                accessibilityRole="button"
+                accessibilityLabel={t.library.tapes.settings}
+                hitSlop={8}
+                style={styles.shuffleAll}
+                onPress={() => router.push('/settings-tapes')}>
+                <SettingsIcon size={16} color={c.accent} />
+              </Pressable>
+              {/* More tapes, fetched: a screen of their own, opened from here and nowhere else. */}
+              {tapesFetchable ? (
+                <Pressable
+                  android_ripple={pressed}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  style={styles.shuffleAll}
+                  onPress={() => router.push('/tapes-add')}>
+                  <PlusIcon size={15} color={c.accent} />
+                  <Text style={styles.shuffleAllLabel}>{t.library.tapes.add}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : note == null && !selecting ? (
+            // Its room kept in the other views, unseen, so the line is as tall in all of them and the list under it starts in the same place.
+            <View style={[styles.shuffleAll, styles.unseen]} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+              <ShuffleIcon size={15} color={c.accent} />
+              <Text style={styles.shuffleAllLabel}>{t.library.screen.shuffleAll}</Text>
+            </View>
           ) : null}
         </View>
         )}
         {/* The offer to look the files up, a lookup under way, or the one tip:
             for a newcomer, and out of the way while tracks are being chosen. */}
-        {selecting ? null : <LibraryWelcome tracks={library.length} confirmed={screen.confirmed} />}
+        {/* The music's offer and tip, about songs: not over the tapes, which are not looked up and are not songs. */}
+        {selecting || view === 'tapes' ? null : <LibraryWelcome tracks={music.length} confirmed={screen.confirmed} />}
         {/* Downloads that may be the wrong song: beside the copies line, and out of the way in the same way. */}
         {selecting ? null : <WrongDownloadsLine confirmed={screen.confirmed} />}
       </View>
@@ -1369,152 +1883,199 @@ export default function LibraryScreen() {
       <BlurArea style={styles.listArea}>
       {racked ? (
         <CoverFlow ref={shelf} albums={albums} onOpen={openAlbum} onHold={onSleeveHeld} />
-      ) : grouped ? (
-        <FlatList
-                  removeClippedSubviews={CLIP_SUBVIEWS}
-          data={shownHeadings}
-          // Remounted for the view as well as for the columns: the three share
-          // this list, and one scrolled half way down is no place to start
-          // reading the other from.
-          key={`${view}-${columns}`}
-          numColumns={columns}
-          columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
-          keyExtractor={(heading) => heading.id}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
-          // Exact with one column and left to be measured with two, for the
-          // reason given at length on the track list below.
-          getItemLayout={
-            columns > 1
-              ? undefined
-              : (_data, index) => ({
-                  length: browseRowHeight,
-                  offset: topRoom + browseRowHeight * index,
-                  index,
-                })
-          }
-          initialNumToRender={12 * columns}
-          windowSize={7}
-          renderItem={renderHeading}
-          ListFooterComponent={searchElsewhere}
-          ListEmptyComponent={
-            albumView ? (
-              <Text style={styles.muted}>{t.library.noAlbums}</Text>
-            ) : (
-              <Text style={styles.empty}>
-                {query.trim()
-                  ? t.library.nothingMatches(query)
-                  : t.library.screen.noFolders}
-              </Text>
-            )
-          }
-        />
       ) : (
-      <View
-        style={styles.listWrapper}
-        ref={drag.wrapperRef}
-        // Page coordinates are what a gesture reports, so where the list sits
-        // in the window is needed to turn one into a row and a column.
-        onLayout={drag.onWrapperLayout}
-        {...drag.panHandlers}>
-      <FlatList
-              removeClippedSubviews={CLIP_SUBVIEWS}
-        data={results}
-        onLayout={(event) => drag.onWidth(event.nativeEvent.layout.width)}
-        /*
-          Remounts the list when the count changes. React Native refuses to
-          alter numColumns on an existing list, and turning the phone is exactly
-          when it changes.
-        */
-        key={columns}
-        numColumns={columns}
-        columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
-        keyExtractor={(track) => track.id}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
-        onScroll={(event) => {
-          restoreTo.current = event.nativeEvent.contentOffset.y;
-          drag.onScroll(event.nativeEvent.contentOffset.y);
-        }}
-        scrollEventThrottle={16}
-        // Read once, when the list is built. Covers the case the guard above
-        // cannot: the list being torn down while the screen around it lives on.
-        contentOffset={{ x: 0, y: restoreTo.current }}
-        /*
-          Measured rather than calculated once there is more than one column.
+        <>
+          {/*
+            Every view opened so far, standing, the one chosen on top and the
+            others out of sight under it: going from one to another is then
+            only a matter of which is seen, where building the list of a view
+            again each time was a hitch felt on every change, the larger the
+            library the more. Each keeps its place, too.
+          */}
+          {GROUPED_VIEWS.filter((kind) => visited.has(kind)).map((kind) => (
+            <View
+              key={kind}
+              // Kept a real view: its style, touch and reading change with the view, and a view flattened away while
+              // they do is the "addViewAt" crash Fabric has had here before.
+              collapsable={false}
+              style={kind === view ? styles.paneShown : styles.paneHidden}
+              pointerEvents={kind === view ? 'auto' : 'none'}
+              importantForAccessibility={kind === view ? 'auto' : 'no-hide-descendants'}>
+              <FlatList
+                        removeClippedSubviews={CLIP_SUBVIEWS}
+                data={headingsOf[kind]}
+                // Remounted when the columns change, which React Native will not alter on a list that is up.
+                key={columns}
+                numColumns={columns}
+                columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
+                keyExtractor={(heading) => heading.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
+                // Exact with one column and left to be measured with two, for the
+                // reason given at length on the track list below.
+                getItemLayout={
+                  columns > 1
+                    ? undefined
+                    : (_data, index) => ({
+                        length: browseRowHeight,
+                        offset: topRoom + browseRowHeight * index,
+                        index,
+                      })
+                }
+                initialNumToRender={12 * columns}
+                windowSize={7}
+                renderItem={renderHeadingOf[kind]}
+                ListFooterComponent={searchElsewhere}
+                ListEmptyComponent={
+                  kind === 'albums' ? (
+                    <Text style={styles.muted}>{t.library.noAlbums}</Text>
+                  ) : (
+                    <Text style={styles.empty}>
+                      {query.trim()
+                        ? t.library.nothingMatches(query)
+                        : t.library.screen.noFolders}
+                    </Text>
+                  )
+                }
+              />
+            </View>
+          ))}
+          {visited.has('tracks') ? (
+            <View
+              collapsable={false}
+              style={view !== 'tracks' ? styles.paneHidden : styles.paneShown}
+              pointerEvents={view !== 'tracks' ? 'none' : 'auto'}
+              importantForAccessibility={view !== 'tracks' ? 'no-hide-descendants' : 'auto'}>
+              <View
+                style={styles.listWrapper}
+                ref={drag.wrapperRef}
+                // Page coordinates are what a gesture reports, so where the list sits
+                // in the window is needed to turn one into a row and a column.
+                onLayout={drag.onWrapperLayout}
+                {...drag.panHandlers}>
+              <FlatList
+                      removeClippedSubviews={CLIP_SUBVIEWS}
+                data={results}
+                onLayout={(event) => drag.onWidth(event.nativeEvent.layout.width)}
+                /*
+                  Remounts the list when the count changes. React Native refuses to
+                  alter numColumns on an existing list, and turning the phone is exactly
+                  when it changes.
+                */
+                key={columns}
+                numColumns={columns}
+                columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
+                keyExtractor={(track) => track.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
+                onScroll={(event) => {
+                  restoreTo.current = event.nativeEvent.contentOffset.y;
+                  drag.onScroll(event.nativeEvent.contentOffset.y);
+                }}
+                scrollEventThrottle={16}
+                // Read once, when the list is built. Covers the case the guard above
+                // cannot: the list being torn down while the screen around it lives on.
+                contentOffset={{ x: 0, y: restoreTo.current }}
+                /*
+                  Measured rather than calculated once there is more than one column.
 
-          The header counts towards an offset, and with a single column the
-          arithmetic is exact: a row per item, each one lower than the last. Two
-          across breaks that. A pair shares one offset, so the offsets stop
-          increasing with the index — and the list finds the visible range by
-          searching those offsets, which only works while they rise. It settled
-          on the wrong window part way down and unmounted rows that were on
-          screen, which is why the middle of the list went blank while the two
-          ends, where the window is pinned, stayed put.
+                  The header counts towards an offset, and with a single column the
+                  arithmetic is exact: a row per item, each one lower than the last. Two
+                  across breaks that. A pair shares one offset, so the offsets stop
+                  increasing with the index — and the list finds the visible range by
+                  searching those offsets, which only works while they rise. It settled
+                  on the wrong window part way down and unmounted rows that were on
+                  screen, which is why the middle of the list went blank while the two
+                  ends, where the window is pinned, stayed put.
 
-          Letting it measure costs the exactness of scrolling to an index.
-          Nothing here does that: the place is restored from a pixel offset,
-          which is independent of this.
-        */
-        getItemLayout={
-          columns > 1
-            ? undefined
-            : (_data, index) => ({
-                length: trackRowHeight,
-                offset: topRoom + headerHeight + trackRowHeight * index,
-                index,
-              })
-        }
-        // Covers are read out of the files, so keep that to what is on screen.
-        initialNumToRender={12 * columns}
-        windowSize={7}
-        // Left to the list to measure, clipping guesses at what is off screen
-        // from the same frames, and guesses wrong in the same way.
-        ListHeaderComponent={
-          <View
-            style={tagShuffles.length > 0 || matchedAlbums.length > 0 ? styles.tagActions : null}
-            onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
-            {matchedAlbums.map((entry) => (
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                key={`album:${entry.key}`}
-                style={styles.tagAction}
-                onPress={() =>
-                  router.push({ pathname: '/playlist', params: { album: entry.key } })
-                }>
-                <View style={styles.albumActionIcon}>
-                  <PlaylistCover tracks={entry.tracks} chosen={null} sleeve={entry.tracks} size={22} />
-                </View>
-                <Text style={styles.tagActionLabel} numberOfLines={1}>
-                  {entry.name}
-                </Text>
-                <Text style={styles.tagActionCount}>{t.format.number(entry.tracks.length)}</Text>
-              </Pressable>
-            ))}
-            {tagShuffles.map(({ tag, tracks: tagged }) => (
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                key={tag}
-                style={styles.tagAction}
-                onPress={() => void start(spreadShuffle(tagged, artistKey), 0)}>
-                <View style={styles.tagActionIcon}>
-                  <PlayIcon size={11} color={c.onPrimary} />
-                </View>
-                <Text style={styles.tagActionLabel} numberOfLines={1}>
-                  {t.library.screen.shuffleTag(tag)}
-                </Text>
-                <Text style={styles.tagActionCount}>{t.format.number(tagged.length)}</Text>
-              </Pressable>
-            ))}
-          </View>
-        }
-        ListEmptyComponent={<Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>}
-        ListFooterComponent={searchElsewhere}
-        renderItem={renderItem}
-      />
-      </View>
+                  Letting it measure costs the exactness of scrolling to an index.
+                  Nothing here does that: the place is restored from a pixel offset,
+                  which is independent of this.
+                */
+                getItemLayout={
+                  columns > 1
+                    ? undefined
+                    : (_data, index) => ({
+                        length: trackRowHeight,
+                        offset: topRoom + headerHeight + trackRowHeight * index,
+                        index,
+                      })
+                }
+                // Covers are read out of the files, so keep that to what is on screen.
+                initialNumToRender={12 * columns}
+                windowSize={7}
+                // Left to the list to measure, clipping guesses at what is off screen
+                // from the same frames, and guesses wrong in the same way.
+                ListHeaderComponent={
+                  <View
+                    style={tagShuffles.length > 0 || matchedAlbums.length > 0 ? styles.tagActions : null}
+                    onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+                    {matchedAlbums.map((entry) => (
+                      <Pressable
+                        accessibilityRole="button"
+                        android_ripple={pressed}
+                        key={`album:${entry.key}`}
+                        style={styles.tagAction}
+                        onPress={() =>
+                          router.push({ pathname: '/playlist', params: { album: entry.key } })
+                        }>
+                        <View style={styles.albumActionIcon}>
+                          <PlaylistCover tracks={entry.tracks} chosen={null} sleeve={entry.tracks} size={22} />
+                        </View>
+                        <Text style={styles.tagActionLabel} numberOfLines={1}>
+                          {entry.name}
+                        </Text>
+                        <Text style={styles.tagActionCount}>{t.format.number(entry.tracks.length)}</Text>
+                      </Pressable>
+                    ))}
+                    {tagShuffles.map(({ tag, tracks: tagged }) => (
+                      <Pressable
+                        accessibilityRole="button"
+                        android_ripple={pressed}
+                        key={tag}
+                        style={styles.tagAction}
+                        onPress={() => void start(spreadShuffle(tagged, artistKey), 0)}>
+                        <View style={styles.tagActionIcon}>
+                          <PlayIcon size={11} color={c.onPrimary} />
+                        </View>
+                        <Text style={styles.tagActionLabel} numberOfLines={1}>
+                          {t.library.screen.shuffleTag(tag)}
+                        </Text>
+                        <Text style={styles.tagActionCount}>{t.format.number(tagged.length)}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                }
+                ListEmptyComponent={<Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>}
+                ListFooterComponent={searchElsewhere}
+                renderItem={renderItem}
+              />
+              </View>
+            </View>
+          ) : null}
+          {seenTapes ? (
+            <View
+              collapsable={false}
+              style={view === 'tapes' ? styles.paneShown : styles.paneHidden}
+              pointerEvents={view === 'tapes' ? 'auto' : 'none'}
+              importantForAccessibility={view === 'tapes' ? 'auto' : 'no-hide-descendants'}>
+              <FlatList
+                removeClippedSubviews={CLIP_SUBVIEWS}
+                data={tapeRows}
+                keyExtractor={(row) => row.id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
+                initialNumToRender={12}
+                windowSize={7}
+                renderItem={renderTape}
+                ListHeaderComponent={tapeFilterBar}
+                ListEmptyComponent={
+                  <Text style={styles.empty}>{query.trim() ? t.library.nothingMatches(query) : t.library.tapes.empty(`${libraryRoot()}/Tapes`)}</Text>
+                }
+              />
+            </View>
+          ) : null}
+        </>
       )}
       </BlurArea>
         </View>
@@ -1590,6 +2151,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   headerClear: { backgroundColor: 'transparent' },
   /** Where the lists are: the room under the top, or all of it where the top is laid over them. */
   listArea: { flex: 1 },
+  paneShown: { flex: 1 },
+  // Out of sight and out of reach, but standing: see where the views' lists are drawn.
+  paneHidden: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   /*
     The slot clips; the switch inside is pinned to the width it measured.
@@ -1641,11 +2205,33 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   metaText: { color: c.textFaint, fontSize: 12, flexShrink: 1 },
   shuffleAll: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   shuffleAllLabel: { color: c.accent, fontSize: 12.5 },
+  tapeActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tapeEpisode: { paddingLeft: 24 },
+  tapeFiltersOut: { marginBottom: 4 },
+  tapeFilters: { gap: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  tapeFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: c.surfaceRaised,
+    borderRadius: 999,
+    paddingVertical: 7,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+    ...outlinedClip(c),
+  },
+  tapeFilterOn: { backgroundColor: c.primary, ...outlinedClip(c, c.primary) },
+  tapeFilterLabel: { color: c.textSecondary, fontSize: 13 },
+  tapeFilterLabelOn: { color: c.onPrimary, fontSize: 13, fontWeight: '600' },
+  tapeFilterCount: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
+  tapeFilterCountOn: { color: c.onPrimary, fontSize: 12, opacity: 0.75, fontVariant: ['tabular-nums'] },
+  unseen: { opacity: 0 },
   links: { flexDirection: 'row', gap: 16 },
   link: { color: c.accent, fontSize: 13 },
 
   list: { paddingBottom: 8 },
   tagActions: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  tapesHeading: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 6 },
   tagAction: {
     flexDirection: 'row',
     alignItems: 'center',

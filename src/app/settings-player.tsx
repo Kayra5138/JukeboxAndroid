@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react';
 import { AutoplaySetting } from '../components/AutoplaySetting';
 import { AutoplaySizes } from '../components/AutoplaySizes';
 import { TapSetting } from '../components/TapSetting';
-import { HeartSetting } from '../components/HeartSetting';
+import { FavoritesSetting } from '../components/HeartSetting';
 import { ListButtonSetting } from '../components/ListButtonSetting';
 import { LyricsFolderSetting } from '../components/LyricsFolderSetting';
 import { useFocusEffect } from 'expo-router';
@@ -16,8 +16,9 @@ import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useLanguage, useT } from '../lib/i18n/index';
 import { namedTargets } from '../lib/lyrics/target';
 import { chooseLyricsTarget, useLyricsTarget, useUnsupportedTargets } from '../lib/lyrics/useTarget';
-import { JUMP_STEPS, stepFrom } from '../lib/player/jump';
+import { JUMP_RANGE, stepFrom } from '../lib/player/jump';
 import { usePressed } from '../lib/theme/index';
+import { NumberStepper } from '../components/NumberStepper';
 
 /**
  * The things about the player that are settled once and not from the player
@@ -65,21 +66,13 @@ export default function PlayerSettingsScreen() {
         />
       }>
       <View style={styles.card}>
-        {/*
-          Offered as the steps themselves rather than as a field to type a
-          number into. There are only a few that anybody wants, the one in
-          use has to be readable at a glance because it is also what is
-          drawn on the buttons, and a keyboard over a settings list to
-          change a 10 to a 15 is more ceremony than the choice deserves.
-        */}
+        {/* Any number of seconds up to a minute, one more or one less or typed: see `NumberStepper`. */}
         <View style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.settings.jump.title}</Text>
-            <Segmented
-              role="button"
-              variant="chips"
-              size="compact"
-              options={JUMP_STEPS.map((seconds) => ({ value: seconds, label: String(seconds) }))}
+            <NumberStepper
+              name={t.settings.jump.title}
+              range={JUMP_RANGE}
               value={jump}
               onChange={(seconds) => {
                 setJump(seconds);
@@ -126,8 +119,8 @@ export default function PlayerSettingsScreen() {
         <View style={styles.rule} />
         <ListButtonSetting />
         <View style={styles.rule} />
-        {/* The last row of the player's page, said nowhere else: see `Heart.tsx`. */}
-        <HeartSetting />
+        {/* Favorites and the heart that fills it, one switch: see `playlists/favorites.ts`. */}
+        <FavoritesSetting />
       </View>
     </SettingsPage>
   );

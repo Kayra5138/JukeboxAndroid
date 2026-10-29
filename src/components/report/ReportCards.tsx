@@ -1,4 +1,4 @@
-import { Image } from 'expo-image';
+import { Image } from '../Picture';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 

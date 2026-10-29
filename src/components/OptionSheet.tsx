@@ -5,6 +5,7 @@ import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * Asks for one of a list, where the list is too long to lay out in a row.
@@ -72,6 +73,7 @@ export function OptionSheet<Value extends string>({
                   accessibilityState={{ checked: on }}
                   style={styles.option}
                   onPress={() => {
+                    if (!on) haptic('choices', 'click');
                     onChoose(option.value);
                     onClose();
                   }}>

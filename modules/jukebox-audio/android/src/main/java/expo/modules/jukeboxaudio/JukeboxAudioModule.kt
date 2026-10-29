@@ -48,6 +48,9 @@ private val ALWAYS_GRANTED = mapOf(
 )
 
 class JukeboxAudioModule : Module() {
+  /** The tapes whose file could not be read for its chapters since the app started: not tried again until it starts again. */
+  private val unreadChapters = java.util.Collections.synchronizedSet(HashSet<String>())
+
   private val context
     get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
 
@@ -57,6 +60,8 @@ class JukeboxAudioModule : Module() {
   private var imagePicker: AppContextActivityResultLauncher<ImagePicker.Input, String?>? = null
   private var backupSave: AppContextActivityResultLauncher<BackupSave.Input, String?>? = null
   private var backupOpen: AppContextActivityResultLauncher<BackupOpen.Input, String?>? = null
+  private var textSave: AppContextActivityResultLauncher<TextSave.Input, String?>? = null
+  private var audioOpen: AppContextActivityResultLauncher<AudioFilesOpen.Input, List<String>>? = null
 
   /**
    * Scanning a library, extracting a cover and downloading three hundred
@@ -72,7 +77,7 @@ class JukeboxAudioModule : Module() {
     Constant("buildTimestamp") { BuildConfig.BUILD_TIMESTAMP }
 
     Events("onTrackChange", "onPlaybackStateChange", "onQueueEnded", "onPlaybackError", "onQueueReplaced",
-      "onSleepTimerChange", "onRepeatModeChange", "onOpenPlayer")
+      "onSleepTimerChange", "onRepeatModeChange", "onOpenPlayer", "onPlaybackParamsChange")
 
     /*
       The widget's cover, pressed while the app was already running. The app
@@ -125,6 +130,8 @@ class JukeboxAudioModule : Module() {
       imagePicker = registerForActivityResult(ImagePicker())
       backupSave = registerForActivityResult(BackupSave())
       backupOpen = registerForActivityResult(BackupOpen())
+      textSave = registerForActivityResult(TextSave())
+      audioOpen = registerForActivityResult(AudioFilesOpen())
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         remover = registerForActivityResult(DeleteRequest())
       }
@@ -137,6 +144,8 @@ class JukeboxAudioModule : Module() {
       imagePicker = null
       backupSave = null
       backupOpen = null
+      textSave = null
+      audioOpen = null
       io.cancel()
     }
 
@@ -465,6 +474,15 @@ class JukeboxAudioModule : Module() {
     Function("thump") { buzz(context, android.os.VibrationEffect.EFFECT_HEAVY_CLICK) }
 
     /**
+     * One of the app's touch feels, at [strength] from nought to one: see
+     * [Feel] for the kinds, and `src/lib/ui/haptics.ts` for which press gets
+     * which. Nothing where the phone's own touch feedback is switched off.
+     */
+    Function("feel") { kind: String, strength: Double ->
+      feel(context, kind, strength.toFloat().coerceIn(0.05f, 1f))
+    }
+
+    /**
      * Puts [text] on the clipboard, for the report screen's Copy.
      *
      * Here rather than a library for it: this is the one thing the app ever
@@ -528,6 +546,193 @@ class JukeboxAudioModule : Module() {
 
     AsyncFunction("skipToIndexAsync") { index: Int ->
       player?.skipToIndex(index)
+    }
+
+    /** Where each tape was left, by the track's id: see [TapeKeeper]. */
+    AsyncFunction("getTapePlacesAsync") {
+      val context = appContext.reactContext ?: return@AsyncFunction emptyMap<String, Any?>()
+      TapeStore.all(context).mapValues { (_, place) ->
+        mapOf(
+          "positionSec" to place.positionMs / 1000.0,
+          "durationSec" to place.durationMs / 1000.0,
+          "at" to place.at.toDouble(),
+          "finished" to place.finished
+        )
+      }
+    }
+
+    /** A tape's chapters, where it was fetched with some: see [expo.modules.jukeboxaudio.downloads.TapeChapters]. */
+    AsyncFunction("getTapeChaptersAsync") { trackId: String ->
+      val context = appContext.reactContext ?: return@AsyncFunction emptyList<Map<String, Any>>()
+      expo.modules.jukeboxaudio.downloads.TapeChapters.get(context, trackId)
+    }
+
+    /**
+     * The chapters of a tape fetched from YouTube before chapters were kept,
+     * looked up once by its video and kept, found or not. Answers with them.
+     */
+    AsyncFunction("lookUpTapeChaptersAsync") Coroutine { trackId: String, videoId: String ->
+      val context = appContext.reactContext ?: return@Coroutine emptyList<Map<String, Any>>()
+      withContext(Dispatchers.IO) {
+        if (!expo.modules.jukeboxaudio.downloads.TapeChapters.known(context, trackId)) {
+          val found = runCatching { expo.modules.jukeboxaudio.downloads.YouTubeEngine.chapters(context, videoId) }.getOrNull()
+          // Not found for want of a connection is asked again another time; found to be none is not.
+          if (found != null) expo.modules.jukeboxaudio.downloads.TapeChapters.put(context, trackId, found)
+        }
+        expo.modules.jukeboxaudio.downloads.TapeChapters.get(context, trackId)
+      }
+    }
+
+    /**
+     * The chapters written into a tape's file, for one that has none kept
+     * (a podcast's episode, fetched before chapters were kept or with none
+     * in its feed): read once and kept, found or not. Answers with them.
+     */
+    AsyncFunction("readEmbeddedChaptersAsync") Coroutine { trackId: String, uri: String ->
+      val context = appContext.reactContext ?: return@Coroutine emptyList<Map<String, Any>>()
+      withContext(Dispatchers.IO) {
+        // Not read — a file slow to open, one being written — is asked again another time, though not twice while the app
+        // runs: each try may take ten seconds. Read and found to have none is not asked again at all.
+        if (!expo.modules.jukeboxaudio.downloads.TapeChapters.known(context, trackId) && unreadChapters.add(trackId)) {
+          runCatching { expo.modules.jukeboxaudio.downloads.TapeChapters.embedded(context, android.net.Uri.parse(uri)) }
+            .onSuccess {
+              expo.modules.jukeboxaudio.downloads.TapeChapters.put(context, trackId, it ?: org.json.JSONArray())
+              unreadChapters.remove(trackId)
+            }
+        }
+        expo.modules.jukeboxaudio.downloads.TapeChapters.get(context, trackId)
+      }
+    }
+
+    /** Whether a tape has a transcript kept, to follow without asking anything. */
+    Function("tapeTranscriptKept") { trackId: String ->
+      val context = appContext.reactContext ?: return@Function false
+      (expo.modules.jukeboxaudio.downloads.TapeTranscripts.get(context, trackId)?.length() ?: 0) > 0
+    }
+
+    /**
+     * What is said in a tape fetched from YouTube, as its captions have it:
+     * looked up once by its video and kept, found or not. Answers with its
+     * lines, `[{startSec, text}]`, empty for a video with none.
+     */
+    AsyncFunction("lookUpTapeTranscriptAsync") Coroutine { trackId: String, videoId: String ->
+      val context = appContext.reactContext ?: return@Coroutine emptyList<Map<String, Any>>()
+      withContext(Dispatchers.IO) {
+        // A podcast's, kept as it was fetched, has no video to ask: there is nothing more to find for one without.
+        val lines = expo.modules.jukeboxaudio.downloads.TapeTranscripts.get(context, trackId)
+          ?: if (videoId.isBlank()) org.json.JSONArray()
+          else expo.modules.jukeboxaudio.downloads.YouTubeEngine.transcript(context, videoId).also {
+            expo.modules.jukeboxaudio.downloads.TapeTranscripts.put(context, trackId, it)
+          }
+        (0 until lines.length()).mapNotNull { at ->
+          val line = lines.optJSONObject(at) ?: return@mapNotNull null
+          mapOf("startSec" to line.optLong("s") / 1000.0, "text" to line.optString("t"))
+        }
+      }
+    }
+
+    /** Where tapes were left, from a backup, by this phone's ids: see [TapeStore.bring]. */
+    AsyncFunction("bringTapePlacesAsync") { places: Map<String, Map<String, Any?>>, replace: Boolean ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      val read = places.mapNotNull { (id, place) ->
+        val position = (place["positionSec"] as? Number)?.toDouble() ?: return@mapNotNull null
+        val duration = (place["durationSec"] as? Number)?.toDouble() ?: return@mapNotNull null
+        val at = (place["at"] as? Number)?.toLong() ?: return@mapNotNull null
+        id to TapePlace((position * 1000).toLong(), (duration * 1000).toLong(), at, place["finished"] == true)
+      }.toMap()
+      TapeStore.bring(context, read, replace)
+      null
+    }
+
+    /** Each tape's place taken to its file's new id, where the new one has none of its own. */
+    AsyncFunction("moveTapePlacesAsync") { moves: Map<String, String> ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      for ((from, to) in moves) {
+        expo.modules.jukeboxaudio.downloads.TapeChapters.move(context, from, to)
+        expo.modules.jukeboxaudio.downloads.TapeTranscripts.move(context, from, to)
+        val place = TapeStore.get(context, from) ?: continue
+        if (TapeStore.get(context, to) == null) TapeStore.put(context, to, place)
+        TapeStore.put(context, from, null)
+      }
+      null
+    }
+
+    /** A tape marked as heard to the end, or as not begun: its place set to either, by hand. */
+    AsyncFunction("markTapeAsync") { trackId: String, finished: Boolean, durationSec: Double ->
+      val context = appContext.reactContext ?: return@AsyncFunction null
+      val duration = (durationSec * 1000).toLong().coerceAtLeast(0)
+      TapeStore.put(context, trackId, if (finished) TapePlace(duration, duration, System.currentTimeMillis(), true) else null)
+      // The one playing, too: its keeper would otherwise write where it is back over the mark.
+      TapeKeeper.live?.marked(trackId, finished)
+      null
+    }
+
+    /** Whether a tape goes back a little on being played again after a while: see [Tapes.smartRewind]. */
+    Function("getTapeSmartRewind") {
+      val context = appContext.reactContext ?: return@Function true
+      Tapes.smartRewind(context)
+    }
+
+    /** How far a press of previous or next moves a tape from outside the app: see [Tapes.jump]. */
+    Function("setTapeJumps") { backSec: Int, forwardSec: Int ->
+      val context = appContext.reactContext ?: return@Function null
+      Tapes.setJumps(context, backSec, forwardSec)
+      null
+    }
+
+    /** Each tape's speed, by its key, and the music's if the app had put it aside: see [Tapes.applySpeed]. */
+    Function("setTapeSpeeds") { json: String, musicSpeed: Double? ->
+      val context = appContext.reactContext ?: return@Function null
+      Tapes.setSpeeds(context, json)
+      if (musicSpeed != null && musicSpeed > 0) Tapes.keepMusicSpeed(context, musicSpeed.toFloat())
+      null
+    }
+
+    /** One of a tape's switches — `skipSilence`, `voiceClarity`, `skipSponsors` — and what it is set to. */
+    Function("getTapeFlag") { name: String, otherwise: Boolean ->
+      val context = appContext.reactContext ?: return@Function otherwise
+      Tapes.flag(context, name, otherwise)
+    }
+
+    Function("setTapeFlag") { name: String, on: Boolean ->
+      val context = appContext.reactContext ?: return@Function null
+      Tapes.setFlag(context, name, on)
+      TapeKeeper.live?.relisten()
+      null
+    }
+
+    /** A tape's parts to pass over, `[[fromMs, toMs], …]`: see [Tapes.setSkips]. */
+    Function("setTapeSkips") { trackId: String, json: String ->
+      val context = appContext.reactContext ?: return@Function null
+      Tapes.setSkips(context, trackId, json)
+      TapeKeeper.live?.reskip()
+      null
+    }
+
+    /** A tape's parts passed over, `[[fromSec, toSec], …]`, or null where they have not been looked for. */
+    Function("getTapeSkips") { trackId: String ->
+      val context = appContext.reactContext ?: return@Function null
+      if (!Tapes.skipsKnown(context, trackId)) return@Function null
+      Tapes.skipsOf(context, trackId).map { listOf(it.first / 1000.0, it.last / 1000.0) }
+    }
+
+    /** [videoId]'s parts to pass over looked up and kept for [trackId], and handed to the player: see [Tapes.lookUpSkips]. */
+    AsyncFunction("lookUpTapeSkipsAsync") Coroutine { trackId: String, videoId: String ->
+      val context = appContext.reactContext ?: return@Coroutine 0
+      val found = withContext(Dispatchers.IO) { Tapes.lookUpSkips(context, trackId, videoId) }
+      TapeKeeper.live?.reskip()
+      found.size
+    }
+
+    Function("tapeSkipsKnown") { trackId: String ->
+      val context = appContext.reactContext ?: return@Function true
+      Tapes.skipsKnown(context, trackId)
+    }
+
+    Function("setTapeSmartRewind") { on: Boolean ->
+      val context = appContext.reactContext ?: return@Function null
+      Tapes.setSmartRewind(context, on)
+      null
     }
 
     AsyncFunction("seekToAsync") { seconds: Double ->
@@ -719,6 +924,66 @@ class JukeboxAudioModule : Module() {
       }
     }
 
+    /**
+     * Erases tracks this app put on the phone itself, without asking: the
+     * media store lets an app take away what it made. Answers with the ids
+     * erased; one that is not the app's to take, or is gone already, is
+     * passed over and left out of the answer.
+     */
+    AsyncFunction("deleteOwnTracksAsync") Coroutine { ids: List<String> ->
+      withContext(Dispatchers.IO) {
+        ids.filter { id ->
+          val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toLongOrNull() ?: return@filter false)
+          runCatching { context.contentResolver.delete(uri, null, null) == 1 }.getOrDefault(false)
+        }
+      }
+    }
+
+    /** Lets the user choose sound files on the phone; answers each one's address and name, or none if they backed out. */
+    AsyncFunction("pickAudioFilesAsync") Coroutine { ->
+      val launcher = audioOpen ?: return@Coroutine emptyList<Map<String, Any?>>()
+      val picked = withContext(Dispatchers.Main) { launcher.launch(AudioFilesOpen.Input()) }
+      withContext(Dispatchers.IO) {
+        picked.map { address ->
+          val uri = android.net.Uri.parse(address)
+          val name = runCatching {
+            context.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+              if (it.moveToFirst()) it.getString(0) else null
+            }
+          }.getOrNull()
+          mapOf("uri" to address, "name" to (name ?: uri.lastPathSegment ?: "tape"))
+        }
+      }
+    }
+
+    /**
+     * The files chosen copied into [folder] of the library, a tape each, under
+     * the names given: answers with how many were. One that cannot be read
+     * is passed over and the rest copied.
+     */
+    AsyncFunction("copyTapeFilesAsync") Coroutine { uris: List<String>, names: List<String>, folder: String ->
+      withContext(Dispatchers.IO) {
+        uris.indices.count { at ->
+          runCatching {
+            LibraryImport.fromDocument(context, android.net.Uri.parse(uris[at]), folder, names.getOrElse(at) { "tape" })
+          }.isSuccess
+        }
+      }
+    }
+
+    /** Asks where to save a file of text and writes it there. False when the user backed out. */
+    AsyncFunction("saveTextFileAsync") Coroutine { name: String, type: String, text: String ->
+      val launcher = textSave ?: return@Coroutine false
+      val target = withContext(Dispatchers.Main) { launcher.launch(TextSave.Input(name, type)) }
+        ?: return@Coroutine false
+      withContext(Dispatchers.IO) {
+        val out = context.contentResolver.openOutputStream(android.net.Uri.parse(target), "wt")
+          ?: throw Told(R.string.jukebox_file_not_writable)
+        out.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+      }
+      true
+    }
+
     AsyncFunction("shuffleQueueAsync") { order: List<String>?, promise: Promise ->
       val controller = player
       if (controller == null) promise.resolve(emptyList<Map<String, Any?>>())
@@ -780,9 +1045,97 @@ private fun vibrator(context: android.content.Context): android.os.Vibrator? {
  * does depends entirely on the motor behind it.
  */
 private fun buzz(context: android.content.Context, effect: Int) {
+  if (!touchFeedbackOn(context)) return
   val found = vibrator(context) ?: return
   val shape = android.os.VibrationEffect.createPredefined(effect)
   buzzer.execute { runCatching { found.vibrate(shape) } }
+}
+
+/**
+ * Whether the phone's own touch feedback is on. The phone's setting comes
+ * first: somebody who has switched vibration on touch off for the whole phone
+ * has said so for this app too. Read each time, from the settings the system
+ * keeps cached in this process, so a change is heeded at once.
+ */
+private fun touchFeedbackOn(context: android.content.Context): Boolean =
+  runCatching {
+    android.provider.Settings.System.getInt(context.contentResolver, android.provider.Settings.System.HAPTIC_FEEDBACK_ENABLED, 1) != 0
+  }.getOrDefault(true)
+
+/**
+ * The feels, by the name JavaScript asks for. Built from the motor's own
+ * primitives where it has them, which can be made lighter or stronger; where
+ * it has not, the platform's named effect nearest to each, at its own
+ * strength.
+ */
+private object Feel {
+  const val TICK = "tick"
+  const val CLICK = "click"
+  const val HEAVY = "heavy"
+  const val DOUBLE = "double"
+  const val CONFIRM = "confirm"
+  const val REJECT = "reject"
+  const val TOGGLE_ON = "toggleOn"
+  const val TOGGLE_OFF = "toggleOff"
+  const val HOLD = "hold"
+  const val LIFT = "lift"
+  const val STEP = "step"
+}
+
+private fun feel(context: android.content.Context, kind: String, strength: Float) {
+  if (!touchFeedbackOn(context)) return
+  val found = vibrator(context) ?: return
+  val shape = composed(found, kind, strength) ?: predefined(kind) ?: return
+  buzzer.execute {
+    runCatching {
+      if (Build.VERSION.SDK_INT >= 33) {
+        found.vibrate(shape, android.os.VibrationAttributes.createForUsage(android.os.VibrationAttributes.USAGE_TOUCH))
+      } else {
+        found.vibrate(shape)
+      }
+    }
+  }
+}
+
+/** [kind] from primitives, where the motor has every one it takes; null where it has not, or before Android 11. */
+private fun composed(motor: android.os.Vibrator, kind: String, strength: Float): android.os.VibrationEffect? {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
+  val tick = android.os.VibrationEffect.Composition.PRIMITIVE_TICK
+  val click = android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
+  val rise = android.os.VibrationEffect.Composition.PRIMITIVE_QUICK_RISE
+  // The two that came a version later, and what stands in for them before it.
+  val thud = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.os.VibrationEffect.Composition.PRIMITIVE_THUD else click
+  val lowTick = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.os.VibrationEffect.Composition.PRIMITIVE_LOW_TICK else tick
+  // Each step: the primitive, how strong a share of [strength], and the pause before it in milliseconds.
+  val steps: List<Triple<Int, Float, Int>> = when (kind) {
+    Feel.TICK, Feel.STEP -> listOf(Triple(tick, 0.7f, 0))
+    Feel.CLICK, Feel.HOLD -> listOf(Triple(click, 0.8f, 0))
+    Feel.HEAVY -> listOf(Triple(thud, 1f, 0))
+    Feel.DOUBLE -> listOf(Triple(click, 0.9f, 0), Triple(click, 0.9f, 70))
+    Feel.CONFIRM -> listOf(Triple(tick, 0.6f, 0), Triple(click, 1f, 50))
+    Feel.REJECT -> listOf(Triple(lowTick, 1f, 0), Triple(lowTick, 1f, 80))
+    Feel.TOGGLE_ON -> listOf(Triple(click, 0.9f, 0))
+    Feel.TOGGLE_OFF -> listOf(Triple(lowTick, 0.8f, 0))
+    Feel.LIFT -> listOf(Triple(rise, 0.7f, 0), Triple(click, 0.8f, 0))
+    else -> return null
+  }
+  val used = steps.map { it.first }.distinct().toIntArray()
+  if (!motor.areAllPrimitivesSupported(*used)) return null
+  val composition = android.os.VibrationEffect.startComposition()
+  for ((primitive, share, delay) in steps) composition.addPrimitive(primitive, (share * strength).coerceIn(0f, 1f), delay)
+  return runCatching { composition.compose() }.getOrNull()
+}
+
+/** The platform's named effect nearest [kind], for a motor without primitives. */
+private fun predefined(kind: String): android.os.VibrationEffect? {
+  val effect = when (kind) {
+    Feel.TICK, Feel.STEP, Feel.TOGGLE_OFF -> android.os.VibrationEffect.EFFECT_TICK
+    Feel.CLICK, Feel.HOLD, Feel.TOGGLE_ON, Feel.LIFT, Feel.CONFIRM -> android.os.VibrationEffect.EFFECT_CLICK
+    Feel.HEAVY -> android.os.VibrationEffect.EFFECT_HEAVY_CLICK
+    Feel.DOUBLE, Feel.REJECT -> android.os.VibrationEffect.EFFECT_DOUBLE_CLICK
+    else -> return null
+  }
+  return android.os.VibrationEffect.createPredefined(effect)
 }
 
 /**

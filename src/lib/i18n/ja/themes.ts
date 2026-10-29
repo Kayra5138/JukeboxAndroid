@@ -28,6 +28,8 @@ export const themes: Strings['themes'] = {
   frost: 'すりガラス',
   aero: 'Aero',
   aurora: 'ジャケットグラス',
+  auroraLight: 'ジャケットグラス（ライト）',
+  sundown: 'サンセットガラス',
 
   lightGroup: 'ライト',
   darkGroup: 'ダーク',

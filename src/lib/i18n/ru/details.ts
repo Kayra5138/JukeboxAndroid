@@ -39,6 +39,7 @@ export const details: Strings['details'] = {
   lookUp: 'Найти',
   searchFailed: 'Поиск не удался.',
 
+  unsaved: { title: "Отменить изменения?", body: "Введённое здесь не сохранено.", keep: "Продолжить", discard: "Отменить" },
   general: {
     fields: {
       title: 'Название',

@@ -18,6 +18,7 @@ export const backup: Strings['backup'] = {
         : 'バックアップです。',
   listens: (count) => `再生記録${format.number(count)}件`,
   tagged: (count) => `タグ付き${format.number(count)}曲`,
+  followed: (count) => `フォロー中の番組 ${format.number(count)} 件`,
   withLyrics: (count) => `歌詞付き${format.number(count)}曲`,
 
   songs: (found, total) => {

@@ -20,7 +20,7 @@ Already GPL-3.0, so there is nothing to reconcile.
 | Project | Version | Licence |
 | --- | --- | --- |
 | youtubedl-android (deniscerri fork), library and FFmpeg artifacts | 0.19.0 | [GPL-3.0](https://github.com/deniscerri/youtubedl-android/blob/master/LICENSE) |
-| yt-dlp, official executable | 2026.08.19 | [Unlicense, with bundled components](https://github.com/yt-dlp/yt-dlp#license) |
+| yt-dlp, official executable | 2026.10.26 | [Unlicense, with bundled components](https://github.com/yt-dlp/yt-dlp#license) |
 | FFmpeg, prebuilt in the `ffmpeg` artifact (`--enable-gpl --enable-version3`) | as packaged in 0.19.0 | [GPL-3.0-or-later as configured](https://ffmpeg.org/legal.html) |
 | Libraries packed with that FFmpeg, built by Termux: x264, x265, Xvid, libvidstab, Rubber Band, FFTW | as packaged | GPL-2.0-or-later |
 | GnuTLS, Nettle, GMP, LAME, mpg123, libopenmpt, libass, libbluray, SoXR, libsamplerate, glib, libiconv, libunistring, libidn2, opencore-amr, vo-amrwbenc, zimg, libssh, ZeroMQ, v4l-utils and others in the same archive | as packaged | LGPL, BSD, MIT, MPL-2.0 or Apache-2.0, each under its own terms |
@@ -34,7 +34,7 @@ Source and build instructions:
 - https://github.com/deniscerri/youtubedl-android
 - https://github.com/deniscerri/youtubedl-android/blob/master/BUILD_FFMPEG.md
 - https://github.com/deniscerri/youtubedl-android/blob/master/BUILD_PYTHON.md
-- https://github.com/yt-dlp/yt-dlp/tree/2026.08.19
+- https://github.com/yt-dlp/yt-dlp/tree/2026.10.26
 
 Notes:
 
@@ -173,6 +173,10 @@ Notes:
 | [LRCLIB](https://lrclib.net) | Lyrics, timed where available | Public domain |
 | [Apple iTunes Search](https://performance-partners.apple.com/search-api) | Tags and covers MusicBrainz did not have | Apple's API terms |
 | [Wikimedia Commons](https://commons.wikimedia.org) | One photograph per artist on a recap card | Per file, mostly CC-BY or CC-BY-SA |
+| [SponsorBlock](https://sponsor.ajay.app) | The parts of a YouTube tape its users marked as a sponsor's message, self-promotion or a request to subscribe, passed over while it plays | [CC BY-NC-SA 4.0](https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License) |
+| [Apple iTunes Search](https://performance-partners.apple.com/search-api), podcasts | Finding a podcast and its feed | Apple's API terms |
+| Podcast feeds | A show's episodes, and their chapters and transcripts where the feed gives them | Each podcast's own |
+| [Internet Archive](https://archive.org) and [LibriVox](https://librivox.org) | Finding and fetching books read aloud | LibriVox recordings are in the public domain; other items per item |
 
 Notes:
 
@@ -187,6 +191,10 @@ Notes:
   what makes saving and sharing the card allowed.
 - A card made of album covers carries no credit line, because it makes no such
   claim.
+- SponsorBlock's data is by its users, licensed CC BY-NC-SA 4.0. Jukebox only
+  reads it, to pass those parts over while a tape plays, and keeps a copy of a
+  tape's parts on the phone; it is not shown, shared or sold. The credit is
+  here and in the README.
 
 ## JavaScript dependencies
 

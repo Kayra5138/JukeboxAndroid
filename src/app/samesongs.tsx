@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { FlatList, StyleSheet, Switch, Text, View } from 'react-native';
+import { useFocusEffect, useIsFocused } from 'expo-router';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { footGlass, useLaidOver, useUnderBars } from '../components/UnderBars';
@@ -11,6 +12,7 @@ import { useLibraryTracks } from '../lib/library/useLibrary';
 import { answerPairs, keepApart, mergeSongs, sameSongs, type Side, type Suggestion } from '../lib/identity/index';
 import { makeStyles, outlined, outlinedClip, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { useBack } from '../lib/ui/back';
 
 /** Where the file is, as much of it as is known. One lost long ago has only a name. */
 const whereabouts = (side: Side) => `${side.folder ?? ''}${side.filename ?? ''}`;
@@ -65,6 +67,10 @@ export default function SameSongsScreen() {
   const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
   /** Whether the merge of the chosen is waiting for a yes: it cannot be undone. */
   const [asking, setAsking] = useState(false);
+  // Back takes back the question first, and then the choice.
+  const focused = useIsFocused();
+  useBack(chosen.size > 0 && focused, () => setChosen(new Set()));
+  useBack(asking && focused, () => setAsking(false));
   /** How the last answer to many went, said until the next. */
   const [result, setResult] = useState<string | null>(null);
   /** Whether a merge of the chosen takes the first file of each pair off the phone as well. */

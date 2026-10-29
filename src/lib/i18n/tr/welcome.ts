@@ -33,7 +33,12 @@ export const welcome: Strings['welcome'] = {
       heading: 'Görünümü seç',
       note: 'Denemek için birine dokun.',
       more:
-        'Diğer temalar ve telefonu takip ederken hangi ikisinin kullanılacağı Ayarlar → Görünüm’de.',
+        'Diğer temalar ve telefonu takip ederken hangi ikisinin kullanılacağı Ayarlar → Görünüm ve his’te.',
+    },
+    views: {
+      heading: 'Kütüphanede neler olsun',
+      note: 'Müziğine bakmanın yolları; kütüphanenin üstünde bir düğme olarak durur. İstediklerini aç.',
+      more: 'Bunları istediğin zaman Ayarlar → Görünüm ve his’ten değiştirebilirsin.',
     },
     discover: {
       heading: 'Keşfet',

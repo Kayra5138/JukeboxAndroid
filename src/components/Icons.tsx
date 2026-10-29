@@ -168,6 +168,64 @@ export function ListAddIcon({ size = 20, color: asked }: { size?: number; color?
   return <VectorIcon source={require('../../assets/icons/list-add.svg')} size={size} color={color} />;
 }
 
+/** A tag: a list that follows one. */
+export function TagIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/tag.svg')} size={size} color={color} />;
+}
+
+/** Three dots: more, in a menu. */
+export function MoreIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/more.svg')} size={size} color={color} />;
+}
+
+/** A flame: what is played most. */
+export function FlameIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/flame.svg')} size={size} color={color} />;
+}
+
+/** Sparkles: what is new. */
+export function SparkleIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/sparkle.svg')} size={size} color={color} />;
+}
+
+/** An hourglass: what has not been heard in a long while. */
+export function HourglassIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/hourglass.svg')} size={size} color={color} />;
+}
+
+/** A compass: finding what you do not have yet. */
+export function SkipIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/skip.svg')} size={size} color={color} />;
+}
+
+export function MoonIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/moon.svg')} size={size} color={color} />;
+}
+
+/** A place marked, with a plus: marking one where the tape is. */
+export function MarkAddIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/mark-add.svg')} size={size} color={color} />;
+}
+
+/** The places marked, as a list. */
+export function MarksIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/marks.svg')} size={size} color={color} />;
+}
+
+export function CompassIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/compass.svg')} size={size} color={color} />;
+}
+
 export function SettingsIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
   const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/settings.svg')} size={size} color={color} />;

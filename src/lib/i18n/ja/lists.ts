@@ -2,6 +2,7 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "お気に入り", kept: "お気に入りは削除できません。名前の変更、空にすること、設定 → プレーヤーでの非表示はできます。" },
   naming: {
     heading: 'リスト名を入力',
     placeholder: 'リスト名',
@@ -16,6 +17,14 @@ export const lists: Strings['lists'] = {
     fromListening: '再生履歴から',
     discover: 'ディスカバー',
     discoverHint: '再生した曲をもとに、まだ持っていない曲を紹介',
+    count: (count) => `${format.number(count)}件のリスト`,
+    more: 'その他',
+    files: 'プレイリストファイル',
+    yours: 'あなたのリスト',
+    showAll: (count) => `すべて表示（${format.number(count)}件）`,
+    showFewer: '表示を減らす',
+    shuffleList: (list) => `「${list}」をシャッフル再生`,
+    holdToShuffle: '長押しでシャッフル再生',
 
     tagSheet: {
       heading: 'タグからリストを作成',
@@ -40,6 +49,9 @@ export const lists: Strings['lists'] = {
     heading: (count) => `${format.number(count)}曲をリストに追加`,
     noLists: 'リストはまだありません。',
     newList: '新規リスト…',
+    inIt: (count: number) => (count === 1 ? '追加済み' : 'すべて追加済み'),
+    someInIt: (count: number, of: number) => `${format.number(of)}曲中${format.number(count)}曲追加済み`,
+    removed: (count: number, list: string) => `${list}から${format.number(count)}曲を外しました`,
     already: (list) => `${list}に追加済み`,
     added: (count, list) => `${format.number(count)}曲を${list}に追加しました`,
   },

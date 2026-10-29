@@ -19,6 +19,7 @@ import {
 import { outlined, outlinedClip, outlineWidth, OUTLINE_WIDTH } from '../edges.ts';
 import { barWashOf, castable, drawable, effectsOf, flattened, groundsOf, laid, page, scene } from '../effects.ts';
 import { auroraColours } from '../themes/aurora.ts';
+import { auroraLightColours } from '../themes/auroraLight.ts';
 import type { Palette, Theme } from '../tokens.ts';
 
 /** How bright a colour is to the eye, from nought to one, as WCAG reckons it. */
@@ -628,6 +629,43 @@ describe('a theme of glass', () => {
         }
       }
     }
+  });
+
+  it('can be read by day as well, over a pale sky made from any cover', () => {
+    const covers: string[][] = [
+      ['#000000', '#000000', '#000000'],
+      ['#ffffff', '#ffffff', '#ffffff'],
+      ['#2a0a0a', '#a02828', '#e06060'],
+      ['#fff200', '#ffe000', '#ffffff'],
+    ];
+    for (let hue = 0; hue < 360; hue += 30) {
+      covers.push([hsl(hue, 90, 12), hsl(hue, 90, 45), hsl((hue + 60) % 360, 90, 80)]);
+    }
+    for (const cover of covers) {
+      const made = auroraLightColours(cover);
+      assert.ok(luminance(made.bg) > 0.7, `${cover.join()}: the page is ${made.bg}`);
+      for (const layer of effectsOf(made)!.backdrop) assert.ok(drawable(layer), layer);
+      for (const colours of flattened(made)) {
+        for (const ground of [...GROUNDS, 'surfaceRaised'] as const) {
+          for (const token of ['text', 'textSecondary', 'accent'] as const) {
+            const got = contrast(colours[token], colours[ground]);
+            assert.ok(got >= 4.5, `${cover.join()}: ${token} on ${ground} over ${colours.bg} is ${got.toFixed(2)}:1`);
+          }
+        }
+        for (const ground of GROUNDS) {
+          for (const token of READ) {
+            const got = contrast(colours[token], colours[ground]);
+            assert.ok(got >= 4.5, `${cover.join()}: ${token} on ${ground} over ${colours.bg} is ${got.toFixed(2)}:1`);
+          }
+        }
+        assert.ok(contrast(colours.onAccent, colours.accent) >= 4.5, cover.join());
+        assert.ok(contrast(colours.onPrimary, colours.primary) >= 4.5, cover.join());
+      }
+    }
+  });
+
+  it('is the frosted glass itself with nothing playing', () => {
+    assert.equal(resolveTheme('auroraLight', 'light').colours, themeOf('frost').colours);
   });
 
   it('is the night glass itself with nothing playing, and the same glass for the same cover', () => {

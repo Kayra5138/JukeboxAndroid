@@ -8,8 +8,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import JukeboxAudio from '../../modules/jukebox-audio';
 import { makeStyles } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * How far the finger must travel sideways before this is a swipe at all.
@@ -134,7 +134,7 @@ export function SwipeRow({
         const now = Math.abs(moved) >= TRIGGER;
         if (now !== armed.current) {
           armed.current = now;
-          if (now) JukeboxAudio.tick?.();
+          if (now) haptic('holds', 'tick');
         }
       },
       onPanResponderRelease: (_event, gesture) => {

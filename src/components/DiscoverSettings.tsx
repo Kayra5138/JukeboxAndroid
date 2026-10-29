@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 
 import { Pressable } from './Pressable';
 import { Segmented } from './Segmented';
@@ -12,17 +13,16 @@ import {
   POPULARITY_CHOICES,
   popularityOf,
   previewsOn,
-  READY_CHOICES,
+  DISCOVER_RANGES,
   type DiscoverSettings as Settings,
   type Popularity,
 } from '../lib/discover/policy';
 import { blockedSongs } from '../lib/discover/store';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, outlinedClip, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { NumberStepper } from './NumberStepper';
 
 /** What can be chosen, as the engine reads it: see `settingsFrom`, which takes nothing else. */
-const COUNTS = [10, 20, 30, 40];
-const REFRESH_DAYS = [0, 1, 3, 7, 14, 30];
 
 const POPULARITY_LABEL = {
   known: 'popularityKnown',
@@ -77,11 +77,11 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.title}>{said.count}</Text>
-          <Choices
-            options={COUNTS}
-            chosen={settings.count}
-            label={(count) => t.format.number(count)}
-            onChoose={(count) => change({ count })}
+          <NumberStepper
+            name={said.count}
+            range={DISCOVER_RANGES.count}
+            value={settings.count}
+            onChange={(count) => change({ count })}
           />
           <Text style={styles.muted}>{said.countNote}</Text>
         </View>
@@ -89,11 +89,12 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
         <View style={styles.rule} />
         <View style={styles.row}>
           <Text style={styles.title}>{said.refresh}</Text>
-          <Choices
-            options={REFRESH_DAYS}
-            chosen={settings.refreshDays}
+          <NumberStepper
+            name={said.refresh}
+            range={DISCOVER_RANGES.refreshDays}
+            value={settings.refreshDays}
             label={(days) => (days ? said.everyDays(days) : said.manual)}
-            onChoose={(refreshDays) => change({ refreshDays })}
+            onChange={(refreshDays) => change({ refreshDays })}
           />
           <Text style={styles.muted}>{said.refreshNote}</Text>
         </View>
@@ -101,11 +102,12 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
         <View style={styles.rule} />
         <View style={styles.row}>
           <Text style={styles.title}>{said.ready}</Text>
-          <Choices
-            options={READY_CHOICES}
-            chosen={settings.ready}
+          <NumberStepper
+            name={said.ready}
+            range={DISCOVER_RANGES.ready}
+            value={settings.ready}
             label={(ready) => (ready ? t.format.number(ready) : said.readyNone)}
-            onChoose={(ready) => change({ ready })}
+            onChange={(ready) => change({ ready })}
           />
           <Text style={styles.muted}>{said.readyNote}</Text>
         </View>

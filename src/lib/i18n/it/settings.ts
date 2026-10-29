@@ -7,9 +7,10 @@ export const settings: Strings['settings'] = {
   lastBuiltUnknown: 'Ultima build: disponibile dopo aver installato il nuovo APK',
 
   sections: {
-    look: 'Aspetto',
+    look: 'Aspetto e tatto',
     sound: 'Audio',
     player: 'Lettore',
+    tapes: 'Cassette',
     library: 'Libreria',
     downloads: 'Download e Scopri',
     data: 'I tuoi dati',
@@ -17,9 +18,10 @@ export const settings: Strings['settings'] = {
     experimental: 'Sperimentale',
   },
   categories: {
-    look: 'Il tema, gli album come scaffale, le animazioni e quali viste offre la libreria.',
+    look: 'Il tema, gli album come scaffale, le animazioni, la vibrazione e quali viste offre la libreria.',
     sound: 'Equalizzatore ed effetti, volume uniforme, dissolvenza incrociata, velocità e tonalità.',
     player: 'La durata dei salti avanti e indietro, cosa suona quando finisce la coda e la lingua in cui vengono tradotti i testi.',
+    tapes: 'Riavvolgimento intelligente, la durata dei salti di una cassetta e i podcast scaricati solo con il Wi‑Fi.',
     library: 'La cartella della tua musica, tag e copertine, e i file che potrebbero essere la stessa canzone.',
     waiting: (count) => `${format.number(count)} da decidere`,
     downloads: 'La coda dei download e il suo pulsante mobile, Scopri, e l’aggiornamento del downloader di YouTube.',
@@ -82,7 +84,7 @@ export const settings: Strings['settings'] = {
     note:
       'Tenendo il telefono in orizzontale, sfoglia le copertine invece di leggere un elenco. Tocca quella davanti per aprirla.',
   },
-  heart: { title: 'Cuore', note: 'Un cuore nel lettore. Non salva niente.' },
+  favoritesShown: { title: "Preferiti", note: "Una lista sempre presente, i più recenti in alto, riempita da un cuore nel lettore e da Aggiungi ai Preferiti nel menu di un brano. Disattivati, i tre sono nascosti e il contenuto resta." },
   listButton: {
     title: 'Pulsante Aggiungi a una lista',
     note:
@@ -139,10 +141,34 @@ export const settings: Strings['settings'] = {
       'Per un telefono che perde fotogrammi. Il lettore compare invece di salire, e il gioco smette di illuminarsi quando si vince o si perde una vita. I tasti continuano a cadere: quello è il gioco, non una decorazione.',
   },
   scriptNames: { title: 'Nomi in altre scritture', latin: 'Lettere latine', original: 'Originale', note: 'Se una ricerca ha trovato il nome di un brano in lettere latine e nella sua scrittura (giapponese, cinese, coreano), quale mostra la libreria. I brani cercati prima si completano alla prossima ricerca.' },
+  haptics: {
+    title: "Vibrazione",
+    open: "Quanto vibra l’app sotto il dito, e con che forza.",
+    mode: "Vibra",
+    modes: { off: "No", essential: "L’essenziale", all: "Tutto", custom: "Su misura" },
+    modeNotes: {
+      off: "L’app non vibra mai.",
+      essential: "Solo dove dice di più: una pressione lunga, se qualcosa ha funzionato o no, e il gioco.",
+      all: "Pressioni lunghe e trascinamenti, interruttori e scelte, gli scatti di un cursore, risultati, i tasti del lettore e il gioco.",
+      custom: "Scegli sotto quali momenti vibrano.",
+    },
+    strength: "Intensità",
+    strengthNote: "Si sente quando lasci. I telefoni il cui motore non si regola mantengono la propria intensità.",
+    groupsHeading: "Cosa vibra",
+    groups: {
+      holds: { title: "Premere e trascinare", note: "Una pressione lunga, una riga sollevata per spostarla, il dito sulle caselle." },
+      choices: { title: "Interruttori e scelte", note: "Interruttori, le schede di una scelta, un’opzione scelta." },
+      notches: { title: "Scatti e passi", note: "Velocità normale, 0 dB, il centro di un cursore, le colonne di un grafico." },
+      results: { title: "Risultati", note: "Ciò che hai chiesto ha funzionato o no: trovato, scritto, aggiunto, importato." },
+      player: { title: "Tasti del lettore", note: "Riproduci, salta, ripeti, il cuore, toccare una riga del testo." },
+      fun: { title: "Gioco e divertimento", note: "I tasti di Piano Tiles, e altro." },
+    },
+    phone: "Se il feedback tattile è disattivato nelle impostazioni del telefono, nemmeno l’app vibra.",
+  },
   moreButton: {
     title: 'Tre puntini su ogni riga',
     note:
-      'Alla fine di ogni riga di brani, aprono lo stesso menu della pressione prolungata. Anche senza, basta tenere premuta una riga.',
+      'Alla fine di ogni riga di brani e album, aprono lo stesso menu della pressione prolungata. Anche senza, basta tenere premuta una riga.',
   },
   tabs: {
     title: 'Schede',
@@ -156,6 +182,7 @@ export const settings: Strings['settings'] = {
       albums: 'Album, ricostruiti da ciò che dicono i tag.',
       artists: 'Tutti quelli a cui è attribuita una canzone. Una canzone di due artisti compare sotto entrambi.',
       folders: 'Le cartelle in cui sono conservati i file, dentro la cartella della libreria.',
+      tapes: 'Audiolibri, podcast e registrazioni lunghe dalla cartella Tapes della libreria, che riprendono da dove li hai lasciati.',
     },
     onlyHint: 'È l’unica vista attiva, quindi non si può disattivare',
     toggleHint: 'Mostra o nasconde questa vista nella libreria',
@@ -174,7 +201,7 @@ export const settings: Strings['settings'] = {
   exportAll: {
     title: 'Esporta tutto',
     note:
-      'Cronologia degli ascolti, liste, tag, testi e impostazioni, in un unico file da salvare dove vuoi. Non la musica.',
+      'Cronologia degli ascolti, liste, tag, testi e impostazioni, i podcast che segui e dove sei arrivato in ogni cassetta con i segni messi, in un unico file da salvare dove vuoi. Non la musica.',
     failed: 'Impossibile salvare il backup.',
   },
   importBackup: {
@@ -190,6 +217,39 @@ export const settings: Strings['settings'] = {
   },
   equalizer: { note: 'Bande, bassi, surround e loudness' },
   effects: { note: 'Ampiezza, crossfeed, rotazione e livello' },
+  /** The tape settings, apart from the music's: see `app/settings-tapes.tsx`. */
+  tapes: {
+    smartRewind: {
+      title: 'Riavvolgimento intelligente',
+      note: 'Una cassetta riprodotta di nuovo dopo un po’ riparte poco prima di dove era stata lasciata, tanto più indietro quanto più lunga è stata la pausa: tre secondi dopo una breve pausa, mezzo minuto dopo un giorno. Disattivato, riprende esattamente da dove si era fermata.',
+    },
+    skipSilence: { title: 'Salta i silenzi', note: 'Le pause nel parlato vengono saltate e la cassetta dura un po’ meno. La musica non viene mai toccata.' },
+    voiceClarity: { title: 'Voce più chiara', note: 'Il rimbombo sotto la voce viene abbassato e la parte che distingue le parole un po’ alzata, sopra il tuo equalizzatore. Solo con le cassette.' },
+    skipSponsors: { title: 'Salta gli sponsor', note: 'Nelle cassette da YouTube vengono saltate le parti segnate dagli ascoltatori di SponsorBlock: messaggi degli sponsor, autopromozione, inviti a iscriversi.' },
+    back: 'Salta indietro',
+    forward: 'Salta avanti',
+    jumpNote: 'Di quanti secondi saltano i due pulsanti ai lati di play in una cassetta. La musica ha il suo, in Lettore.',
+    podcasts: 'Podcast',
+    deletePlayed: {
+      title: 'Elimina gli episodi ascoltati',
+      off: 'Gli episodi dei podcast che segui restano sul telefono dopo l’ascolto.',
+      after: (days) => oneOrMany(days, 'Un episodio di un podcast che segui viene eliminato un giorno dopo averlo ascoltato fino in fondo, se l’app lo ha scaricato. Uno con segni resta.', `Un episodio di un podcast che segui viene eliminato ${format.number(days)} giorni dopo averlo ascoltato fino in fondo, se l’app lo ha scaricato. Uno con segni resta.`),
+    },
+    /** The podcasts followed, as an OPML file: see `podcasts/opml.ts`. */
+    opml: {
+      heading: 'Porta con te i podcast',
+      export: 'Salva i podcast che segui',
+      exportNote: 'Come file OPML, leggibile da altre app di podcast.',
+      import: 'Segui podcast da un file',
+      importNote: 'Un file OPML da un’altra app di podcast. I programmi vengono seguiti senza scaricare nulla da soli; attivalo per ciascuno nella sua schermata.',
+      importing: (done, total) => `Lettura ${format.number(done)} di ${format.number(total)}…`,
+      imported: (followed, already, failed) => [oneOrMany(followed, '1 podcast seguito.', `${format.number(followed)} podcast seguiti.`), already > 0 ? `${format.number(already)} erano già seguiti.` : '', failed > 0 ? `${format.number(failed)} non leggibili.` : ''].filter(Boolean).join(' '),
+      nothing: 'In quel file non ci sono podcast.',
+      failed: 'Impossibile leggere o scrivere il file.',
+      none: 'Non segui ancora nessun podcast.',
+      saved: (count) => oneOrMany(count, '1 podcast salvato.', `${format.number(count)} podcast salvati.`),
+    },
+  },
   jump: {
     title: 'Salta di',
     note: 'Di quanti secondi si spostano nel brano i due pulsanti ai lati di quello di riproduzione.',

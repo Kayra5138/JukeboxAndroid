@@ -9,7 +9,7 @@ export const player = {
   /** The player itself; see `PlayerSheet`. */
   sheet: {
     nothingPlaying: 'Nothing playing.',
-    heart: 'Heart',
+    heart: "Favorite",
     /** What the repeat button is called in each of its three states. */
     repeat: { off: 'Repeat', all: 'Repeat all', one: 'Repeat one' },
     back: (seconds: number) => oneOrMany(seconds, 'Back 1 second', `Back ${seconds} seconds`),
@@ -25,6 +25,22 @@ export const player = {
     position: 'Playback position',
     /** Where the bar has got to, said aloud: [position] and [duration] are `1:23` and `3:45`. */
     positionValue: (position: string, duration: string) => `${position} of ${duration}`,
+  },
+  /** The player while a tape plays: see `PlayerSheet`. */
+  tape: {
+    /** Under the name: which part of its book or show this is, [at] of [of]. */
+    part: (at: number, of: number) => `Part ${format.number(at)} of ${format.number(of)}`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at: number, of: number) => `Episode ${format.number(at)} of ${format.number(of)}`,
+    previousPart: 'Previous part',
+    nextPart: 'Next part',
+    /** The heading over the parts in the queue. */
+    parts: (count: number) => `Parts · ${format.number(count)}`,
+    /** Under the bar, for a tape in parts: how far into the whole of it, and how long is left of it. */
+    book: (percent: number, left: string) => `${format.number(percent)}% of the whole · ${left} left`,
+    /** The speed button, read aloud: [speed] as it is shown, `1.2×`. */
+    speed: (speed: string) => `Speed ${speed}, tap for the next`,
+    sleep: 'Sleep timer',
   },
   queue: {
     /** [title] is the track's. */
@@ -85,13 +101,67 @@ export const player = {
     howMany: 'Pause after how many minutes?',
     minutes: 'Minutes',
     start: 'Start',
+    /** The same, while a tape plays: a part, and not a song or the music. */
+    tape: {
+      about: 'Pauses after a while. The last half minute gets quieter.',
+      pauseAtEnd: 'Pause at the end of this part',
+      endOfTrack: 'End of part',
+      finish: {
+        title: 'Let the current part finish',
+        note: 'When the time is up, wait for the part to end instead of fading it out.',
+        label: 'Let the current part finish when the sleep timer runs out',
+      },
+    },
   },
   /** The one line that says what the sleep timer is doing; see `player/sleep.ts`. */
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: 'Transcript',
+    show: 'Show what is said',
+    none: 'This video has no captions to follow.',
+  },
+  chapters: {
+    heading: (count: number) => `Chapters · ${format.number(count)}`,
+    untitled: (at: number) => `Chapter ${format.number(at)}`,
+    at: (at: number, of: number) => `Chapter ${format.number(at)} of ${format.number(of)}`,
+    sleepAtEnd: 'Stop at the end of this chapter',
+    listHint: 'Lists the chapters',
+  },
+  marks: {
+    screen: 'Marks',
+    heading: 'Marks in this tape',
+    add: 'Mark this place',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count: number) => oneOrMany(count, 'Marks, 1 so far', `Marks, ${format.number(count)} so far`),
+    noteAt: (time: string) => `Mark at ${time}`,
+    noteHint: 'A note of what is here, if you like. You can leave it empty.',
+    notePlaceholder: 'What is here',
+    save: 'Mark',
+    none: 'Nothing marked in this tape yet. Mark a place with the button beside the sleep timer.',
+    noneAnywhere: 'Nothing marked yet. While a tape plays, mark a place from the player and write a note of what is there; every mark shows up here.',
+    noNote: 'No note',
+    remove: (time: string) => `Remove the mark at ${time}`,
+    editNote: 'Edit the note',
+    goHint: 'Goes to this place',
+    playHint: 'Plays the tape from this place',
+    howTo: 'Press a mark to go to it, hold it to change its note.',
+    all: 'All marks',
+    count: (count: number) => oneOrMany(count, '1 mark', `${format.number(count)} marks`),
+  },
   sleep: {
     endOfTrack: 'Pauses when this track ends',
     /** [time] is a countdown, `12:34`. */
     thenToTheEnd: (time: string) => `${time} left, then to the end of the track`,
     fadingOut: (time: string) => `Fading out, ${time} left`,
     pausesIn: (time: string) => `Pauses in ${time}`,
+    /** The sleep timer set to the end of a tape's chapter: while it waits, paused, and the time to it while it plays. */
+    endOfChapter: 'Pauses when this chapter ends',
+    chapterIn: (time: string) => `${time} to the end of the chapter`,
+    tape: {
+      endOfTrack: 'Pauses when this part ends',
+      thenToTheEnd: (time: string) => `${time} left, then to the end of the part`,
+    },
   },
 };

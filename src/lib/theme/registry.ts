@@ -1,5 +1,6 @@
 import { aero } from './themes/aero.ts';
 import { aurora } from './themes/aurora.ts';
+import { auroraLight } from './themes/auroraLight.ts';
 import { black } from './themes/black.ts';
 import { contrast } from './themes/contrast.ts';
 import { cover } from './themes/cover.ts';
@@ -8,6 +9,7 @@ import { dark } from './themes/dark.ts';
 import { dusk } from './themes/dusk.ts';
 import { forest } from './themes/forest.ts';
 import { frost } from './themes/frost.ts';
+import { sundown } from './themes/sundown.ts';
 import { glass } from './themes/glass.ts';
 import { ice } from './themes/ice.ts';
 import { lavender } from './themes/lavender.ts';
@@ -60,6 +62,8 @@ export const THEMES = [
   frost,
   aero,
   aurora,
+  auroraLight,
+  sundown,
 ] as const satisfies readonly Theme[];
 
 export type ThemeId = (typeof THEMES)[number]['id'];

@@ -110,7 +110,7 @@ export function preferencesToSetting(preferences: SleepPreferences): string {
  * arrived yet, and it is shown as nothing left rather than as less than that.
  */
 export function remainingMs(timer: SleepTimer, now: number): number | null {
-  if (timer.kind !== 'duration' || timer.endsAt === null) return null;
+  if ((timer.kind !== 'duration' && timer.kind !== 'endOfChapter') || timer.endsAt === null) return null;
   return Math.max(0, timer.endsAt - now);
 }
 
@@ -142,12 +142,17 @@ export function formatRemaining(ms: number): string {
 export function describeTimer(
   timer: SleepTimer,
   now: number,
-  t: Strings = strings()
+  t: Strings = strings(),
+  /** A tape is playing, which ends in a part rather than a track. */
+  tape = false
 ): string | null {
   if (timer.kind === 'off') return null;
+  const said = tape ? t.player.sleep.tape : t.player.sleep;
   const left = remainingMs(timer, now);
-  if (left === null) return t.player.sleep.endOfTrack;
-  if (timer.finishTrack) return t.player.sleep.thenToTheEnd(formatRemaining(left));
+  // The end of a chapter: when it will be got to while it plays, and only that it will be while it waits.
+  if (timer.kind === 'endOfChapter') return left === null ? t.player.sleep.endOfChapter : t.player.sleep.chapterIn(formatRemaining(left));
+  if (left === null) return said.endOfTrack;
+  if (timer.finishTrack) return said.thenToTheEnd(formatRemaining(left));
   if (timer.fade && left <= SLEEP_FADE_MS) return t.player.sleep.fadingOut(formatRemaining(left));
   return t.player.sleep.pausesIn(formatRemaining(left));
 }

@@ -110,8 +110,27 @@ export const TABLES = {
     cover_track_id: 'T',
     cover_uri: 'T',
     tag: 'T',
+    kind: 'T',
   },
   playlist_tracks: { playlist_id: 'I!', track_id: 'T!', position: 'I!', added_at: 'I!' },
+  // Both later than the rest, and absent from a backup made before them.
+  /** The podcasts and channels followed, and how each is fetched; not their episodes, which their feeds give again. */
+  podcasts: {
+    feed_url: 'T!',
+    title: 'T!',
+    author: 'T',
+    image: 'T',
+    summary: 'T',
+    subscribed_at: 'I!',
+    checked_at: 'I',
+    auto_download: 'I!',
+    keep: 'I!',
+    fetch_next: 'I!',
+    next_count: 'I!',
+    folder: 'T',
+  },
+  /** The places marked in tapes, each with what was noted of it. */
+  tape_marks: { track_id: 'T!', position_sec: 'R!', note: 'T', created_at: 'I!' },
 } as const;
 
 export type TableName = keyof typeof TABLES;
@@ -122,6 +141,8 @@ export const TABLE_NAMES = Object.keys(TABLES) as TableName[];
 /** What a required column is given when a backup from before it existed lacks it. */
 const DEFAULTS: Partial<Record<TableName, Row>> = {
   track_lyrics: { offset_ms: 0 },
+  // As the database has them for a show followed before each was asked.
+  podcasts: { auto_download: 1, keep: 3, fetch_next: 0, next_count: 3 },
 };
 
 /**
@@ -199,6 +220,22 @@ export type BackupTrack = {
   durationSec: number | null;
 };
 
+/** Where a tape was left, as the player keeps it. */
+export type TapePlace = { positionSec: number; durationSec: number; at: number; finished: boolean };
+
+/**
+ * What the player keeps of tapes rather than the database: where each was
+ * left, by the song's id, and its switches — going back a little on being
+ * played again, silences passed over, a clearer voice, a video's sponsors
+ * passed over. How far the jump buttons go and each tape's speed are
+ * settings, and travel as settings do.
+ */
+export type BackupTapes = {
+  places: Record<string, TapePlace>;
+  smartRewind?: boolean;
+  flags?: Partial<Record<'skipSilence' | 'voiceClarity' | 'skipSponsors', boolean>>;
+};
+
 export type Backup = {
   format: number;
   /** The version of the app that wrote it, for a person reading the file. */
@@ -208,6 +245,8 @@ export type Backup = {
   settings: Record<string, string>;
   /** The player's own settings, kept as the player gave them. */
   sound: { effects?: unknown; transitions?: unknown; equalizer?: unknown; loudness?: unknown };
+  /** Absent from a backup made before tapes were kept by it. */
+  tapes?: BackupTapes;
   tables: Tables;
 };
 
@@ -323,6 +362,38 @@ export function parseBackup(json: string, t: Strings = strings()): Backup {
     tracks,
     settings,
     sound,
+    tapes: tapesOf(source.tapes),
     tables,
   };
+}
+
+const FLAGS = ['skipSilence', 'voiceClarity', 'skipSponsors'] as const;
+
+/** A backup's tapes, each place checked as a row is; nothing where it holds none. */
+export function tapesOf(raw: unknown): BackupTapes | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const source = raw as Record<string, unknown>;
+  const places: Record<string, TapePlace> = {};
+  const given = source.places;
+  if (given && typeof given === 'object' && !Array.isArray(given)) {
+    for (const [id, each] of Object.entries(given as Record<string, unknown>)) {
+      if (!id || !each || typeof each !== 'object') continue;
+      const place = each as Record<string, unknown>;
+      const positionSec = number(place.positionSec);
+      const durationSec = number(place.durationSec);
+      const at = number(place.at);
+      if (positionSec == null || durationSec == null || at == null || positionSec < 0 || durationSec < 0) continue;
+      places[id] = { positionSec, durationSec, at, finished: place.finished === true };
+    }
+  }
+  const tapes: BackupTapes = { places };
+  if (typeof source.smartRewind === 'boolean') tapes.smartRewind = source.smartRewind;
+  const flags = source.flags;
+  if (flags && typeof flags === 'object' && !Array.isArray(flags)) {
+    for (const name of FLAGS) {
+      const value = (flags as Record<string, unknown>)[name];
+      if (typeof value === 'boolean') (tapes.flags ??= {})[name] = value;
+    }
+  }
+  return tapes;
 }

@@ -2,6 +2,7 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "收藏", kept: "“收藏”不能删除，但可以重命名、清空，或在 设置 → 播放器 中隐藏。" },
   naming: {
     heading: '为歌单命名',
     placeholder: '歌单名称',
@@ -16,6 +17,14 @@ export const lists: Strings['lists'] = {
     fromListening: '根据你的收听',
     discover: '发现',
     discoverHint: '根据你常听的内容，推荐你还没有的音乐',
+    count: (count) => `${format.number(count)} 个列表`,
+    more: '更多',
+    files: '播放列表文件',
+    yours: '你的列表',
+    showAll: (count) => `显示全部（${format.number(count)}）`,
+    showFewer: '收起',
+    shuffleList: (list) => `随机播放“${list}”`,
+    holdToShuffle: '长按随机播放',
 
     tagSheet: {
       heading: '从标签创建歌单',
@@ -38,6 +47,9 @@ export const lists: Strings['lists'] = {
     heading: (count) => `将 ${format.number(count)} 首歌曲添加到歌单`,
     noLists: '还没有歌单。',
     newList: '新建歌单…',
+    inIt: (count: number) => (count === 1 ? '已在列表中' : '全部已在列表中'),
+    someInIt: (count: number, of: number) => `${format.number(of)} 首中 ${format.number(count)} 首已在列表中`,
+    removed: (count: number, list: string) => `已从 ${list} 移出 ${format.number(count)} 首`,
     already: (list) => `已在“${list}”中`,
     added: (count, list) => `已将 ${format.number(count)} 首歌曲添加到“${list}”`,
   },

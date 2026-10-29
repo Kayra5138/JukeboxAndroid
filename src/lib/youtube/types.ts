@@ -12,6 +12,18 @@ export type YouTubeVideo = {
    */
   discoveryTitle?: string;
   discoveryArtist?: string;
+  /**
+   * Fetched as a tape, into the Tapes folder: [name] is the show, book or list
+   * it is part of and the folder it goes in, [part] its place in a list
+   * fetched as one book. See `lib/tapes` and `fetchTape` on the phone.
+   */
+  tape?: { name: string; part?: number; album?: string; title?: string; date?: string; list?: { id: string; name: string } };
+  /** A file fetched as it is from [url], not a video of YouTube's: a podcast's episode. */
+  direct?: boolean;
+  /** A podcast's episode's chapters and transcript, as its feed gives them: fetched with it. */
+  chaptersUrl?: string;
+  transcriptUrl?: string;
+  transcriptType?: string | null;
   /** The record a Discover song is on, as the catalogue names it; null where it named none. */
   discoveryAlbum?: string | null;
   /** The sleeve a Discover song is shown with. The phone keeps a copy as the file's picture and looks nothing up. */

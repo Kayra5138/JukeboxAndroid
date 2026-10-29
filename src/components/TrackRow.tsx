@@ -7,7 +7,10 @@ import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import type { EnrichedTrack } from '../lib/media/merge';
+import { progressOf, useTapePlace } from '../lib/tapes/places';
+import { isTape } from '../lib/tapes/tape';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * How tall a row is: 68 at the phone's ordinary size of writing, and taller as
@@ -33,7 +36,10 @@ export function useTrackRowHeight(): number {
 function formatDuration(seconds: number): string {
   if (seconds <= 0) return '';
   const total = Math.round(seconds);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  const minutes = Math.floor(total / 60);
+  const rest = String(total % 60).padStart(2, '0');
+  // An hour or more, as a tape or a long mix can be, as hours: 2:37:15 rather than 157:15.
+  return minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
 }
 
 /**
@@ -79,13 +85,31 @@ export const TrackRow = memo(function TrackRow({
   const pressed = usePressed();
   const height = useTrackRowHeight();
   const subtitle = [track.artist ?? t.common.unknownArtist, ...track.tags.slice(0, 2)].join(' · ');
+  // A tape says how far in it is, under its cover, and how long is left, where a song says how long it is.
+  const place = useTapePlace(track.id);
+  const tape = place != null && isTape(track) ? place : null;
+  const progress = progressOf(tape);
+  const begun = progress != null && tape != null;
+  const length = tape?.finished
+    ? t.library.tapes.played
+    : begun
+      ? t.library.tapes.heard(Math.floor(tape.positionSec / 60), Math.max(1, Math.round(tape.durationSec / 60)))
+      : formatDuration(track.durationSec);
+  // And under it, for one part way through, how long is left of it.
+  const left = begun ? t.library.tapes.left(Math.max(1, Math.round((tape.durationSec - tape.positionSec) / 60))) : null;
 
   return (
     <Pressable
       android_ripple={pressed}
       style={[styles.row, { height }, shared && styles.rowShared, selected && styles.rowSelected]}
       onPress={() => onPress(track)}
-      onLongPress={onLongPress && (() => onLongPress(track))}
+      onLongPress={
+        onLongPress &&
+        (() => {
+          haptic('holds', 'hold');
+          onLongPress(track);
+        })
+      }
       /*
         While tracks are being chosen the row is a tick box and says whether it
         is ticked; otherwise it is a button, and says whether it is the one
@@ -115,11 +139,19 @@ export const TrackRow = memo(function TrackRow({
           {selected ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
         </View>
       ) : null}
-      {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" transition={120} />
-      ) : (
-        <View style={[styles.art, styles.artEmpty]} />
-      )}
+      {/* A real view always, so that a bar coming and going under the cover never hands the cover to another parent. */}
+      <View collapsable={false}>
+        {artwork ? (
+          <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" transition={120} />
+        ) : (
+          <View style={[styles.art, styles.artEmpty]} />
+        )}
+        {progress != null ? (
+          <View style={styles.tapeTrack} importantForAccessibility="no">
+            <View style={[styles.tapeDone, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+      </View>
 
       <View style={styles.text}>
         <Text style={[styles.title, playing && styles.titlePlaying]} numberOfLines={1}>
@@ -130,7 +162,14 @@ export const TrackRow = memo(function TrackRow({
         </Text>
       </View>
 
-      <Text style={styles.duration}>{formatDuration(track.durationSec)}</Text>
+      {left ? (
+        <View style={styles.tapeTimes}>
+          <Text style={styles.duration}>{length}</Text>
+          <Text style={styles.tapeLeft}>{left}</Text>
+        </View>
+      ) : (
+        <Text style={[styles.duration, tape?.finished && styles.tapeHeard]}>{length}</Text>
+      )}
       {/* The menu a hold opens, for whoever has not found the hold; not while rows are being ticked. */}
       {onLongPress && !selectable ? <MoreButton onPress={() => onLongPress(track)} /> : null}
     </Pressable>
@@ -177,4 +216,19 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   titlePlaying: { color: c.accent, fontWeight: '600' },
   subtitle: { color: c.textMuted, fontSize: 12.5 },
   duration: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
+  // How far into a tape: along the foot of its cover, over a darker strip so it reads on any picture.
+  tapeTrack: {
+    position: 'absolute',
+    left: 4,
+    right: 4,
+    bottom: 4,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    overflow: 'hidden',
+  },
+  tapeDone: { height: 3, backgroundColor: c.accent },
+  tapeHeard: { color: c.accent },
+  tapeTimes: { alignItems: 'flex-end', gap: 2 },
+  tapeLeft: { color: c.textFaint, fontSize: 11 },
 }));

@@ -7,6 +7,8 @@ import {
 import { libraryState } from '../../library/index';
 import { splitCredit } from '../../metadata/credit';
 import { artistKey, spreadShuffle } from '../../media/shuffle';
+import { isTape } from '../../tapes/tape';
+import type { EnrichedTrack } from '../../media/enriched';
 import type { Track } from '../../types';
 import { candidateOf, contextNow, foldName, KEPT_FOR_MS, libraryIndex, playedSince } from './data';
 import { CALL_AT_ONCE, chooseFresh, freshTrouble, type FreshSeed } from './fresh';
@@ -280,6 +282,9 @@ async function see(): Promise<void> {
   // No picked songs left in the queue, and so nothing for a line over them to be about.
   if (v.autoFrom < 0) setAutoplayNote(null);
   if (mode === 'off') return;
+  // A queue that ends in a tape ends there: a book or an episode is not followed by songs like it.
+  const last = v.queue[v.queue.length - 1];
+  if (last && isTape(last)) return;
   if (decision.kind === 'none') {
     await warm(v, mode);
     return;
@@ -346,8 +351,19 @@ async function warm(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>): Promise<
   warmedAt = now;
   await breathe();
   const library = libraryState();
-  const idx = libraryIndex(library.kind === 'library' ? library.tracks : []);
+  const idx = libraryIndex(musicOf(library.kind === 'library' ? library.tracks : []));
   contextNow(idx.idf, autoplaySource().pool, now);
+}
+
+/**
+ * The library without its tapes, which are never picked to follow a song:
+ * the same list for the same reading of the library, so that what is made of
+ * it once is not made again.
+ */
+let music: { of: readonly EnrichedTrack[]; tracks: EnrichedTrack[] } | null = null;
+function musicOf(tracks: readonly EnrichedTrack[]): EnrichedTrack[] {
+  if (music?.of !== tracks) music = { of: tracks, tracks: tracks.filter((track) => !isTape(track)) };
+  return music.tracks;
 }
 
 /**
@@ -364,7 +380,7 @@ async function warm(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>): Promise<
 function pick(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>, adding: boolean, urgent: boolean): { tracks: Track[]; note: AutoplayNote | null } {
   const now = Date.now();
   const library = libraryState();
-  const tracks = library.kind === 'library' ? library.tracks : [];
+  const tracks = musicOf(library.kind === 'library' ? library.tracks : []);
   const idx = libraryIndex(tracks);
   const discover = autoplaySource();
   const queued = new Set(v.queue.map((track) => track.id));

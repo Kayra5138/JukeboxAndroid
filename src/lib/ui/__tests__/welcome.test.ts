@@ -203,14 +203,19 @@ test('a locale is matched to a language by tag, then by language alone', () => {
   assert.equal(languageForLocale(undefined, ids), null);
 });
 
-test('somebody who finished the first setup is shown what a tap plays and the library folder', () => {
-  assert.deepEqual(stepsFor('update', 1), ['folder', 'tap']);
+test('somebody who finished the first setup is shown what a tap plays, the library folder and the views', () => {
+  assert.deepEqual(stepsFor('update', 1), ['folder', 'views', 'tap']);
   const { welcome } = place({ words: 'done', seen: '1' });
   assert.equal(welcome.kind(), 'update');
-  assert.deepEqual(welcome.steps(), ['folder', 'tap']);
+  assert.deepEqual(welcome.steps(), ['folder', 'views', 'tap']);
 });
 
-test('somebody who has seen what a tap plays is asked only for the library folder', () => {
-  assert.deepEqual(stepsFor('update', 2), ['folder']);
-  assert.deepEqual(place({ words: 'done', seen: '2' }).welcome.steps(), ['folder']);
+test('somebody who has seen what a tap plays is asked for the library folder and the views', () => {
+  assert.deepEqual(stepsFor('update', 2), ['folder', 'views']);
+  assert.deepEqual(place({ words: 'done', seen: '2' }).welcome.steps(), ['folder', 'views']);
+});
+
+test('somebody who has seen the library folder is asked only which views the library offers, once tapes came', () => {
+  assert.deepEqual(stepsFor('update', 3), ['views']);
+  assert.deepEqual(place({ words: 'done', seen: '3' }).welcome.steps(), ['views']);
 });

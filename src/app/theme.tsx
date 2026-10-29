@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -23,6 +24,9 @@ import {
   type Palette,
 } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
+import { useIsFocused } from 'expo-router';
 
 /** The three colours in the order they are asked for, and the token each one ends up as. */
 const ROLES: { role: SeedRole; token: keyof Palette }[] = [
@@ -61,6 +65,9 @@ export default function CustomThemeScreen() {
   const [draft, setDraft] = useState(saved);
   /** The one colour whose controls are out. One at a time: three sets of sliders is a wall. */
   const [open, setOpen] = useState<SeedRole | null>(null);
+  // Back closes a colour's editor before it leaves: what was picked is kept as it was picked.
+  const focused = useIsFocused();
+  useBack(open != null && focused, () => setOpen(null));
 
   const made = customColours(draft);
 
@@ -155,7 +162,10 @@ export default function CustomThemeScreen() {
             android_ripple={pressed}
             accessibilityRole="button"
             style={styles.use}
-            onPress={() => chooseTheme('custom')}>
+            onPress={() => {
+              haptic('results', 'confirm');
+              chooseTheme('custom');
+            }}>
             <Text style={styles.useLabel}>{say.use}</Text>
           </Pressable>
         )}
@@ -164,7 +174,10 @@ export default function CustomThemeScreen() {
           android_ripple={pressed}
           accessibilityRole="button"
           style={styles.reset}
-          onPress={() => keep(DEFAULT_SEEDS)}>
+          onPress={() => {
+            haptic('results', 'confirm');
+            keep(DEFAULT_SEEDS);
+          }}>
           <Text style={styles.resetLabel}>{say.reset}</Text>
         </Pressable>
       </FormScroll>

@@ -6,9 +6,10 @@ export const settings: Strings['settings'] = {
   lastBuiltUnknown: '构建时间：安装新版 APK 后显示',
 
   sections: {
-    look: '外观',
+    look: '外观与触感',
     sound: '声音',
     player: '播放器',
+    tapes: '磁带',
     library: '音乐库',
     downloads: '下载与发现',
     data: '你的数据',
@@ -16,9 +17,10 @@ export const settings: Strings['settings'] = {
     experimental: '实验性功能',
   },
   categories: {
-    look: '主题、专辑唱片架、动效，以及音乐库提供哪些视图。',
+    look: '主题、专辑唱片架、动效、振动，以及音乐库提供哪些视图。',
     sound: '均衡器和音效、音量均衡、交叉淡化，以及速度和音调。',
     player: '跳转按钮的步长、播放队列结束后播放什么，以及歌词翻译的目标语言。',
+    tapes: '智能回退、磁带跳转按钮的步长，以及仅在 Wi‑Fi 下获取播客。',
     library: '音乐所在的文件夹、标签和封面，以及可能是同一首歌的文件。',
     waiting: (count) => `${format.number(count)} 项待确认`,
     downloads: '下载队列及其悬浮按钮、“发现”，以及保持 YouTube 下载器为最新版本。',
@@ -79,7 +81,7 @@ export const settings: Strings['settings'] = {
     title: '专辑唱片架',
     note: '横握手机时，像翻唱片一样浏览专辑封面，而不是看列表。点按最前面的一张即可打开。',
   },
-  heart: { title: '爱心', note: '在播放器上显示一颗爱心，但它不会记录任何东西。' },
+  favoritesShown: { title: "收藏", note: "一个始终存在的列表，最新的在最上面，由播放器上的爱心和歌曲菜单中的“加入收藏”填充。关闭后三者都会隐藏，内容保留。" },
   listButton: {
     title: '添加到歌单按钮',
     note:
@@ -135,10 +137,34 @@ export const settings: Strings['settings'] = {
     note: '适合容易掉帧的手机。播放器会直接出现而不是向上滑出，游戏中获得或失去生命时也不再闪光。琴键仍会落下——那是游戏本身，不是装饰。',
   },
   scriptNames: { title: '其他文字的名称', latin: '拉丁字母', original: '原文', note: '当查找同时找到歌曲的拉丁字母名和原文名（日文、中文、韩文）时，曲库显示哪一个。之前查找过的歌曲在重新查找后补全。' },
+  haptics: {
+    title: "振动",
+    open: "手指触碰时应用振动的多少与强弱。",
+    mode: "振动",
+    modes: { off: "关闭", essential: "仅重要", all: "全部", custom: "自定义" },
+    modeNotes: {
+      off: "应用完全不振动。",
+      essential: "只在最有意义的时候：长按生效、操作成功与否，以及游戏。",
+      all: "长按和拖动、开关和选项、滑块刻度、结果、播放器按钮和游戏。",
+      custom: "在下方选择哪些时刻振动。",
+    },
+    strength: "强度",
+    strengthNote: "松手时可感受到。电机无法调节强弱的手机保持其自身强度。",
+    groupsHeading: "哪些会振动",
+    groups: {
+      holds: { title: "长按和拖动", note: "长按生效、抬起一行以移动、手指划过复选框。" },
+      choices: { title: "开关和选项", note: "开关、选项的标签、选中的选项。" },
+      notches: { title: "刻度和步进", note: "正常速度、0 dB、滑块中点、图表的列。" },
+      results: { title: "结果", note: "操作成功或失败：找到、写入、添加、导入。" },
+      player: { title: "播放器按钮", note: "播放、跳过、重复、爱心、点按歌词的一行。" },
+      fun: { title: "游戏和乐趣", note: "Piano Tiles 的按键等。" },
+    },
+    phone: "如果手机设置中关闭了触摸反馈，应用也不会振动。",
+  },
   moreButton: {
     title: '每行的三点按钮',
     note:
-      '显示在每首歌曲行的末尾，打开与长按相同的菜单。关闭后仍可长按打开。',
+      '显示在每首歌曲和每张专辑行的末尾，打开与长按相同的菜单。关闭后仍可长按打开。',
   },
   tabs: {
     title: '标签页',
@@ -152,6 +178,7 @@ export const settings: Strings['settings'] = {
       albums: '根据标签信息整理成的专辑。',
       artists: '歌曲署名的所有艺人。两位艺人合作的歌曲在两人名下都会出现。',
       folders: '音乐库文件夹下存放文件的各个文件夹。',
+      tapes: '音乐库文件夹中“Tapes”文件夹里的有声书、播客和长录音，会从你上次停下的地方继续播放。',
     },
     onlyHint: '这是唯一开启的视图，因此保持开启',
     toggleHint: '在音乐库中显示或隐藏此视图',
@@ -165,7 +192,7 @@ export const settings: Strings['settings'] = {
   },
   exportAll: {
     title: '导出全部内容',
-    note: '你的收听记录、歌单、标签、歌词和设置，保存为一个文件，位置由你选择。不包括音乐文件本身。',
+    note: '你的收听记录、歌单、标签、歌词和设置、关注的播客，以及每盘磁带听到的位置和做的标记，保存为一个文件，位置由你选择。不包括音乐文件本身。',
     failed: '无法保存备份。',
   },
   importBackup: {
@@ -181,6 +208,39 @@ export const settings: Strings['settings'] = {
   },
   equalizer: { note: '频段、低音、环绕声和响度' },
   effects: { note: '宽度、交叉馈送、旋转和电平' },
+  /** The tape settings, apart from the music's: see `app/settings-tapes.tsx`. */
+  tapes: {
+    smartRewind: {
+      title: '智能回退',
+      note: '隔一段时间再播放的磁带，会从停下的位置稍早一点开始，离开越久退得越多：短暂停顿后退 3 秒，隔一天退半分钟。关闭后从停下的位置原样继续。',
+    },
+    skipSilence: { title: '跳过静音', note: '跳过说话中的停顿，磁带会短一些。不影响音乐。' },
+    voiceClarity: { title: '更清晰的人声', note: '在你的均衡器之上，压低人声下的低频嗡声，并稍微提升分辨字词的频段。仅在播放磁带时。' },
+    skipSponsors: { title: '跳过赞助', note: '来自 YouTube 的磁带中，SponsorBlock 用户标记的部分（赞助信息、频道自我推广、订阅提醒）会被跳过。' },
+    back: '后退',
+    forward: '前进',
+    jumpNote: '播放磁带时，播放键两侧按钮跳转的秒数。音乐的步长在“播放器”中单独设置。',
+    podcasts: '播客',
+    deletePlayed: {
+      title: '删除已听单集',
+      off: '已关注播客的单集听完后仍保留在手机上。',
+      after: (days) => `已关注播客的单集若由应用获取，在完整听完 ${format.number(days)} 天后删除。做过标记的会保留。`,
+    },
+    /** The podcasts followed, as an OPML file: see `podcasts/opml.ts`. */
+    opml: {
+      heading: '迁移播客',
+      export: '保存已关注的播客',
+      exportNote: '保存为其他播客应用也能读取的 OPML 文件。',
+      import: '从文件关注播客',
+      importNote: '来自其他播客应用的 OPML 文件。节目会被关注，但不会自动获取任何内容；可在每个节目的页面中开启。',
+      importing: (done, total) => `正在读取第 ${format.number(done)} 个，共 ${format.number(total)} 个…`,
+      imported: (followed, already, failed) => [`已关注 ${format.number(followed)} 个播客。`, already > 0 ? `${format.number(already)} 个已在关注中。` : '', failed > 0 ? `${format.number(failed)} 个无法读取。` : ''].filter(Boolean).join(''),
+      nothing: '该文件中没有播客。',
+      failed: '无法读取或写入该文件。',
+      none: '你还没有关注任何播客。',
+      saved: (count) => `已保存 ${format.number(count)} 个播客。`,
+    },
+  },
   jump: {
     title: '跳转步长',
     note: '播放键两侧的两个按钮每次在歌曲中前进或后退的秒数。',

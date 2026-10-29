@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { SlidingMark, type MarkPlace } from './SlidingMark';
 import { useLandscape } from '../lib/ui/layout';
 import { useHiddenTabs } from '../lib/ui/tabs';
+import { haptic } from '../lib/ui/haptics';
 import { Frost, useFrosted, useTabTarget } from './Frosted';
 import { barGlass, barsLaidOver, noteTabBar } from './UnderBars';
 
@@ -150,6 +151,8 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
               // The navigator's own guard: a tab that is already open should
               // not be navigated to again, and a listener may say no.
               if (!focused && !event.defaultPrevented) {
+                // The lightest of clicks, and only for a tab actually changed to.
+                haptic('choices', 'tick');
                 navigation.navigate(route.name, route.params);
               }
             }}>

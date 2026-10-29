@@ -8,6 +8,7 @@ import { noticeAbout } from './show';
 import { useDiscoverActions, useDiscoverTrack, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 
 /**
  * Keep and exclude where a song is heard.
@@ -127,7 +128,10 @@ export function PlayerDiscoverSide({
         hitSlop={slop}
         accessibilityRole="button"
         accessibilityLabel={said.row.exclude}
-        onPress={() => exclude(entry.id)}>
+        onPress={() => {
+          haptic('results', 'reject');
+          exclude(entry.id);
+        }}>
         <MinusIcon size={18} />
       </Pressable>
     );
@@ -145,7 +149,10 @@ export function PlayerDiscoverSide({
       accessibilityLabel={told ?? said.row.keep}
       accessibilityState={{ busy: keeping, disabled: keeping }}
       disabled={keeping}
-      onPress={() => keep(entry.id)}>
+      onPress={() => {
+        haptic('results', 'confirm');
+        keep(entry.id);
+      }}>
       {keeping ? (
         <ActivityIndicator size={16} color={c.textMuted} />
       ) : failed ? (
@@ -179,7 +186,10 @@ export function PlayerDiscoverUndo() {
       accessibilityLabel={`${notice.text} ${t.discover.notice.undo}`}
       hitSlop={2}
       style={styles.undo}
-      onPress={undo}>
+      onPress={() => {
+        haptic('choices', 'tick');
+        undo();
+      }}>
       <Text style={styles.undoLabel}>{t.discover.notice.undo}</Text>
     </Pressable>
   );
@@ -223,7 +233,10 @@ export function PlayingKeep({
       accessibilityLabel={t.discover.row.keep}
       accessibilityState={{ busy: entry.keeping, disabled: entry.keeping }}
       disabled={entry.keeping}
-      onPress={() => keep(entry.id)}>
+      onPress={() => {
+        haptic('results', 'confirm');
+        keep(entry.id);
+      }}>
       {entry.keeping ? <ActivityIndicator size={16} color={c.textMuted} /> : <PlusIcon size={18} />}
     </Pressable>
   );
@@ -238,6 +251,15 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     are things to do, and are drawn as something to press.
   */
   button: { backgroundColor: c.surfaceRaised, ...outlined(c) },
-  undo: { minHeight: 44, paddingHorizontal: 14, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  // A pill of its own under the player's row of buttons, laid over what is below it: nothing moves for it.
+  undo: {
+    minHeight: 36,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.surfaceRaised,
+    ...outlined(c),
+  },
   undoLabel: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
 }));

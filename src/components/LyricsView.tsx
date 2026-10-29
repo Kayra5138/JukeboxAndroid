@@ -6,6 +6,7 @@ import { lineAt, parseLrc } from '../lib/lyrics/lrc';
 import type { LyricsState } from '../lib/lyrics/useLyrics';
 import { useTranslation } from '../lib/lyrics/useTranslation';
 import { makeStyles, useColours } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 
 const LINE_HEIGHT = 34;
 
@@ -38,6 +39,7 @@ export function LyricsView({
   onSeek,
   trackId,
   translated,
+  noneText,
 }: {
   state: LyricsState;
   positionSec: number;
@@ -46,6 +48,8 @@ export function LyricsView({
   trackId: string | null;
   /** Whether to show a translation beneath each line. */
   translated: boolean;
+  /** What is said where there are no words: a song's lyrics unless told otherwise, as a tape's captions are. */
+  noneText?: string;
 }) {
   const t = useT();
   const styles = useStyles();
@@ -189,7 +193,7 @@ export function LyricsView({
   if (!state.lyrics) {
     return (
       <View style={[styles.centred, { height }]}>
-        <Text style={styles.none}>{t.lyrics.none}</Text>
+        <Text style={styles.none}>{noneText ?? t.lyrics.none}</Text>
       </View>
     );
   }
@@ -277,7 +281,10 @@ export function LyricsView({
                 accessibilityLabel={rendering ? `${line.text}. ${rendering}` : line.text}
                 accessibilityHint={t.lyrics.seekTo(t.format.decimal(line.at + offsetSec, 1))}
                 accessibilityState={{ selected: index === active }}
-                onPress={() => onSeek(line.at + offsetSec)}
+                onPress={() => {
+                  haptic('player', 'tick');
+                  onSeek(line.at + offsetSec);
+                }}
                 style={[styles.line, index === active && styles.lineNow]}>
                 {line.text}
               </Text>
@@ -285,7 +292,10 @@ export function LyricsView({
                 <Text
                   // Already said with the line above it.
                   importantForAccessibility="no"
-                  onPress={() => onSeek(line.at + offsetSec)}
+                  onPress={() => {
+                  haptic('player', 'tick');
+                  onSeek(line.at + offsetSec);
+                }}
                   style={[styles.translated, index === active && styles.translatedNow]}>
                   {rendering}
                 </Text>

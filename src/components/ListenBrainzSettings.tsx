@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, Linking, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 import { Pressable } from './Pressable';
 
 import { TextPrompt } from './TextPrompt';
@@ -15,6 +16,8 @@ import {
   useScrobbling,
 } from '../lib/scrobble/index';
 import { makeStyles, outlined, outlinedClip, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
 
 /** Said in words on the card as well, for anybody who would rather type it. */
 const TOKEN_PAGE = 'https://listenbrainz.org/settings/';
@@ -54,6 +57,8 @@ export function ListenBrainzSettings({
   /** How the last attempt to connect went wrong, in words; null when it did not. */
   const [refused, setRefused] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Back answers the question no.
+  useBack(confirming, () => setConfirming(false));
 
   // Read as the screen comes into view and not while drawing: it counts over
   // the history, and what it finds may have changed while this was away.
@@ -68,7 +73,11 @@ export function ListenBrainzSettings({
     setRefused(null);
     setChecking(true);
     try {
-      if (!(await connectListenBrainz(token))) setRefused(said.connect.invalid);
+      if (await connectListenBrainz(token)) haptic('results', 'confirm');
+      else {
+        haptic('results', 'reject');
+        setRefused(said.connect.invalid);
+      }
     } catch (failure) {
       /*
         What kind of failure, and never the token: the errors raised on the
@@ -81,6 +90,7 @@ export function ListenBrainzSettings({
         'ListenBrainz could not be asked about a token:',
         failure instanceof Error ? `${failure.name}: ${failure.message}` : typeof failure
       );
+      haptic('results', 'reject');
       setRefused(said.connect.unreachable);
     }
     setChecking(false);

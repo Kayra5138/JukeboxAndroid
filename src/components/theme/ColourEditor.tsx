@@ -8,6 +8,7 @@ import { useT } from '../../lib/i18n/index';
 import { fromLch, toLch, type Lch } from '../../lib/theme/colour.ts';
 import { SEED_PRESETS, seedColour, type SeedRole } from '../../lib/theme/custom.ts';
 import { hintKey, makeStyles, useColours, usePressed } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 
 /**
  * As strong as the slider goes. About the strongest colour a screen can
@@ -134,7 +135,9 @@ export function ColourEditor({
               hitSlop={3}
               style={[styles.ring, on && styles.ringOn]}
               onPress={() => {
-                if (!on) onCommit(preset);
+                if (on) return;
+                haptic('choices', 'click');
+                onCommit(preset);
               }}>
               <View style={[styles.preset, { backgroundColor: preset }]} />
             </Pressable>

@@ -49,3 +49,42 @@ class BackupOpen : AppContextActivityResultContract<BackupOpen.Input, String?> {
   override fun parseResult(input: Input, resultCode: Int, intent: Intent?): String? =
     if (resultCode == Activity.RESULT_OK) intent?.data?.toString() else null
 }
+
+/**
+ * Asking where to save a file of text of some other kind: a list of the
+ * podcasts followed, as OPML, for another app to read.
+ */
+class TextSave : AppContextActivityResultContract<TextSave.Input, String?> {
+  class Input(val name: String, val type: String) : Serializable
+
+  override fun createIntent(context: Context, input: Input): Intent =
+    Intent(Intent.ACTION_CREATE_DOCUMENT)
+      .addCategory(Intent.CATEGORY_OPENABLE)
+      .setType(input.type)
+      .putExtra(Intent.EXTRA_TITLE, input.name)
+
+  override fun parseResult(input: Input, resultCode: Int, intent: Intent?): String? =
+    if (resultCode == Activity.RESULT_OK) intent?.data?.toString() else null
+}
+
+/**
+ * Asking for sound files on the phone, as many as are wanted at once: the
+ * parts of a book, the episodes of a show, to be copied into the Tapes folder.
+ */
+class AudioFilesOpen : AppContextActivityResultContract<AudioFilesOpen.Input, List<String>> {
+  class Input : Serializable
+
+  override fun createIntent(context: Context, input: Input): Intent =
+    Intent(Intent.ACTION_OPEN_DOCUMENT)
+      .addCategory(Intent.CATEGORY_OPENABLE)
+      .setType("audio/*")
+      .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+      .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+
+  override fun parseResult(input: Input, resultCode: Int, intent: Intent?): List<String> {
+    if (resultCode != Activity.RESULT_OK || intent == null) return emptyList()
+    val clips = intent.clipData
+    if (clips != null && clips.itemCount > 0) return (0 until clips.itemCount).mapNotNull { clips.getItemAt(it).uri?.toString() }
+    return listOfNotNull(intent.data?.toString())
+  }
+}

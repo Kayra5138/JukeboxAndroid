@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
+import JukeboxAudio from '../../modules/jukebox-audio/index';
 import { useRouter } from 'expo-router';
-import { BackHandler } from 'react-native';
 
 import { PlaylistPicker } from './PlaylistPicker';
 import { TrackMenu, type TrackAction } from './TrackMenu';
@@ -8,6 +8,13 @@ import { albumKey } from '../lib/media/albums';
 import { deleteTracks } from '../lib/media/remove';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import type { Track } from '../lib/types';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
+import { isFavorite, setFavorite } from '../lib/playlists/favorites';
+import { withoutTapes } from '../lib/tapes/tape';
+import { markTape } from '../lib/tapes/places';
+import { seriesOf } from '../lib/podcasts/series';
+import { folderKey } from '../lib/media/folders';
 
 /** For a row of a record's own page, where "go to album" would lead to itself. */
 export const WITHOUT_ALBUM: readonly TrackAction[] = ['album'];
@@ -83,7 +90,11 @@ export function useTrackMenu({
     []
   );
   const close = useCallback(() => setMenu(null), []);
-  const addToList = useCallback((trackIds: string[]) => setAddingTo(trackIds), []);
+  // Never with a tape in it, from whichever screen the tracks were chosen on: see `lib/tapes`.
+  const addToList = useCallback((trackIds: string[]) => {
+    const songs = withoutTapes(trackIds);
+    if (songs.length > 0) setAddingTo(songs);
+  }, []);
   const closePicker = useCallback(() => setAddingTo(null), []);
 
   /**
@@ -122,14 +133,41 @@ export function useTrackMenu({
       else if (action === 'addToQueue') void addToQueue(track);
       else if (action === 'playSimilar') void playQueue([track], 0, { similar: true });
       else if (action === 'playOnly') void playQueue([track], 0);
-      else if (action === 'delete') void erase([track.id]);
+      else if (action === 'delete') {
+        void erase([track.id]).then((gone) => {
+          if (gone) haptic('results', 'confirm');
+        });
+      }
       else if (action === 'addToPlaylist') setAddingTo([track.id]);
+      else if (action === 'favorite') {
+        const on = !isFavorite(track.id);
+        setFavorite(track.id, on);
+        haptic('results', on ? 'confirm' : 'toggleOff');
+      }
       else if (action === 'tiles') {
         hooks.current.beforeLeaving?.();
         // The name goes with it. The game shows what it is about to play before
         // the player has been told anything, and the name it should show is the
         // one on the row that was pressed -- tags corrected by hand included.
         router.push({ pathname: '/tiles', params: { track: track.id, title: track.title } });
+      }
+      else if (action === 'playFromStart') {
+        // Its place forgotten first, so the player puts it on from the top; the one playing is sent there where it is (see `TapeKeeper.marked`).
+        void markTape(track.id, false, track.durationSec).then(async () => {
+          const playing = (await JukeboxAudio.getStatusAsync().catch(() => null))?.trackId;
+          if (playing === track.id) await JukeboxAudio.playAsync();
+          else await playQueue([track], 0);
+        }).catch((error: unknown) => console.warn('The tape could not be played from its start', error));
+      }
+      else if (action === 'series' || action === 'tapeFolder') {
+        const show = action === 'series' ? seriesOf(track) : null;
+        hooks.current.beforeLeaving?.();
+        if (show) router.push({ pathname: '/podcast', params: { feed: show.feedUrl } });
+        else router.push({ pathname: '/playlist', params: { folder: folderKey(track.folder ?? '') } });
+      }
+      else if (action === 'tapeDetails') {
+        hooks.current.beforeLeaving?.();
+        router.push({ pathname: '/tape', params: { trackId: track.id } });
       }
       else if (action === 'album') {
         const name = track.album?.trim();
@@ -159,14 +197,7 @@ export function useTrackMenu({
     Listened for only while the picker is up, which also puts this after the
     screen's own listener; the last one registered is the first one asked.
   */
-  useEffect(() => {
-    if (addingTo == null) return;
-    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-      setAddingTo(null);
-      return true;
-    });
-    return () => listener.remove();
-  }, [addingTo]);
+  useBack(addingTo != null, () => setAddingTo(null));
 
   const element = (
     <>

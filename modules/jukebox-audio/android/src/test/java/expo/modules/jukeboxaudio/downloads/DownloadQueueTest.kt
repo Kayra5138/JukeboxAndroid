@@ -357,6 +357,33 @@ class DownloadQueueTest {
     assertEquals(ended, queue.lastEnded)
   }
 
+  @Test fun aPodcastsEpisodeStoppedToWaitForWifiGoesBackWhenAskedAndKeepsItsRuleUnlessToldOtherwise() {
+    val episode = queue.enqueue(
+      video(1).put("tape", JSONObject().put("name", "Show")).put("discoverAutomatic", true).put("discoverWifiOnly", true),
+      "original", "Music", null, here)
+    val mobile = Outside(wifi = { false })
+    muchLater()
+    assertTrue(queue.next(mobile) !is Next.Take)
+    assertEquals("failed", status(episode))
+    // Discover's own are Discover's to ask again, and are left.
+    val mine = own(2, wifiOnly = true)
+    muchLater()
+    queue.next(mobile)
+    // A show no longer followed, or no longer fetching by itself, keeps what it had stopped.
+    assertFalse(queue.requeueWaiting(anyNetwork = false, folders = setOf("Another show")))
+    assertEquals("failed", status(episode))
+    assertTrue(queue.requeueWaiting(anyNetwork = false, folders = setOf("Show")))
+    assertEquals("queued", status(episode))
+    assertEquals("failed", status(mine))
+    assertTrue(job(episode).getJSONObject("video").getBoolean("discoverWifiOnly"))
+    // May use any connection: the rule comes off it as it goes back.
+    muchLater()
+    queue.next(mobile)
+    assertTrue(queue.requeueWaiting(anyNetwork = true, folders = setOf("Show")))
+    assertFalse(job(episode).getJSONObject("video").getBoolean("discoverWifiOnly"))
+    assertEquals(episode, (queue.next(mobile) as Next.Take).job.getString("id"))
+  }
+
   @Test fun askedForNextOneOfDiscoversOwnIsNoLongerItsOwn() {
     val asked = download(1); val mine = own(2, wifiOnly = true)
     queue.prioritizeDiscovery(mine)

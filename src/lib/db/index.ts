@@ -156,6 +156,10 @@ export const SETTINGS = {
    */
   libraryArtistSort: 'library:sort:artists',
   libraryFolderSort: 'library:sort:folders',
+  /** The tapes' order: `tapes/sort.ts`. */
+  libraryTapeSort: 'library:sort:tapes',
+  /** Which of the tapes view's parts are shown: `tapes/sort.ts`. */
+  libraryTapeFilter: 'library:tapes:filter',
   /**
    * `'true'` when records are browsed as a rack rather than as a list.
    *
@@ -182,6 +186,27 @@ export const SETTINGS = {
   reduceMotion: 'ui:reduceMotion',
   /** `'false'` when rows of tracks leave out the three dots that open their menu; anything else shows them. */
   moreButton: 'ui:moreButton',
+  /** The lists something was last put in from the list picker, most recent first, as a JSON list of ids: the picker's order. */
+  listsRecent: 'lists:recent',
+  /** Whether Favorites is shown among the lists. Shown unless 'false'; the heart fills it either way. */
+  favoritesShown: 'lists:favoritesShown',
+  /** How fast each tape is played, by its folder, as `{ folder: speed }`: see `tapes/speed.ts`. */
+  tapeSpeeds: 'tapes:speeds',
+  /** The music's own speed, kept while a tape plays at its own, to go back to after it. */
+  musicSpeed: 'tapes:musicSpeed',
+  /** How far a tape's jump buttons go back and forward, in seconds: see `tapes/settings.ts`. */
+  tapeBack: 'tapes:back',
+  tapeForward: 'tapes:forward',
+  /** `'false'` when the episodes of followed podcasts may be fetched by themselves on mobile data too; on Wi‑Fi only otherwise. */
+  podcastsWifiOnly: 'podcasts:wifiOnly',
+  /** `'true'` once the marks of tapes deleted before marks went with them were taken away: see `tapes/marks.ts`. */
+  marksSwept: 'tapes:marksSwept',
+  /** The language books are searched in on Add tapes, by its two letters, or `all`: see `books/archive.ts`. Absent, the app's own. */
+  bookLanguage: 'books:language',
+  /** How many days after it was heard to the end an episode of a followed podcast is deleted; absent or `0` is never. */
+  podcastsDeletePlayedDays: 'podcasts:deletePlayedDays',
+  /** How the app vibrates under a touch: `ui/haptics.ts`, as JSON. Absent is everything, at the middle strength. */
+  haptics: 'ui:haptics',
   /** Whether what somebody saves about a track is written into its file as well: `filetags/auto.ts`. Off unless 'true'. */
   writeEdits: 'files:writeEdits',
   /** Whether what lookups find is written into the files as well. Off unless 'true'. */
@@ -205,8 +230,6 @@ export const SETTINGS = {
    * it is useful: the queue has a screen of its own for whoever goes looking.
    */
   downloadsButton: 'ui:downloadsButton',
-  /** `'true'` where the player has its heart: see `lib/ui/heart.ts`. */
-  heart: 'ui:heart',
   /** `'false'` where the player leaves out its add-to-list button; anything else shows it. */
   listButton: 'player:listButton',
   /**

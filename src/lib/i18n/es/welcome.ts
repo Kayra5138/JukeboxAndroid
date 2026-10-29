@@ -33,7 +33,12 @@ export const welcome: Strings['welcome'] = {
       heading: 'Elige un aspecto',
       note: 'Toca uno para probarlo.',
       more:
-        'Hay más temas, y la elección de los dos que se usan al seguir el sistema, en Ajustes → Aspecto.',
+        'Hay más temas, y la elección de los dos que se usan al seguir el sistema, en Ajustes → Aspecto y tacto.',
+    },
+    views: {
+      heading: 'Qué muestra la biblioteca',
+      note: 'Las formas de ver tu música, como un selector sobre la biblioteca. Activa las que quieras.',
+      more: 'Puedes cambiarlas cuando quieras en Ajustes → Aspecto y tacto.',
     },
     discover: {
       heading: 'Descubrir',

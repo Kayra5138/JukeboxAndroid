@@ -3,6 +3,7 @@ import { one } from './grammar.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "Favoris", kept: "Les Favoris ne peuvent pas être supprimés. On peut les renommer, les vider ou les masquer dans Réglages → Lecteur." },
   naming: {
     heading: 'Nomme la liste',
     placeholder: 'Nom de la liste',
@@ -18,6 +19,14 @@ export const lists: Strings['lists'] = {
     fromListening: 'D’après tes écoutes',
     discover: 'Découvrir',
     discoverHint: 'De la musique que tu n’as pas, d’après ce que tu écoutes',
+    count: (count) => `${format.number(count)} ${one(count, 'liste', 'listes')}`,
+    more: 'Plus',
+    files: 'Fichiers de listes',
+    yours: 'Tes listes',
+    showAll: (count) => `Tout afficher (${format.number(count)})`,
+    showFewer: 'Afficher moins',
+    shuffleList: (list) => `Lecture aléatoire de ${list}`,
+    holdToShuffle: 'Maintiens pour lire en aléatoire',
 
     tagSheet: {
       heading: 'Créer une liste depuis un tag',
@@ -42,6 +51,10 @@ export const lists: Strings['lists'] = {
     heading: (count) => `Ajouter ${format.number(count)} ${one(count, 'titre', 'titres')} à`,
     noLists: 'Aucune liste pour l’instant.',
     newList: 'Nouvelle liste…',
+    inIt: (count: number) => (count === 1 ? 'Déjà dedans' : 'Tous déjà dedans'),
+    someInIt: (count: number, of: number) => `${format.number(count)} sur ${format.number(of)} déjà dedans`,
+    removed: (count, list) =>
+      `${format.number(count)} ${one(count, 'titre retiré', 'titres retirés')} de ${list}`,
     already: (list) => `Déjà dans ${list}`,
     added: (count, list) =>
       `${format.number(count)} ${one(count, 'titre ajouté', 'titres ajoutés')} à ${list}`,

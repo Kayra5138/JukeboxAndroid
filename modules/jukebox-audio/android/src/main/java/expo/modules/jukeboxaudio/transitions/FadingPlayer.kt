@@ -20,8 +20,23 @@ import expo.modules.jukeboxaudio.CallQuiet
 class FadingPlayer(
   player: Player,
   private val crossfader: Crossfader,
-  private val quiet: CallQuiet
+  private val quiet: CallQuiet,
+  /** A press of previous or next on a tape, taken as a jump within it: true where it was one. See [expo.modules.jukeboxaudio.Tapes.jump]. */
+  private val tapeJump: (forward: Boolean) -> Boolean = { false },
+  /** Whether a tape is playing: its previous and next are always there to press, being jumps, at its first part and its last. */
+  private val tapeNow: () -> Boolean = { false },
 ) : ForwardingPlayer(player) {
+
+  override fun getAvailableCommands(): Player.Commands {
+    val commands = super.getAvailableCommands()
+    if (!tapeNow()) return commands
+    return commands.buildUpon().addAll(Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_PREVIOUS).build()
+  }
+
+  override fun isCommandAvailable(command: Int): Boolean =
+    ((command == Player.COMMAND_SEEK_TO_NEXT || command == Player.COMMAND_SEEK_TO_PREVIOUS) && tapeNow()) ||
+      super.isCommandAvailable(command)
+
 
   override fun play() {
     woken()
@@ -65,6 +80,7 @@ class FadingPlayer(
   }
 
   override fun seekToNext() {
+    if (tapeJump(true)) return
     if (crossfader.skip(toNext = true)) return
     super.seekToNext()
   }
@@ -82,6 +98,7 @@ class FadingPlayer(
    * anybody asked for.
    */
   override fun seekToPrevious() {
+    if (tapeJump(false)) return
     if (atStartOfTrack() && crossfader.skip(toNext = false)) return
     super.seekToPrevious()
     // Whichever of the two it did, it has landed somewhere new and wants the

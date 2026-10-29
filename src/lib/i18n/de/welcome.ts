@@ -34,7 +34,12 @@ export const welcome: Strings['welcome'] = {
       heading: 'Wähle ein Design',
       note: 'Tipp eins an, um es auszuprobieren.',
       more:
-        'Weitere Designs und welche zwei beim Folgen des Systems verwendet werden, findest du unter Einstellungen → Aussehen.',
+        'Weitere Designs und welche zwei beim Folgen des Systems verwendet werden, findest du unter Einstellungen → Aussehen & Gefühl.',
+    },
+    views: {
+      heading: 'Was die Bibliothek zeigt',
+      note: 'Die Ansichten deiner Musik, als Umschalter über der Bibliothek. Schalte die ein, die du möchtest.',
+      more: 'Das kannst du jederzeit unter Einstellungen → Aussehen & Gefühl ändern.',
     },
     discover: {
       heading: 'Entdecken',

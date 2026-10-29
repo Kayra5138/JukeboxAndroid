@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 
 import { OptionSheet } from './OptionSheet';
 import { Pressable } from './Pressable';

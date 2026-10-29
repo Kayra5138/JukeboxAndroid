@@ -13,6 +13,7 @@ import {
 import { Pressable } from './Pressable';
 import { SlidingMark } from './SlidingMark';
 import { makeStyles, outlined, outlineWidth } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 import { insideBorder, withPlace, type Place } from '../lib/ui/segmented';
 
 /** One of the choices: what it says, and what it is. */
@@ -216,7 +217,11 @@ export function Segmented<Value extends string | number>({
             disabled={off}
             hitSlop={hitSlop}
             style={[look.cell, layout === 'fill' && styles.fill, optionStyle, own, option.disabled && styles.dim]}
-            onPress={() => onChange(option.value)}>
+            onPress={() => {
+              // Felt only where something changes, or where pressing the chosen one again does something.
+              if (!on || role === 'button') haptic('choices', 'tick');
+              onChange(option.value);
+            }}>
             <Text
               style={[look.label, labelStyle, on && look.chosen, on && chosenLabelStyle]}
               // On one line, made smaller to fit where it has to be rather than cut; laid one

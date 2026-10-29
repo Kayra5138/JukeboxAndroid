@@ -40,6 +40,8 @@ import { artistKey, spreadShuffle } from '../media/shuffle.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { recordPlay, recordSkip } from '../db/history.ts';
 import { listenRecorded } from '../scrobble/index.ts';
+import { isTape } from '../tapes/tape.ts';
+import { refreshTapePlaces } from '../tapes/places.ts';
 import { noteError } from '../support/errorLogStore.ts';
 import type { Track } from '../types.ts';
 
@@ -197,6 +199,8 @@ const SNAPSHOT_ATTEMPTS = 3;
  * is not a hundred calls across to the player.
  */
 const PARAMS_GAP_MS = 120;
+/** How long after the app last told the player a speed what it reports is taken for that being carried out, and not for a change of its own. */
+const PARAMS_ECHO_MS = 1000;
 
 /**
  * Everything the player is willing to be told about a track.
@@ -206,29 +210,11 @@ const PARAMS_GAP_MS = 120;
  * reloaded — returns whole tracks rather than the handful of fields playback
  * happens to require.
  */
-const toQueueItem = ({
-  id,
-  uri,
-  title,
-  artist,
-  album,
-  artworkUri,
-  durationSec,
-  trackNumber,
-  filename,
-  folder,
-}: Track) => ({
-  id,
-  uri,
-  title,
-  artist,
-  album,
-  artworkUri,
-  durationSec,
-  trackNumber,
-  filename,
-  folder,
-});
+const toQueueItem = (track: Track) => {
+  const { id, uri, title, artist, album, artworkUri, durationSec, trackNumber, filename, folder } = track;
+  // And whether it is a tape, for the player to keep its place: see `lib/tapes`.
+  return { id, uri, title, artist, album, artworkUri, durationSec, trackNumber, filename, folder, tape: isTape(track) };
+};
 
 const ActionsContext = createContext<PlayerActions | null>(null);
 const StateContext = createContext<PlayerState | null>(null);
@@ -299,6 +285,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!session) return;
     sessionRef.current = null;
     const play = finishSession(session, completed, Date.now());
+    /*
+      A tape is not a song. Listened to a stretch at a time and left part
+      way through as often as not, it would be the most played thing in the
+      history and the most skipped, it would teach Discover that somebody
+      likes the sound of a voice reading, and it would be sent to ListenBrainz
+      as a song: it is kept out of all of them. Its place is the player's.
+    */
+    if (isTape(play.track)) return;
     try {
       const row = recordPlay(play);
       // Told last and only of a listen that was written down. It decides for
@@ -326,6 +320,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
    * most.
    */
   const offRecord = useRef(false);
+
+  /**
+   * The track that last started over by itself, on repeat, until another one
+   * starts. Moving on from a song that has been looping is not walking out on
+   * it: it has been heard through, again and again, and the last time round
+   * being cut short is only how a loop is ever left.
+   */
+  const loopedRef = useRef<string | null>(null);
 
   const startSession = useCallback((track: Track, playing: boolean) => {
     if (offRecord.current) return;
@@ -581,7 +583,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const trackChange = JukeboxAudio.addListener('onTrackChange', (event) => {
       // Media3 tells us whether the outgoing track ended or was skipped, so the
       // history entry is exact rather than inferred.
-      flushSession(event.completedPrevious, !event.completedPrevious);
+      const leftLoop = loopedRef.current != null && sessionRef.current?.track.id === loopedRef.current;
+      flushSession(event.completedPrevious, !event.completedPrevious && !leftLoop);
+      loopedRef.current = event.repeated ? event.trackId : null;
+      // The tape left has a new place, as may the one come on.
+      refreshTapePlaces();
       changesHeard.current += 1;
       setError(null);
       // The index is authoritative — with a repeated track the id alone cannot
@@ -612,6 +618,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (playing) setError(null);
       const session = sessionRef.current;
       if (session) sessionRef.current = setSessionPlaying(session, playing, Date.now());
+      if (!playing) refreshTapePlaces();
     });
 
     /*
@@ -658,6 +665,20 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       writeSetting(SETTINGS.repeat, event.repeat);
     });
 
+    /*
+      The speed the player is at, followed: it changes a tape's and the
+      music's over by itself, and the speed button has to say what is so. Not
+      while a change of the app's own is on its way or has only just gone,
+      whose word is the newer one and comes back here in its turn.
+    */
+    const paramsChanged = JukeboxAudio.addListener('onPlaybackParamsChange', (event) => {
+      if (sending.current || Date.now() - sentAt.current < PARAMS_ECHO_MS) return;
+      setSpeedState(event.speed);
+      setPitchState(event.pitch);
+      params.current = { speed: event.speed, pitch: event.pitch };
+      told.current = { speed: event.speed, pitch: event.pitch };
+    });
+
     return () => {
       trackChange.remove();
       queueReplaced.remove();
@@ -665,8 +686,22 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       queueEnded.remove();
       failed.remove();
       repeatChanged.remove();
+      paramsChanged.remove();
     };
   }, [flushSession, markPlaying, placeCurrent, resync, startSession]);
+
+  /*
+    How far into a tape the rows show, kept up with while one plays: the
+    player writes its place down every few seconds, and this reads it a
+    little less often, which is plenty for a bar a few pixels high.
+  */
+  const tapePlaying = isPlaying && current != null && isTape(current);
+  useEffect(() => {
+    refreshTapePlaces();
+    if (!tapePlaying) return;
+    const every = setInterval(refreshTapePlaces, 15_000);
+    return () => clearInterval(every);
+  }, [tapePlaying]);
 
   // A play in progress when the app closes is lost, which is preferable to
   // recording one that never happened.
@@ -983,6 +1018,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     },
     [askPlayerFor]
   );
+
+  /*
+    A tape at its own speed and the music at its own is the player's to see
+    to (`Tapes.applySpeed`), with no app about as well as with one; the speed
+    it sets comes back here with the rest of its state.
+  */
 
   const setPitch = useCallback(
     async (value: number) => {

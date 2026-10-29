@@ -9,6 +9,8 @@ import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.MediaStoreLibrary
 import expo.modules.jukeboxaudio.QueueStore
 import expo.modules.jukeboxaudio.R
+import expo.modules.jukeboxaudio.Tapes
+import expo.modules.jukeboxaudio.TapeStore
 
 /**
  * The library as a car can see it.
@@ -37,6 +39,10 @@ internal object BrowseTree {
   private const val ALBUMS = "albums"
   private const val LISTS = "lists"
   private const val RECENT = "recent"
+  /** The tapes part way through, on the home tab: see [tapesBegun]. */
+  private const val TAPES = "tapes"
+  /** How many of them the home tab offers: the ones being listened to, not a library of books. */
+  private const val TAPES_ON_HOME = 3
 
   /**
    * One record, one list, and the answer to one search: `album/key`, `list/7`,
@@ -248,6 +254,9 @@ internal object BrowseTree {
           ))
         }
 
+        // The books and shows part way through, the latest first, before the songs: carried on with from here.
+        tapesBegun(context, root).take(TAPES_ON_HOME).forEach { add(playable(context, it, TAPES)) }
+
         recent.forEach { add(playable(context, it, RECENT)) }
 
         // A library nothing has been played from yet still deserves a first
@@ -354,6 +363,16 @@ internal object BrowseTree {
     }
   }
 
+  /** The tapes part way through and not yet heard, the one listened to last first. */
+  private fun tapesBegun(context: Context, root: String): List<Entry> {
+    val places = TapeStore.all(context)
+    return tracks(context, root, tapes = true)
+      .filter { Tapes.isTapeFolder(it.folder ?: "", root) }
+      .mapNotNull { entry -> places[entry.id]?.takeIf { !it.finished && it.positionMs >= 10_000 }?.let { entry to it.at } }
+      .sortedByDescending { it.second }
+      .map { it.first }
+  }
+
   /** The songs that answer [query], best first. */
   private fun found(context: Context, root: String, query: String): List<Entry> =
     tracks(context, root)
@@ -382,6 +401,8 @@ internal object BrowseTree {
     // The history knows ids and when they were heard; what those ids are is
     // still the library's to say, and a track played once and deleted since
     // simply falls out of the shelf.
+    parentId == TAPES -> tapesBegun(context, root)
+
     parentId == RECENT -> inOrderOf(
       tracks(context, root), LibraryDatabase.recentlyPlayed(context, SHELF)
     )
@@ -477,6 +498,16 @@ internal object BrowseTree {
     val parent = body.substring(0, separator)
     val trackId = body.substring(separator + 1)
 
+    // A tape carried on with plays with the rest of its book or show after it, in their order, from where it was left.
+    if (parent == TAPES) {
+      val root = LibraryDatabase.libraryRoot(context)
+      val all = tracks(context, root, tapes = true)
+      val chosen = all.firstOrNull { it.id == trackId } ?: return emptyList<MediaItem>() to 0
+      val parts = all.filter { it.folder == chosen.folder }
+        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.filename ?: it.title })
+      return parts.map { playable(context, it, TAPES) } to parts.indexOfFirst { it.id == trackId }.coerceAtLeast(0)
+    }
+
     val siblings = children(context, parent)
     val index = siblings.indexOfFirst { it.mediaId == mediaId }
     if (index >= 0) return siblings to index
@@ -484,7 +515,7 @@ internal object BrowseTree {
     // The list it came from has changed underneath the head unit — a track
     // removed, a folder repointed. Playing the one thing that was asked for is
     // better than playing nothing.
-    val single = tracks(context, LibraryDatabase.libraryRoot(context))
+    val single = tracks(context, LibraryDatabase.libraryRoot(context), tapes = true)
       .firstOrNull { it.id == trackId }
       ?.let { playable(context, it, parent) }
     return listOfNotNull(single) to 0
@@ -500,6 +531,8 @@ internal object BrowseTree {
     val albumArtist: String?,
     /** The media store's folder, which is one of the things that says two tracks are one record. */
     val folder: String?,
+    /** The file's own name, which for a tape is the order its parts go in. */
+    val filename: String?,
     val position: Int?,
     /** Milliseconds, or null for a file the media store will not date. */
     val addedAt: Long?,
@@ -509,15 +542,20 @@ internal object BrowseTree {
   /*
     Every way into the library in the car comes through here — the shelves,
     the records, search, shuffle, what was played lately — so what the phone
-    leaves out of the library is left out here, once, for all of them.
+    leaves out of the library is left out here, once, for all of them. So
+    are the tapes, as the phone keeps them out of its music: a book is not a
+    song to shuffle into, nor a record on a shelf. Only the one thing asked
+    for by its id, which a tape carried on with can be, is looked for among
+    them too ([tapes]).
   */
-  private fun tracks(context: Context, root: String): List<Entry> {
+  private fun tracks(context: Context, root: String, tapes: Boolean = false): List<Entry> {
     val kept = LibraryDatabase.kept(context)
     val hiding = LibraryDatabase.hiding(context)
 
     return MediaStoreLibrary.queryTracks(context, root).mapNotNull { row ->
       val id = row["id"] as? String ?: return@mapNotNull null
       val uri = row["uri"] as? String ?: return@mapNotNull null
+      if (!tapes && Tapes.isTapeFolder(row["folder"] as? String ?: "", root)) return@mapNotNull null
       if (!hiding.leavesNothing &&
         !hiding.shows(row["folder"] as? String, (row["durationSec"] as? Number)?.toDouble() ?: 0.0)
       ) return@mapNotNull null
@@ -534,6 +572,7 @@ internal object BrowseTree {
         album = names.album,
         albumArtist = albumArtistNamed(row["album"] as? String, row["albumArtist"] as? String, known),
         folder = row["folder"] as? String,
+        filename = row["filename"] as? String,
         position = known?.position ?: (row["trackNumber"] as? Number)?.toInt(),
         addedAt = row["addedAt"] as? Long,
         durationSec = (row["durationSec"] as? Number)?.toDouble() ?: -1.0
@@ -700,6 +739,8 @@ internal object BrowseTree {
       putString("jukebox.uri", entry.uri)
       putDouble("jukebox.durationSec", entry.durationSec)
       putInt("jukebox.trackNumber", entry.position ?: -1)
+      // Where it is, which is what says whether it is a tape: see [expo.modules.jukeboxaudio.Tapes].
+      putString("jukebox.folder", entry.folder)
       /*
         The heading this row sits under. A car gathers a RUN of rows asking for
         the same one and writes it above them -- so the grouping is by being

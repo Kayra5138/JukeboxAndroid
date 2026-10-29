@@ -3,6 +3,7 @@ import type { Strings } from '../en/index.ts';
 import { oneOrMany } from '../write.ts';
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "Favoriten", kept: "Die Favoriten lassen sich nicht löschen, aber umbenennen, leeren oder in Einstellungen → Player ausblenden." },
   naming: {
     heading: 'Liste benennen',
     placeholder: 'Name der Liste',
@@ -17,6 +18,14 @@ export const lists: Strings['lists'] = {
     fromListening: 'Aus deinem Hörverhalten',
     discover: 'Entdecken',
     discoverHint: 'Musik, die du noch nicht hast – passend zu dem, was du hörst',
+    count: (count) => `${format.number(count)} ${oneOrMany(count, 'Liste', 'Listen')}`,
+    more: 'Mehr',
+    files: 'Playlist-Dateien',
+    yours: 'Deine Listen',
+    showAll: (count) => `Alle ${format.number(count)} anzeigen`,
+    showFewer: 'Weniger anzeigen',
+    shuffleList: (list) => `${list} zufällig abspielen`,
+    holdToShuffle: 'Gedrückt halten, um zufällig abzuspielen',
 
     tagSheet: {
       heading: 'Liste aus einem Tag erstellen',
@@ -46,6 +55,10 @@ export const lists: Strings['lists'] = {
     heading: (count) => `${format.number(count)} Titel zu einer Liste hinzufügen`,
     noLists: 'Noch keine Listen.',
     newList: 'Neue Liste…',
+    inIt: (count: number) => (count === 1 ? 'Schon drin' : 'Alle schon drin'),
+    someInIt: (count: number, of: number) => `${format.number(count)} von ${format.number(of)} schon drin`,
+    removed: (count: number, list: string) =>
+      oneOrMany(count, `Aus ${list} entfernt`, `${format.number(count)} Titel aus ${list} entfernt`),
     already: (list) => `Schon in ${list}`,
     added: (count, list) => `${format.number(count)} Titel zu ${list} hinzugefügt`,
   },

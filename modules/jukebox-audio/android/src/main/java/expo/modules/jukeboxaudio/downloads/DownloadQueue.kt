@@ -365,13 +365,15 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   fun enqueue(video: JSONObject, format: String, folder: String, discoverKey: String? = null,
     exists: (JSONObject) -> Boolean): String {
     val id = video.getString("id")
-    YouTubeData.url(id)
+    YouTubeData.urlOf(video)
     val destination = checked(format, folder, discoverKey)
     video.remove("find")
     // The same file: the same video, saved as the same thing. One that is
     // being cancelled is on its way out, and asking again is asking anew.
+    // A tape and a song of the same video are two files, in two places.
     val existing = jobs.lastOrNull { !it.toFind && it.video.optString("id") == id &&
       it.text("discoverKey") == discoverKey && it.optString("format") == format &&
+      it.video.has("tape") == video.has("tape") &&
       (it.status in activeStates || it.status == "done") && it.status != "cancelling" }
     if (existing != null) {
       if (existing.status != "done" || exists(existing)) return existing.getString("id")
@@ -722,6 +724,9 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     return copy(job)
   }
 
+  /** Whether job [id] is still to keep off mobile data, as it is now and not as the worker's copy of it was. */
+  fun wifiOnly(id: String): Boolean = find(id)?.video?.optBoolean("discoverWifiOnly") ?: false
+
   /** Somebody asked for this one themselves: it is no longer Discover's own, and may use the connection there is. */
   private fun asked(job: JSONObject) {
     job.put("automatic", false)
@@ -789,6 +794,37 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     place(job)
     changed = true
     return true
+  }
+
+  /**
+   * Tapes fetched without anybody asking that were stopped to wait for
+   * Wi‑Fi, put back in the queue: a podcast's episodes, which have nobody
+   * else to ask for them again as Discover's own have. Asked where there is
+   * Wi‑Fi now, or where they may use any connection after all — [anyNetwork],
+   * which takes the rule off those still waiting their turn as well. Answers
+   * with whether any went back.
+   */
+  fun requeueWaiting(anyNetwork: Boolean, folders: Set<String>): Boolean {
+    var any = false
+    for (job in jobs.toList()) {
+      // Only a show still followed that still fetches by itself: one let go of, or told to stop, keeps what it had stopped.
+      val tape = job.video.optJSONObject("tape") ?: continue
+      if (!job.isNull("discoverKey") || tape.optString("name") !in folders) continue
+      if (anyNetwork && job.video.optBoolean("discoverWifiOnly")) {
+        job.video.put("discoverWifiOnly", false)
+        changed = true
+      }
+      if (job.status != "failed" || job.text("errorCode") != Failure.WAITING_WIFI.code) continue
+      if (jobs.count { it.status in activeStates } >= LIMIT) break
+      job.put("status", "queued").put("progress", 0).put("trackId", JSONObject.NULL)
+        .put("finishedAt", JSONObject.NULL).put("startedAt", JSONObject.NULL).put("cleared", false)
+      fail(job, null)
+      jobs.remove(job)
+      place(job)
+      changed = true
+      any = true
+    }
+    return any
   }
 
   fun setPaused(value: Boolean) {

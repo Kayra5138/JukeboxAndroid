@@ -11,6 +11,8 @@ export const common: Strings['common'] = {
   save: '保存',
   done: '完了',
   ok: 'OK',
+  typeNumber: '数値を入力',
+  wholeFrom: (min, max) => `${format.number(min)}〜${format.number(max)}の整数`,
   close: '閉じる',
   back: '戻る',
   delete: '削除',

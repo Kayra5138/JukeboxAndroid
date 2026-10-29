@@ -11,9 +11,10 @@ export const settings = {
    * title of the page it opens; and the two headings left inside those pages.
    */
   sections: {
-    look: 'Look',
+    look: 'Look & feel',
     sound: 'Sound',
     player: 'Player',
+    tapes: 'Tapes',
     library: 'Library',
     downloads: 'Downloads & Discover',
     data: 'Your data',
@@ -30,9 +31,10 @@ export const settings = {
    * in words. Beside the name goes what is live, where anything is.
    */
   categories: {
-    look: 'The theme, albums as a rack, motion, and which views the library offers.',
+    look: 'The theme, albums as a rack, motion, vibration, and which views the library offers.',
     sound: 'The equalizer and effects, even loudness, crossfade, and speed and pitch.',
     player: 'How far the jump buttons go, what plays when the queue runs out, and the language lyrics are translated into.',
+    tapes: 'Smart rewind, how far a tape’s jump buttons go, and fetching podcasts on Wi‑Fi only.',
     library: 'The folder your music is in, tags and covers, and files that may be the same song.',
     /** Beside Library's name: how many files are waiting to be called one song or two. */
     waiting: (count: number) => `${format.number(count)} to decide`,
@@ -105,8 +107,8 @@ export const settings = {
     note:
       'Holding the phone sideways, flick through sleeves instead of reading a list. Tap the one in front to open it.',
   },
-  /** The last row of the player's page. What it turns on is not described anywhere else, on purpose. */
-  heart: { title: 'Heart', note: 'A heart on the player. It keeps nothing.' },
+  /** The last row of the player's page: Favorites, with the heart that fills it, on or off. */
+  favoritesShown: { title: "Favorites", note: "A list that is always there, newest first, filled by a heart on the player and by Add to Favorites in a song’s menu. Off, all three are hidden and what is in it waits." },
   /** Settings → Player: the button on the player that adds the song playing to a list. */
   listButton: {
     title: 'Add-to-list button',
@@ -171,11 +173,36 @@ export const settings = {
   },
   /** Which writing a song's name found in two is shown in: Settings → Look. */
   scriptNames: { title: 'Names in other writings', latin: 'Latin letters', original: 'Original', note: 'Where a lookup found a song\'s name in Latin letters as well as in its own writing (Japanese, Chinese, Korean), which the library shows. Songs looked up before this was added fill in when they are looked up again.' },
-  /** Settings → Look: the three dots at the end of each row of tracks. */
+  /** Settings → Look → Vibration: see `ui/haptics.ts`. */
+  haptics: {
+    title: "Vibration",
+    open: "How much the app vibrates under your finger, and how strongly.",
+    mode: "Vibrate",
+    modes: { off: "Off", essential: "Essential", all: "All", custom: "Custom" },
+    modeNotes: {
+      off: "The app does not vibrate at all.",
+      essential: "Only where it says most: a hold taking, something you asked for working or not, and the game.",
+      all: "Holds and drags, switches and choices, the stops on a slider, results, the player's buttons and the game.",
+      custom: "Pick the kinds of moment below.",
+    },
+    strength: "Strength",
+    strengthNote: "Felt as you let go. Phones whose motor cannot be made lighter or stronger keep their own strength.",
+    groupsHeading: "What vibrates",
+    groups: {
+      holds: { title: "Holds and drags", note: "A long press taking, a row lifted to move it, a finger run down the checkboxes." },
+      choices: { title: "Switches and choices", note: "Switches, the tabs of a choice, an option picked." },
+      notches: { title: "Stops and steps", note: "Normal speed, 0 dB, the middle of a slider, the columns of a chart." },
+      results: { title: "Results", note: "Something you asked for worked, or did not: found, written, added, imported." },
+      player: { title: "Player buttons", note: "Play, skip, repeat, the heart, tapping a line of the lyrics." },
+      fun: { title: "Game and fun", note: "The keys of Piano Tiles, and more." },
+    },
+    phone: "If touch feedback is off in the phone's own settings, the app does not vibrate either.",
+  },
+  /** Settings → Look: the three dots at the end of each row of tracks and of albums. */
   moreButton: {
     title: 'Three dots on each row',
     note:
-      'At the end of every row of tracks, opening the same menu a long press does. Holding a row works without them too.',
+      'At the end of every row of tracks and albums, opening the same menu a long press does. Holding a row works without them too.',
   },
   /** Settings → Look: the tabs that can be taken off the bar. Their names are the tabs' own. */
   tabs: {
@@ -190,6 +217,7 @@ export const settings = {
       albums: 'Records, put together from what the tags say.',
       artists: 'Everyone a song is credited to. A song by two artists is under both.',
       folders: 'The folders the files are kept in, below the library folder.',
+      tapes: 'Books, podcasts and long recordings from the Tapes folder inside the library folder, which play on from where you left them.',
     },
     onlyHint: 'The only view left on, so it stays on',
     toggleHint: 'Shows or hides this view in the library',
@@ -208,7 +236,7 @@ export const settings = {
   exportAll: {
     title: 'Export everything',
     note:
-      'Your listening history, lists, tags, lyrics and settings, in one file you choose a place for. Not the music itself.',
+      'Your listening history, lists, tags, lyrics and settings, the podcasts you follow, and where you are in each tape and what you marked in it, in one file you choose a place for. Not the music itself.',
     failed: 'The backup could not be saved.',
   },
   importBackup: {
@@ -226,6 +254,39 @@ export const settings = {
   },
   equalizer: { note: 'Bands, bass, surround and loudness' },
   effects: { note: 'Width, crossfeed, rotation and level' },
+  /** The tape settings, apart from the music's: see `app/settings-tapes.tsx`. */
+  tapes: {
+    smartRewind: {
+      title: 'Smart rewind',
+      note: 'A tape played again after a while starts a little before where it was left, the longer away the further back: three seconds after a short break, half a minute after a day. Off, it plays on from exactly where it stopped.',
+    },
+    skipSilence: { title: 'Skip silence', note: 'Pauses in what is said are passed over, so a tape plays a little shorter. Music is never touched.' },
+    voiceClarity: { title: 'Clearer voice', note: 'Rumble under a voice is let down and the part of it words are told apart by is lifted a little, over your equalizer. Only while a tape plays.' },
+    skipSponsors: { title: 'Skip sponsors', note: 'In tapes from YouTube, the parts SponsorBlock’s listeners marked — a sponsor’s message, the channel’s own advertising, a request to subscribe — are passed over as they come.' },
+    back: 'Jump back',
+    forward: 'Jump forward',
+    jumpNote: 'How far a tape’s two buttons either side of play go, in seconds. Music keeps its own, under Player.',
+    podcasts: 'Podcasts',
+    deletePlayed: {
+      title: 'Delete heard episodes',
+      off: 'Episodes of the podcasts you follow stay on the phone after you hear them.',
+      after: (days: number) => oneOrMany(days, 'An episode of a podcast you follow is deleted a day after you hear it to the end, if the app fetched it. One you marked stays.', `An episode of a podcast you follow is deleted ${format.number(days)} days after you hear it to the end, if the app fetched it. One you marked stays.`),
+    },
+    /** The podcasts followed, as an OPML file: see `podcasts/opml.ts`. */
+    opml: {
+      heading: 'Moving your podcasts',
+      export: 'Save the podcasts you follow',
+      exportNote: 'As an OPML file, which other podcast apps can read.',
+      import: 'Follow podcasts from a file',
+      importNote: 'An OPML file from another podcast app. Shows are followed without fetching anything by themselves; turn that on for each one on its own screen.',
+      importing: (done: number, total: number) => `Reading ${format.number(done)} of ${format.number(total)}…`,
+      imported: (followed: number, already: number, failed: number) => [oneOrMany(followed, 'Followed 1 podcast.', `Followed ${format.number(followed)} podcasts.`), already > 0 ? oneOrMany(already, '1 was followed already.', `${format.number(already)} were followed already.`) : '', failed > 0 ? oneOrMany(failed, '1 could not be read.', `${format.number(failed)} could not be read.`) : ''].filter(Boolean).join(' '),
+      nothing: 'There are no podcasts in that file.',
+      failed: 'That file could not be read or written.',
+      none: 'You follow no podcasts yet.',
+      saved: (count: number) => oneOrMany(count, 'Saved 1 podcast.', `Saved ${format.number(count)} podcasts.`),
+    },
+  },
   jump: {
     title: 'Jump by',
     note: 'How far the two buttons either side of play move through a track, in seconds.',

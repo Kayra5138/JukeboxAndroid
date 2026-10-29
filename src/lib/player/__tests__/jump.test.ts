@@ -4,18 +4,20 @@ import { describe, it } from 'node:test';
 import { DEFAULT_JUMP, jumpTo, stepFrom } from '../jump.ts';
 
 describe('which step a stored setting means', () => {
-  it('takes one that is offered', () => {
+  it('takes any whole number of seconds up to a minute', () => {
     assert.equal(stepFrom('30'), 30);
+    assert.equal(stepFrom('20'), 20);
+    assert.equal(stepFrom('1'), 1);
   });
 
   it('falls back to ten for anything it cannot use', () => {
     assert.equal(stepFrom(null), DEFAULT_JUMP);
     assert.equal(stepFrom(''), DEFAULT_JUMP);
     assert.equal(stepFrom('nonsense'), DEFAULT_JUMP);
-    // A step that was once offered and no longer is, so the row of buttons
-    // would have nothing lit and the player would move by a figure that
-    // cannot be read anywhere.
-    assert.equal(stepFrom('20'), DEFAULT_JUMP);
+    // Outside what can be chosen, or not whole: nothing the setting could show.
+    assert.equal(stepFrom('90'), DEFAULT_JUMP);
+    assert.equal(stepFrom('0'), DEFAULT_JUMP);
+    assert.equal(stepFrom('7.5'), DEFAULT_JUMP);
   });
 });
 

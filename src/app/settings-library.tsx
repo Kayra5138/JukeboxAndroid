@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
-import { Switch, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 
 import { OptionSheet } from '../components/OptionSheet';
 import { Pressable } from '../components/Pressable';

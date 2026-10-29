@@ -4,6 +4,7 @@ import {
   type Cell,
   type Row,
   type TableName,
+  type TapePlace,
   type Tables,
 } from './format.ts';
 
@@ -163,7 +164,10 @@ export function remapTables(
     }
   }
 
-  for (const name of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations'] as const) {
+  // A followed show is nobody's song: it comes as it is.
+  out.podcasts = tables.podcasts.map((row) => ({ ...row }));
+
+  for (const name of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations', 'tape_marks'] as const) {
     for (const row of tables[name]) {
       const id = to.get(row.track_id as string);
       if (!id) {
@@ -351,6 +355,16 @@ function mergeKeyed(here: Tables, there: Tables): Omit<Tables, 'playlists' | 'pl
       (row) => `${row.track_id}\u0000${row.target}`,
       newerTranslation
     ),
+    // A show followed here keeps how it is fetched here.
+    podcasts: oneOfEach(here.podcasts, there.podcasts, (row) => row.feed_url as string, (mine) => mine),
+    // A mark is one place in one tape: the same place on both, to the millisecond, is one mark, its note the one here.
+    // Two marks a moment apart are two, each with its own note.
+    tape_marks: oneOfEach(
+      here.tape_marks,
+      there.tape_marks,
+      (row) => `${row.track_id}\u0000${Math.round((row.position_sec as number) * 1000)}`,
+      (mine) => mine
+    ),
   };
 }
 
@@ -365,7 +379,7 @@ function mergeKeyed(here: Tables, there: Tables): Omit<Tables, 'playlists' | 'pl
  * are moved where they are, by whoever is doing the moving.
  */
 export function joinSongs(here: Tables, there: Tables): Tables {
-  return { ...emptyTables(), ...mergeKeyed(here, there), plays: [], skips: [], discover_exclusions: [] };
+  return { ...emptyTables(), ...mergeKeyed(here, there), plays: [], skips: [], discover_exclusions: [], podcasts: [], tape_marks: [] };
 }
 
 /**
@@ -398,7 +412,8 @@ export function consolidate(tables: Tables): Tables {
  * end up in whichever one happened to be here.
  */
 export function mergeTables(here: Tables, there: Tables): Tables {
-  const kind = (row: Row) => `${fold(row.name)}\u0000${row.tag ?? ''}`;
+  // Favorites are poured into favorites whatever either is called by now: there is one of them on each side.
+  const kind = (row: Row) => (row.kind === 'favorites' ? 'favorites' : `${fold(row.name)}\u0000${row.tag ?? ''}`);
 
   const lists = here.playlists.map((row) => ({ ...row }));
   const free = new Map<string, Row[]>();
@@ -451,6 +466,8 @@ export type Summary = {
   lists: number;
   tagged: number;
   lyrics: number;
+  /** The shows followed in it. */
+  followed: number;
 };
 
 export function summarise(tables: Tables, to: Map<string, string>): Summary {
@@ -464,5 +481,22 @@ export function summarise(tables: Tables, to: Map<string, string>): Summary {
     lists: tables.playlists.length,
     tagged: new Set(tables.track_tags.map((row) => row.track_id)).size,
     lyrics: tables.track_lyrics.filter(hasWords).length,
+    followed: tables.podcasts.length,
   };
+}
+
+/**
+ * Where tapes were left, under the ids their songs have here. A place is a
+ * thing said about a song, as a tag is: one whose song is not here is left
+ * out, and two of the backup's that are one tape here keep the later.
+ */
+export function remapPlaces(places: Record<string, TapePlace>, to: Map<string, string>): Record<string, TapePlace> {
+  const out: Record<string, TapePlace> = {};
+  for (const [id, place] of Object.entries(places)) {
+    const here = to.get(id);
+    if (!here) continue;
+    const already = out[here];
+    if (!already || place.at > already.at) out[here] = place;
+  }
+  return out;
 }

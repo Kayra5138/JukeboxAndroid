@@ -8,8 +8,8 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import JukeboxAudio from '../../modules/jukebox-audio';
 import type { Track } from '../lib/types';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * How far the finger must travel sideways before this is a swipe at all.
@@ -182,7 +182,7 @@ export function TrackStrip({
           return;
         }
 
-        JukeboxAudio.tick?.();
+        haptic('player', 'tick');
         fling.current = gesture.vx;
         nudge.current = forward ? 1 : -1;
         asked.current = target;

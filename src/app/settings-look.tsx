@@ -1,17 +1,20 @@
 import { useCallback, useState } from 'react';
 import { Link, useFocusEffect } from 'expo-router';
-import { Switch, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 
 import { Pressable } from '../components/Pressable';
 import { Segmented } from '../components/Segmented';
 import { SettingsPage, useRows } from '../components/settings/rows';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
-import { LIBRARY_VIEWS, storedViews, viewsFrom, withView, type LibraryView } from '../lib/media/views';
+import { LIBRARY_VIEWS, withView } from '../lib/media/views';
+import { setLibraryViews, useLibraryViews } from '../lib/ui/libraryViews';
 import { switchColours, useColours, usePressed, useThemeChoice } from '../lib/theme/index';
 import { themeOf } from '../lib/theme/registry';
 import { rackWanted, useLandscape } from '../lib/ui/layout';
 import { setMoreButtonShown, useMoreButtonShown } from '../lib/ui/moreButton';
+import { useHaptics } from '../lib/ui/haptics';
 import { OPTIONAL_TABS } from '../lib/ui/tabChoice';
 import { setTabShown, useHiddenTabs } from '../lib/ui/tabs';
 import { setScriptNames, useScriptNames } from '../lib/ui/scriptNames';
@@ -29,6 +32,7 @@ export default function LookSettingsScreen() {
   const c = useColours();
   const styles = useRows();
   const pressed = usePressed();
+  const haptics = useHaptics();
   const landscape = useLandscape();
   /*
     What is chosen, to be named on the row that opens the themes. Not read on
@@ -51,14 +55,11 @@ export default function LookSettingsScreen() {
   /** Held where the tab bar watches it, so a switch here changes the bar at once. */
   const hiddenTabs = useHiddenTabs();
   /** The ways of looking at the library that its switch offers. */
-  const [views, setViews] = useState<LibraryView[]>(() => viewsFrom(readSetting(SETTINGS.libraryViews)));
+  const views = useLibraryViews();
 
   useFocusEffect(useCallback(() => {
     setStill(readSetting(SETTINGS.reduceMotion) === 'true');
     setRack(rackWanted(true));
-    // The same list is a new array each time it is read, and is not news.
-    const kept = viewsFrom(readSetting(SETTINGS.libraryViews));
-    setViews((before) => (storedViews(before) === storedViews(kept) ? before : kept));
   }, []));
 
   return (
@@ -137,6 +138,22 @@ export default function LookSettingsScreen() {
               <Text style={styles.muted}>{t.settings.still.note}</Text>
             </View>
             <View style={styles.rule} />
+            {/* Beside holding the decoration still, which is the nearest thing to it: how the app answers a touch. */}
+            <Link href="/settings-haptics" asChild>
+              <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
+                <View style={styles.line}>
+                  <Text style={styles.title}>{t.settings.haptics.title}</Text>
+                  <View style={styles.choices}>
+                    <Text style={styles.value} numberOfLines={1}>
+                      {t.settings.haptics.modes[haptics.mode]}
+                    </Text>
+                    <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+                  </View>
+                </View>
+                <Text style={styles.muted}>{t.settings.haptics.open}</Text>
+              </Pressable>
+            </Link>
+            <View style={styles.rule} />
             <View style={styles.row}>
               <View style={styles.line}>
                 <Text style={styles.title}>{t.settings.moreButton.title}</Text>
@@ -211,9 +228,7 @@ export default function LookSettingsScreen() {
                         value={on}
                         disabled={only}
                         onValueChange={(wanted) => {
-                          const next = withView(views, view, wanted);
-                          setViews(next);
-                          writeSetting(SETTINGS.libraryViews, storedViews(next));
+                          setLibraryViews(withView(views, view, wanted));
                         }}
                         {...switchColours(c, on)}
                       />

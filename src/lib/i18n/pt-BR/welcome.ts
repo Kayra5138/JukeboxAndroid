@@ -34,7 +34,12 @@ export const welcome: Strings['welcome'] = {
       heading: 'Escolha uma aparência',
       note: 'Toque em um para experimentar.',
       more:
-        'Mais temas, e quais dois usar ao seguir o sistema, ficam em Ajustes → Aparência.',
+        'Mais temas, e quais dois usar ao seguir o sistema, ficam em Ajustes → Aparência e toque.',
+    },
+    views: {
+      heading: 'O que a biblioteca mostra',
+      note: 'Os jeitos de ver sua música, como um seletor acima da biblioteca. Ative os que quiser.',
+      more: 'Você pode mudar isso quando quiser em Configurações → Aparência e toque.',
     },
     discover: {
       heading: 'Descobrir',

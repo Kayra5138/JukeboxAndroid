@@ -36,6 +36,8 @@ export default function MainTabs() {
         the opposite of what moving it there was for.
       */
       tabBar={(props) => <TabBar {...props} />}
+      // Back goes to the tab that was in front before, as it goes back everywhere else, and not always to the library.
+      backBehavior="history"
       // Each tab an area the bar can blur, in a theme of glass: see `Frosted`.
       screenLayout={tabArea}
       screenOptions={{

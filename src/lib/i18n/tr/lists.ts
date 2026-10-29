@@ -2,6 +2,7 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "Favoriler", kept: "Favoriler silinemez. Adı değiştirilebilir, içi boşaltılabilir ya da Ayarlar → Oynatıcı’dan gizlenebilir." },
   naming: {
     heading: 'Listeye ad ver',
     placeholder: 'Liste adı',
@@ -17,6 +18,14 @@ export const lists: Strings['lists'] = {
     fromListening: 'Dinlediklerinden',
     discover: 'Keşfet',
     discoverHint: 'Dinlediklerine göre, sende olmayan müzikler',
+    count: (count) => `${format.number(count)} liste`,
+    more: 'Diğer',
+    files: 'Liste dosyaları',
+    yours: 'Listelerin',
+    showAll: (count) => `Tümünü göster (${format.number(count)})`,
+    showFewer: 'Daha az göster',
+    shuffleList: (list) => `${list} listesini karıştır`,
+    holdToShuffle: 'Karıştırıp çalmak için basılı tut',
 
     tagSheet: {
       heading: 'Etiketten liste oluştur',
@@ -44,6 +53,9 @@ export const lists: Strings['lists'] = {
     heading: (count) => `${format.number(count)} parçanın ekleneceği liste`,
     noLists: 'Henüz liste yok.',
     newList: 'Yeni liste…',
+    inIt: (count: number) => (count === 1 ? 'Listede' : 'Hepsi listede'),
+    someInIt: (count: number, of: number) => `${format.number(of)} şarkıdan ${format.number(count)} tanesi listede`,
+    removed: (count, list) => `${format.number(count)} parça ${list} listesinden çıkarıldı`,
     already: (list) => `Zaten ${list} listesinde`,
     added: (count, list) => `${format.number(count)} parça ${list} listesine eklendi`,
   },

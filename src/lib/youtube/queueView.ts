@@ -80,6 +80,7 @@ export type Source =
   | { kind: 'discover' }
   | { kind: 'album'; name: string }
   | { kind: 'playlist'; name: string }
+  | { kind: 'tape'; name: string }
   | { kind: 'search' };
 
 export function sourceOf(job: DownloadJob): Source {
@@ -90,6 +91,9 @@ export function sourceOf(job: DownloadJob): Source {
   if (typeof album === 'string' && album.trim() !== '') return { kind: 'album', name: album.trim() };
   const list = job.video.sourcePlaylist?.name;
   if (typeof list === 'string' && list.trim() !== '') return { kind: 'playlist', name: list.trim() };
+  // A book's part, a show's episode, or anything fetched as a tape: by the show, book or folder it goes in.
+  const tape = (job.video.tape as { name?: unknown } | null | undefined)?.name;
+  if (typeof tape === 'string' && tape.trim() !== '') return { kind: 'tape', name: tape.trim() };
   return { kind: 'search' };
 }
 

@@ -415,6 +415,13 @@ object DownloadStore {
   fun retry(id: String): Boolean = kept { queue.retry(id) }
 
   @Synchronized
+  fun requeueWaiting(anyNetwork: Boolean, folders: Set<String>): Boolean = kept { queue.requeueWaiting(anyNetwork, folders) }
+
+  /** Whether job [id] is still to keep off mobile data: see [DownloadQueue.wifiOnly]. */
+  @Synchronized
+  fun wifiOnly(id: String): Boolean = queue.wifiOnly(id)
+
+  @Synchronized
   fun setPaused(paused: Boolean) = kept { queue.setPaused(paused) }
 
   @Synchronized

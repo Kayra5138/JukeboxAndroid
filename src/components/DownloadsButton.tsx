@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'expo-router';
-import { Animated, BackHandler, Easing, Keyboard, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, AppState, Easing, Keyboard, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useBatch } from './downloads/useBatch';
@@ -15,11 +15,13 @@ import { laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme
 import { useSheetOpen } from '../lib/theme/Veil';
 import { downloadsLookedAt, useDownloadsButtonWanted } from '../lib/ui/downloadsButton';
 import { announce } from '../lib/ui/announce';
+import { haptic } from '../lib/ui/haptics';
 import { useLandscape } from '../lib/ui/layout';
 import { motionReduced } from '../lib/ui/motion';
 import { useDownloads } from '../lib/youtube/DownloadsProvider';
 import { namesOf, type Batch } from '../lib/youtube/queueView';
 import { statusLabel } from '../lib/youtube/types';
+import { useBack } from '../lib/ui/back';
 
 /** Across the button, which is a finger's width and no more. */
 const SIZE = 48;
@@ -86,6 +88,12 @@ function Watching() {
           .filter(Boolean)
           .join(', ')
       );
+      // Felt only with the app in front: a phone buzzing in a pocket for a
+      // download nobody is watching is not an answer to anything.
+      // Nor for a run that only ended because it was cancelled, which was felt as it was cancelled.
+      if (AppState.currentState === 'active' && batch.done + batch.failed > 0) {
+        haptic('results', batch.failed > 0 ? 'reject' : 'confirm');
+      }
     }
     hadLeft.current = left;
   }, [left, batch.done, batch.failed, batch.total, t]);
@@ -113,14 +121,7 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
   const moving = batch.underWay > 0 && !paused;
   const drift = useDrift(moving);
 
-  useEffect(() => {
-    if (!open) return;
-    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-      setOpen(false);
-      return true;
-    });
-    return () => listener.remove();
-  }, [open]);
+  useBack(open, () => setOpen(false));
 
   const current = batch.current;
   const state = t.downloads.short(batch.underWay, batch.waiting, paused) || (finished ? said.finished : '');

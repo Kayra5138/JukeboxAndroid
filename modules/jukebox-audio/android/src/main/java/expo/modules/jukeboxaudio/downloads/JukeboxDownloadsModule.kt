@@ -124,6 +124,49 @@ class JukeboxDownloadsModule : Module() {
       DiscoverFiles.clean(context, ids, protectedIds)
     }.runOnQueue(io)
 
+    /** A podcast's feed, read: the show and its episodes. See [expo.modules.jukeboxaudio.podcasts.PodcastFeed]. */
+    AsyncFunction("podcastFeedAsync") { address: String ->
+      // A YouTube channel's videos are read by the extractor; a podcast's feed, as a feed.
+      val show = if (expo.modules.jukeboxaudio.podcasts.PodcastFeed.isYouTube(address)) {
+        try { YouTubeEngine.channel(context, address) } catch (error: Exception) { throw trouble(error) }
+      } else expo.modules.jukeboxaudio.podcasts.PodcastFeed.fetch(address)
+      mapOf(
+        "title" to show.title,
+        "author" to show.author,
+        "image" to show.image,
+        "summary" to show.summary,
+        "link" to show.link,
+        "episodes" to show.episodes.map { episode ->
+          mapOf(
+            "guid" to episode.guid,
+            "title" to episode.title,
+            "url" to episode.url,
+            "type" to episode.type,
+            "bytes" to episode.bytes?.toDouble(),
+            "publishedAt" to episode.publishedAt?.toDouble(),
+            "durationSec" to episode.durationSec,
+            "episode" to episode.episode,
+            "season" to episode.season,
+            "image" to episode.image,
+            "summary" to episode.summary,
+            "chaptersUrl" to episode.chaptersUrl,
+            "transcriptUrl" to episode.transcriptUrl,
+            "transcriptType" to episode.transcriptType,
+          )
+        },
+      )
+    }.runOnQueue(io)
+
+    /** The one address of the YouTube channel at [address], by its id; null where it is not a channel's. */
+    AsyncFunction("youtubeFeedAsync") { address: String ->
+      expo.modules.jukeboxaudio.podcasts.PodcastFeed.youtubeFeedOf(address)
+    }.runOnQueue(io)
+
+    AsyncFunction("searchChannelsAsync") { words: String ->
+      try { YouTubeEngine.channels(context, words) }
+      catch (error: Exception) { throw trouble(error) }
+    }.runOnQueue(io)
+
     AsyncFunction("searchAsync") { query: String, searchId: String ->
       try { YouTubeEngine.search(context, query, searchId).map(YouTubeData::map) }
       catch (error: Exception) { throw trouble(error) }
@@ -240,6 +283,14 @@ class JukeboxDownloadsModule : Module() {
       DownloadStore.init(context)
       if (DownloadStore.retry(id)) DownloadService.wake(context)
       Unit
+    }.runOnQueue(io)
+
+    /** A podcast's episodes stopped to wait for Wi‑Fi put back in the queue: see [DownloadQueue.requeueWaiting]. */
+    AsyncFunction("requeueWaitingAsync") { anyNetwork: Boolean, folders: List<String> ->
+      DownloadStore.init(context)
+      val any = DownloadStore.requeueWaiting(anyNetwork, folders.toSet())
+      if (any) DownloadService.wake(context)
+      any
     }.runOnQueue(io)
 
     AsyncFunction("setPausedAsync") { paused: Boolean ->

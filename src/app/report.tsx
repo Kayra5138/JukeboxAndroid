@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { useState } from 'react';
-import { Linking, Platform, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Platform, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
 import { Pressable } from '../components/Pressable';
@@ -11,6 +12,7 @@ import { detailLines, errorLine, issueLink, phoneLine, reportText, stamp, type R
 import { useErrorEntries } from '../lib/support/errorLogStore';
 import { makeStyles, outlined, switchColours, useColours, usePressed, useTheme, useThemeChoice } from '../lib/theme/index';
 import { useAnnounce } from '../lib/ui/announce';
+import { haptic } from '../lib/ui/haptics';
 import { downloads } from '../lib/youtube/native';
 
 /**
@@ -73,6 +75,7 @@ export default function ReportScreen() {
     }
     try {
       JukeboxAudio.copyText(reportText(facts, errors));
+      haptic('results', 'confirm');
       setNote({ text: said.copied, bad: false });
     } catch {
       setNote({ text: said.copyFailed, bad: true });

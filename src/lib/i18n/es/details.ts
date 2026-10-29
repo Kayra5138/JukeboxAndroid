@@ -36,6 +36,7 @@ export const details: Strings['details'] = {
   lookUp: 'Buscar datos',
   searchFailed: 'No se ha podido completar la búsqueda.',
 
+  unsaved: { title: "¿Descartar los cambios?", body: "Lo que escribiste aquí no se ha guardado.", keep: "Seguir editando", discard: "Descartar" },
   general: {
     fields: {
       title: 'Título',

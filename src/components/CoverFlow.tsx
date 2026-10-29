@@ -11,11 +11,11 @@ import {
 import { Image } from './Picture';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import JukeboxAudio from '../../modules/jukebox-audio';
 import { useT } from '../lib/i18n/index';
 import { useAlbumArtwork, warmAlbumArtwork } from '../lib/media/artwork';
 import type { Album } from '../lib/media/albums';
 import { laid, makeStyles } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 import { motionReduced } from '../lib/ui/motion';
 
 /**
@@ -396,8 +396,11 @@ export function CoverFlow({
    * one under the finger is not yet the one the caption names.
    */
   const hold = onHold
-    ? (album: Album) => {
-        if (squared()) onHold(album);
+    ? (album: Album, touched: boolean) => {
+        if (!squared()) return;
+        // Felt under a finger only; a screen reader asking for the menu by name is holding nothing.
+        if (touched) haptic('holds', 'hold');
+        onHold(album);
       }
     : undefined;
 
@@ -479,7 +482,7 @@ export function CoverFlow({
         // A record coming to the front clicks, the way a detent does.
         // Fired from here rather than from an effect so it lands with the
         // movement rather than a frame after it.
-        JukeboxAudio.tick?.();
+        haptic('notches', 'tick');
         return index;
       });
     },
@@ -760,7 +763,7 @@ const Card = memo(function Card({
   /** Opens whichever record is in front. The same function for every card. */
   onOpen: () => void;
   /** The same again for a record held down; only the one in front offers it. */
-  onHold?: (album: Album) => void;
+  onHold?: (album: Album, touched: boolean) => void;
   /** Told when the picture is there and where it came from. Only while measuring. */
   onPicture?: (album: Album, from: string) => void;
 }) {
@@ -770,7 +773,7 @@ const Card = memo(function Card({
   const press = () => {
     if (inFront) onOpen();
   };
-  const held = inFront && onHold ? () => onHold(album) : undefined;
+  const held = inFront && onHold ? (touched: boolean) => onHold(album, touched) : undefined;
 
   /*
     Only the difference between where the fan wants this record and where the
@@ -839,11 +842,11 @@ const Card = memo(function Card({
           onAccessibilityAction={
             held &&
             ((event) => {
-              if (event.nativeEvent.actionName === 'longpress') held();
+              if (event.nativeEvent.actionName === 'longpress') held(false);
             })
           }
           onPress={press}
-          onLongPress={held}>
+          onLongPress={held && (() => held(true))}>
           {artwork ? (
             <Image
               source={{ uri: artwork }}

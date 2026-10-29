@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 
 import { readSetting, SETTINGS, writeSetting } from '../db/index';
 import type { EnrichedTrack } from '../media/enriched';
 import { findCopies, pairsOf, parseApart } from './copies';
 import { useLibraryTracks } from './useLibrary';
+import { isTape } from '../tapes/tape';
 
 /**
  * The library's copies of the same song, with the settings table behind the
@@ -71,5 +72,7 @@ function copiesIn(tracks: readonly EnrichedTrack[], said: ReadonlySet<string>): 
 export function useCopies(): EnrichedTrack[][] {
   const tracks = useLibraryTracks();
   const said = useSyncExternalStore(subscribe, apartNow);
-  return copiesIn(tracks, said);
+  // Songs only: a tape is no song's copy, and none is offered to be deleted as one.
+  const music = useMemo(() => tracks.filter((track) => !isTape(track)), [tracks]);
+  return copiesIn(music, said);
 }

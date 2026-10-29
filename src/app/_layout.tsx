@@ -17,9 +17,17 @@ import { keepSpreadingCovers } from '../lib/media/coverSpread';
 import { loadLanguage, useT } from '../lib/i18n/index';
 import { loadLyricsTarget } from '../lib/lyrics/useTarget';
 import { keepLookupsGoing } from '../lib/metadata/background';
+import { keepPodcastsChecked } from '../lib/podcasts/refresh';
+import { schedulePodcasts } from '../lib/podcasts/background';
+import { syncTapeJumps } from '../lib/tapes/settings';
+import { syncTapeSpeeds } from '../lib/tapes/speed';
+import { fetchNextAfter } from '../lib/podcasts/next';
+import { prepareTape } from '../lib/tapes/extras';
+import { sweepMarksOnce } from '../lib/tapes/marks';
+import { isTape } from '../lib/tapes/tape';
 import { Autoplay } from '../lib/player/autoplay/Autoplay';
 import { NowPlayingHost } from '../lib/player/NowPlayingSheet';
-import { PlayerProvider } from '../lib/player/PlayerProvider';
+import { PlayerProvider, usePlayerState } from '../lib/player/PlayerProvider';
 import { keepScrobbling } from '../lib/scrobble/index';
 import { watchErrors } from '../lib/support/errorLogStore';
 import { keepCheckingForUpdates } from '../lib/support/updateStore';
@@ -83,6 +91,18 @@ export default function RootLayout() {
   */
   useEffect(() => keepLookupsGoing(), []);
 
+  // The podcasts somebody follows, read again now and then, and their new episodes fetched: see `podcasts/refresh.ts`.
+  useEffect(() => keepPodcastsChecked(), []);
+  // And with the app closed: see `podcasts/background.ts`.
+  useEffect(() => {
+    void schedulePodcasts();
+    // The tape's jumps, for presses from outside the app: see `tapes/settings.ts`.
+    syncTapeJumps();
+    syncTapeSpeeds();
+    // Marks left behind by tapes deleted before they went with them, once.
+    void sweepMarksOnce();
+  }, []);
+
   /*
     The window itself, behind every screen. It is what shows through for the
     moment a screen slides over another and around the keyboard as it comes
@@ -144,6 +164,8 @@ export default function RootLayout() {
           the queue is about to run out. Draws nothing.
         */}
         <Autoplay />
+        {/* The episode after the one begun, for a show set to fetch it: see `podcasts/next.ts`. Draws nothing. */}
+        <NextEpisodes />
         {/*
           The now-playing screen is a layer over the navigator rather than a route
           within it, so whatever is underneath stays on screen while it is open.
@@ -183,8 +205,10 @@ export default function RootLayout() {
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             {/* The pages the Settings tab is a menu of, in its order. */}
             <Stack.Screen name="settings-look" options={{ title: t.settings.sections.look, ...over }} />
+            <Stack.Screen name="settings-haptics" options={{ title: t.settings.haptics.title, ...over }} />
             <Stack.Screen name="settings-sound" options={{ title: t.settings.sections.sound, ...over }} />
             <Stack.Screen name="settings-player" options={{ title: t.settings.sections.player, ...over }} />
+            <Stack.Screen name="settings-tapes" options={{ title: t.settings.sections.tapes, ...over }} />
             <Stack.Screen name="settings-library" options={{ title: t.settings.sections.library, ...over }} />
             <Stack.Screen name="settings-downloads" options={{ title: t.settings.sections.downloads, ...over }} />
             <Stack.Screen name="settings-data" options={{ title: t.settings.sections.data, ...over }} />
@@ -210,6 +234,12 @@ export default function RootLayout() {
             <Stack.Screen name="themes" options={{ title: t.nav.themes, ...over }} />
             <Stack.Screen name="theme" options={{ title: t.nav.customTheme, ...over }} />
             <Stack.Screen name="downloads" options={{ title: t.nav.downloads, ...over }} />
+            {/* Opened from the tapes view of the library, and from nowhere else. */}
+            <Stack.Screen name="tapes-add" options={{ title: t.library.tapes.add, ...over }} />
+            <Stack.Screen name="podcast" options={{ title: t.search.tapes.podcasts.showTitle, ...over }} />
+            <Stack.Screen name="marks" options={{ title: t.player.marks.screen, ...over }} />
+            <Stack.Screen name="book" options={{ title: t.search.tapes.sources.books, ...over }} />
+            <Stack.Screen name="tape" options={{ title: t.library.tapes.details.title, ...over }} />
             <Stack.Screen name="discover-settings" options={{ title: t.discover.settings.title, ...over }} />
           </Stack>
           {/*
@@ -378,8 +408,10 @@ const HEADERLESS = new Set(['(tabs)', 'tiles', 'playlist']);
  */
 const SCROLLS_UNDER = new Set([
   'settings-look',
+  'settings-haptics',
   'settings-sound',
   'settings-player',
+  'settings-tapes',
   'settings-library',
   'settings-downloads',
   'settings-data',
@@ -422,3 +454,17 @@ const usePage = makeStyles((c) =>
 );
 
 const rootStyles = StyleSheet.create({ app: { flex: 1 } });
+
+/** Each tape as it begins handed to `fetchNextAfter`, which fetches the next episodes of a show that asks for it, and made ready (`prepareTape`). */
+function NextEpisodes() {
+  const { current } = usePlayerState();
+  const id = current && isTape(current) ? current.id : null;
+  const uri = id ? (current?.uri ?? null) : null;
+  useEffect(() => {
+    if (!id) return;
+    void fetchNextAfter(id);
+    // Its chapters, and the parts of a video to pass over: see `tapes/extras.ts`.
+    void prepareTape(id, uri);
+  }, [id, uri]);
+  return null;
+}

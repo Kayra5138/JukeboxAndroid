@@ -22,6 +22,7 @@ import JukeboxAudio from '../../../modules/jukebox-audio';
 import type { ReportCard } from '../../lib/stats/report';
 import { makeStyles, outlined, page, useColours } from '../../lib/theme/index';
 import { useAnnounce } from '../../lib/ui/announce';
+import { haptic } from '../../lib/ui/haptics';
 import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
 
 /**
@@ -204,12 +205,15 @@ export function ReportViewer({
       if (how === 'save') {
         if (!JukeboxAudio.saveImageAsync) throw new Error(t.stats.viewer.cannotSave);
         await JukeboxAudio.saveImageAsync(file);
+        haptic('results', 'confirm');
         setNote(t.stats.viewer.saved);
       } else {
         if (!JukeboxAudio.shareImageAsync) throw new Error(t.stats.viewer.cannotShare);
         await JukeboxAudio.shareImageAsync(file);
       }
     } catch (failure) {
+      // Sharing hands the picture to the phone's own sheet, which answers for itself.
+      if (how === 'save') haptic('results', 'reject');
       setNote(failure instanceof Error ? failure.message : t.stats.viewer.failed);
     } finally {
       setBusy(null);

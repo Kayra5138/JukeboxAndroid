@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 
 import { makeStyles } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 
 /** How often a drag is allowed to reach the audio framework, in milliseconds. */
 const SEND_EVERY_MS = 40;
@@ -21,6 +22,54 @@ const THUMB = 22;
 /** What a screen reader may ask of a slider: a step up and a step down. */
 const ADJUST = [{ name: 'increment' }, { name: 'decrement' }];
 const TRACK = 6;
+
+/**
+ * How far, in points, a drag has to carry the value away from a notch it was
+ * felt at before that notch can be felt again. A finger resting on a notch
+ * is never quite still, and without this a slider between two steps would
+ * buzz for as long as it was held there.
+ */
+const REARM = 8;
+
+/** Room for the arithmetic of a snapped value, which is not always exact. */
+const EPSILON = 1e-9;
+
+/** The values a slider is felt to stop at as it is dragged across them. */
+type Notches = {
+  centre?: number;
+  notches?: readonly number[];
+  notchEvery?: number;
+};
+
+function isNotch(value: number, { centre, notches, notchEvery }: Notches): boolean {
+  const near = (notch: number) => Math.abs(value - notch) < EPSILON;
+  if (centre !== undefined && near(centre)) return true;
+  if (notches?.some(near)) return true;
+  return !!notchEvery && near(Math.round(value / notchEvery) * notchEvery);
+}
+
+/**
+ * The notch a move from one value to another came to, crossed or landed on,
+ * or null. Leaving one is not coming to it: the drag that sets off from the
+ * resting value has nothing yet to be felt.
+ */
+function notchReached(from: number, to: number, { centre, notches, notchEvery }: Notches): number | null {
+  if (from === to) return null;
+  const up = to > from;
+  const reached = (notch: number) =>
+    up ? from + EPSILON < notch && notch <= to + EPSILON : to - EPSILON <= notch && notch < from - EPSILON;
+  let found: number | null = null;
+  const consider = (notch: number) => {
+    if (reached(notch) && (found === null || Math.abs(notch - to) < Math.abs(found - to))) found = notch;
+  };
+  if (centre !== undefined) consider(centre);
+  notches?.forEach(consider);
+  if (notchEvery) {
+    const steps = up ? Math.floor(to / notchEvery + EPSILON) : Math.ceil(to / notchEvery - EPSILON);
+    consider(steps * notchEvery);
+  }
+  return found;
+}
 
 /**
  * Sliders that follow the finger rather than the render loop.
@@ -62,6 +111,13 @@ type Common = {
    * them, and the finger would have nothing to feel.
    */
   snap?: (value: number) => number;
+  /**
+   * Values felt as the thumb crosses them, besides the centre, which always
+   * is: the zero of a control that rests at its bottom end, say.
+   */
+  notches?: readonly number[];
+  /** Felt at every multiple of this, for a control whose every step matters. */
+  notchEvery?: number;
 };
 
 /**
@@ -92,9 +148,12 @@ function useDrag({
   invert,
   snap,
   tapPosition,
+  centre,
+  notches,
+  notchEvery,
   onDrag,
   onSettle,
-}: {
+}: Notches & {
   value: number;
   min: number;
   max: number;
@@ -140,6 +199,12 @@ function useDrag({
     would hand the settings a second copy of the same change.
   */
   const latest = useRef(value);
+  /*
+    The notch last felt, kept until the drag has carried the value far enough
+    from it, so that the same notch is not felt over and over under a finger
+    that has not really moved.
+  */
+  const felt = useRef<number | null>(null);
 
   /*
     Everything the responder reads lives in a ref. It is built once, on the
@@ -155,11 +220,25 @@ function useDrag({
     invert,
     snap,
     tapPosition,
+    notched: { centre, notches, notchEvery } as Notches,
     onDrag,
     onSettle,
     at,
   });
-  live.current = { value, min, max, span, travel, invert, snap, tapPosition, onDrag, onSettle, at };
+  live.current = {
+    value,
+    min,
+    max,
+    span,
+    travel,
+    invert,
+    snap,
+    tapPosition,
+    notched: { centre, notches, notchEvery },
+    onDrag,
+    onSettle,
+    at,
+  };
 
   // Follows the value while nobody is holding it — a preset chosen, a reset,
   // the screen opening — and keeps its hands off while somebody is.
@@ -196,6 +275,7 @@ function useDrag({
               : event.nativeEvent.pageX,
             value: live.current.value,
           };
+          felt.current = isNotch(live.current.value, live.current.notched) ? live.current.value : null;
         },
         onPanResponderMove: (event) => {
           const state = live.current;
@@ -205,6 +285,19 @@ function useDrag({
           const moved = (page - start.current.page) / state.travel;
           const fraction = state.at(start.current.value) + (state.invert ? -moved : moved);
           const next = valueAt(fraction, state);
+
+          if (
+            felt.current !== null &&
+            state.span !== 0 &&
+            (Math.abs(next - felt.current) / Math.abs(state.span)) * state.travel > REARM
+          ) {
+            felt.current = null;
+          }
+          const notch = notchReached(latest.current, next, state.notched);
+          if (notch !== null && notch !== felt.current) {
+            felt.current = notch;
+            haptic('notches', 'tick');
+          }
 
           // The thumb is placed by the value rather than by the finger, which
           // is what makes a snapped control feel like it has notches in it.
@@ -239,6 +332,7 @@ function useDrag({
 
           if (pointed !== null) {
             const next = valueAt(pointed, state);
+            if (next !== latest.current && isNotch(next, state.notched)) haptic('notches', 'tick');
             position.setValue(state.at(next));
             setShown(next);
             latest.current = next;
@@ -315,6 +409,8 @@ export function Fader({
   label,
   height,
   snap,
+  notches,
+  notchEvery,
   onDrag,
   onSettle,
   format,
@@ -328,6 +424,8 @@ export function Fader({
     travel,
     invert: true,
     snap,
+    notches,
+    notchEvery,
     onDrag,
     onSettle,
   });
@@ -418,6 +516,8 @@ export function Slider({
   label,
   centre,
   snap,
+  notches,
+  notchEvery,
   onDrag,
   onSettle,
   format,
@@ -466,6 +566,9 @@ export function Slider({
     invert: false,
     snap,
     tapPosition,
+    centre,
+    notches,
+    notchEvery,
     onDrag,
     onSettle,
   });

@@ -34,6 +34,8 @@ export const themes = {
   frost: 'Frosted glass',
   aero: 'Aero',
   aurora: 'Cover glass',
+  auroraLight: 'Cover glass, light',
+  sundown: 'Sundown glass',
 
   lightGroup: 'Light',
   darkGroup: 'Dark',

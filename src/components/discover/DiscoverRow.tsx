@@ -11,6 +11,7 @@ import { rowLabel, rowShows, watchRow, type RowShows, type RowWatch } from './sh
 import { useDiscoverActions, useDiscoverEntry, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 
 /**
  * As tall as a row of the Library, and worked out the same way, for the same
@@ -77,6 +78,17 @@ function Song({
   const { id } = entry;
   useAnnounced(entry);
 
+  // Felt from the finger's own ways of keeping and excluding, and not from a
+  // screen reader's actions, which say what they did out loud.
+  const keepFelt = () => {
+    haptic('results', 'confirm');
+    keep(id);
+  };
+  const excludeFelt = () => {
+    haptic('results', 'reject');
+    exclude(id);
+  };
+
   const busy = shows.mark === 'queued' || shows.mark === 'working' || shows.mark === 'progress';
   const lineStyle =
     shows.tone === 'danger' ? styles.lineBad : shows.tone === 'accent' ? styles.lineChosen : styles.line;
@@ -93,9 +105,9 @@ function Song({
       left={
         shows.keeping
           ? undefined
-          : { label: said.swipeKeep, colour: c.successSoft, tint: c.success, onAct: () => keep(id) }
+          : { label: said.swipeKeep, colour: c.successSoft, tint: c.success, onAct: keepFelt }
       }
-      right={{ label: said.swipeExclude, colour: c.dangerSoft, tint: c.danger, onAct: () => exclude(id) }}>
+      right={{ label: said.swipeExclude, colour: c.dangerSoft, tint: c.danger, onAct: excludeFelt }}>
       <View style={[styles.row, { height }, shows.chosen && styles.rowChosen, shows.gone && styles.rowGone]}>
         {/*
           The song is the button, and the two beside it are not inside it: a
@@ -107,7 +119,10 @@ function Song({
           style={styles.song}
           disabled={shows.gone}
           onPress={() => play(id)}
-          onLongPress={() => onMenu(id)}
+          onLongPress={() => {
+            haptic('holds', 'hold');
+            onMenu(id);
+          }}
           accessibilityRole="button"
           /*
             Everything the row shows, as words. A label takes the place of
@@ -182,7 +197,7 @@ function Song({
               android_ripple={pressed}
               style={styles.act}
               disabled={shows.keeping}
-              onPress={() => keep(id)}
+              onPress={keepFelt}
               accessible={false}
               importantForAccessibility="no-hide-descendants">
               {shows.keeping ? <ActivityIndicator size={16} color={c.textMuted} /> : <PlusIcon size={18} />}
@@ -190,7 +205,7 @@ function Song({
             <Pressable
               android_ripple={pressed}
               style={styles.act}
-              onPress={() => exclude(id)}
+              onPress={excludeFelt}
               accessible={false}
               importantForAccessibility="no-hide-descendants">
               <MinusIcon size={18} color={c.textMuted} />

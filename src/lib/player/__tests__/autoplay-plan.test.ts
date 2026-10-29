@@ -147,7 +147,9 @@ describe('how many a top-up adds', () => {
 
   it('reads only the choices offered, and the defaults for anything else', () => {
     assert.deepEqual(sizesFrom('12,6'), { library: 12, fresh: 6 });
-    assert.deepEqual(sizesFrom('13,6'), { library: 8, fresh: 6 });
+    assert.deepEqual(sizesFrom('13,6'), { library: 13, fresh: 6 });
+    assert.deepEqual(sizesFrom('99,6'), { library: 8, fresh: 6 });
+    assert.deepEqual(sizesFrom('12,0'), { library: 12, fresh: 4 });
     assert.deepEqual(sizesFrom('12'), { library: 12, fresh: 4 });
     assert.deepEqual(sizesFrom(null), DEFAULT_SIZES);
     assert.deepEqual(sizesFrom('nonsense'), DEFAULT_SIZES);

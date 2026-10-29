@@ -7,6 +7,10 @@ import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 import type { Track } from '../lib/types';
+import { useFavoritesShown, useIsFavorite } from '../lib/playlists/favorites';
+import { markTape, useTapePlace } from '../lib/tapes/places';
+import { isTape } from '../lib/tapes/tape';
+import { seriesOf } from '../lib/podcasts/series';
 
 export type TrackAction =
   | 'playNext'
@@ -14,10 +18,16 @@ export type TrackAction =
   | 'playSimilar'
   | 'playOnly'
   | 'addToPlaylist'
+  | 'favorite'
   | 'album'
   | 'tiles'
   | 'details'
-  | 'delete';
+  | 'delete'
+  // A tape's own: see `TAPE_ACTIONS`.
+  | 'playFromStart'
+  | 'series'
+  | 'tapeFolder'
+  | 'tapeDetails';
 
 /**
  * In the order the sheet shows them. What each says, and the line under it,
@@ -31,10 +41,21 @@ const ACTIONS: readonly TrackAction[] = [
   'playOnly',
   'album',
   'addToPlaylist',
+  // Into Favorites or out of it, as the player's heart does; worded by which it would be.
+  'favorite',
   'tiles',
   'details',
   'delete',
 ];
+
+/**
+ * A tape's menu, in its order, in place of a song's: from the top or on from
+ * where it was, after the one playing or at the end, the series it is an
+ * episode of or the folder it is in, and away. Heard or not is above these.
+ * Nothing of a song's — a list, Favorites, similar songs, the game, the
+ * record, a lookup of its details — which a book or an episode is not.
+ */
+const TAPE_ACTIONS: readonly TrackAction[] = ['playFromStart', 'playNext', 'addToQueue', 'series', 'tapeFolder', 'tapeDetails', 'delete'];
 
 /**
  * Everything that can be done to one track, from a long press on its row.
@@ -67,6 +88,13 @@ export function TrackMenu({
   const pressed = usePressed();
   useWindowVeil(track !== null);
   const discover = isDiscoverTrack(track?.id);
+  const favorite = useIsFavorite(track?.id);
+  const favorites = useFavoritesShown();
+  const said = (action: TrackAction) =>
+    action === 'favorite' ? t.library.menu[favorite ? 'favoriteRemove' : 'favoriteAdd'] : t.library.menu[action];
+  const tape = track != null && isTape(track);
+  // An episode of a podcast that is followed opens its series; any other tape, the folder it is in.
+  const series = tape && seriesOf(track) != null;
   return (
     <Modal
       visible={track !== null}
@@ -84,16 +112,24 @@ export function TrackMenu({
               <Text accessibilityRole="header" style={styles.title} numberOfLines={2}>
                 {track.title}
               </Text>
-              <Text style={styles.artist} numberOfLines={1}>
-                {track.artist ?? t.common.unknownArtist}
-              </Text>
+              {/* A tape with nobody named is not a song by an unknown artist: it says nothing there. */}
+              {track.artist || !isTape(track) ? (
+                <Text style={styles.artist} numberOfLines={1}>
+                  {track.artist ?? t.common.unknownArtist}
+                </Text>
+              ) : null}
             </View>
 
-            {ACTIONS.filter(
+            {/* First for a tape: where it stands is the thing about a book or an episode most often put right. */}
+            {!discover && isTape(track) ? <TapeEntry track={track} onDone={onClose} /> : null}
+            {(tape ? TAPE_ACTIONS : ACTIONS).filter(
               // Only where there is a record to go to. A track whose album
               // nobody knows would lead to an empty screen.
               (action) =>
                 !hidden?.includes(action) &&
+                (action !== 'series' || series) &&
+                (action !== 'tapeFolder' || !series) &&
+                (action !== 'favorite' || favorites) &&
                 !(discover && (NOT_FOR_DISCOVER as readonly TrackAction[]).includes(action)) &&
                 (action !== 'album' || Boolean(track.album?.trim()))
             ).map((action) => (
@@ -104,9 +140,9 @@ export function TrackMenu({
                 style={styles.action}
                 onPress={() => onSelect(action, track)}>
                 <Text style={action === 'delete' ? styles.destructive : styles.actionLabel}>
-                  {t.library.menu[action].label}
+                  {said(action).label}
                 </Text>
-                <Text style={styles.actionHint}>{t.library.menu[action].hint}</Text>
+                <Text style={styles.actionHint}>{said(action).hint}</Text>
               </Pressable>
             ))}
             {discover ? <DiscoverEntries trackId={track.id} onDone={onClose} /> : null}
@@ -114,6 +150,31 @@ export function TrackMenu({
         ) : null}
       </Pressable>
     </Modal>
+  );
+}
+
+/**
+ * A tape marked as heard, so that it starts from the top next time and goes
+ * to the foot of the tapes; or one heard, or part way through, marked as not
+ * begun.
+ */
+function TapeEntry({ track, onDone }: { track: Track; onDone: () => void }) {
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
+  const place = useTapePlace(track.id);
+  const heard = place?.finished === true;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      android_ripple={pressed}
+      style={styles.action}
+      onPress={() => {
+        void markTape(track.id, !heard, track.durationSec);
+        onDone();
+      }}>
+      <Text style={styles.actionLabel}>{heard ? t.library.tapes.markUnplayed : t.library.tapes.markPlayed}</Text>
+    </Pressable>
   );
 }
 

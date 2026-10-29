@@ -3,10 +3,10 @@ import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
+import { Switch } from '../components/Switch';
 import { Pressable } from '../components/Pressable';
 import { Segmented } from '../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -46,6 +46,9 @@ import { useT, type Strings } from '../lib/i18n/index';
 import { makeStyles, outlined, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
 import { useAnnounce } from '../lib/ui/announce';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
+import { useIsFocused } from 'expo-router';
 
 /** A change the player would not take, said in the log; see `settle`. */
 const refused = (failure: unknown) => console.warn('The equalizer could not be set', failure);
@@ -63,6 +66,9 @@ const MB_PER_DB = 100;
  * minus thirty would spend half its length on values nobody wants.
  */
 const PREAMP_SLIDER_MIN = -20;
+
+/** Where the tone sliders are felt: at nothing, which is the bottom of each. */
+const NONE = [0] as const;
 
 /** The part of the equalizer's settings that is the curve and the curves kept. */
 type Shape = Omit<ParametricEqualizer, 'notice'>;
@@ -104,6 +110,10 @@ export default function EqualizerScreen() {
   useAnnounce(note);
   /** The preset "Delete" has been pressed on once, waiting to be pressed again. */
   const [armed, setArmed] = useState<string | null>(null);
+  // Back folds a band's editor away, and lets a preset waiting to be deleted off, before it leaves.
+  const focused = useIsFocused();
+  useBack(open != null && focused, () => setOpen(null));
+  useBack(armed != null && focused, () => setArmed(null));
 
   /*
     The settings as they stand, read by the drag handlers.
@@ -383,9 +393,11 @@ export default function EqualizerScreen() {
                     danger
                     onPress={() => {
                       if (armed !== current) {
+                        haptic('choices', 'tick');
                         setArmed(current);
                         return;
                       }
+                      haptic('results', 'heavy');
                       setArmed(null);
                       setNote(null);
                       shape({ presets: removed(kept, current) }, true);
@@ -432,6 +444,7 @@ export default function EqualizerScreen() {
                 style={styles.add}
                 accessibilityRole="button"
                 onPress={() => {
+                  haptic('choices', 'tick');
                   const next = [
                     ...latestBands(),
                     // Flat, so that adding it changes nothing until it is
@@ -514,6 +527,7 @@ export default function EqualizerScreen() {
               value={state.bass}
               min={0}
               max={1000}
+              notches={NONE}
               accent={c.accent}
               format={(strength) => t.sound.percent(Math.round(strength / 10))}
               onDrag={(value) => push({ bass: Math.round(value) })}
@@ -526,6 +540,7 @@ export default function EqualizerScreen() {
               value={state.virtualizer}
               min={0}
               max={1000}
+              notches={NONE}
               accent={c.accent}
               format={(strength) => t.sound.percent(Math.round(strength / 10))}
               onDrag={(value) => push({ virtualizer: Math.round(value) })}
@@ -537,6 +552,7 @@ export default function EqualizerScreen() {
             value={state.loudness}
             min={0}
             max={state.maxLoudnessMb}
+            notches={NONE}
             accent={c.accent}
             format={decibels}
             onDrag={(value) => push({ loudness: Math.round(value) })}
@@ -550,6 +566,7 @@ export default function EqualizerScreen() {
           style={styles.reset}
           accessibilityRole="button"
           onPress={() => {
+            haptic('results', 'confirm');
             setOpen(null);
             setArmed(null);
             setNote(null);

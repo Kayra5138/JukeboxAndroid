@@ -258,6 +258,8 @@ export function readdress(database: BackupDb, moves: Pair[], stays: (id: string)
     ['playlist_tracks', 'track_id'],
     ['playlists', 'cover_track_id'],
     ['shared_covers', 'track_id'],
+    // A tape's marks go with it to its new name. Where it was left is the player's, and stays with the old.
+    ['tape_marks', 'track_id'],
   ] as const) {
     const moving = held(database, table, column, froms);
     if (moving.length === 0) continue;

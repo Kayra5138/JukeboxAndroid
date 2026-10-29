@@ -28,6 +28,8 @@ export const themes: Strings['themes'] = {
   frost: 'Cristal esmerilado',
   aero: 'Aero',
   aurora: 'Cristal de portada',
+  auroraLight: 'Cristal de portada, claro',
+  sundown: 'Cristal de atardecer',
 
   lightGroup: 'Claros',
   darkGroup: 'Oscuros',

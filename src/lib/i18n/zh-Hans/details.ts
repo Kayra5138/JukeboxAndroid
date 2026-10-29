@@ -32,6 +32,7 @@ export const details: Strings['details'] = {
   lookUp: '在线查询',
   searchFailed: '搜索未能完成。',
 
+  unsaved: { title: "放弃更改？", body: "你在这里输入的内容尚未保存。", keep: "继续编辑", discard: "放弃" },
   general: {
     fields: {
       title: '标题',

@@ -38,6 +38,7 @@ export const downloads: Strings['downloads'] = {
     search: '検索',
     album: (name) => `アルバム：${name}`,
     playlist: (name) => `プレイリスト：${name}`,
+    tape: (name) => `カセット：${name}`,
   },
   automatic: '自動 · 他の完了を待機中',
   retrying: (why) => (why ? `再試行中 · ${why}` : '再試行中'),

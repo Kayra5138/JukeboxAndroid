@@ -1,6 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { HeartButton } from './Heart';
-import { useHeartWanted } from '../lib/ui/heartWanted';
+import { ShuffleButton } from './Shuffle';
+import { optionsFit, transportFit } from '../lib/player/optionsFit';
+import { GLORY_AT, moodOf, NO_RUN, pressed as pressedAt, type Mood } from '../lib/ui/heart';
+import { flyingOf, linesOf, joinFlying, wordsOf, type Flying } from '../lib/ui/playerFun';
+import { FlyingWords, VinylFace, WaveTitle } from './PlayerFun';
+import { useSpinner } from '../lib/ui/spinner';
 import { useListButtonWanted } from '../lib/ui/listButton';
 import { Image } from './Picture';
 import { useRouter } from 'expo-router';
@@ -8,7 +13,6 @@ import {
   AccessibilityInfo,
   Animated,
   Easing,
-  BackHandler,
   PanResponder,
   StyleSheet,
   Text,
@@ -28,8 +32,10 @@ import {
   PlayIcon,
   PreviousIcon,
   RepeatIcon,
-  ShuffleIcon,
   SettingsIcon,
+  MarkAddIcon,
+  MarksIcon,
+  MoonIcon,
   TranslateIcon,
 } from './Icons';
 import { PlayerSettings } from './PlayerSettings';
@@ -43,14 +49,28 @@ import { barsLaidOver, topGlass } from './UnderBars';
 import { CoverPage } from './CoverPage';
 import { glassOf, glassPage } from '../lib/theme/Veil';
 import { PlayerDiscoverSide, PlayerDiscoverUndo } from './discover/PlayingActions';
+import { isDiscoverTrack } from './discover/show';
+import { useFavoritesShown } from '../lib/playlists/favorites';
 import { useTrackMenu } from './useTrackMenu';
 import { creditReader } from '../lib/db/credits';
 import { albumKey } from '../lib/media/albums';
 import { foldForMatch } from '../lib/metadata/text';
 import { useLyrics } from '../lib/lyrics/useLyrics';
 import { jumpTo, stepFrom } from '../lib/player/jump';
+import { tapeJumps } from '../lib/tapes/settings';
+import JukeboxAudio from '../../modules/jukebox-audio/index';
+import { addMark, useMarks } from '../lib/tapes/marks';
+import { chapterAt, readTranscript, useChapters, useTapeVideo, useTranscript, type Chapter } from '../lib/tapes/extras';
+import { asLyrics } from '../lib/tapes/transcript';
+import { ChaptersSheet } from './tapes/ChaptersSheet';
+import { seriesOf } from '../lib/podcasts/series';
+import { MarksSheet } from './tapes/MarksSheet';
+import { TextPrompt } from './TextPrompt';
+import { durationLabel } from '../lib/youtube/types';
 import { readSetting, SETTINGS } from '../lib/db/index';
 import { motionReduced } from '../lib/ui/motion';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
 import { useTrackArtwork } from '../lib/media/artwork';
 import {
   usePlayerActions,
@@ -58,8 +78,11 @@ import {
   usePlayerPosition,
   usePlayerState,
 } from '../lib/player/PlayerProvider';
-import { makeStyles, outlined, page, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, outlinedClip, page, useColours, usePressed } from '../lib/theme/index';
 import { Behind } from '../lib/theme/Veil';
+import { isTape } from '../lib/tapes/tape';
+import { nextTapeSpeed, setTapeSpeed, tapeKeyOf } from '../lib/tapes/speed';
+import type { Track } from '../lib/types';
 
 /*
   How far outside its picture a transport button can still be pressed, which
@@ -70,6 +93,100 @@ import { Behind } from '../lib/theme/Veil';
 */
 const CONTROL_SLOP = { top: 4, bottom: 4, left: 2, right: 2 };
 const CONTROL_SLOP_WIDE = { top: 8, bottom: 8, left: 5, right: 5 };
+
+/** The buttons, in one line or split into two of as near the same length as there can be. */
+function optionRows(buttons: readonly (ReactNode | null)[], rows: 1 | 2, gap: number): ReactNode {
+  const shown = buttons.filter((button) => button != null);
+  const line = (part: ReactNode[], key: string) => (
+    <View key={key} style={[optionsLine, { gap }]}>
+      {part}
+    </View>
+  );
+  if (rows === 1) return line(shown, 'one');
+  const half = Math.ceil(shown.length / 2);
+  return [line(shown.slice(0, half), 'first'), line(shown.slice(half), 'second')];
+}
+
+const optionsLine = { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' } as const;
+
+/**
+ * What a press of shuffle feels like, by how far into a run it is: the
+ * phone's light click at first, then its heavy one, then two and three of
+ * them in time with the shaking, and at the very end a burst as the songs
+ * are thrown. Felt whether or not the decoration is held still: it is the
+ * hand being answered, not the eye.
+ */
+function feel(mood: Mood): void {
+  const tick = () => haptic('fun', 'tick');
+  const thump = () => haptic('fun', 'heavy');
+  const beats = (count: number, every: number) => {
+    thump();
+    for (let at = 1; at < count; at += 1) setTimeout(thump, at * every);
+  };
+  if (mood === 'one' || mood === 'flurry') tick();
+  else if (mood === 'storm') thump();
+  else if (mood === 'frenzy') beats(2, 105);
+  else beats(4, 70);
+}
+
+/**
+ * The longest the record goes on after the last press of repeat. At the
+ * fastest it runs down in about eight seconds, and is stopped here if it has
+ * somehow not.
+ */
+const RECORD_LIMIT_MS = 11000;
+
+/** How far the repeat button turns at a press, and how much a press adds to the record's speed in turns a second, by how far into a run it is. */
+const RECORD_TURNS: Record<Mood, { button: number; record: number }> = {
+  one: { button: 0.5, record: 0 },
+  flurry: { button: 1, record: 0.25 },
+  storm: { button: 1, record: 0.35 },
+  frenzy: { button: 1.5, record: 0.45 },
+  glory: { button: 2, record: 0.6 },
+};
+
+/**
+ * What a press of repeat feels like: the player's own switch at first, and
+ * once a run is under way a ratchet, the faster the further in, and at the
+ * very height of it a run of clicks all the way round the screen.
+ */
+function feelRepeat(mood: Mood, turningOn: boolean): void {
+  if (mood === 'one') return haptic('player', turningOn ? 'toggleOn' : 'toggleOff');
+  const clicks = (count: number, every: number, last: 'tick' | 'heavy' = 'tick') => {
+    for (let at = 0; at < count; at += 1) setTimeout(() => haptic('fun', at === count - 1 ? last : 'tick'), at * every);
+  };
+  if (mood === 'flurry') clicks(2, 70);
+  else if (mood === 'storm') clicks(3, 55);
+  else if (mood === 'frenzy') clicks(4, 45);
+  else clicks(10, 95, 'heavy');
+}
+
+/**
+ * What a press of the lyrics button feels like: the player's tick at first,
+ * then the keys of a typewriter, and at the very height of a run its bell.
+ */
+function feelLyrics(mood: Mood): void {
+  if (mood === 'one') return haptic('player', 'tick');
+  const keys = (count: number) => {
+    for (let at = 0; at < count; at += 1) setTimeout(() => haptic('fun', 'tick'), at * 60);
+  };
+  if (mood === 'flurry') keys(1);
+  else if (mood === 'storm') keys(2);
+  else if (mood === 'frenzy') keys(3);
+  else {
+    keys(3);
+    setTimeout(() => haptic('fun', 'double'), 200);
+  }
+}
+
+/** How far the queue and the screen shake at a press of shuffle, in times a nudge, by how far into a run it is. */
+const SHAKE: Record<Mood, { queue: number; screen: number }> = {
+  one: { queue: 1, screen: 0 },
+  flurry: { queue: 1.4, screen: 0 },
+  storm: { queue: 2, screen: 0.5 },
+  frenzy: { queue: 2.8, screen: 1.5 },
+  glory: { queue: 3.5, screen: 2.6 },
+};
 
 /** The two points that take the round buttons under the transport from 44 to 48. */
 const MODE_SLOP = 2;
@@ -95,6 +212,31 @@ const SCRUB_SLOP = { top: 13, bottom: 13 };
 /** What a screen reader may ask of the bar: a step on and a step back. */
 const ADJUST = [{ name: 'increment' }, { name: 'decrement' }];
 
+/** A speed as the tape's button shows it: `1×`, `1.2×`, `1.75×`. */
+function speedLabel(speed: number): string {
+  return `${Math.round(speed * 100) / 100}×`;
+}
+
+/**
+ * Under a tape's bar, for one in parts: how far into the whole of it, and
+ * how long is left of it, from the parts' lengths and where this one has got.
+ */
+function TapeWhole({ live, parts, at }: { live: boolean; parts: readonly Track[]; at: number }) {
+  const styles = useStyles();
+  const t = useT();
+  const { positionSec } = usePlayerPosition(live);
+  const lengths = parts.map((part) => Math.max(0, part.durationSec || 0));
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  if (total <= 0) return null;
+  const done = lengths.slice(0, at).reduce((sum, length) => sum + length, 0) + Math.min(positionSec, lengths[at] ?? 0);
+  const percent = Math.min(100, Math.round((done / total) * 100));
+  const minutes = Math.max(0, Math.round((total - done) / 60));
+  const left = minutes >= 60
+    ? `${t.common.hours(Math.floor(minutes / 60))} ${t.common.minutes(minutes % 60)}`
+    : t.common.minutes(Math.max(1, minutes));
+  return <Text style={styles.tapeWhole} numberOfLines={1}>{t.player.tape.book(percent, left)}</Text>;
+}
+
 /**
  * The progress bar, and the way to move through a track.
  *
@@ -113,9 +255,18 @@ function Scrubber({
   durationSec,
   step,
   onSeek,
+  remaining = false,
+  marks,
+  chapters,
 }: {
   positionSec: number;
   durationSec: number;
+  /** Places marked in it, in seconds, shown as ticks on the bar: a tape's. */
+  marks?: readonly number[];
+  /** Where its chapters begin, in seconds, shown as fine breaks in the bar: a tape's. */
+  chapters?: readonly number[];
+  /** What is left at the right end, for a tape, rather than how long it is. */
+  remaining?: boolean;
   /** How far one swipe of a screen reader moves, in seconds: the player's own jump. */
   step: number;
   onSeek: (seconds: number) => void;
@@ -137,6 +288,13 @@ function Scrubber({
   /** Where the bar starts in window coordinates, fixed for the whole gesture. */
   const originX = useRef(0);
   const lastLabel = useRef(0);
+  /**
+   * Where the finger last was, from the moment it came down. The gesture's
+   * own `moveX` is nought until the finger moves, so a tap that never moved
+   * read as a press at the very left of the screen, and sent the track back
+   * to its start.
+   */
+  const fingerX = useRef(0);
   /** Where the last seek was aimed, until the player reports having got there. */
   const settling = useRef<{ seconds: number; since: number } | null>(null);
 
@@ -212,14 +370,19 @@ function Scrubber({
         */
         originX.current = event.nativeEvent.pageX - event.nativeEvent.locationX;
         lastLabel.current = 0;
+        fingerX.current = event.nativeEvent.pageX;
         move(event.nativeEvent.pageX);
       },
       onPanResponderMove: (_event, gesture) => {
+        fingerX.current = gesture.moveX;
         move(gesture.moveX);
       },
       onPanResponderRelease: (_event, gesture) => {
+        // Felt as the finger lets go, which is when the song moves; never
+        // while it is dragged, which would be a buzz the length of the bar.
+        haptic('player', 'tick');
         // A tap never moved, so it ends where it began and seeks there.
-        finish(clamp((gesture.moveX - originX.current) / (widthRef.current || 1)));
+        finish(clamp((fingerX.current - originX.current) / (widthRef.current || 1)));
       },
       onPanResponderTerminate: () => {
         dragging.current = false;
@@ -277,16 +440,41 @@ function Scrubber({
           else if (event.nativeEvent.actionName === 'decrement') stepTo(-1);
         }}
         {...panResponder.panHandlers}>
-        <View style={styles.scrubTrack}>
+        {/*
+          Never what a finger lands on, so that where it lands is measured
+          against the bar itself. The fill is slid along by however much has
+          played, and a press caught by it was measured against wherever it
+          had been slid to: early in a tape, a press near the start sent it
+          near the end.
+        */}
+        <View style={styles.scrubTrack} pointerEvents="none">
           <Animated.View
             style={[styles.scrubFill, { width, transform: [{ translateX: slide }] }]}
           />
         </View>
+        {/* Breaks in the bar where a chapter begins, finer than a mark, which is somebody's own. */}
+        {chapters && chapters.length > 1 && durationSec > 0 ? (
+          <View style={styles.marks} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+            {chapters.slice(1).map((at, index) => (
+              <View key={index} style={[styles.chapterBreak, { left: `${clamp(at / durationSec) * 100}%` }]} />
+            ))}
+          </View>
+        ) : null}
+        {/* Over the bar and taller than it, so a mark shows on the part heard as well as on the part to come. */}
+        {marks && marks.length > 0 && durationSec > 0 ? (
+          <View style={styles.marks} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+            {marks.map((at, index) => (
+              <View key={index} style={[styles.mark, { left: `${clamp(at / durationSec) * 100}%` }]} />
+            ))}
+          </View>
+        ) : null}
       </View>
       {/* Said by the bar itself to a screen reader; see above. */}
       <View style={styles.times} importantForAccessibility="no-hide-descendants">
         <Text style={styles.time}>{formatTime(scrubbed ?? positionSec)}</Text>
-        <Text style={styles.time}>{formatTime(durationSec)}</Text>
+        <Text style={styles.time}>
+          {remaining ? `−${formatTime(Math.max(0, durationSec - (scrubbed ?? positionSec)))}` : formatTime(durationSec)}
+        </Text>
       </View>
     </View>
   );
@@ -306,8 +494,14 @@ function LiveScrubber({
   fileDurationSec,
   step,
   onSeek,
+  remaining,
+  marks,
+  chapters,
 }: {
   live: boolean;
+  remaining?: boolean;
+  marks?: readonly number[];
+  chapters?: readonly number[];
   step: number;
   /** The file's own length, until the player reports one: it cannot before the track is prepared. */
   fileDurationSec: number;
@@ -320,7 +514,38 @@ function LiveScrubber({
       durationSec={durationSec || fileDurationSec}
       step={step}
       onSeek={onSeek}
+      remaining={remaining}
+      marks={marks}
+      chapters={chapters}
     />
+  );
+}
+
+/**
+ * The chapter a tape is in, over its bar, following the position for
+ * itself as the bar does: which of how many, and what it is called. Pressed,
+ * the chapters are listed.
+ */
+function LiveChapter({ live, chapters, onPress }: { live: boolean; chapters: readonly Chapter[]; onPress: () => void }) {
+  const styles = useStyles();
+  const t = useT();
+  const pressed = usePressed();
+  const { positionSec } = usePlayerPosition(live);
+  const at = Math.max(0, chapterAt(chapters, positionSec));
+  const title = chapters[at]?.title || t.player.chapters.untitled(at + 1);
+  return (
+    <Pressable
+      android_ripple={pressed}
+      accessibilityRole="button"
+      accessibilityHint={t.player.chapters.listHint}
+      hitSlop={6}
+      style={styles.chapter}
+      onPress={onPress}>
+      <Text style={styles.chapterText} numberOfLines={1}>
+        {`${t.player.chapters.at(at + 1, chapters.length)} · ${title}`}
+      </Text>
+      <Text style={styles.chapterChevron} importantForAccessibility="no">›</Text>
+    </Pressable>
   );
 }
 
@@ -347,7 +572,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const pressed = usePressed();
   const c = useColours();
   /** One colour, lit or not: the whole of what these buttons say about state. */
-  const heart = useHeartWanted();
+  // One setting for Favorites and the heart that fills it: see `playlists/favorites.ts`.
+  const heart = useFavoritesShown();
   /**
    * What the list picker did, said for a moment over the row of buttons:
    * the player has no line of its own for news, and a list gaining a song
@@ -396,7 +622,37 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
    */
   const [expanded, setExpanded] = useState(false);
   const [playbackOpen, setPlaybackOpen] = useState(false);
+  /** The sleep timer on its own, from a tape's button for it. */
+  const [sleepOpen, setSleepOpen] = useState(false);
+  // A tape's marks: the place a new one is being noted at, and whether its list is up.
+  /** The place being marked, and in which tape: the one playing when Mark was pressed, should it have gone on to the next part while the note is written. */
+  const [marking, setMarking] = useState<{ trackId: string; at: number } | null>(null);
+  const markingAt = marking?.at ?? null;
+  const [marksOpen, setMarksOpen] = useState(false);
+  const markList = useMarks(current && isTape(current) ? current.id : null);
+  // A tape's chapters, where it has some: see `tapes/extras.ts`.
+  const chapterList = useChapters(current && isTape(current) ? current.id : null);
+  const tapeVideo = useTapeVideo(current && isTape(current) ? current.id : null);
+  const transcript = useTranscript(current && isTape(current) ? current.id : null);
+  // What the lyrics view is handed for a tape: its captions as timed words, or none.
+  const transcriptState = useMemo(() => {
+    const words = transcript.lines ? asLyrics(transcript.lines) : null;
+    return {
+      looking: transcript.looking,
+      lyrics: words ? { ...words, fetchedAt: 0, source: 'manual' as const, offsetMs: 0 } : null,
+    };
+  }, [transcript]);
+  const chapterStarts = useMemo(() => chapterList.map((chapter) => chapter.startSec), [chapterList]);
+  const [chaptersOpen, setChaptersOpen] = useState(false);
+  const markTimes = useMemo(() => markList.map((mark) => mark.positionSec), [markList]);
   const [showLyrics, setShowLyrics] = useState(false);
+  // A tape's captions in place of its picture, as a song's words are: see `tapes/extras.ts`.
+  const [showTranscript, setShowTranscript] = useState(false);
+  /** The width the row of buttons under the controls has to itself, once laid out: see `optionsFit`. */
+  const [optionsWidth, setOptionsWidth] = useState(0);
+  /** How the transport is drawn: full size until it is found not to fit, and then closer and smaller until it does. See `transportFit`. */
+  const [squeeze, setSqueeze] = useState<{ gap: number | null; scale: number }>({ gap: null, scale: 1 });
+  const transportRoom = useRef(0);
   // Off until asked for: the first translation into a language fetches a model
   // of some thirty megabytes, which is not something to spend unbidden.
   const [showTranslation, setShowTranslation] = useState(false);
@@ -408,20 +664,185 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     and then the button is as it was. Nought to one, once for each press.
   */
   const dealt = useRef(new Animated.Value(1)).current;
-  const deal = () => {
-    if (motionReduced()) return;
+  /*
+    How hard the queue shakes, and the whole screen with it, by how far into a
+    run of presses this one is (see `Shuffle.tsx`): once, a nudge; kept up, the
+    screen itself goes, and at the height of it goes properly.
+  */
+  const queueShakes = useRef(new Animated.Value(1)).current;
+  const screenShakes = useRef(new Animated.Value(0)).current;
+  /** At the very end of a run, the songs thrown all over and, within the second, back in their places. */
+  const scatter = useRef(new Animated.Value(0)).current;
+  /** The queue and the screen shaken as hard as [mood] says: shuffle's, and the repeat button's from a storm on. */
+  const shakeFor = (mood: Mood) => {
+    queueShakes.setValue(SHAKE[mood].queue);
+    screenShakes.setValue(SHAKE[mood].screen);
+    dealt.stopAnimation();
     dealt.setValue(0);
-    Animated.timing(dealt, { toValue: 1, duration: 520, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
+    Animated.timing(dealt, { toValue: 1, duration: mood === 'one' ? 520 : 700, easing: Easing.out(Easing.quad), useNativeDriver: true }).start();
   };
-  const dealtLight = dealt.interpolate({ inputRange: [0, 0.15, 0.7, 1], outputRange: [0, 1, 1, 0] });
-  const dealtTurn = dealt.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-  const dealtSize = dealt.interpolate({ inputRange: [0, 0.3, 1], outputRange: [1, 1.25, 1] });
-  const dealtShake = dealt.interpolate({ inputRange: [0, 0.2, 0.45, 0.7, 1], outputRange: [0, -14, 10, -5, 0] });
+  const deal = (mood: Mood) => {
+    feel(mood);
+    if (motionReduced()) return;
+    shakeFor(mood);
+    if (mood !== 'glory') return;
+    scatter.stopAnimation();
+    Animated.sequence([
+      Animated.timing(scatter, { toValue: 1, duration: 300, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.delay(120),
+      Animated.spring(scatter, { toValue: 0, friction: 6, tension: 70, useNativeDriver: true }),
+    ]).start();
+    // And a click as everything is back in its place.
+    setTimeout(() => haptic('fun', 'tick'), 760);
+  };
+  const shake = dealt.interpolate({ inputRange: [0, 0.15, 0.3, 0.45, 0.6, 0.75, 1], outputRange: [0, -14, 11, -8, 5, -2, 0] });
+  const dealtShake = Animated.multiply(shake, queueShakes);
+  const screenShake = Animated.multiply(shake, screenShakes);
+  const screenTilt = screenShake.interpolate({ inputRange: [-50, 50], outputRange: ['-5deg', '5deg'] });
+
+  /*
+    The repeat button pressed again and again: the button turning one way
+    and the other, then the cover turned into a record that spins the faster
+    for every press and runs down when they stop, and at the very height of
+    a run the whole screen turned round. Turning and nothing else: the shaking
+    is the shuffle button's. Each press goes round the modes as it always does.
+  */
+  const repeatRun = useRef(NO_RUN);
+  const repeatTurn = useRef(new Animated.Value(0)).current;
+  const [vinyl, setVinyl] = useState(false);
+  const vinylOff = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The record and, at the height of a run, the screen: each press adds to how fast they turn, and they run down by themselves.
+  const { value: record, kick: kickRecord, stop: stopRecord } = useSpinner(() => {
+    vinylOff.current = setTimeout(() => setVinyl(false), 400);
+  });
+  const { value: screenTurn, kick: kickScreen, stop: stopScreen } = useSpinner();
+  /*
+    However the running down goes, the record is a cover again and the screen
+    upright a while after the last press: a run down that is lost on the way,
+    as an animation is when the cover is taken off the screen in the middle of
+    it, never says it has stopped, and the cover stayed a record.
+  */
+  const recordLimit = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressRepeat = () => {
+    const next = pressedAt(repeatRun.current, Date.now());
+    repeatRun.current = next;
+    const mood = moodOf(next);
+    feelRepeat(mood, repeat !== 'one');
+    if (motionReduced()) return;
+    repeatTurn.stopAnimation();
+    repeatTurn.setValue(0);
+    Animated.timing(repeatTurn, {
+      toValue: (next.count % 2 === 0 ? -1 : 1) * RECORD_TURNS[mood].button,
+      duration: 480,
+      easing: Easing.out(Easing.back(1.4)),
+      useNativeDriver: true,
+    }).start();
+    if (mood === 'one') return;
+    setVinyl(true);
+    if (vinylOff.current) clearTimeout(vinylOff.current);
+    kickRecord(RECORD_TURNS[mood].record);
+    if (mood === 'glory') kickScreen(0.35);
+    if (recordLimit.current) clearTimeout(recordLimit.current);
+    recordLimit.current = setTimeout(() => {
+      stopRecord();
+      stopScreen();
+      setVinyl(false);
+    }, RECORD_LIMIT_MS);
+  };
+  const repeatIconTurn = repeatTurn.interpolate({ inputRange: [-1, 1], outputRange: ['-360deg', '360deg'], extrapolate: 'extend' });
+  const recordTurn = record.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'], extrapolate: 'extend' });
+  const screenRound = screenTurn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'], extrapolate: 'extend' });
+
+  /*
+    The lyrics button pressed again and again: the button wobbling, then
+    words of the song rising off it, then the song's name waving, and at the
+    very height of a run lines of the song falling over everything. Each
+    press opens or closes the words as it always does.
+  */
+  const lyricsRun = useRef(NO_RUN);
+  const lyricsWobble = useRef(new Animated.Value(0)).current;
+  const wave = useRef(new Animated.Value(0)).current;
+  const waveLoop = useRef<Animated.CompositeAnimation | null>(null);
+  const waveOff = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [waving, setWaving] = useState(false);
+  const [flying, setFlying] = useState<Flying[]>([]);
+  const lyricsButton = useRef<View | null>(null);
+  /** Where the lyrics button is on the screen, found as it is laid out and again at each press. */
+  const buttonAt = useRef({ x: 0, y: 0 });
+  const measureButton = () =>
+    lyricsButton.current?.measureInWindow((x, y, wide) => {
+      buttonAt.current = { x: x + wide / 2 - 20, y: y - 10 };
+    });
+  const heardWords = useRef<{ id: string; lyrics: { plain: string | null; synced: string | null } } | null>(null);
+  const pressLyrics = () => {
+    const next = pressedAt(lyricsRun.current, Date.now());
+    lyricsRun.current = next;
+    const mood = moodOf(next);
+    feelLyrics(mood);
+    if (motionReduced()) return;
+    lyricsWobble.stopAnimation();
+    lyricsWobble.setValue(0);
+    Animated.timing(lyricsWobble, { toValue: 1, duration: 360, useNativeDriver: true }).start();
+    if (mood === 'one' || !current) return;
+    // From where the button was found to be beforehand: a run of presses is quicker than asking.
+    const from = buttonAt.current;
+    measureButton();
+    // The words last read for this song: closed again by the very press that let these go, they are not read now.
+    const known = heardWords.current?.id === current.id ? heardWords.current.lyrics : lyrics.lyrics;
+    const words = wordsOf(known, current.title, current.artist);
+    const lines = linesOf(known);
+    const let_go = flyingOf(next, mood, next.count === GLORY_AT, words, lines).map((item) => ({ ...item, from }));
+    setFlying((now) => joinFlying(now, let_go));
+    if (mood === 'flurry') return;
+    setWaving(true);
+    if (!waveLoop.current) {
+      wave.setValue(0);
+      waveLoop.current = Animated.loop(Animated.timing(wave, { toValue: 1, duration: 650, easing: Easing.linear, useNativeDriver: true }));
+      waveLoop.current.start();
+    }
+    if (waveOff.current) clearTimeout(waveOff.current);
+    waveOff.current = setTimeout(() => {
+      waveLoop.current?.stop();
+      waveLoop.current = null;
+      setWaving(false);
+    }, 1800);
+  };
+  const landed = (key: string) => setFlying((now) => now.filter((item) => item.key !== key));
+  const lyricsWobbleTurn = lyricsWobble.interpolate({ inputRange: [0, 0.25, 0.5, 0.75, 1], outputRange: ['0deg', '-14deg', '11deg', '-6deg', '0deg'] });
+  useEffect(
+    () => () => {
+      if (vinylOff.current) clearTimeout(vinylOff.current);
+      if (recordLimit.current) clearTimeout(recordLimit.current);
+      if (waveOff.current) clearTimeout(waveOff.current);
+      waveLoop.current?.stop();
+    },
+    []
+  );
+  const flyingLayer =
+    flying.length > 0 ? <FlyingWords items={flying} origin={buttonAt.current} ink={c.text} accent={c.accent} onLanded={landed} /> : null;
+  // The cover and the name thrown off with the songs, each its own way, and back.
+  const artThrown = [
+    { translateX: scatter.interpolate({ inputRange: [0, 1], outputRange: [0, -70] }) },
+    { translateY: scatter.interpolate({ inputRange: [0, 1], outputRange: [0, -50] }) },
+    { rotate: scatter.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '-28deg'] }) },
+    { scale: scatter.interpolate({ inputRange: [0, 1], outputRange: [1, 0.72] }) },
+  ];
+  const titleThrown = [
+    { translateX: scatter.interpolate({ inputRange: [0, 1], outputRange: [0, 90] }) },
+    { translateY: scatter.interpolate({ inputRange: [0, 1], outputRange: [0, 40] }) },
+    { rotate: scatter.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '16deg'] }) },
+  ];
   const dealtFade = dealt.interpolate({ inputRange: [0, 0.25, 1], outputRange: [1, 0.45, 1] });
 
   // Only asked for once the panel is open. Every track change would otherwise
   // send LRCLIB a request for words nobody is going to read.
-  const lyrics = useLyrics(current, showLyrics);
+  // A tape has no words to look up, whatever was left switched on from a song.
+  const wordsWanted = showLyrics && !(current && isTape(current));
+  const lyrics = useLyrics(current, wordsWanted);
+  // Kept for the lyrics button's run of presses, which closes them again as often as it opens them.
+  useEffect(() => {
+    if (current && lyrics.lyrics) heardWords.current = { id: current.id, lyrics: lyrics.lyrics };
+  }, [current, lyrics.lyrics]);
 
   /*
     How tall the queue grows to. Measured from the space left below the player
@@ -489,13 +910,22 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     [grow]
   );
 
+  // For the handle's drag, which is built once and would otherwise feel a
+  // drag towards where the queue already is as if it had moved it.
+  const expandedNow = useRef(expanded);
+  useEffect(() => {
+    expandedNow.current = expanded;
+  }, [expanded]);
+
   const queueHandle = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dy) > 6,
         onPanResponderRelease: (_event, gesture) => {
-          if (gesture.dy < -30) toggleQueue(true);
-          else if (gesture.dy > 30) toggleQueue(false);
+          const wanted = gesture.dy < -30 ? true : gesture.dy > 30 ? false : null;
+          if (wanted === null) return;
+          if (wanted !== expandedNow.current) haptic('holds', 'tick');
+          toggleQueue(wanted);
         },
       }),
     [toggleQueue]
@@ -512,13 +942,24 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
    * never has to be won from the list in the first place.
    */
   const slide = useRef(new Animated.Value(0)).current;
+  // Whether the drag is far enough down to put the player away if let go,
+  // felt once on the way past and again only after coming back above it.
+  const pastClosing = useRef(false);
   const dismiss = useMemo(
     () =>
       PanResponder.create({
         onMoveShouldSetPanResponder: (_event, gesture) =>
           gesture.dy > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
+        onPanResponderGrant: () => {
+          pastClosing.current = false;
+        },
         onPanResponderMove: (_event, gesture) => {
           if (gesture.dy > 0) slide.setValue(gesture.dy);
+          const past = gesture.dy > 120;
+          if (past !== pastClosing.current) {
+            pastClosing.current = past;
+            if (past) haptic('holds', 'tick');
+          }
         },
         onPanResponderRelease: (_event, gesture) => {
           // Far enough, or thrown hard enough, counts as putting it away.
@@ -561,15 +1002,17 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     player was supposedly letting the user return to never moved.
   */
   const covered = useCoveredByRoute();
-  useEffect(() => {
-    if (covered) return;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (playbackOpen) setPlaybackOpen(false);
-      else onClose();
-      return true;
-    });
-    return () => subscription.remove();
-  }, [covered, onClose, playbackOpen]);
+  /*
+    Each of what opens inside the player is closed before the player is: the
+    playback panel, the words, the queue pulled up over the cover — whichever
+    was opened last first, as the back key does everywhere (`ui/back.ts`).
+  */
+  useBack(!covered, onClose);
+  useBack(!covered && expanded, () => toggleQueue(false));
+  useBack(!covered && wordsWanted, () => setShowLyrics(false));
+  useBack(!covered && showTranscript && current != null && isTape(current), () => setShowTranscript(false));
+  useBack(!covered && playbackOpen, () => setPlaybackOpen(false));
+  useBack(!covered && sleepOpen, () => setSleepOpen(false));
 
   /*
     The menu of a row in the queue. Nothing to read again afterwards: the
@@ -581,7 +1024,13 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     The entries that go to another screen close the player first, for the
     reason the album's name under the title does.
   */
-  const menu = useTrackMenu({ beforeLeaving: onClose, onAdded: setAdded });
+  const menu = useTrackMenu({
+    beforeLeaving: onClose,
+    onAdded: (message) => {
+      haptic('results', 'confirm');
+      setAdded(message);
+    },
+  });
   /** Whether the add-to-list button is wanted: Settings → Player. */
   const listButton = useListButtonWanted();
 
@@ -609,6 +1058,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     open instead of this one.
   */
   const [step] = useState(() => stepFrom(readSetting(SETTINGS.jumpSeconds)));
+  // A tape's own, from the tape settings: see `tapes/settings.ts`.
+  const [tapeStep] = useState(tapeJumps);
   const jump = useCallback(
     (by: number) => {
       // Asked for at the press, since nothing here follows the position:
@@ -655,6 +1106,24 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const artSize = Math.min(height * 0.3, 320);
 
   /*
+    A tape is played another way: see `lib/tapes`. Its parts are the tapes of
+    the queue from its folder, which is its book or its show; no shuffle,
+    repeat, heart, list or lyrics, which are a song's; longer jumps, made for
+    a voice; and its speed and the sleep timer to hand.
+  */
+  const tape = isTape(current);
+  const tapeKey = tape ? tapeKeyOf(current) : null;
+  const parts = tape ? queue.filter((entry) => tapeKeyOf(entry) === tapeKey) : [];
+  const partAt = parts.findIndex((entry) => entry.id === current.id);
+  // An episode of a followed show is one of its episodes, not a part of a book.
+  const series = tape && seriesOf(current) != null;
+  const back = tape ? tapeStep.back : step;
+  const forward = tape ? tapeStep.forward : step;
+  // A song's words, or a tape's captions where it has a video to have them from.
+  const lyricsShown = tape ? showTranscript && tapeVideo != null : showLyrics;
+  const wordsShown = tape ? transcriptState : lyrics;
+
+  /*
     The largest square the measured box will hold — and never more than a share
     of the screen, whatever the measurement says.
 
@@ -671,10 +1140,60 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     wide and less than half as tall as the screen it had upright, and the space
     the buttons give up is the space the artwork and the words get.
   */
-  const skipIcon = landscape ? 20 : 24;
-  const playIcon = landscape ? 27 : 32;
+  /*
+    The transport at full size where it fits, and where it does not, the gaps
+    between its buttons closed first and then the whole row drawn smaller,
+    rather than its two ends cut off by the screen's.
+  */
+  const transportGap = landscape ? 10 : 18;
+  const squeezeGap = squeeze.gap ?? transportGap;
+  const skipIcon = Math.round((landscape ? 20 : 24) * squeeze.scale);
+  const playIcon = Math.round((landscape ? 27 : 32) * squeeze.scale);
   const modeIcon = landscape ? 18 : 21;
-  const control = landscape ? styles.controlWide : styles.control;
+  /** How many buttons the row has: four always, and the two that Settings can add. */
+  /*
+    Not for a song of Discover's, which is not the library's until it is kept,
+    and so cannot be one of its Favorites: the menu leaves it out too.
+  */
+  const hearted = heart && current != null && !isDiscoverTrack(current.id);
+  // A tape's five, and its captions where it has a video to have them from: its speed, the sleep timer, a mark, its marks and the settings.
+  const optionCount = tape ? 5 + (tapeVideo != null ? 1 : 0) : 4 + (listButton && current ? 1 : 0) + (hearted ? 1 : 0);
+  /*
+    Worked out on each drawing rather than kept with a hook: this is below the
+    return for nothing playing, and a hook there is one more on some drawings
+    than on others, which React cannot follow. It is a few sums.
+  */
+  const laid = optionsFit(optionsWidth, optionCount, modeIcon);
+  const fit = {
+    ...laid,
+    button: [styles.mode, { minWidth: laid.size, minHeight: laid.size, borderRadius: laid.size / 2 }],
+    slop: Math.max(MODE_SLOP, Math.round((48 - laid.size) / 2)),
+  };
+
+  /*
+    Translating the words, on the words themselves: in the corner of where
+    they are shown, and only while there are words to translate. In the row under the controls it
+    came and went with them, and moved every button there each time.
+  */
+  const translateToggle = (
+    <Pressable
+      android_ripple={pressed}
+      style={[styles.translate, showTranslation && styles.translateOn]}
+      accessibilityRole="button"
+      hitSlop={6}
+      accessibilityLabel={t.player.sheet.translateLyrics}
+      accessibilityState={{ selected: showTranslation }}
+      onPress={() => {
+        haptic('player', 'tick');
+        setShowTranslation(!showTranslation);
+      }}>
+      <TranslateIcon size={18} color={showTranslation ? ON : OFF} />
+    </Pressable>
+  );
+  const control = [
+    landscape ? styles.controlWide : styles.control,
+    squeeze.scale < 1 && { paddingHorizontal: Math.round((landscape ? 8 : 10) * squeeze.scale) },
+  ];
   // Sideways the buttons are drawn smaller to fit; they are not any harder to
   // aim for than they were, only to see.
   const controlSlop = landscape ? CONTROL_SLOP_WIDE : CONTROL_SLOP;
@@ -697,7 +1216,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const openBox = { height: queueHeight };
   // Sideways the heading is laid over the queue only, never over the words,
   // which are drawn to a height of their own and know nothing of a heading.
-  const headingOver = queueOver && !showLyrics;
+  const headingOver = queueOver && !lyricsShown;
 
   const queueListWith = (inset: number, foot = 0) => (
     <Animated.View style={[styles.dealt, { opacity: dealtFade, transform: [{ translateX: dealtShake }] }]}>
@@ -705,6 +1224,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
       inset={inset}
       foot={foot}
       queue={queue}
+      scatter={scatter}
       currentIndex={currentIndex}
       onSelect={(index) => void skipToIndex(index)}
       onMove={(from, to) => void moveInQueue(from, to)}
@@ -732,14 +1252,67 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
   const queueList = queueListWith(0);
 
   const settings = (
-    <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch}
-      onSpeed={(value) => void setSpeed(value)} onPitch={(value) => void setPitch(value)}
+    <PlayerSettings visible={playbackOpen} tape={current != null && isTape(current)} speed={speed} pitch={pitch}
+      onSpeed={(value) => {
+        // A tape's speed is its own, kept for it as the speed button keeps it.
+        if (tapeKey) setTapeSpeed(tapeKey, value);
+        void setSpeed(value);
+      }} onPitch={(value) => void setPitch(value)}
       onClose={() => setPlaybackOpen(false)} />
   );
+  const markSheets = (
+    <>
+      <TextPrompt
+        visible={markingAt != null}
+        heading={markingAt != null ? t.player.marks.noteAt(durationLabel(markingAt)) : ''}
+        hint={t.player.marks.noteHint}
+        placeholder={t.player.marks.notePlaceholder}
+        confirmLabel={t.player.marks.save}
+        optional
+        onSubmit={(note) => {
+          if (marking) addMark(marking.trackId, marking.at, note);
+          haptic('choices', 'toggleOn');
+          setMarking(null);
+        }}
+        onClose={() => setMarking(null)}
+      />
+      <ChaptersSheet
+        visible={chaptersOpen}
+        chapters={chapterList}
+        durationSec={current.durationSec}
+        onSeek={(seconds) => void seekTo(seconds)}
+        // The last chapter ends where the tape does, which is the player's own end of a track.
+        onSleepAt={(positionSec) => void JukeboxAudio.setSleepTimerAsync?.(
+          positionSec >= current.durationSec - 1 ? { kind: 'endOfTrack' } : { kind: 'endOfChapter', positionMs: Math.round(positionSec * 1000) }
+        )}
+        onClose={() => setChaptersOpen(false)}
+      />
+      <MarksSheet
+        visible={marksOpen}
+        trackId={tape ? current.id : null}
+        onSeek={(seconds) => void seekTo(seconds)}
+        onAll={() => {
+          onClose();
+          router.push('/marks');
+        }}
+        onClose={() => setMarksOpen(false)}
+      />
+    </>
+  );
 
-  // The two sheets drawn in here and not in windows of their own: while either
-  // is up, the player under it is what goes out of focus.
-  const veiled = playbackOpen || menu.veiled;
+  const sleepSheet = (
+    <PlayerSettings sleepOnly tape visible={sleepOpen} speed={speed} pitch={pitch}
+      onSpeed={(value) => {
+        // A tape's speed is its own, kept for it as the speed button keeps it.
+        if (tapeKey) setTapeSpeed(tapeKey, value);
+        void setSpeed(value);
+      }} onPitch={(value) => void setPitch(value)}
+      onClose={() => setSleepOpen(false)} />
+  );
+
+  // The sheets drawn in here and not in windows of their own: while one is
+  // up, the player under it is what goes out of focus.
+  const veiled = playbackOpen || sleepOpen || menu.veiled;
 
   const playerColumn = (
       <View
@@ -791,32 +1364,43 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             be pushed anywhere. The box stays the height the column gave it and
             the artwork is drawn inside it, clipped if it has to be.
           */}
-          <View style={landscape ? styles.artLayer : undefined}>
-          {showLyrics && !landscape ? (
-            <LiveLyrics
-              live={!covered}
-              state={lyrics}
-              height={artSize}
-              onSeek={onSeek}
-              trackId={current.id}
-              translated={showTranslation}
-            />
+          <Animated.View
+            collapsable={false}
+            style={[landscape ? styles.artLayer : lyricsShown ? styles.lyricsBox : undefined, { transform: artThrown }]}>
+          {lyricsShown && !landscape ? (
+            <View style={styles.lyricsBox}>
+              <LiveLyrics
+                live={!covered}
+                state={wordsShown}
+                height={artSize}
+                onSeek={onSeek}
+                trackId={current.id}
+                translated={showTranslation && !tape}
+                noneText={tape ? t.player.transcript.none : undefined}
+              />
+              {lyrics.lyrics && !tape ? <View style={styles.translateCorner}>{translateToggle}</View> : null}
+            </View>
           ) : artwork ? (
-            <Image
-              source={{ uri: artwork }}
-              // Square, and no larger than the box it was given.
-              style={[
-                styles.art,
-                // An explicit square either way. Asking for `flex` and an
-                // aspect ratio together leaves the size to be resolved two
-                // ways at once, and it came out differently depending on
-                // whether the screen had been turned or opened already wide.
-                landscape
-                  ? { width: wideArt, height: wideArt }
-                  : { width: artSize, height: artSize },
-              ]}
-              contentFit="cover"
-            />
+            // Turned as a record while the repeat button is pressed and pressed again; still, and square, otherwise.
+            <Animated.View style={{ transform: [{ rotate: recordTurn }] }}>
+              <Image
+                source={{ uri: artwork }}
+                // Square, and no larger than the box it was given.
+                style={[
+                  styles.art,
+                  // An explicit square either way. Asking for `flex` and an
+                  // aspect ratio together leaves the size to be resolved two
+                  // ways at once, and it came out differently depending on
+                  // whether the screen had been turned or opened already wide.
+                  landscape
+                    ? { width: wideArt, height: wideArt }
+                    : { width: artSize, height: artSize },
+                  vinyl && { borderRadius: (landscape ? wideArt : artSize) / 2 },
+                ]}
+                contentFit="cover"
+              />
+              {vinyl ? <VinylFace size={landscape ? wideArt : artSize} hole={c.bg} /> : null}
+            </Animated.View>
           ) : (
             <View
               style={[
@@ -828,7 +1412,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               ]}
             />
           )}
-          </View>
+          </Animated.View>
         </Animated.View>
 
         {/*
@@ -837,12 +1421,24 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           is a part of its own that listens for that one song, so this sheet
           is not drawn again for anything Discover does.
         */}
-        <View style={styles.titleRow}>
+        <Animated.View collapsable={false} style={[styles.titleRow, { transform: titleThrown }]}>
         <PlayerDiscoverSide trackId={current.id} side="keep" small={landscape} />
         <View style={styles.titles}>
-          <Text ref={titleRef} style={[styles.title, landscape && styles.titleWide]} numberOfLines={1}>
-            {current.title}
-          </Text>
+          {waving ? (
+            <WaveTitle text={current.title} wave={wave} style={[styles.title, landscape && styles.titleWide]} />
+          ) : (
+            <Text ref={titleRef} style={[styles.title, landscape && styles.titleWide]} numberOfLines={1}>
+              {current.title}
+            </Text>
+          )}
+          {tape ? (
+            // Whose it is and which part, and no links: a show's name is not an artist's page.
+            <Text style={[styles.artist, landscape && styles.artistWide]} numberOfLines={1}>
+              {[album ?? credit, parts.length > 1 && partAt >= 0 ? (series ? t.player.tape.episode : t.player.tape.part)(partAt + 1, parts.length) : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </Text>
+          ) : (
           <Text style={[styles.artist, landscape && styles.artistWide]} numberOfLines={1}>
             {/*
               Each name goes to its own artist, the way the album goes to the
@@ -888,22 +1484,53 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
               </>
             ) : null}
           </Text>
+          )}
         </View>
         <PlayerDiscoverSide trackId={current.id} side="exclude" small={landscape} />
-        </View>
+        </Animated.View>
 
         {error ? <Text style={styles.error}>{error.message}</Text> : null}
 
-        <LiveScrubber live={!covered} fileDurationSec={current.durationSec} step={step} onSeek={onSeek} />
+        {tape && chapterList.length > 1 ? (
+          <LiveChapter live={!covered} chapters={chapterList} onPress={() => setChaptersOpen(true)} />
+        ) : null}
+        <LiveScrubber
+          live={!covered}
+          fileDurationSec={current.durationSec}
+          step={back}
+          onSeek={onSeek}
+          remaining={tape}
+          marks={tape ? markTimes : undefined}
+          chapters={tape ? chapterStarts : undefined}
+        />
+        {tape && parts.length > 1 && partAt >= 0 ? <TapeWhole live={!covered} parts={parts} at={partAt} /> : null}
 
-        <View style={[styles.transport, landscape && styles.transportWide]}>
+        <View
+          style={styles.transportBox}
+          onLayout={(event) => {
+            // More room or less, it is worked out again from full size.
+            const room = Math.floor(event.nativeEvent.layout.width);
+            if (room === transportRoom.current) return;
+            transportRoom.current = room;
+            setSqueeze({ gap: null, scale: 1 });
+          }}>
+        <View
+          style={[styles.transport, { gap: squeezeGap }]}
+          onLayout={(event) => {
+            const taken = Math.ceil(event.nativeEvent.layout.width);
+            const next = transportFit(transportRoom.current, taken, squeezeGap, squeeze.scale);
+            if (next.gap !== squeezeGap || next.scale !== squeeze.scale) setSqueeze(next);
+          }}>
           <Pressable
             android_ripple={pressed}
             style={control}
             hitSlop={controlSlop}
             accessibilityRole="button"
-            accessibilityLabel={t.common.previousTrack}
-            onPress={() => void previous()}>
+            accessibilityLabel={tape ? t.player.tape.previousPart : t.common.previousTrack}
+            onPress={() => {
+              haptic('player', 'tick');
+              void previous();
+            }}>
             <PreviousIcon size={skipIcon} />
           </Pressable>
           {/*
@@ -916,9 +1543,12 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             style={control}
             hitSlop={controlSlop}
             accessibilityRole="button"
-            accessibilityLabel={t.player.sheet.back(step)}
-            onPress={() => jump(-step)}>
-            <JumpIcon size={skipIcon} seconds={step} back />
+            accessibilityLabel={t.player.sheet.back(back)}
+            onPress={() => {
+              haptic('player', 'tick');
+              jump(-back);
+            }}>
+            <JumpIcon size={skipIcon} seconds={back} back />
           </Pressable>
           <Pressable
             android_ripple={pressed}
@@ -926,7 +1556,10 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             hitSlop={controlSlop}
             accessibilityRole="button"
             accessibilityLabel={playWhenReady ? t.common.pause : t.common.play}
-            onPress={() => void toggle()}>
+            onPress={() => {
+              haptic('player', 'click');
+              void toggle();
+            }}>
             {playWhenReady ? <PauseIcon size={playIcon} /> : <PlayIcon size={playIcon} />}
           </Pressable>
           <Pressable
@@ -934,108 +1567,222 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             style={control}
             hitSlop={controlSlop}
             accessibilityRole="button"
-            accessibilityLabel={t.player.sheet.forward(step)}
-            onPress={() => jump(step)}>
-            <JumpIcon size={skipIcon} seconds={step} />
+            accessibilityLabel={t.player.sheet.forward(forward)}
+            onPress={() => {
+              haptic('player', 'tick');
+              jump(forward);
+            }}>
+            <JumpIcon size={skipIcon} seconds={forward} />
           </Pressable>
           <Pressable
             android_ripple={pressed}
             style={control}
             hitSlop={controlSlop}
             accessibilityRole="button"
-            accessibilityLabel={t.common.nextTrack}
-            onPress={() => void next()}>
+            accessibilityLabel={tape ? t.player.tape.nextPart : t.common.nextTrack}
+            onPress={() => {
+              haptic('player', 'tick');
+              void next();
+            }}>
             <NextIcon size={skipIcon} />
           </Pressable>
         </View>
+        </View>
 
-        <View style={styles.options}>
-          <Pressable
-            android_ripple={pressed}
-            style={styles.mode}
-            accessibilityRole="button"
-            hitSlop={MODE_SLOP}
-            accessibilityLabel={t.player.sheet.shuffleQueue}
-            onPress={() => {
-              deal();
-              void shuffleQueue();
-            }}>
-            <Animated.View style={{ transform: [{ rotate: dealtTurn }, { scale: dealtSize }] }}>
-              <ShuffleIcon size={modeIcon} color={OFF} />
-              <Animated.View style={[StyleSheet.absoluteFill, { opacity: dealtLight }]} pointerEvents="none">
-                <ShuffleIcon size={modeIcon} color={ON} />
-              </Animated.View>
-            </Animated.View>
-          </Pressable>
-          <Pressable
-            android_ripple={pressed}
-            style={[styles.mode, repeat !== 'off' && styles.modeOn]}
-            accessibilityRole="button"
-            hitSlop={MODE_SLOP}
-            accessibilityLabel={t.player.sheet.repeat[repeat]}
-            accessibilityState={{ selected: repeat !== 'off' }}
-            onPress={() => void cycleRepeat()}>
-            <RepeatIcon
-              size={modeIcon}
-              once={repeat === 'one'}
-              color={repeat === 'off' ? OFF : ON}
-            />
-          </Pressable>
-          <Pressable
-            android_ripple={pressed}
-            style={styles.mode}
-            accessibilityRole="button"
-            hitSlop={MODE_SLOP}
-            accessibilityLabel={t.player.sheet.playbackSettings}
-            accessibilityState={{ expanded: playbackOpen }}
-            onPress={() => setPlaybackOpen(true)}>
-            <SettingsIcon size={modeIcon} color={OFF} />
-          </Pressable>
-          <Pressable
-            android_ripple={pressed}
-            style={[styles.mode, showLyrics && styles.modeOn]}
-            accessibilityRole="button"
-            hitSlop={MODE_SLOP}
-            accessibilityLabel={t.player.sheet.lyrics}
-            accessibilityState={{ selected: showLyrics }}
-            onPress={() => setShowLyrics(!showLyrics)}>
-            <LyricsIcon size={modeIcon} color={showLyrics ? ON : OFF} />
-          </Pressable>
-          {/* Only offered where it would do something. */}
-          {showLyrics ? (
-            <Pressable
-              android_ripple={pressed}
-              style={[styles.mode, showTranslation && styles.modeOn]}
-              accessibilityRole="button"
-              hitSlop={MODE_SLOP}
-              accessibilityLabel={t.player.sheet.translateLyrics}
-              accessibilityState={{ selected: showTranslation }}
-              onPress={() => setShowTranslation(!showTranslation)}>
-              <TranslateIcon size={modeIcon} color={showTranslation ? ON : OFF} />
-            </Pressable>
-          ) : null}
-          {/* The song playing into a list in two taps, not through its menu. */}
-          {listButton && current ? (
-            <Pressable
-              android_ripple={pressed}
-              style={styles.mode}
-              accessibilityRole="button"
-              hitSlop={MODE_SLOP}
-              accessibilityLabel={t.library.menu.addToPlaylist.label}
-              onPress={() => menu.addToList([current.id])}>
-              <ListAddIcon size={modeIcon} color={OFF} />
-            </Pressable>
-          ) : null}
-          {heart ? <HeartButton key={current?.id ?? 'none'} size={modeIcon} on={c.accent} off={OFF} style={styles.mode} hitSlop={MODE_SLOP} /> : null}
-          {/* For the ten seconds a song just excluded can be had back, and otherwise not there. */}
-          <PlayerDiscoverUndo />
-          {added ? (
-            <View style={styles.added} pointerEvents="none">
-              <Text style={styles.addedText} accessibilityLiveRegion="polite" numberOfLines={2}>
+        {/*
+          One row, whatever the width: drawn smaller before it is ever let
+          run onto a second line, and then on two of the same length, never
+          one button left on its own. See `optionsFit`.
+        */}
+        <View
+          style={styles.optionsBox}
+          onLayout={(event) => {
+            const measured = Math.floor(event.nativeEvent.layout.width);
+            setOptionsWidth((was) => (was === measured ? was : measured));
+          }}>
+          {tape ? optionRows(
+            [
+              <Pressable
+                key="speed"
+                android_ripple={pressed}
+                style={[fit.button, styles.tapeChip]}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.tape.speed(speedLabel(speed))}
+                onPress={() => {
+                  const next = nextTapeSpeed(speed);
+                  haptic('choices', 'tick');
+                  if (tapeKey) setTapeSpeed(tapeKey, next);
+                  void setSpeed(next);
+                }}>
+                <Text style={styles.tapeChipLabel}>{speedLabel(speed)}</Text>
+              </Pressable>,
+              <Pressable
+                key="sleep"
+                android_ripple={pressed}
+                style={fit.button}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.tape.sleep}
+                accessibilityState={{ expanded: sleepOpen }}
+                onPress={() => setSleepOpen(true)}>
+                <MoonIcon size={fit.icon} color={OFF} />
+              </Pressable>,
+              <Pressable
+                key="mark"
+                android_ripple={pressed}
+                style={fit.button}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.marks.add}
+                onPress={() => {
+                  // Where it is now, at the press, not where it has got to once the note is written.
+                  haptic('choices', 'click');
+                  setMarking({ trackId: current.id, at: playerPositionNow().positionSec });
+                }}>
+                <MarkAddIcon size={fit.icon} color={OFF} />
+              </Pressable>,
+              ...(tapeVideo != null ? [
+                <Pressable
+                  key="transcript"
+                  android_ripple={pressed}
+                  style={[fit.button, lyricsShown && styles.modeOn]}
+                  accessibilityRole="button"
+                  hitSlop={fit.slop}
+                  accessibilityLabel={t.player.transcript.show}
+                  accessibilityState={{ selected: lyricsShown }}
+                  onPress={() => {
+                    haptic('player', 'tick');
+                    if (!showTranscript) void readTranscript(current.id, tapeVideo);
+                    setShowTranscript(!showTranscript);
+                  }}>
+                  <LyricsIcon size={fit.icon} color={lyricsShown ? ON : OFF} />
+                </Pressable>,
+              ] : []),
+              <Pressable
+                key="marks"
+                android_ripple={pressed}
+                style={fit.button}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.marks.list(markTimes.length)}
+                accessibilityState={{ expanded: marksOpen }}
+                onPress={() => setMarksOpen(true)}>
+                <MarksIcon size={fit.icon} color={markTimes.length > 0 ? ON : OFF} />
+              </Pressable>,
+              <Pressable
+                key="settings"
+                android_ripple={pressed}
+                style={fit.button}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.sheet.playbackSettings}
+                accessibilityState={{ expanded: playbackOpen }}
+                onPress={() => setPlaybackOpen(true)}>
+                <SettingsIcon size={fit.icon} color={OFF} />
+              </Pressable>,
+            ],
+            fit.rows,
+            fit.gap
+          ) : optionRows(
+            [
+              <ShuffleButton
+                key="shuffle"
+                size={fit.icon}
+                on={ON}
+                off={OFF}
+                style={fit.button}
+                hitSlop={fit.slop}
+                label={t.player.sheet.shuffleQueue}
+                onPress={() => void shuffleQueue()}
+                onDeal={deal}
+              />,
+              <Pressable
+                key="repeat"
+                android_ripple={pressed}
+                style={[fit.button, repeat !== 'off' && styles.modeOn]}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.sheet.repeat[repeat]}
+                accessibilityState={{ selected: repeat !== 'off' }}
+                onPress={() => {
+                  // Round from off to all to one: only from one does it come back to off.
+                  void cycleRepeat();
+                  pressRepeat();
+                }}>
+                <Animated.View style={{ transform: [{ rotate: repeatIconTurn }] }}>
+                  <RepeatIcon size={fit.icon} once={repeat === 'one'} color={repeat === 'off' ? OFF : ON} />
+                </Animated.View>
+              </Pressable>,
+              <Pressable
+                key="settings"
+                android_ripple={pressed}
+                style={fit.button}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.sheet.playbackSettings}
+                accessibilityState={{ expanded: playbackOpen }}
+                onPress={() => setPlaybackOpen(true)}>
+                <SettingsIcon size={fit.icon} color={OFF} />
+              </Pressable>,
+              <Pressable
+                key="lyrics"
+                android_ripple={pressed}
+                style={[fit.button, lyricsShown && styles.modeOn]}
+                accessibilityRole="button"
+                hitSlop={fit.slop}
+                accessibilityLabel={t.player.sheet.lyrics}
+                accessibilityState={{ selected: lyricsShown }}
+                onPress={() => {
+                  setShowLyrics(!showLyrics);
+                  pressLyrics();
+                }}>
+                <Animated.View
+                  ref={lyricsButton}
+                  collapsable={false}
+                  // Again a moment later: laid out while the player is still rising, it is not yet where it will be.
+                  onLayout={() => {
+                    measureButton();
+                    setTimeout(measureButton, 700);
+                  }}
+                  style={{ transform: [{ rotate: lyricsWobbleTurn }] }}>
+                  <LyricsIcon size={fit.icon} color={lyricsShown ? ON : OFF} />
+                </Animated.View>
+              </Pressable>,
+              // The song playing into a list in two taps, not through its menu.
+              // Neither for a tape, which is in no list and nobody's favourite.
+              listButton && current && !isTape(current) ? (
+                <Pressable
+                  key="list"
+                  android_ripple={pressed}
+                  style={fit.button}
+                  accessibilityRole="button"
+                  hitSlop={fit.slop}
+                  accessibilityLabel={t.library.menu.addToPlaylist.label}
+                  onPress={() => menu.addToList([current.id])}>
+                  <ListAddIcon size={fit.icon} color={OFF} />
+                </Pressable>
+              ) : null,
+              hearted && !(current && isTape(current)) ? (
+                <HeartButton key={`heart-${current?.id ?? 'none'}`} trackId={current?.id ?? null} size={fit.icon} on={ON} off={OFF} style={fit.button} hitSlop={fit.slop} />
+              ) : null,
+            ],
+            fit.rows,
+            fit.gap
+          )}
+          {/*
+            Under the row and not in it, so that nothing in the row moves for
+            them: what was added to a list, and for ten seconds the way back
+            from a song just excluded.
+          */}
+          <View style={styles.added} pointerEvents="box-none">
+            <PlayerDiscoverUndo />
+            {added ? (
+              <Text style={styles.addedText} accessibilityLiveRegion="polite" numberOfLines={2} pointerEvents="none">
                 {added}
               </Text>
-            </View>
-          ) : null}
+            ) : null}
+          </View>
         </View>
       </View>
   );
@@ -1055,7 +1802,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           nothing asked it to measure again. A key makes the old views go.
         */
         key="wide"
-        style={[styles.screen, { transform: [{ translateY: slide }] }]}>
+        style={[styles.screen, { transform: [{ translateY: slide }, { translateX: screenShake }, { rotate: screenTilt }, { rotate: screenRound }] }]}>
         <CoverPage uri={artwork} />
         <Behind
           veiled={veiled}
@@ -1089,7 +1836,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
                     }
                   : undefined
               }>
-              {t.format.upper(showLyrics ? t.player.sheet.lyrics : t.player.sheet.upNext(queue.length))}
+              {t.format.upper(lyricsShown ? (tape ? t.player.transcript.heading : t.player.sheet.lyrics) : (tape ? t.player.tape.parts(queue.length) : t.player.sheet.upNext(queue.length)))}
             </Text>
             {/*
               The words take the second column rather than the artwork's place.
@@ -1106,15 +1853,19 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
                 const measured = event.nativeEvent.layout.height;
                 setSideBox((box) => (box === measured ? box : measured));
               }}>
-              {showLyrics ? (
-                <LiveLyrics
-                  live={!covered}
-                  state={lyrics}
-                  height={sideBox}
-                  onSeek={onSeek}
-                  trackId={current.id}
-                  translated={showTranslation}
-                />
+              {lyricsShown ? (
+                <View style={styles.lyricsBox}>
+                  <LiveLyrics
+                    live={!covered}
+                    state={wordsShown}
+                    height={sideBox}
+                    onSeek={onSeek}
+                    trackId={current.id}
+                    translated={showTranslation && !tape}
+                    noneText={tape ? t.player.transcript.none : undefined}
+                  />
+                  {lyrics.lyrics && !tape ? <View style={styles.translateCorner}>{translateToggle}</View> : null}
+                </View>
               ) : (
                 queueListWith(headingOver ? headingHeight : 0)
               )}
@@ -1122,14 +1873,17 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           </View>
         </Behind>
         <PlayerTip />
+        {flyingLayer}
         {settings}
+        {sleepSheet}
+        {markSheets}
         {menu.element}
       </Animated.View>
     );
   }
 
   return (
-    <Animated.View key="tall" style={[styles.screen, { transform: [{ translateY: slide }] }]}>
+    <Animated.View key="tall" style={[styles.screen, { transform: [{ translateY: slide }, { translateX: screenShake }, { rotate: screenTilt }, { rotate: screenRound }] }]}>
       <CoverPage uri={artwork} />
       <Behind veiled={veiled} style={styles.behind}>
       {playerColumn}
@@ -1164,7 +1918,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
             accessibilityRole="button"
             accessibilityState={{ expanded }}>
             <View style={styles.queueGrip} />
-            <Text style={styles.queueLabel}>{t.format.upper(t.player.sheet.upNext(queue.length))}</Text>
+            <Text style={styles.queueLabel}>{t.format.upper((tape ? t.player.tape.parts(queue.length) : t.player.sheet.upNext(queue.length)))}</Text>
           </Pressable>
         </View>
 
@@ -1173,7 +1927,10 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
       </Behind>
       {/* Under the two sheets, which cover it while either is up. */}
       <PlayerTip />
+      {flyingLayer}
       {settings}
+      {sleepSheet}
+      {markSheets}
       {menu.element}
     </Animated.View>
   );
@@ -1245,8 +2002,19 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   scrubHitArea: { paddingVertical: 10, justifyContent: 'center' },
   scrubTrack: { height: 3, borderRadius: 2, backgroundColor: c.borderStrong, overflow: 'hidden' },
   scrubFill: { height: 3, backgroundColor: c.text },
+  marks: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  chapterBreak: { position: 'absolute', width: 2, height: 7, marginLeft: -1, backgroundColor: c.bg, opacity: 0.85 },
+  chapter: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2, minHeight: 28 },
+  chapterText: { flex: 1, color: c.textSecondary, fontSize: 13 },
+  chapterChevron: { color: c.textMuted, fontSize: 18 },
+  mark: { position: 'absolute', width: 3, height: 11, marginLeft: -1.5, borderRadius: 1.5, backgroundColor: c.accent },
   times: { flexDirection: 'row', justifyContent: 'space-between' },
   time: { color: c.textFaint, fontSize: 11, fontVariant: ['tabular-nums'] },
+  // How far into the whole of a tape in parts, under its bar.
+  tapeWhole: { color: c.textMuted, fontSize: 12, textAlign: 'center', marginTop: 6 },
+  // The speed, as a word in a ring where the other buttons are icons.
+  tapeChip: { paddingHorizontal: 10, borderWidth: StyleSheet.hairlineWidth * 2, borderColor: c.borderStrong },
+  tapeChipLabel: { color: c.text, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
 
   /*
     Five buttons, so the gaps are what gives. Three of them sat comfortably at
@@ -1254,8 +2022,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     phone is wide — the row has no way to wrap and nowhere to scroll, so it
     would simply have run off both edges.
   */
-  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 18 },
-  transportWide: { gap: 10 },
+  // A row, so that the transport in it is as wide as what it holds even where that is wider than the room: what is measured.
+  transportBox: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'center' },
+  transport: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   controlWide: {
     paddingHorizontal: 8,
     paddingVertical: 6,
@@ -1270,7 +2039,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
 
   /** Over the row of buttons, under them, for as long as it is said. */
-  added: { position: 'absolute', top: '100%', left: 0, right: 0, alignItems: 'center', marginTop: 6, zIndex: 2 },
+  added: { position: 'absolute', top: '100%', left: 0, right: 0, alignItems: 'center', marginTop: 6, gap: 6, zIndex: 2 },
   addedText: {
     color: c.text,
     fontSize: 13,
@@ -1279,15 +2048,23 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     overflow: 'hidden',
-    ...outlined(c),
+    ...outlinedClip(c),
   },
-  options: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  optionsBox: { gap: 6 },
+  /** The words' whole width, so that the corner below is the corner of where they are shown and not of a spinner. */
+  lyricsBox: { alignSelf: 'stretch' },
+  /** Over the top right of the words, clear of the edge. */
+  translateCorner: { position: 'absolute', top: 6, right: 6 },
+  translate: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    backgroundColor: c.surfaceRaised,
+    ...outlined(c),
   },
+  translateOn: outlined(c, c.accent),
   /*
     Lit or not is all these say about themselves, and lit is a shade. Where a
     theme draws outlines, one that is on is ringed in the accent as well. The

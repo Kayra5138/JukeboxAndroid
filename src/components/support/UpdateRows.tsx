@@ -1,4 +1,5 @@
-import { Linking, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../Switch';
 
 import { Pressable } from '../Pressable';
 import { useRows } from '../settings/rows';

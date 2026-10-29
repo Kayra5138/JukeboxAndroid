@@ -1,8 +1,13 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { PanResponder, type View } from 'react-native';
 
+import { haptic } from './haptics';
+
 /** How far in from a row's left edge the checkbox reaches. */
 export const CHECKBOX_COLUMN = 52;
+
+/** The least time between two steps felt, so a fast drag is a run of ticks rather than a buzz. */
+const STEP_FELT = 35;
 
 export type DragSelect = {
   /** Spread onto the view wrapping the list. */
@@ -57,6 +62,8 @@ export function useDragSelect({
   const anchor = useRef<number | null>(null);
   const deselects = useRef(false);
   const before = useRef<Set<string>>(new Set());
+  const reached = useRef(-1);
+  const felt = useRef(0);
 
   // Mirrors for the responder, which is built once and would otherwise close
   // over whatever these were at the time.
@@ -140,10 +147,22 @@ export function useDragSelect({
         // what every other list with checkboxes does.
         deselects.current = selectedRef.current.has(id);
         before.current = new Set(selectedRef.current);
+        reached.current = index;
+        haptic('holds', 'tick');
         apply(index);
       },
-      onPanResponderMove: (event) =>
-        apply(indexAt(event.nativeEvent.pageX, event.nativeEvent.pageY)),
+      onPanResponderMove: (event) => {
+        const index = indexAt(event.nativeEvent.pageX, event.nativeEvent.pageY);
+        if (anchor.current !== null && index !== reached.current) {
+          reached.current = index;
+          const now = Date.now();
+          if (now - felt.current >= STEP_FELT) {
+            felt.current = now;
+            haptic('holds', 'step');
+          }
+        }
+        apply(index);
+      },
       onPanResponderRelease: () => {
         anchor.current = null;
       },

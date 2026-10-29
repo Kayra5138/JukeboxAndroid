@@ -12,7 +12,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: 'Ничего не играет.',
-    heart: 'Сердечко',
+    heart: "В избранном",
     repeat: { off: 'Повтор', all: 'Повторять все', one: 'Повторять трек' },
     back: (count) => `Назад на ${seconds(count)}`,
     forward: (count) => `Вперёд на ${seconds(count)}`,
@@ -23,6 +23,17 @@ export const player: Strings['player'] = {
     upNext: (count) => `Далее · ${format.number(count)}`,
     position: 'Позиция воспроизведения',
     positionValue: (position, duration) => `${position} из ${duration}`,
+  },
+  tape: {
+    part: (at, of) => `Часть ${format.number(at)} из ${format.number(of)}`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at, of) => `Выпуск ${format.number(at)} из ${format.number(of)}`,
+    previousPart: 'Предыдущая часть',
+    nextPart: 'Следующая часть',
+    parts: (count) => `Части · ${format.number(count)}`,
+    book: (percent, left) => `${format.number(percent)}% целого · осталось ${left}`,
+    speed: (speed) => `Скорость ${speed}, нажми для следующей`,
+    sleep: 'Таймер сна',
   },
   queue: {
     /* The title stays in the nominative after the colon: a name cannot be declined. */
@@ -76,11 +87,63 @@ export const player: Strings['player'] = {
     howMany: 'Через сколько минут поставить на паузу?',
     minutes: 'Минуты',
     start: 'Запустить',
+    tape: {
+      about: 'Ставит на паузу через заданное время. Последние полминуты звук постепенно стихает.',
+      pauseAtEnd: 'Пауза в конце этой части',
+      endOfTrack: 'Конец части',
+      finish: {
+        title: 'Доиграть текущую часть',
+        note: 'Когда время выйдет, дождаться конца части, а не приглушать её.',
+        label: 'Доиграть текущую часть, когда таймер сна истечёт',
+      },
+    },
+  },
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: 'Текст',
+    show: 'Показать, что говорится',
+    none: 'У этого видео нет субтитров.',
+  },
+  chapters: {
+    heading: (count) => `Главы · ${format.number(count)}`,
+    untitled: (at) => `Глава ${format.number(at)}`,
+    at: (at, of) => `Глава ${format.number(at)} из ${format.number(of)}`,
+    sleepAtEnd: 'Остановить в конце этой главы',
+    listHint: 'Показывает список глав',
+  },
+  marks: {
+    screen: 'Закладки',
+    heading: 'Закладки в этой кассете',
+    add: 'Отметить это место',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count) => `Закладки: ${format.number(count)}`,
+    noteAt: (time) => `Закладка на ${time}`,
+    noteHint: 'Заметка о том, что здесь, если хотите. Можно оставить пустой.',
+    notePlaceholder: 'Что здесь',
+    save: 'Отметить',
+    none: 'В этой кассете пока нет закладок. Отметьте место кнопкой рядом с таймером сна.',
+    noneAnywhere: 'Закладок пока нет. Пока играет кассета, отметьте место в плеере и запишите, что там; все закладки появятся здесь.',
+    noNote: 'Без заметки',
+    remove: (time) => `Удалить закладку на ${time}`,
+    editNote: 'Изменить заметку',
+    goHint: 'Переходит к этому месту',
+    playHint: 'Включает кассету с этого места',
+    howTo: 'Нажмите на закладку, чтобы перейти к ней, или удерживайте, чтобы изменить заметку.',
+    all: 'Все закладки',
+    count: (count) => `${format.number(count)} ${plural(count, 'закладка', 'закладки', 'закладок')}`,
   },
   sleep: {
     endOfTrack: 'Пауза в конце этого трека',
     thenToTheEnd: (time) => `Осталось ${time}, затем до конца трека`,
     fadingOut: (time) => `Звук стихает, осталось ${time}`,
     pausesIn: (time) => `Пауза через ${time}`,
+    endOfChapter: 'Пауза в конце этой главы',
+    chapterIn: (time) => `${time} до конца главы`,
+    tape: {
+      endOfTrack: 'Пауза в конце этой части',
+      thenToTheEnd: (time) => `Осталось ${time}, затем до конца части`,
+    },
   },
 };

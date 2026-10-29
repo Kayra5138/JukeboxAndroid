@@ -338,7 +338,7 @@ export function isDiscoverTrack(trackId: string | null | undefined): boolean {
  * would have opened on nothing, or failed. Playing next and queueing take
  * the track as it is and are left.
  */
-export const NOT_FOR_DISCOVER = ['album', 'addToPlaylist', 'tiles', 'details', 'delete'] as const;
+export const NOT_FOR_DISCOVER = ['album', 'addToPlaylist', 'favorite', 'tiles', 'details', 'delete'] as const;
 
 /**
  * The notice, for a player that has `trackId` on: whether it is about this

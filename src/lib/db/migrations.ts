@@ -648,6 +648,112 @@ const NAMES_IN_TWO_WRITINGS = `
   ALTER TABLE track_metadata ADD COLUMN native_artist TEXT;
 `;
 
+/**
+ * What a list is beyond its name: nothing for the ordinary kind, and
+ * `favorites` for the one the heart fills, which there is always one of and
+ * which cannot be deleted (`playlists/favorites.ts`). Made by the app on its
+ * first start after this, in the language it speaks, rather than here.
+ */
+const LIST_KIND = `
+  ALTER TABLE playlists ADD COLUMN kind TEXT;
+`;
+
+/**
+ * Skips that were really a song on repeat. The player never told the app of a
+ * track starting over by itself, so an hour of one song looping was one
+ * listen, and pressing next at the end filed all of it as a skip; the song
+ * played most came to head the list of songs skipped most. A skip that lasted
+ * longer than the track is one of those: nobody walks out on a song after
+ * hearing more than the whole of it.
+ */
+const LOOPS_NOT_SKIPS = `
+  DELETE FROM skips WHERE duration_sec > 0 AND seconds_played >= duration_sec;
+`;
+
+/**
+ * When a list was last used: something put in it, or it played. The Lists
+ * tab is in this order, the lists in use at the top; a list never used since
+ * this came in stands where its last change puts it.
+ */
+const LIST_USED = `
+  ALTER TABLE playlists ADD COLUMN used_at INTEGER;
+`;
+
+/**
+ * Podcasts somebody follows, and the episodes their feeds have been seen to
+ * hold: see `lib/podcasts`. What became of an episode — fetched, under way —
+ * is the download queue's to say, by the episode's job; these say what there
+ * is, and which were there already when last looked.
+ */
+const PODCASTS = `
+  CREATE TABLE IF NOT EXISTS podcasts (
+    feed_url      TEXT PRIMARY KEY NOT NULL,
+    title         TEXT NOT NULL,
+    author        TEXT,
+    image         TEXT,
+    summary       TEXT,
+    subscribed_at INTEGER NOT NULL,
+    checked_at    INTEGER,
+    auto_download INTEGER NOT NULL DEFAULT 1,
+    keep          INTEGER NOT NULL DEFAULT 3
+  );
+  CREATE TABLE IF NOT EXISTS podcast_episodes (
+    feed_url     TEXT NOT NULL,
+    guid         TEXT NOT NULL,
+    title        TEXT NOT NULL,
+    url          TEXT NOT NULL,
+    published_at INTEGER,
+    duration_sec REAL,
+    image        TEXT,
+    summary      TEXT,
+    seen_at      INTEGER NOT NULL,
+    PRIMARY KEY (feed_url, guid)
+  );
+`;
+
+/**
+ * Whether a followed show fetches the episode after the one being listened
+ * to, for somebody working through it from older ones; and the places marked
+ * in tapes, each with what was noted of it.
+ */
+const FETCH_NEXT_AND_MARKS = `
+  ALTER TABLE podcasts ADD COLUMN fetch_next INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE IF NOT EXISTS tape_marks (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id     TEXT NOT NULL,
+    position_sec REAL NOT NULL,
+    note         TEXT,
+    created_at   INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS tape_marks_track ON tape_marks (track_id);
+`;
+
+/** How many episodes after the one being listened to a show that fetches the next ones fetches. */
+const NEXT_COUNT = `
+  ALTER TABLE podcasts ADD COLUMN next_count INTEGER NOT NULL DEFAULT 3;
+`;
+
+/**
+ * The folder of the Tapes folder a followed show's episodes are put in, named
+ * as it was when it was followed: a show that renames itself afterwards keeps
+ * its episodes together where they already are.
+ */
+const PODCAST_FOLDER = `
+  ALTER TABLE podcasts ADD COLUMN folder TEXT;
+  UPDATE podcasts SET folder = title WHERE folder IS NULL;
+`;
+
+/**
+ * Where a podcast's episode has its chapters and a transcript of what is said
+ * in it, as its feed gives them, for the episode fetched later from what was
+ * kept of the feed rather than from the feed read afresh.
+ */
+const EPISODE_EXTRAS = `
+  ALTER TABLE podcast_episodes ADD COLUMN chapters_url TEXT;
+  ALTER TABLE podcast_episodes ADD COLUMN transcript_url TEXT;
+  ALTER TABLE podcast_episodes ADD COLUMN transcript_type TEXT;
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -676,6 +782,14 @@ export const MIGRATIONS: string[] = [
   EXCLUSIONS_DATED,
   ALBUM_ARTIST_AND_SHARED_COVERS,
   NAMES_IN_TWO_WRITINGS,
+  LIST_KIND,
+  LOOPS_NOT_SKIPS,
+  LIST_USED,
+  PODCASTS,
+  FETCH_NEXT_AND_MARKS,
+  NEXT_COUNT,
+  PODCAST_FOLDER,
+  EPISODE_EXTRAS,
 ];
 
 /**

@@ -34,7 +34,12 @@ export const welcome: Strings['welcome'] = {
       heading: 'Choisis une apparence',
       note: 'Touche-en un pour l’essayer.',
       more:
-        'D’autres thèmes, et le choix des deux utilisés quand l’appli suit le système, sont dans Paramètres → Apparence.',
+        'D’autres thèmes, et le choix des deux utilisés quand l’appli suit le système, sont dans Paramètres → Apparence et toucher.',
+    },
+    views: {
+      heading: 'Ce que montre la bibliothèque',
+      note: 'Les façons de voir ta musique, comme un sélecteur au-dessus de la bibliothèque. Active celles que tu veux.',
+      more: 'Tu peux les changer à tout moment dans Réglages → Apparence et toucher.',
     },
     discover: {
       heading: 'Découvrir',

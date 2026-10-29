@@ -11,6 +11,7 @@ import { BarChart } from '../components/BarChart';
 import { ReportViewer } from '../components/report/ReportViewer';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT, type Strings } from '../lib/i18n/index';
+import { haptic } from '../lib/ui/haptics';
 import {
   firstPlayAt,
   listens,
@@ -334,7 +335,11 @@ export default function StatsScreen() {
                 accessibilityState={{ checked: option === metric }}
                 hitSlop={METRIC_SLOP}
                 style={styles.metricHit}
-                onPress={() => setMetric(option)}>
+                onPress={() => {
+                  // A choice like a segmented row's, felt as one is.
+                  if (option !== metric) haptic('choices', 'tick');
+                  setMetric(option);
+                }}>
                 <Text style={[styles.metric, option === metric && styles.metricOn]}>
                   {t.format.upper(option === 'time' ? t.stats.screen.time : t.stats.screen.plays)}
                 </Text>

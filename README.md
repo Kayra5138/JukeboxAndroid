@@ -54,6 +54,14 @@ Every release is signed with the same key, so one installs over another
 whichever way it was fetched. A copy you built yourself is signed with your
 own key and will not: uninstall first if you switch (see [Building](#building)).
 
+**On Samsung and some other phones**, the battery saver can freeze an app it
+thinks is idle, and a player paused for a moment by another app's sound (a
+video starting in a feed, say) looks idle to it. Jukebox notices when playback
+comes back silent and starts the sound again within a couple of seconds, but
+for music that never stops in the background, put Jukebox under *Settings →
+Battery → Background usage limits → Never sleeping apps* (on other phones:
+*Apps → Jukebox → Battery → Unrestricted*).
+
 [obtainium]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22Kayra5138.Jukebox%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FKayra5138%2FJukeboxAndroid%22%2C%22author%22%3A%22Kayra5138%22%2C%22name%22%3A%22Jukebox%22%7D
 
 ## Features
@@ -213,7 +221,7 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   matched by its length, if only one recording of that artist is that long.
   A live, remix or instrumental version is never taken for the original.
 - **Names in other writings.** Where a lookup finds a song's name both in
-  Latin letters and in its own writing, Settings → Look chooses which the
+  Latin letters and in its own writing, Settings → Look & feel chooses which the
   library shows: Latin letters (the default) or the original. Songs looked up
   before this fill in when they are looked up again (select them, then
   More… → Look up details).
@@ -269,6 +277,11 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
 
 ### Lists and albums
 
+- **Favorites**, a list that is always there, newest first. The heart on the
+  player puts the song playing in it and takes it out again, and so does
+  *Add to Favorites* in every song's menu. It can be renamed and emptied but
+  not deleted. One switch in Settings → Player hides the list, the heart and
+  the menu entry together; what is in it waits.
 - Lists ordered by hand, with a cover of your choice: a grid of four, one
   track's cover, or a picture from your phone.
 - Make a list from a tag in two ways. A *following* list always mirrors the
@@ -414,6 +427,52 @@ own key and will not: uninstall first if you switch (see [Building](#building)).
   own release, checked against that release's sums, and tried before it is
   trusted. The copy the app came with can be gone back to.
 
+### Tapes
+
+Books, podcasts, talks and long recordings, kept apart from the music. A view
+of their own in the library, switched on in the setup or under Look & feel,
+for anything in the **Tapes** folder of your library folder.
+
+- **They play on from where you left them**, each one, kept by the player
+  itself, so the car, the widget and a headset keep the place too. Played
+  again after a while, a tape goes back a few seconds to the start of the
+  sentence; that can be switched off.
+- **Out of the music.** Tapes are not in tracks, albums or artists, shuffle
+  all, the songs picked to follow, Discover, the history, the stats or
+  ListenBrainz, and are never crossfaded.
+- **The tapes view** shows what is being listened to first, each row with how
+  far in it is and how long is left and a button that carries it on. Shows you
+  follow, books and other tapes can be shown together or a kind at a time, and
+  sorted by when you last listened, by name or by what came newest.
+- **Add tapes** brings them in four ways:
+  - **YouTube**: a video or a playlist, a playlist becoming a numbered book in
+    a folder of its own. No length limit, and the video's chapters come with it.
+  - **Follow**: podcasts from Apple's podcast directory or by a feed's address,
+    and YouTube channels by name or by address. A show you follow can fetch its
+    newest episodes by itself (on Wi‑Fi only unless you allow mobile data), the
+    episodes after the one you are on, and delete those you finished some days
+    ago (one you put a mark in is kept). You do not have to follow to fetch an
+    episode. Shows can be brought in
+    from, and written out to, an OPML file.
+  - **Books**: LibriVox's recordings of books out of copyright, from the
+    Internet Archive, by title or author, in one language or any.
+  - **Phone**: sound files already on the phone, copied into a folder of your
+    Tapes in the order their names count.
+- **In the player**, a tape has its own buttons: how far the jumps go, a speed
+  of its own for each book or show, a sleep timer that can stop at the end of
+  the chapter, marks with a note at any place (shown on the bar and listed
+  together on a screen of their own), its chapters, and, for a video or a
+  podcast that has one, a transcript that follows along as lyrics do.
+- **Listening**: silences passed over, a clearer voice, and the parts of a
+  YouTube video that SponsorBlock's users marked as a sponsor's message,
+  the channel's own advertising or a request to subscribe passed over (on unless
+  switched off; asked by a short prefix of a hash of the video's id, never the
+  id itself). SponsorBlock's data is by its users, at
+  [sponsor.ajay.app](https://sponsor.ajay.app), under
+  [CC BY-NC-SA 4.0](https://github.com/ajayyy/SponsorBlock/wiki/Database-and-API-License).
+- A tape's details say how far in it is, where it came from, its chapters and
+  what was passed over.
+
 ### Piano Tiles
 
 Long-press any track and choose **Play piano tiles**. The game is generated
@@ -462,6 +521,11 @@ from the song itself.
   it later. The notification, the widget and Android Auto follow the same
   choice. Everything but English was translated by AI; see
   [Development](#development) if a line reads wrong.
+- **Vibration that answers a touch**, and as much of it as you like:
+  holds and drags, switches and choices, the stops on a slider (normal speed,
+  0 dB), results, the player's buttons and the game. Settings → Look & feel →
+  Vibration chooses all of it, the essential few, none, or a group at a time,
+  and how strong. The phone's own touch-feedback switch is heeded first.
 - **A short setup on the first start**: the language, the look, Discover,
   what a tap on a song plays and whether to keep playing similar songs, each
   step skippable. Somebody
@@ -470,7 +534,7 @@ from the song itself.
   to find covers and the tips, as on the day it was installed, with your
   music, lists and settings left as they are.
 - **Tabs you do not use can go.** Lists, Search and Stats can each be taken
-  off the bar in Settings → Look; Library and Settings stay.
+  off the bar in Settings → Look & feel; Library and Settings stay.
 - **Your own pair for day and night.** Following the phone goes between two
   themes, and you choose which: any theme for its light mode, any for its
   dark.
@@ -520,7 +584,7 @@ from the song itself.
   The now-playing ones change layout as they are resized, and the cover opens
   the player.
 - Three dots at the end of every row of tracks open its menu, as a long press
-  does; Settings → Look can take them away.
+  does; Settings → Look & feel can take them away.
 - Pause, then swipe the notification away to close the music.
 - Playback keeps going with the app closed.
 - A landscape layout: tabs move to a rail on the left, the player to a panel on
@@ -535,8 +599,8 @@ from the song itself.
 ### Android Auto
 
 - Four tabs: Home, Tracks, Albums, Lists. Everything is cover tiles.
-- Home starts with Continue, Shuffle recent and Shuffle all, then what you
-  played lately.
+- Home starts with Continue, Shuffle recent and Shuffle all, then the three
+  tapes you are part way through, then what you played lately.
 - Each shelf has a Sort tile at its head: by name, artist, recently added,
   most played or recently played.
 - Search works typed or spoken.
@@ -546,7 +610,8 @@ from the song itself.
 
 - **Export everything** in Settings writes one zip: listening history, skips,
   lists, tags, track details, lyrics and translations, covers, settings and the
-  sound setup.
+  sound setup, and of tapes the shows you follow, where you are in each tape,
+  your marks and the tape settings.
 - Not in it: the music itself, the download history, the library folder and
   anything about a ListenBrainz connection, its token least of all.
 - **Import** reads that zip on any phone. Songs are found again by file name,
@@ -582,6 +647,12 @@ the only one that sends anything about you.
 | Open Downloads, or ask for a download | GitHub (whether there is a newer yt-dlp; at most once a day, and it can be turned off) |
 | Press Update on the Downloads screen | GitHub (the newer yt-dlp, about 3 MB) |
 | Use the Search tab | YouTube |
+| Search for a podcast on Add tapes | Apple's podcast directory (iTunes Search) |
+| Search for a YouTube channel, follow one, or open it | YouTube (the channel's page and its videos, read as a desktop browser would ask for them, which is the only way YouTube shows them, with a cookie that skips its consent page) |
+| Open or follow a podcast, and while a followed show looks for new episodes | The podcast's own host (its feed, its episodes, and its chapters and transcript where it has them), over https |
+| Search for or open a book | The Internet Archive |
+| Play a YouTube tape with sponsors passed over (on unless switched off) | SponsorBlock (a short prefix of a hash of the video's id, never the id itself) |
+| Show what is said in a YouTube tape | YouTube (the video's captions) |
 | Open the app, at most once a day | GitHub (whether there is a newer Jukebox; it can be turned off under Settings → Your data) |
 | Press Open GitHub on Report a problem | GitHub, in your browser (the report you have just read; nothing is sent otherwise) |
 | Browse in the car | iTunes (a cover not saved yet, fetched once) |
@@ -600,13 +671,13 @@ To build it. To run it, see [Install](#install).
 
 ```bash
 npm install
-npm test                 # 2,291 tests, pure logic
+npm test                 # 2,360 tests, pure logic
 npx tsc --noEmit         # typecheck
 
 npx expo prebuild --platform android
 
 cd android
-./gradlew :jukebox-audio:testDebugUnitTest   # 473 more, in Kotlin
+./gradlew :jukebox-audio:testDebugUnitTest   # 490 more, in Kotlin
 ./gradlew :app:assembleRelease
 adb install -r app/build/outputs/apk/release/app-release.apk
 ```
@@ -649,6 +720,7 @@ Good to know:
 | `WAKE_LOCK` | Keeping the phone awake while music plays, a download runs or a lookup goes on |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Lookups, lyrics, downloads, and telling "offline" from "failed" |
 | `VIBRATE` | Haptics on swipes and in the game |
+| `RECEIVE_BOOT_COMPLETED` | Keeping the work done with the app closed scheduled after the phone restarts: the followed podcasts' check for new episodes, and Discover's songs kept ready |
 
 There is no permission to write to storage. Deleting a track, and writing
 details into a file, each raise a system dialog that grants those files, that

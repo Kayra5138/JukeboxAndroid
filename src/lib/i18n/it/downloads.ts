@@ -38,6 +38,7 @@ export const downloads: Strings['downloads'] = {
     search: 'Cerca',
     album: (name) => `Album: ${name}`,
     playlist: (name) => `Playlist: ${name}`,
+    tape: (name) => `Cassette: ${name}`,
   },
   automatic: 'Automatico · attende gli altri',
   retrying: (why) => (why ? `Nuovo tentativo · ${why}` : 'Nuovo tentativo'),

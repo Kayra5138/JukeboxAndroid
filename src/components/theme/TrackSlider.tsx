@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 
 import { makeStyles } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 
 /** How often a drag is allowed to reach whoever is listening, in milliseconds. */
 const TELL_EVERY_MS = 32;
@@ -19,6 +20,9 @@ const TAP_SLOP = 6;
 
 const THUMB = 26;
 const TRACK = 14;
+
+/** Which end of the track a fraction is at, if either. */
+const endOf = (fraction: number): 0 | 1 | null => (fraction <= 0 ? 0 : fraction >= 1 ? 1 : null);
 
 /** The colours a track runs through, left to right: two at the least, which is what a gradient is. */
 export type TrackColours = readonly [string, string, ...string[]];
@@ -88,6 +92,8 @@ export function TrackSlider({
   /** Where the finger left it, which a throttled `onChange` may not have been told. */
   const latest = useRef(value);
   const toldAt = useRef(0);
+  /** The end the finger last had it at, so that an end is felt once as it is reached and not at every step held there. */
+  const end = useRef<0 | 1 | null>(null);
 
   // Follows the value while nobody is holding it — a colour picked from the
   // row above, a code typed in — and keeps its hands off while somebody is.
@@ -110,16 +116,25 @@ export function TrackSlider({
     return next;
   };
 
+  /** A notch felt as the finger brings it to either end. Not for a screen reader's steps, which are read out. */
+  const reached = (next: number) => {
+    const now = endOf(at(next));
+    if (now !== null && now !== end.current) haptic('notches', 'tick');
+    end.current = now;
+  };
+
   const grant = (event: GestureResponderEvent) => {
     measure();
     dragging.current = true;
     start.current = { page: event.nativeEvent.pageX, value: latest.current };
+    end.current = endOf(at(latest.current));
   };
 
   const move = (event: GestureResponderEvent) => {
     if (travel <= 0) return;
     const moved = (event.nativeEvent.pageX - start.current.page) / travel;
     const next = place(at(start.current.value) + moved);
+    reached(next);
     const now = Date.now();
     if (now - toldAt.current >= TELL_EVERY_MS) {
       toldAt.current = now;
@@ -131,7 +146,7 @@ export function TrackSlider({
     dragging.current = false;
     // Measured along the thumb's travel, so that the ends of the range are the ends of the track.
     if (travel > 0 && Math.abs(event.nativeEvent.pageX - start.current.page) <= TAP_SLOP) {
-      place((event.nativeEvent.pageX - left.current - THUMB / 2) / travel);
+      reached(place((event.nativeEvent.pageX - left.current - THUMB / 2) / travel));
     }
     onSettle(latest.current);
   };

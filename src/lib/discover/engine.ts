@@ -7,6 +7,7 @@ import { withMetadata } from '../media/merge';
 import { mergeSongs } from '../identity/index';
 import { libraryFilesChanged, libraryState, subscribeLibrary } from '../library/index';
 import { noteError } from '../support/errorLogStore';
+import { isTape } from '../tapes/tape';
 import { carried } from '../youtube/carried';
 import { failureCode } from '../youtube/errors';
 import { findUntil, queueChanged } from '../youtube/finder';
@@ -334,7 +335,8 @@ async function build(refresh: boolean): Promise<void> {
     };
     const onStep = (step: { done: number; total: number }) =>
       dispatch({ type: 'buildProgress', label, done: step.done, total: step.total });
-    const pool: Song[] = await buildPool(library, Date.now(), said, controller.signal, strings(), { onStep });
+    // From the music alone: a book's reader is not an artist somebody wants more of.
+    const pool: Song[] = await buildPool(library.filter((track) => !isTape(track)), Date.now(), said, controller.signal, strings(), { onStep });
     // What is already owned is not recommended, by whichever of its spellings it is owned under.
     const owned = new Set(everything.map(songKey));
     dispatch({ type: 'built', refresh, pool: pool.filter((song) => !owned.has(songKey(song))) });
@@ -876,7 +878,7 @@ export async function growForAutoplay(artists: readonly string[]): Promise<void>
   const controller = new AbortController();
   const stop = setTimeout(() => controller.abort(), BUILD_MS);
   try {
-    const pool = await buildPool(library.tracks, Date.now(), () => {}, controller.signal, strings(), { around: artists });
+    const pool = await buildPool(library.tracks.filter((track) => !isTape(track)), Date.now(), () => {}, controller.signal, strings(), { around: artists });
     const owned = new Set(library.tracks.map(songKey));
     dispatch({ type: 'grown', pool: pool.filter((song) => !owned.has(songKey(song))) });
   } catch (error) {

@@ -46,7 +46,8 @@ export function ListHeading({
   /** Something that just went wrong, said under the hint. */
   note?: ReactNode;
   onPlay: () => void;
-  onShuffle: () => void;
+  /** Left out for a list that is not shuffled: a folder of tapes, played in its order. */
+  onShuffle?: () => void;
   children?: ReactNode;
 }) {
   const t = useT();
@@ -105,14 +106,16 @@ export function ListHeading({
             onPress={onPlay}>
             <Text style={styles.actionLabel}>{t.common.play}</Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            android_ripple={pressed}
-            style={[styles.secondary, nothing && styles.actionOff]}
-            disabled={nothing}
-            onPress={onShuffle}>
-            <Text style={styles.secondaryLabel}>{t.common.shuffle}</Text>
-          </Pressable>
+          {onShuffle ? (
+            <Pressable
+              accessibilityRole="button"
+              android_ripple={pressed}
+              style={[styles.secondary, nothing && styles.actionOff]}
+              disabled={nothing}
+              onPress={onShuffle}>
+              <Text style={styles.secondaryLabel}>{t.common.shuffle}</Text>
+            </Pressable>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t.common.addToQueue}

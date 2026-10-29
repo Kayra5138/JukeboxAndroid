@@ -1,4 +1,5 @@
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 
 import { useT } from '../lib/i18n/index';
 import { makeStyles, switchColours, useColours } from '../lib/theme/index';

@@ -1,4 +1,6 @@
+import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { db } from '../db/index.ts';
+import { refreshTapePlaces } from '../tapes/places.ts';
 import type { Cell } from '../backup/format.ts';
 import type { BackupDb } from '../backup/store.ts';
 import { artworkChanged } from '../media/artworkEvents.ts';
@@ -51,6 +53,21 @@ export function recognise(tracks: Scanned[]): void {
   last = tracks;
   const moved = takeIn(open(), tracks, memory, Date.now());
   void followDownloads(tracks, moved);
+  void followPlaces(moved);
+}
+
+/**
+ * Where each tape was left taken to its file's new name, as its marks are in
+ * the database (`readdress`): the places are the player's, kept apart from it.
+ */
+async function followPlaces(moved: Pair[]): Promise<void> {
+  if (moved.length === 0) return;
+  try {
+    await JukeboxAudio.moveTapePlacesAsync?.(Object.fromEntries(moved.map((pair) => [pair.from, pair.to])));
+    refreshTapePlaces();
+  } catch (error) {
+    console.warn('Tapes could not be taken along to their files.', error);
+  }
 }
 
 /**
@@ -125,6 +142,7 @@ export function mergeSongs(from: string, to: string): void {
   memory.files = null;
   memory.pairs = null;
   if (last) void followDownloads(last, [{ from, to }]);
+  void followPlaces([{ from, to }]);
 }
 
 /**

@@ -4,6 +4,8 @@ import { oneOrMany } from '../write.ts';
 /** The lists tab, one list, and the pickers that add to them. */
 export const lists = {
   /** Naming a list, wherever one is made. */
+  /** The list the heart fills: its name as it is made, and why it has no Delete. See `playlists/favorites.ts`. */
+  favorites: { name: "Favorites", kept: "Favorites cannot be deleted. It can be renamed, emptied, or hidden in Settings → Player." },
   naming: {
     heading: 'Name the list',
     placeholder: 'List name',
@@ -21,6 +23,19 @@ export const lists = {
     fromListening: 'From your listening',
     discover: 'Discover',
     discoverHint: 'Music you do not have, from what you play',
+    /** Under the title of the tab: how many lists there are. */
+    count: (count: number) => `${format.number(count)} ${oneOrMany(count, 'list', 'lists')}`,
+    /** The button of three dots beside the title, and the sheet it opens. */
+    more: 'More',
+    files: 'Playlist files',
+    yours: 'Your lists',
+    /** At the foot of the lists when not all of them fit: [count] is how many there are. */
+    showAll: (count: number) => `Show all ${format.number(count)}`,
+    showFewer: 'Show fewer',
+    /** The button beside each list that plays it shuffled at once; read out with the list's name. */
+    shuffleList: (list: string) => `Shuffle ${list}`,
+    /** Read out on the tiles of lists made from listening. */
+    holdToShuffle: 'Hold to shuffle and play',
 
     tagSheet: {
       heading: 'Make a list from a tag',
@@ -49,6 +64,11 @@ export const lists = {
       oneOrMany(count, 'Add 1 track to', `Add ${format.number(count)} tracks to`),
     noLists: 'No lists yet.',
     newList: 'New list…',
+    /** For a screen reader, on a list in the picker that holds what is being added already: all of it, or [count] of [of]. On screen it is a tick, or the share. */
+    inIt: (count: number): string => (count === 1 ? 'In it' : 'All in it'),
+    someInIt: (count: number, of: number) => `${format.number(count)} of ${format.number(of)} in it`,
+    removed: (count: number, list: string) =>
+      oneOrMany(count, `Taken out of ${list}`, `${format.number(count)} tracks taken out of ${list}`),
     already: (list: string) => `Already in ${list}`,
     added: (count: number, list: string) =>
       oneOrMany(

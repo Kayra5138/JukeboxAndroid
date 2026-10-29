@@ -1,3 +1,5 @@
+import { wholeIn, type Range } from '../ui/range.ts';
+
 /**
  * The two buttons that move a little way through the record.
  *
@@ -11,16 +13,15 @@
  * is what lets both of them be checked without a phone to store anything on.
  */
 
-/** How far a press moves, in seconds. */
-export const JUMP_STEPS = [5, 10, 15, 30, 60] as const;
+/** How far a press may move, in seconds: any whole number of them up to a minute. */
+export const JUMP_RANGE: Range = { min: 1, max: 60 };
 
 /** The step nobody chose: what every other player uses, so a thumb knows it. */
 export const DEFAULT_JUMP = 10;
 
 /** The step a stored setting means, falling back to ten for anything else. */
 export function stepFrom(saved: string | null): number {
-  const seconds = Number(saved);
-  return (JUMP_STEPS as readonly number[]).includes(seconds) ? seconds : DEFAULT_JUMP;
+  return wholeIn(saved, JUMP_RANGE) ?? DEFAULT_JUMP;
 }
 
 /**

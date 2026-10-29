@@ -29,7 +29,7 @@ object DownloadMetadata {
   /** Literal yt-dlp templates: spaces prevent bare names becoming field references;
    * percent/colon escaping prevents a song name being interpreted as template syntax. */
   fun option(field: String, value: String): String {
-    require(field in setOf("title", "artist", "album"))
+    require(field in setOf("title", "artist", "album", "track"))
     val literal = value.replace("%", "%%").replace(":", "\\:")
     return " $literal :(?s) (?P<meta_$field>.*) "
   }

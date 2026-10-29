@@ -13,6 +13,7 @@ import { useCopies } from '../../lib/library/copiesStore';
 import { lookUpWholeLibrary, useBulkLookup } from '../../lib/metadata/bulk';
 import { answered, parseOffer, shouldOffer } from '../../lib/metadata/offer';
 import { makeStyles, outlined, usePressed } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 import { useTip } from '../../lib/ui/tipsStore';
 import { useWelcomeShown } from '../../lib/ui/welcomeStore';
 
@@ -57,6 +58,7 @@ export function LibraryWelcome({ tracks, confirmed }: { tracks: number; confirme
   }, [confirmed, running, tracks, welcoming]);
 
   const answer = (accepted: boolean) => {
+    haptic('choices', 'click');
     setOffer(null);
     keepAnswer(accepted, tracks);
     if (accepted) void lookUpWholeLibrary();

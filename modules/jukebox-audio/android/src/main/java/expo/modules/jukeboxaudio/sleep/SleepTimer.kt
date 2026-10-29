@@ -62,11 +62,13 @@ class SleepTimer(
   private enum class Kind(val id: String) {
     OFF("off"),
     DURATION("duration"),
-    END_OF_TRACK("endOfTrack")
+    END_OF_TRACK("endOfTrack"),
+    END_OF_CHAPTER("endOfChapter")
   }
 
   private val handler = Handler(Looper.getMainLooper())
   private val due = Runnable { expire() }
+  private val watch = Runnable { watchChapter() }
 
   private var kind = Kind.OFF
 
@@ -80,6 +82,10 @@ class SleepTimer(
 
   /** Whether the player has been asked to pause at the end of the track. */
   private var stoppingAtEnd = false
+
+  /** For the end of a chapter: where in which item it ends, in the item's own milliseconds. */
+  private var chapterItem = -1
+  private var chapterEndMs = 0L
 
   // ---- what the app asks ----
 
@@ -115,6 +121,23 @@ class SleepTimer(
     announce()
   }
 
+  /**
+   * Pauses when the tape playing gets to [positionMs] — the end of the
+   * chapter it is in — however long that takes in time: a pause holds it
+   * back, a faster speed brings it on, and it is the place that counts, not
+   * the clock. Gone to another item, or past the place by hand, it is let go.
+   */
+  fun atPosition(positionMs: Long) {
+    reset()
+    if (main.mediaItemCount > 0 && positionMs > main.currentPosition) {
+      kind = Kind.END_OF_CHAPTER
+      chapterItem = main.currentMediaItemIndex
+      chapterEndMs = positionMs
+      watchChapter()
+    }
+    announce()
+  }
+
   fun cancel() {
     reset()
     announce()
@@ -132,6 +155,10 @@ class SleepTimer(
     "kind" to kind.id,
     "endsAt" to if (kind == Kind.DURATION && !finishing) {
       (System.currentTimeMillis() + deadline - SystemClock.elapsedRealtime()).toDouble()
+    } else if (kind == Kind.END_OF_CHAPTER && main.isPlaying) {
+      // When it will get there at the speed it plays, while it plays; nothing to count down while it waits.
+      val speed = main.playbackParameters.speed.coerceAtLeast(0.1f)
+      (System.currentTimeMillis() + ((chapterEndMs - main.currentPosition).coerceAtLeast(0L) / speed)).toDouble()
     } else null,
     "finishTrack" to finishTrack,
     "fade" to fade,
@@ -141,6 +168,7 @@ class SleepTimer(
   /** The service is going. Nothing is done to a player that is about to be released. */
   fun release() {
     handler.removeCallbacks(due)
+    handler.removeCallbacks(watch)
     windDown.clear()
     kind = Kind.OFF
     finishing = false
@@ -183,6 +211,22 @@ class SleepTimer(
     }
   }
 
+  /**
+   * Looks at where the tape has got to, four times a second while it plays:
+   * paused there once it has got to the end of the chapter. Not looked at
+   * while paused; [onIsPlayingChanged] starts it again.
+   */
+  private fun watchChapter() {
+    handler.removeCallbacks(watch)
+    if (kind != Kind.END_OF_CHAPTER) return
+    if (main.currentMediaItemIndex != chapterItem) return finish()
+    if (main.currentPosition >= chapterEndMs) {
+      main.pause()
+      return finish()
+    }
+    if (main.isPlaying) handler.postDelayed(watch, 250)
+  }
+
   /** Asked to play, with something to play; see [atExpiry] for why not `isPlaying`. */
   private fun playing(): Boolean =
     main.playWhenReady &&
@@ -209,6 +253,9 @@ class SleepTimer(
    */
   private fun reset() {
     handler.removeCallbacks(due)
+    handler.removeCallbacks(watch)
+    chapterItem = -1
+    chapterEndMs = 0L
     val turnedDown = windDown.begun()
     windDown.clear()
     if (stoppingAtEnd) stopAtTrackEnd(false)
@@ -267,6 +314,12 @@ class SleepTimer(
   }
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
+    // The end of a chapter is counted in the tape, not the clock: looked for while it plays, and the time to it said again.
+    if (kind == Kind.END_OF_CHAPTER) {
+      if (isPlaying) watchChapter()
+      announce()
+      return
+    }
     // Sound coming back without anybody having pressed play: a call ending,
     // after a timer that ran out while the phone slept through it.
     if (isPlaying && kind == Kind.DURATION && !finishing) {
@@ -274,7 +327,26 @@ class SleepTimer(
     }
   }
 
+  override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+    if (kind != Kind.END_OF_CHAPTER) return
+    val past = reason == Player.DISCONTINUITY_REASON_SEEK && newPosition.mediaItemIndex == chapterItem && newPosition.positionMs >= chapterEndMs
+    // Carried over the end by a part being passed over, a sponsor's message that runs on into the next chapter: the end
+    // was got to, and it pauses there, at the start of what comes after.
+    if (past && SleepTimers.passingOver && oldPosition.positionMs < chapterEndMs) {
+      main.pause()
+      return finish()
+    }
+    // Gone past it by hand, or on to something else: there is no end of this chapter to wait for.
+    if (past || newPosition.mediaItemIndex != chapterItem) return finish()
+    announce()
+  }
+
+  override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
+    if (kind == Kind.END_OF_CHAPTER) announce()
+  }
+
   override fun onPlaybackStateChanged(playbackState: Int) {
+    if (playbackState == Player.STATE_ENDED && kind == Kind.END_OF_CHAPTER) return finish()
     // The last track of a queue ends the queue rather than pausing at its own
     // end, and that is the track ending all the same.
     if (playbackState == Player.STATE_ENDED && (finishing || kind == Kind.END_OF_TRACK)) finish()
@@ -300,6 +372,20 @@ object SleepTimers {
 
   @Volatile private var live: SleepTimer? = null
 
+  /** While a tape's part is being passed over (`TapeKeeper`'s skipper): its jump is the tape playing on, not a hand. */
+  @Volatile var passingOver = false
+    private set
+
+  /** [jump], a part of a tape passed over, told apart from a seek by hand. On the player's thread. */
+  fun passOver(jump: () -> Unit) {
+    passingOver = true
+    try {
+      jump()
+    } finally {
+      passingOver = false
+    }
+  }
+
   /**
    * Told every time the timer changes: set, cancelled, fired, or run out and
    * waiting for a track. Not every second -- the time left is arithmetic the
@@ -314,6 +400,8 @@ object SleepTimers {
   fun set(request: Map<String, Any?>, answer: (Map<String, Any?>) -> Unit) = withTimer(answer) { timer ->
     if (request["kind"] == "endOfTrack") {
       timer.untilTrackEnds()
+    } else if (request["kind"] == "endOfChapter") {
+      timer.atPosition((request["positionMs"] as? Number)?.toLong() ?: 0L)
     } else {
       timer.start(
         durationMs = (request["durationMs"] as? Number)?.toLong(),

@@ -23,6 +23,7 @@ export const backup: Strings['backup'] = {
   },
   listens: (count) => `${format.number(count)} ${one(count, 'écoute', 'écoutes')}`,
   tagged: (count) => `${format.number(count)} ${one(count, 'morceau tagué', 'morceaux tagués')}`,
+  followed: (count) => `${format.number(count)} ${one(count, 'émission suivie', 'émissions suivies')}`,
   withLyrics: (count) =>
     `${format.number(count)} ${one(count, 'morceau avec paroles', 'morceaux avec paroles')}`,
 

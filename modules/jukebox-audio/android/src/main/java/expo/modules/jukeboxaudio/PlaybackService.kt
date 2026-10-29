@@ -310,6 +310,11 @@ class PlaybackService : MediaLibraryService() {
    * two goes, then it is left alone and reported, which is the existing
    * behaviour for a track that genuinely cannot play.
    */
+  private var stallGuard: StallGuard? = null
+
+  /** Where each tape was left, kept and gone back to: see [TapeKeeper]. */
+  private var tapeKeeper: TapeKeeper? = null
+
   private val faultRecovery = object : Player.Listener {
     private var tries = 0
     private var triedFor = -1
@@ -555,12 +560,21 @@ class PlaybackService : MediaLibraryService() {
       all of them, and the only place the fades have to be woven in.
     */
     val quiet = CallQuiet(this, player).also { callQuiet = it }
-    mediaSession = MediaLibrarySession.Builder(this, FadingPlayer(player, transitions, quiet), browsing)
+    mediaSession = MediaLibrarySession.Builder(this, FadingPlayer(
+      player,
+      transitions,
+      quiet,
+      tapeJump = { forward -> Tapes.jump(this, player, forward) },
+      tapeNow = { Tapes.isTape(this, player.currentMediaItem) },
+    ), browsing)
       .apply { launchAppIntent()?.let { setSessionActivity(it) } }
       .build()
 
     player.addListener(widgetWatcher)
     player.addListener(faultRecovery)
+    // Playing in name and silent in fact, after the phone froze the app: see [StallGuard].
+    stallGuard = StallGuard(player, transitions).also { player.addListener(it) }
+    tapeKeeper = TapeKeeper(this, player).also { player.addListener(it) }
     speak()
     Localised.watch(languageChanged)
     publish()
@@ -1171,6 +1185,11 @@ class PlaybackService : MediaLibraryService() {
     // Written before the player goes, so the widget stops offering controls for
     // a service that is about to stop existing.
     widgetHandler.removeCallbacksAndMessages(null)
+    stallGuard?.release()
+    // Where a tape was, as the service stops: the last few seconds since it was last written down.
+    tapeKeeper?.saveCurrent()
+    tapeKeeper?.release()
+    tapeKeeper = null
     // The last word on where playback was. The writer is shut down below, and
     // shutting it down lets what it has already been given finish.
     savePlace()

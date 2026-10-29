@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Switch } from './Switch';
 import { Pressable } from './Pressable';
 import { Segmented } from './Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +42,7 @@ import {
 } from '../lib/player/effects';
 import { makeStyles, outlined, switchColours, useColours, usePressed } from '../lib/theme/index';
 import { scrimOf } from '../lib/theme/Veil';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * Settings that shape playback but are rarely touched, kept behind the gear so
@@ -58,8 +60,14 @@ export function PlayerSettings({
   onSpeed,
   onPitch,
   onClose,
+  sleepOnly = false,
+  tape = false,
 }: {
   visible: boolean;
+  /** A tape is playing: the sleep timer speaks of a part, not of the music or a song. */
+  tape?: boolean;
+  /** The sleep timer and nothing else: for a tape, whose player has a button of its own for it. */
+  sleepOnly?: boolean;
   speed: number;
   pitch: number;
   onSpeed: (value: number) => void;
@@ -114,6 +122,7 @@ export function PlayerSettings({
             paddingBottom: insets.bottom + 28,
           },
         ]}>
+        {sleepOnly ? null : <>
         <View style={styles.headingRow}>
           <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.playback)}</Text>
           {/*
@@ -132,6 +141,7 @@ export function PlayerSettings({
             disabled={untouched}
             hitSlop={12}
             onPress={() => {
+              haptic('results', 'confirm');
               onSpeed(SPEED.normal);
               onPitch(multiplierOf(PITCH.normal));
             }}>
@@ -166,12 +176,17 @@ export function PlayerSettings({
             onSettle={onSpeed}
           />
 
+          {/* Not for a tape: a voice is listened to at its own pitch, sped up or not. */}
+          {tape ? null : (
+          <>
           <Slider
             label={t.player.settings.pitch}
             value={semitones}
             min={PITCH.min}
             max={PITCH.max}
             centre={PITCH.normal}
+            // Every semitone is felt, since every one is a different key.
+            notchEvery={1}
             accent={c.accent}
             snap={(value) => snap(value, PITCH)}
             format={(value) => formatSemitones(value, t)}
@@ -179,6 +194,8 @@ export function PlayerSettings({
             onSettle={(value) => onPitch(multiplierOf(value))}
           />
           <Text style={styles.hint}>{t.player.settings.pitchHint}</Text>
+          </>
+          )}
         </View>
 
         {/*
@@ -210,7 +227,10 @@ export function PlayerSettings({
               isBlank(effects) && styles.chipOn,
               !effects && styles.chipOff,
             ]}
-            onPress={() => changeEffects(BLANK)}>
+            onPress={() => {
+              haptic('choices', 'tick');
+              changeEffects(BLANK);
+            }}>
             <Text style={isBlank(effects) ? styles.chipLabelOn : styles.chipLabel}>
               {t.common.off}
             </Text>
@@ -226,7 +246,10 @@ export function PlayerSettings({
                 accessibilityState={{ checked: on, disabled: !effects }}
                 disabled={!effects}
                 style={[styles.chip, on && styles.chipOn, !effects && styles.chipOff]}
-                onPress={() => changeEffects(shapeOf(preset.of))}>
+                onPress={() => {
+                  haptic('choices', 'tick');
+                  changeEffects(shapeOf(preset.of));
+                }}>
                 <Text style={on ? styles.chipLabelOn : styles.chipLabel}>
                   {t.sound.effects.presets[preset.id].name}
                 </Text>
@@ -250,13 +273,14 @@ export function PlayerSettings({
                   `Off` on its own would also undo whatever stereo shape was
                   set alongside it.
                 */
-                onPress={() =>
+                onPress={() => {
+                  haptic('choices', on ? 'toggleOff' : 'toggleOn');
                   changeEffects(
                     on
                       ? { voice: 'off', voiceMix: 1 }
                       : { voice: choice.id, voiceMix: choice.mix }
-                  )
-                }>
+                  );
+                }}>
                 <Text style={on ? styles.chipLabelOn : styles.chipLabel}>
                   {t.sound.effects.voices[choice.id].name}
                 </Text>
@@ -273,10 +297,13 @@ export function PlayerSettings({
           <Text style={styles.hint}>{t.player.settings.equalizer.note}</Text>
         </Pressable>
 
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/transitions')}>
-          <Text style={styles.rowTitle}>{t.nav.crossfade}</Text>
-          <Text style={styles.hint}>{t.player.settings.crossfade.note}</Text>
-        </Pressable>
+        {/* Nor this: a tape is never faded into the next thing. */}
+        {tape ? null : (
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/transitions')}>
+            <Text style={styles.rowTitle}>{t.nav.crossfade}</Text>
+            <Text style={styles.hint}>{t.player.settings.crossfade.note}</Text>
+          </Pressable>
+        )}
 
         {/* Last of the rows, because it is the way out of here rather than a setting. */}
         <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/effects')}>
@@ -284,12 +311,14 @@ export function PlayerSettings({
           <Text style={styles.hint}>{t.player.settings.allEffects.note}</Text>
         </Pressable>
 
+        </>}
+
         {/*
           Under everything else. The rest of this sheet is about how the music
           sounds, and this is about when it stops: reached for once, at the end
           of an evening, and in nobody's way down here the rest of the time.
         */}
-        <SleepTimerSection />
+        <SleepTimerSection tape={tape} />
 
       </ScrollView>
     </View>
@@ -307,9 +336,11 @@ export function PlayerSettings({
  * few lines once a second and not the sliders above them, and so that it only
  * listens while the sheet is up: it is not mounted otherwise.
  */
-function SleepTimerSection() {
+function SleepTimerSection({ tape }: { tape: boolean }) {
   const { timer, now, supported, start, cancel } = useSleepTimer();
   const t = useT();
+  // A part's words for a tape, a song's for everything else; the rest is the same.
+  const said = tape ? { ...t.player.sleepTimer, ...t.player.sleepTimer.tape } : t.player.sleepTimer;
   const styles = useStyles();
   const c = useColours();
   const [preferences, setPreferences] = useState(() =>
@@ -369,7 +400,10 @@ function SleepTimerSection() {
           accessibilityLabel={t.player.sleepTimer.cancel}
           disabled={!running}
           hitSlop={12}
-          onPress={() => void cancel()}>
+          onPress={() => {
+            haptic('choices', 'tick');
+            void cancel();
+          }}>
           <Text style={[styles.reset, !running && styles.resetOff]}>{t.common.cancel}</Text>
         </Pressable>
       </View>
@@ -377,7 +411,7 @@ function SleepTimerSection() {
       <Text style={running ? styles.status : styles.hint}>
         {!supported
           ? t.player.sleepTimer.unsupported
-          : (describeTimer(timer, now, t) ?? t.player.sleepTimer.about)}
+          : (describeTimer(timer, now, t, tape) ?? said.about)}
       </Text>
 
       {/*
@@ -397,7 +431,7 @@ function SleepTimerSection() {
             accessibilityLabel: t.player.sleepTimer.pauseAfter(minutes),
           })),
           { value: 'typed', label: t.player.sleepTimer.custom, accessibilityLabel: t.player.sleepTimer.pauseAfterTyped },
-          { value: 'end', label: t.player.sleepTimer.endOfTrack, accessibilityLabel: t.player.sleepTimer.pauseAtEnd },
+          { value: 'end', label: said.endOfTrack, accessibilityLabel: said.pauseAtEnd },
         ]}
         value={counting !== null ? `after ${counting}` : timer.kind === 'endOfTrack' ? 'end' : null}
         onChange={(choice) => {
@@ -405,8 +439,11 @@ function SleepTimerSection() {
             setRefused(false);
             setAsking(true);
           } else if (choice === 'end') {
+            // Felt beyond the chips' own tick: something will now stop the music.
+            haptic('results', 'confirm');
             void start({ kind: 'endOfTrack' });
           } else {
+            haptic('results', 'confirm');
             pauseAfter(Number(choice.slice('after '.length)));
           }
         }}
@@ -414,11 +451,11 @@ function SleepTimerSection() {
 
       <View style={styles.switchRow}>
         <View style={styles.switchWords}>
-          <Text style={styles.rowTitle}>{t.player.sleepTimer.finish.title}</Text>
-          <Text style={styles.hint}>{t.player.sleepTimer.finish.note}</Text>
+          <Text style={styles.rowTitle}>{said.finish.title}</Text>
+          <Text style={styles.hint}>{said.finish.note}</Text>
         </View>
         <Switch
-          accessibilityLabel={t.player.sleepTimer.finish.label}
+          accessibilityLabel={said.finish.label}
           value={preferences.finishTrack}
           disabled={!supported}
           onValueChange={letTrackFinish}
@@ -445,9 +482,11 @@ function SleepTimerSection() {
         onSubmit={(value) => {
           const minutes = minutesFrom(value);
           if (minutes === null) {
+            haptic('results', 'reject');
             setRefused(true);
             return;
           }
+          haptic('results', 'confirm');
           setAsking(false);
           pauseAfter(minutes);
         }}

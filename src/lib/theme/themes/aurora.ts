@@ -25,7 +25,7 @@ import { GLASS, GLASS_FINISH, glass } from './glass.ts';
  */
 
 /** How light each part of the sky may be and how strong its colour, as OKLCH counts them. */
-const DEPTHS = { top: 0.17, middle: 0.3, foot: 0.24, glow: 0.31 } as const;
+const DEPTHS = { top: 0.14, middle: 0.25, foot: 0.2, glow: 0.27 } as const;
 const STRENGTH = { top: 0.05, middle: 0.1, foot: 0.08, glow: 0.11 } as const;
 
 /** A colour's hue, at a lightness and no more than a strength. */
@@ -48,7 +48,7 @@ export function auroraColours(stops: readonly string[]): Palette {
   const effects = {
     ...GLASS_FINISH,
     backdrop: [
-      `radial-gradient(circle at 86% 40%, ${withAlpha(glow, 0.7)} 0%, ${withAlpha(glow, 0)} 58%)`,
+      `radial-gradient(circle at 86% 40%, ${withAlpha(glow, 0.6)} 0%, ${withAlpha(glow, 0)} 58%)`,
       `linear-gradient(180deg, ${bg} 0%, ${middle} 58%, ${foot} 100%)`,
     ],
   };

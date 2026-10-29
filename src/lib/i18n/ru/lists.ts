@@ -5,6 +5,7 @@ import type { Strings } from '../en/index.ts';
 const tracks = (count: number) => counted(count, 'трек', 'трека', 'треков');
 
 export const lists: Strings['lists'] = {
+  favorites: { name: "Избранное", kept: "Избранное нельзя удалить. Его можно переименовать, очистить или скрыть в Настройки → Плеер." },
   naming: {
     heading: 'Название плейлиста',
     placeholder: 'Название',
@@ -19,6 +20,14 @@ export const lists: Strings['lists'] = {
     fromListening: 'По твоим прослушиваниям',
     discover: 'Открытия',
     discoverHint: 'Музыка, которой у тебя нет, по тому, что ты слушаешь',
+    count: (count) => counted(count, 'список', 'списка', 'списков'),
+    more: 'Ещё',
+    files: 'Файлы плейлистов',
+    yours: 'Твои списки',
+    showAll: (count) => `Показать все (${format.number(count)})`,
+    showFewer: 'Свернуть',
+    shuffleList: (list) => `Перемешать «${list}»`,
+    holdToShuffle: 'Удерживай, чтобы перемешать и включить',
 
     tagSheet: {
       heading: 'Плейлист из тега',
@@ -44,6 +53,9 @@ export const lists: Strings['lists'] = {
     heading: (count) => `Добавить ${format.number(count)} ${plural(count, 'трек', 'трека', 'треков')} в`,
     noLists: 'Плейлистов пока нет.',
     newList: 'Новый плейлист…',
+    inIt: (count: number) => (count === 1 ? 'Уже в списке' : 'Все уже в списке'),
+    someInIt: (count: number, of: number) => `${format.number(count)} из ${format.number(of)} уже в списке`,
+    removed: (count, list) => `Убрано из «${list}»: ${tracks(count)}`,
     already: (list) => `Уже в плейлисте «${list}»`,
     added: (count, list) => `Добавлено в «${list}»: ${tracks(count)}`,
   },

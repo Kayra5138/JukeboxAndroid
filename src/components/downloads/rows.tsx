@@ -6,7 +6,8 @@ import { Image } from '../Picture';
 import { Pressable } from '../Pressable';
 import { useT } from '../../lib/i18n/index';
 import type { Strings } from '../../lib/i18n/languages';
-import { laid, makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { laid, makeStyles, outlined, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
+import { haptic } from '../../lib/ui/haptics';
 import { offerFor, type Advice } from '../../lib/youtube/extractor';
 import { canCancel, canMove, canRetry, isAutomatic, namesOf, retryOf, sameJob, sourceOf } from '../../lib/youtube/queueView';
 import { jobError, statusLabel, type DownloadJob } from '../../lib/youtube/types';
@@ -41,6 +42,7 @@ function sourceLabel(job: DownloadJob, t: Strings): string {
   const said = t.downloads.source;
   if (source.kind === 'album') return said.album(source.name);
   if (source.kind === 'playlist') return said.playlist(source.name);
+  if (source.kind === 'tape') return said.tape(source.name);
   return said[source.kind];
 }
 
@@ -139,7 +141,10 @@ export const NowRow = memo(
             accessibilityLabel={t.downloads.cancelLabel(title)}
             disabled={!stoppable}
             style={styles.textButton}
-            onPress={() => onCancel(job.id)}>
+            onPress={() => {
+              haptic('choices', 'tick');
+              onCancel(job.id);
+            }}>
             {/* Too late to stop, for the moment it takes to put the file away. */}
             <Text style={styles.link}>{stoppable ? t.common.cancel : '…'}</Text>
           </Pressable>
@@ -244,7 +249,10 @@ export const WaitingRow = memo(
               accessibilityRole="button"
               accessibilityLabel={said.doNextLabel(title)}
               style={styles.iconButton}
-              onPress={() => onFront(job.id)}>
+              onPress={() => {
+                haptic('choices', 'tick');
+                onFront(job.id);
+              }}>
               <ToFrontIcon size={18} color={c.textMuted} />
             </Pressable>
           ) : (
@@ -258,7 +266,10 @@ export const WaitingRow = memo(
             accessibilityLabel={said.cancelLabel(title)}
             disabled={!canCancel(job)}
             style={styles.iconButton}
-            onPress={() => onCancel(job.id)}>
+            onPress={() => {
+              haptic('choices', 'tick');
+              onCancel(job.id);
+            }}>
             <Text style={styles.cross}>×</Text>
           </Pressable>
         ) : (
@@ -360,7 +371,10 @@ export const FinishedRow = memo(
             accessibilityRole="button"
             accessibilityLabel={t.downloads.retryLabel(title)}
             style={styles.textButton}
-            onPress={() => onRetry(job.id)}>
+            onPress={() => {
+              haptic('choices', 'tick');
+              onRetry(job.id);
+            }}>
             <Text style={styles.link}>{t.common.retry}</Text>
           </Pressable>
         ) : job.status === 'done' ? (
@@ -407,6 +421,15 @@ const useStyles = makeStyles((c) =>
       paddingLeft: 20,
       paddingRight: 10,
       overflow: 'hidden',
+      /*
+        Said outright, for when a lifted row is put down: a row that cuts its
+        contents works out where from its corners and border, and one told of
+        them and then told nothing keeps cutting to the shape it last had (see
+        `outlinedClip`).
+      */
+      borderRadius: 0,
+      borderWidth: 0,
+      borderColor: 'transparent',
     },
     /*
       One flat colour, whatever the theme writes its surfaces in. The rows it
@@ -426,7 +449,7 @@ const useStyles = makeStyles((c) =>
       backgroundColor: c.surface,
       borderRadius: 14,
       overflow: 'hidden',
-      ...outlined(c),
+      ...outlinedClip(c),
     },
 
     // No colour of the theme's on the picture itself; see TrackRow's `art`.

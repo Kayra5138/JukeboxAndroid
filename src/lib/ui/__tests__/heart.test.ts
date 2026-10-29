@@ -18,10 +18,10 @@ test('presses close together are one run, and a pause begins another', () => {
 });
 
 test('a run earns more the longer it goes on', () => {
-  assert.deepEqual([1, 3, 4, 8, 9, 15, 16, 29].map((count) => moodOf(run(count))), [
+  assert.deepEqual([1, 7, 8, 17, 18, 29, 30, 49].map((count) => moodOf(run(count))), [
     'one', 'one', 'flurry', 'flurry', 'storm', 'storm', 'frenzy', 'frenzy',
   ]);
-  const counts = [1, 4, 9, 17].map((count) => flightsOf(run(count), half).length);
+  const counts = [1, 8, 18, 31].map((count) => flightsOf(run(count), half).length);
   assert.deepEqual(counts, [1, 3, 6, 9]);
 });
 
@@ -31,9 +31,9 @@ test('one press is one heart, nearly straight up', () => {
 });
 
 test('at its height every fourth press adds a heart that swells where it is', () => {
-  assert.ok(flightsOf(run(16), half).some((flight) => flight.swell));
-  assert.ok(!flightsOf(run(17), half).some((flight) => flight.swell));
-  assert.ok(!flightsOf(run(12), half).some((flight) => flight.swell));
+  assert.ok(flightsOf(run(32), half).some((flight) => flight.swell));
+  assert.ok(!flightsOf(run(33), half).some((flight) => flight.swell));
+  assert.ok(!flightsOf(run(28), half).some((flight) => flight.swell));
 });
 
 test('no two hearts share a key, within a press or across a run', () => {

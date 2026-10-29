@@ -103,6 +103,7 @@ export function BackupSheet({
               <Text style={styles.fact}>{t.common.lists(summary.lists)}</Text>
               <Text style={styles.fact}>{said.tagged(summary.tagged)}</Text>
               <Text style={styles.fact}>{said.withLyrics(summary.lyrics)}</Text>
+              {summary.followed > 0 ? <Text style={styles.fact}>{said.followed(summary.followed)}</Text> : null}
             </View>
 
             {/*

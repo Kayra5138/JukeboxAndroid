@@ -104,7 +104,8 @@ export type ChartNote = {
  */
 export type SleepTimer = {
   /** `off` is no timer at all, and what every other field is then is not news. */
-  kind: 'off' | 'duration' | 'endOfTrack';
+  /** `endOfChapter` is a place in the tape playing, counted down only while it plays. */
+  kind: 'off' | 'duration' | 'endOfTrack' | 'endOfChapter';
   /**
    * When a duration runs out, in the milliseconds `Date.now()` counts in.
    *
@@ -132,7 +133,9 @@ export type SleepTimerRequest =
       /** Left out, the music fades. */
       fade?: boolean;
     }
-  | { kind: 'endOfTrack' };
+  | { kind: 'endOfTrack' }
+  /** Pause when the tape playing gets to [positionMs], the end of the chapter it is in. */
+  | { kind: 'endOfChapter'; positionMs: number };
 
 type SleepTimerEvents = {
   /**
@@ -258,6 +261,40 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
   previousAsync(): Promise<void>;
   skipToIndexAsync(index: number): Promise<void>;
   seekToAsync(seconds: number): Promise<void>;
+  /** Where each tape was left, by the track's id, as the player keeps it. */
+  getTapePlacesAsync(): Promise<Record<string, { positionSec: number; durationSec: number; at: number; finished: boolean }>>;
+  /** A tape's place set by hand: heard to the end, or not begun. */
+  markTapeAsync(trackId: string, finished: boolean, durationSec: number): Promise<void>;
+  /** Each tape's place taken from its old id to its new one, by `{ from: to }`. */
+  moveTapePlacesAsync?(moves: Record<string, string>): Promise<void>;
+  /** A tape's chapters, where it was fetched with some, in order. */
+  getTapeChaptersAsync?(trackId: string): Promise<{ startSec: number; title: string }[]>;
+  /** A tape fetched from YouTube before chapters were kept: its chapters looked up once by its video, and kept. */
+  lookUpTapeChaptersAsync?(trackId: string, videoId: string): Promise<{ startSec: number; title: string }[]>;
+  /** What is said in a tape fetched from YouTube, as its captions have it: looked up once by its video, and kept. */
+  lookUpTapeTranscriptAsync?(trackId: string, videoId: string): Promise<{ startSec: number; text: string }[]>;
+  /** The chapters written into a tape's file, read once and kept. */
+  /** Where tapes were left, from a backup, by this phone's ids: in place of every place there was, or beside them, the later of two kept. */
+  bringTapePlacesAsync?(places: Record<string, { positionSec: number; durationSec: number; at: number; finished: boolean }>, replace: boolean): Promise<void>;
+  readEmbeddedChaptersAsync?(trackId: string, uri: string): Promise<{ startSec: number; title: string }[]>;
+  /** Whether a tape has a transcript kept, as a podcast's episode does where its feed gave one. */
+  tapeTranscriptKept?(trackId: string): boolean;
+  /** Whether a tape goes back a little on being played again after a while. */
+  getTapeSmartRewind(): boolean;
+  setTapeSmartRewind(on: boolean): void;
+  /** One of a tape's switches — `skipSilence`, `voiceClarity`, `skipSponsors` — and setting it. */
+  getTapeFlag?(name: string, otherwise: boolean): boolean;
+  setTapeFlag?(name: string, on: boolean): void;
+  /** A tape's parts to pass over as it plays, `[[fromMs, toMs], …]` as JSON, and whether they have been looked for. */
+  setTapeSkips?(trackId: string, json: string): void;
+  tapeSkipsKnown?(trackId: string): boolean;
+  getTapeSkips?(trackId: string): [number, number][] | null;
+  /** A video's parts to pass over looked up of SponsorBlock and kept for its tape; answers with how many. */
+  lookUpTapeSkipsAsync?(trackId: string, videoId: string): Promise<number>;
+  /** How far a press of previous or next moves a tape from outside the app, in seconds. */
+  setTapeJumps?(backSec: number, forwardSec: number): void;
+  /** Each tape's speed by its key, as JSON, and the music's where the app had put it aside. */
+  setTapeSpeeds?(json: string, musicSpeed: number | null): void;
   /** Insert into the live queue without interrupting playback. -1 appends. */
   insertIntoQueueAsync(track: QueueItem, index: number): Promise<void>;
   moveInQueueAsync(from: number, to: number): Promise<void>;
@@ -278,6 +315,14 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * whether they did; a refusal is an ordinary outcome, not an error.
    */
   deleteTracksAsync(trackIds: string[]): Promise<boolean>;
+  /** Erases tracks this app put on the phone itself, without asking; answers with the ids erased. */
+  deleteOwnTracksAsync?(trackIds: string[]): Promise<string[]>;
+  /** Asks where to save a file of text of [type] and writes it there; false when the user backed out. */
+  saveTextFileAsync?(name: string, type: string, text: string): Promise<boolean>;
+  /** Lets the user choose sound files on the phone; each one's address and name, or none if they backed out. */
+  pickAudioFilesAsync?(): Promise<{ uri: string; name: string }[]>;
+  /** The files chosen copied into [folder] of the library under [names]; answers with how many were. */
+  copyTapeFilesAsync?(uris: string[], names: string[], folder: string): Promise<number>;
   setRepeatModeAsync(mode: RepeatMode): Promise<void>;
   /**
    * Sets a sleep timer in place of any there was, and answers with it.
@@ -357,6 +402,12 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * thing that answers immediately.
    */
   thump?(): void;
+  /**
+   * One of the app's touch feels, at a strength from nought to one: see
+   * `src/lib/ui/haptics.ts`. Nothing where the phone's touch feedback is off.
+   * Missing from an older build.
+   */
+  feel?(kind: string, strength: number): void;
   /**
    * Puts a piece of text on the clipboard: the report screen's Copy.
    * Missing from a build from before there was one.

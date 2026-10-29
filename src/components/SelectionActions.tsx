@@ -50,6 +50,7 @@ import { usePlayerState } from '../lib/player/PlayerProvider';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 import type { Track } from '../lib/types';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * Everything that can be done to tracks chosen together.
@@ -267,6 +268,7 @@ export function useSelectionActions({
       const tag = canonicalLabel(typed);
       if (!tag || ids.length === 0) return;
       addTagToTracks(ids, tag);
+      haptic('results', 'confirm');
       refreshGenres(ids);
       void refreshLibrary();
       onSaid(said.tagAdded(tag, ids.length));
@@ -282,6 +284,7 @@ export function useSelectionActions({
       setUntagging(null);
       const ids = [...trackIds];
       removeTagFromTracks(ids, tag);
+      haptic('results', 'confirm');
       refreshGenres(ids);
       void refreshLibrary();
       onSaid(said.tagRemoved(tag, carrying));
@@ -297,6 +300,7 @@ export function useSelectionActions({
     // What lookups found, and only that: an edit somebody typed stays, as it
     // does when the same tracks are looked up again.
     forgetMetadata(ids);
+    haptic('results', 'confirm');
     artworkChanged();
     void refreshLibrary();
     onChanged('cleared');
@@ -312,8 +316,10 @@ export function useSelectionActions({
       else if (action === 'addTag') setTagging(true);
       else if (action === 'removeTag') {
         const carried = tagsAmong(ids);
-        if (carried.length === 0) onSaid(said.noTags);
-        else setUntagging(carried);
+        if (carried.length === 0) {
+          haptic('results', 'reject');
+          onSaid(said.noTags);
+        } else setUntagging(carried);
       } else if (action === 'cover') {
         chooseCoverFor(ids).then(
           (chosen) => {
@@ -332,7 +338,9 @@ export function useSelectionActions({
       else {
         // Android asks first. Backing out of that leaves the choice as it was.
         void erase(ids).then((gone) => {
-          if (gone) onChanged('cleared');
+          if (!gone) return;
+          haptic('results', 'confirm');
+          onChanged('cleared');
         });
       }
     },

@@ -232,8 +232,8 @@ dependencies {
 // embedded version. This is the copy every install starts with and can go
 // back to; a newer release is fetched on the phone only when its owner asks
 // for it, and is kept only while it is newer than this one: ExtractorUpdate.kt.
-def extractorVersion = '2026.08.19'
-def extractorSha256 = '1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6'
+def extractorVersion = '2026.10.26'
+def extractorSha256 = 'e51e69e89489f199530f13d32a4342da3ddb2cf34842f364603a066db05afbf3'
 def extractorAssets = layout.buildDirectory.dir('generated/youtubeAssets')
 def prepareYoutubeExtractor = tasks.register('prepareYoutubeExtractor') {
   inputs.property('version', extractorVersion)

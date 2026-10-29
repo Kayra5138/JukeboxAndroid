@@ -211,6 +211,137 @@ object YouTubeEngine {
   }
 
   /**
+   * The chapters of the video [id], read afresh: for a tape fetched before
+   * chapters were kept. Answers with them as [TapeChapters] keeps them, or
+   * an empty list for a video that has none.
+   */
+  fun chapters(context: Context, id: String): org.json.JSONArray {
+    init(context)
+    val cancelled = AtomicBoolean(false)
+    val directory = File(context.cacheDir, "chapters-${UUID.randomUUID()}").apply { mkdirs() }
+    try {
+      val request = request(YouTubeData.url(id)).apply {
+        addOption("--skip-download")
+        addCommands(listOf("--print-to-file", "%(chapters)j", File(directory, "chapters.json").absolutePath))
+      }
+      gate.hold(YouTubeGate.For.FIND, cancelled) { execute(request, cancelled, 60) }
+      return TapeChapters.read(File(directory, "chapters.json")) ?: org.json.JSONArray()
+    } finally {
+      directory.deleteRecursively()
+    }
+  }
+
+  /**
+   * What is said in the video [id], as its captions have it (see
+   * [TapeTranscripts.addressIn] for which): its lines, or an empty list for a
+   * video with none.
+   */
+  fun transcript(context: Context, id: String): org.json.JSONArray {
+    init(context)
+    val cancelled = AtomicBoolean(false)
+    val request = request(YouTubeData.url(id)).apply {
+      addOption("--skip-download")
+      addOption("--dump-single-json")
+    }
+    val info = gate.hold(YouTubeGate.For.FIND, cancelled) { JSONObject(execute(request, cancelled, 90)) }
+    val address = TapeTranscripts.addressIn(info) ?: return org.json.JSONArray()
+    return TapeTranscripts.linesOf(TapeTranscripts.fetch(address))
+  }
+
+  /**
+   * A YouTube channel read as a show: its latest videos, from its Videos tab,
+   * newest first, each with how long it is and about when it came out — the
+   * day being YouTube's "two weeks ago" turned back into a date, which is near
+   * enough to put them in order and name their files by. Shorts and streams
+   * are tabs of their own, and so are not among them.
+   */
+  fun channel(context: Context, address: String): expo.modules.jukeboxaudio.podcasts.Show {
+    val id = expo.modules.jukeboxaudio.podcasts.PodcastFeed.channelIdOf(address) ?: throw YouTubeTrouble(Failure.INVALID_VIDEO)
+    init(context)
+    val cancelled = AtomicBoolean(false)
+    val request = request("https://www.youtube.com/channel/$id/videos", true).apply {
+      addOption("--skip-download")
+      addOption("--dump-single-json")
+      addOption("--flat-playlist")
+      addOption("--playlist-end", "30")
+      addOption("--ignore-errors")
+      addOption("--extractor-args", "youtubetab:approximate_date")
+    }
+    val json = gate.hold(YouTubeGate.For.HAND, cancelled) { JSONObject(execute(request, cancelled, 120)) }
+    val name = json.optString("channel").ifBlank { json.optString("uploader") }.takeUnless { it.isBlank() || it == "null" }
+      ?: json.optString("title").removeSuffix(" - Videos").ifBlank { "YouTube" }
+    val thumbs = json.optJSONArray("thumbnails")
+    val pictures = (0 until (thumbs?.length() ?: 0)).mapNotNull { thumbs?.optJSONObject(it) }
+    // The channel's own picture, square, not one of the banners across its page.
+    val avatar = pictures.firstOrNull { it.optString("id") == "avatar_uncropped" }
+      ?: pictures.lastOrNull { it.optInt("width") > 0 && it.optInt("width") == it.optInt("height") }
+    val entries = json.optJSONArray("entries")
+    val episodes = (0 until (entries?.length() ?: 0)).mapNotNull { index ->
+      val entry = entries?.optJSONObject(index) ?: return@mapNotNull null
+      val video = YouTubeData.video(entry) ?: return@mapNotNull null
+      val stamp = entry.optLong("timestamp", 0L).takeIf { it > 0 }
+        ?: entry.optLong("release_timestamp", 0L).takeIf { it > 0 }
+      expo.modules.jukeboxaudio.podcasts.Episode(
+        guid = video.getString("id"),
+        title = video.optString("title"),
+        url = video.getString("url"),
+        type = null,
+        bytes = null,
+        publishedAt = stamp?.times(1000),
+        durationSec = video.optDouble("duration").takeIf { it.isFinite() && it > 0 },
+        episode = null,
+        season = null,
+        image = video.optString("thumbnail").takeIf { it.startsWith("https://") },
+        summary = entry.optString("description").takeUnless { it.isBlank() || it == "null" }?.take(600),
+      )
+    }
+    return expo.modules.jukeboxaudio.podcasts.Show(
+      title = name,
+      author = name,
+      image = avatar?.optString("url")?.takeIf { it.startsWith("https://") },
+      summary = json.optString("description").takeUnless { it.isBlank() || it == "null" }?.take(600),
+      link = "https://www.youtube.com/channel/$id",
+      episodes = episodes,
+    )
+  }
+
+  /**
+   * YouTube channels by [words], as YouTube's own search finds them with its
+   * filter for channels, the nearest first: each by its id, its name, its
+   * handle and its picture, to be followed as a show by its channel's page.
+   */
+  fun channels(context: Context, words: String): List<Map<String, Any?>> {
+    init(context)
+    val cancelled = AtomicBoolean(false)
+    val address = "https://www.youtube.com/results?search_query=${java.net.URLEncoder.encode(words.trim(), "UTF-8")}&sp=EgIQAg%3D%3D"
+    val request = request(address, true).apply {
+      addOption("--skip-download")
+      addOption("--dump-single-json")
+      addOption("--flat-playlist")
+      addOption("--playlist-end", "6")
+      addOption("--ignore-errors")
+    }
+    val json = gate.hold(YouTubeGate.For.HAND, cancelled) { JSONObject(execute(request, cancelled, 90)) }
+    val entries = json.optJSONArray("entries") ?: return emptyList()
+    return (0 until entries.length()).mapNotNull { index ->
+      val entry = entries.optJSONObject(index) ?: return@mapNotNull null
+      val id = entry.optString("channel_id").ifBlank { entry.optString("id") }
+      if (!Regex("UC[A-Za-z0-9_-]{22}").matches(id)) return@mapNotNull null
+      val thumbs = entry.optJSONArray("thumbnails")
+      val picture = (0 until (thumbs?.length() ?: 0)).mapNotNull { thumbs?.optJSONObject(it) }
+        .maxByOrNull { it.optInt("width") }?.optString("url")
+        ?.let { if (it.startsWith("//")) "https:$it" else it }?.takeIf { it.startsWith("https://") }
+      mapOf(
+        "id" to id,
+        "title" to entry.optString("channel").ifBlank { entry.optString("title") }.ifBlank { id },
+        "handle" to entry.optString("uploader_id").takeIf { it.startsWith("@") },
+        "image" to picture,
+        "followers" to entry.optLong("channel_follower_count", -1L).takeIf { it >= 0 },
+      )
+    }
+  }
+
+  /**
    * Stops a search. One that has not begun is remembered, to be stopped as
    * it does — unless [remember] is false, which is for the queue's: its
    * search goes by its job's id, and a job that is tried again must not be
@@ -238,10 +369,12 @@ object YouTubeEngine {
   fun download(context: Context, id: String, format: String, directory: File, cancelled: AtomicBoolean, discovery: JSONObject? = null,
     discover: Boolean = false, progress: (String, Int) -> Unit): Pair<File, JSONObject> {
     init(context)
-    val url = YouTubeData.url(id)
+    // A file fetched as it is, a podcast's episode, from its own address; anything else is a video of YouTube's.
+    val url = if (discovery?.optBoolean("direct") == true) YouTubeData.direct(discovery.optString("url")) else YouTubeData.url(id)
     progress("preparing", 0)
     return gate.hold(YouTubeGate.For.DOWNLOAD, cancelled) {
-      if (discover && discovery != null) fetchKnown(context, url, format, directory, cancelled, discovery, progress)
+      if (discovery?.optJSONObject("tape") != null) fetchTape(context, url, directory, cancelled, discovery, progress)
+      else if (discover && discovery != null) fetchKnown(context, url, format, directory, cancelled, discovery, progress)
       else fetch(context, url, format, directory, cancelled, discovery, progress)
     }
   }
@@ -308,6 +441,98 @@ object YouTubeEngine {
       ?: throw YouTubeTrouble(if (refused || YouTubeData.filteredOut(said)) Failure.NOT_A_SONG else Failure.NO_AUDIO)
     return audio to video
   }
+
+  /**
+   * A tape: a book, an episode, a talk, a recording of an evening, fetched
+   * to be listened to a stretch at a time from the Tapes folder.
+   *
+   * Nothing like a song, and nothing of a song's asked. No catalogue: what
+   * it is called is what the video is called, whose it is is the channel's,
+   * and the record it is on is the list or the show it was fetched as part
+   * of. No length it may not be, since a book runs for hours, and room for
+   * one. The sound is kept as it came, an m4a where there is one, since a
+   * voice loses nothing to the encoding and turning hours of it into an mp3
+   * is a long wait for a larger file. The chapters the video has are kept in
+   * the file.
+   *
+   * Not SponsorBlock's marks, which the extractor can write in as chapters:
+   * when it cannot reach SponsorBlock it fails the whole download, and says
+   * it could not reach YouTube. The stretches to pass over are the player's
+   * to ask about as it plays, where not reaching anybody costs nothing.
+   */
+  private fun fetchTape(context: Context, url: String, directory: File, cancelled: AtomicBoolean, video: JSONObject,
+    progress: (String, Int) -> Unit): Pair<File, JSONObject> {
+    directory.mkdirs()
+    val tape = video.getJSONObject("tape")
+    // A part of a book is called what it is within the book, without the book's name the video gives it first.
+    val title = tape.optString("title").ifBlank { video.optString("title") }.ifBlank { "YouTube audio" }
+    val artist = video.optString("channel")
+    // The list it is a part of, or, fetched on its own, itself: two books from one channel are two books.
+    val album = tape.optString("album").ifBlank { tape.optString("name") }.ifBlank { artist }
+    // A podcast's episode wears its show's picture, from wherever the feed keeps it; a video, its own.
+    val artwork = if (video.optBoolean("direct")) {
+      video.text("thumbnail")?.let { cover -> runCatching { expo.modules.jukeboxaudio.AlbumArtwork.download(context, cover, anyHost = true) }.getOrNull() }
+    } else {
+      runCatching { DownloadArtwork.carried(context, null, video, cancelled) }.getOrNull()
+    }
+    check(!cancelled.get()) { "Cancelled" }
+    /*
+      A file of its own — a podcast's episode, a book's part — fetched here
+      first, tried again as the way to it gives out (see [DirectFetch]); the
+      extractor then only names and tags the copy on the phone.
+    */
+    val direct = video.optBoolean("direct")
+    val source = if (direct) {
+      val ending = url.substringBefore('?').substringAfterLast('/').substringAfterLast('.', "").lowercase().takeIf { it in AUDIO } ?: "mp3"
+      val whole = DirectFetch.fetch(url, File(directory, "source/whole.$ending"), cancelled) { share -> progress("downloading", share) }
+      "file://${whole.absolutePath}"
+    } else url
+    val request = request(source).apply {
+      if (direct) addOption("--enable-file-urls")
+      addOption("-f", "bestaudio[ext=m4a]/bestaudio/best")
+      addOption("-x")
+      addOption("--audio-format", "best")
+      addOption("--match-filter", "!is_live")
+      addOption("--max-filesize", "1500M")
+      addOption("--newline")
+      addOption("--output", File(directory, "audio.%(ext)s").absolutePath)
+      addOption("--embed-metadata")
+      addOption("--embed-chapters")
+      addOption("--parse-metadata", DownloadMetadata.option("title", title))
+      addOption("--parse-metadata", DownloadMetadata.option("artist", artist))
+      addOption("--parse-metadata", DownloadMetadata.option("album", album))
+      tape.optInt("part", 0).takeIf { it > 0 }?.let { addOption("--parse-metadata", DownloadMetadata.option("track", it.toString())) }
+      // A video's chapters, written down beside it as well as into it, for the player to list (see [TapeChapters]).
+      if (!direct) addCommands(listOf("--print-to-file", "%(chapters)j", File(directory, "chapters.json").absolutePath))
+    }
+    var converting = false
+    var refused = false
+    val said = StringBuilder()
+    try {
+      execute(request, cancelled, TAPE_TIMEOUT_SECONDS) { percent, _, line ->
+        if (said.length < 8_000) said.appendLine(line)
+        refused = refused || line.contains("does not pass filter")
+        converting = converting || line.startsWith("[ExtractAudio]") || line.startsWith("[Metadata]") || line.startsWith("[EmbedChapters]")
+        // The copy on the phone is only read over, which is no download: its own fetch said how that went.
+        progress(if (converting || direct) "converting" else "downloading", if (direct) 100 else percent.toInt().coerceIn(0, 100))
+      }
+    } finally {
+      File(directory, "source").deleteRecursively()
+    }
+    val audio = directory.listFiles()?.singleOrNull { it.isFile && it.extension.lowercase() in AUDIO }
+      ?: throw YouTubeTrouble(if (refused) Failure.LIVE else Failure.NO_AUDIO)
+    val info = JSONObject().put("id", video.getString("id")).put("url", url)
+      .put("title", title).put("artist", artist).put("album", album)
+      .put("channel", artist)
+      .put("thumbnail", video.text("thumbnail") ?: JSONObject.NULL)
+      .put("duration", video.optDouble("duration").takeIf { it.isFinite() && it > 0 } ?: JSONObject.NULL)
+    artwork?.let { info.put("artworkUri", it) }
+    TapeChapters.read(File(directory, "chapters.json"))?.let { info.put("chapters", it) }
+    return audio to info
+  }
+
+  /** Long enough for hours of a book over a slow connection. */
+  private const val TAPE_TIMEOUT_SECONDS = 4L * 60 * 60
 
   /** What the extractor may leave behind as the audio, by its ending. */
   private val AUDIO = setOf("mp3", "m4a", "opus", "ogg", "aac", "flac", "wav", "mp4")

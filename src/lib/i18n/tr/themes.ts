@@ -28,6 +28,8 @@ export const themes: Strings['themes'] = {
   frost: 'Buzlu cam',
   aero: 'Aero',
   aurora: 'Kapak camı',
+  auroraLight: 'Kapak camı, açık',
+  sundown: 'Gün batımı camı',
 
   lightGroup: 'Açık',
   darkGroup: 'Koyu',

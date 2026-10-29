@@ -11,6 +11,7 @@ import {
 import { useT, type Strings } from '../lib/i18n/index';
 import { columnHolding, type Bucket } from '../lib/stats/period';
 import { makeStyles, withAlpha } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 import { motionReduced } from '../lib/ui/motion';
 
 /** How tall the bars are, before the labels underneath. */
@@ -112,6 +113,8 @@ export function BarChart({
   const bucketsRef = useRef(buckets);
   widthRef.current = width;
   bucketsRef.current = buckets;
+  /** The column the dragging finger is over, so that each is felt once as it is entered and not at every move. */
+  const scrubbed = useRef<number | null>(null);
 
   /*
     Kept across renders and rebuilt only when the number of columns changes,
@@ -160,10 +163,20 @@ export function BarChart({
           columns.length - 1,
           Math.max(0, Math.floor((x / span) * columns.length))
         );
+        if (index !== scrubbed.current) {
+          scrubbed.current = index;
+          haptic('notches', 'tick');
+        }
         setPinned(columns[index].start);
       },
-      onPanResponderRelease: () => setPinned(null),
-      onPanResponderTerminate: () => setPinned(null),
+      onPanResponderRelease: () => {
+        scrubbed.current = null;
+        setPinned(null);
+      },
+      onPanResponderTerminate: () => {
+        scrubbed.current = null;
+        setPinned(null);
+      },
     })
   ).current;
 
@@ -261,7 +274,10 @@ export function BarChart({
             // The bars are thin; without this a tap has to land inside a strip
             // a few pixels wide and as short as the bar happens to be.
             hitSlop={{ top: 14, bottom: 14 }}
-            onPress={() => setPinned(index === touched ? null : bucket.start)}>
+            onPress={() => {
+              haptic('notches', 'tick');
+              setPinned(index === touched ? null : bucket.start);
+            }}>
             <Animated.View
               style={[
                 styles.bar,

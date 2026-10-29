@@ -6,9 +6,10 @@ export const settings: Strings['settings'] = {
   lastBuiltUnknown: '最終ビルド：新しいAPKをインストールすると表示されます',
 
   sections: {
-    look: '外観',
+    look: '外観と操作感',
     sound: 'サウンド',
     player: 'プレーヤー',
+    tapes: 'カセット',
     library: 'ライブラリ',
     downloads: 'ダウンロードとディスカバー',
     data: 'データ',
@@ -16,9 +17,10 @@ export const settings: Strings['settings'] = {
     experimental: '試験運用',
   },
   categories: {
-    look: 'テーマ、アルバムのラック表示、アニメーション、ライブラリで使う表示の種類。',
+    look: 'テーマ、アルバムのラック表示、アニメーション、バイブレーション、ライブラリで使う表示の種類。',
     sound: 'イコライザーとエフェクト、音量の均一化、クロスフェード、速度とピッチ。',
     player: 'スキップボタンで移動する秒数、キューが終わるときに続けて流す曲、歌詞の翻訳先の言語。',
+    tapes: 'スマート巻き戻し、カセットのスキップボタンの秒数、ポッドキャストを Wi‑Fi のときだけ取得する設定。',
     library: '音楽があるフォルダ、タグとジャケット、同じ曲かもしれないファイル。',
     waiting: (count) => `${format.number(count)}件が確認待ち`,
     downloads: 'ダウンロードキューとフローティングボタン、ディスカバー、YouTubeダウンローダーの更新。',
@@ -81,7 +83,7 @@ export const settings: Strings['settings'] = {
     note:
       '端末を横向きにすると、リストの代わりにジャケットをめくって選べます。手前のジャケットをタップすると開きます。',
   },
-  heart: { title: 'ハート', note: 'プレーヤーにハートを表示します。何も記録しません。' },
+  favoritesShown: { title: "お気に入り", note: "常にあるリスト（新しい順）。プレーヤーのハートと曲のメニューの「お気に入りに追加」で追加します。オフにすると3つとも隠れ、中身はそのまま残ります。" },
   listButton: {
     title: 'リストに追加ボタン',
     note:
@@ -138,10 +140,34 @@ export const settings: Strings['settings'] = {
       'コマ落ちする端末向けです。プレーヤーはせり上がらずにそのまま表示され、ゲームでライフの増減時に光る演出がなくなります。タイルが落ちてくる動きはゲームそのものなので、そのまま残ります。',
   },
   scriptNames: { title: '他の文字での名前', latin: 'ローマ字', original: 'オリジナル', note: '検索で曲名がローマ字と元の文字（日本語・中国語・韓国語）の両方で見つかったとき、ライブラリにどちらを表示するか。以前に検索した曲は、もう一度検索すると埋まります。' },
+  haptics: {
+    title: "バイブレーション",
+    open: "指で触れたときにアプリがどれだけ、どの強さで振動するか。",
+    mode: "振動",
+    modes: { off: "オフ", essential: "基本のみ", all: "すべて", custom: "カスタム" },
+    modeNotes: {
+      off: "アプリは振動しません。",
+      essential: "最も意味のある場面だけ：長押し、操作の成否、ゲーム。",
+      all: "長押しとドラッグ、スイッチと選択、スライダーの目盛り、結果、プレーヤーのボタン、ゲーム。",
+      custom: "下で振動させる場面を選びます。",
+    },
+    strength: "強さ",
+    strengthNote: "指を離したときに確認できます。強さを変えられないモーターの端末では、端末の強さのままです。",
+    groupsHeading: "振動する場面",
+    groups: {
+      holds: { title: "長押しとドラッグ", note: "長押しの反応、移動するために持ち上げた行、チェックボックスをなぞる指。" },
+      choices: { title: "スイッチと選択", note: "スイッチ、選択のタブ、選んだ項目。" },
+      notches: { title: "目盛りとステップ", note: "通常速度、0 dB、スライダーの中央、グラフの列。" },
+      results: { title: "結果", note: "操作が成功したかどうか：見つかった、書き込んだ、追加した、読み込んだ。" },
+      player: { title: "プレーヤーのボタン", note: "再生、スキップ、リピート、ハート、歌詞の行をタップ。" },
+      fun: { title: "ゲームとお楽しみ", note: "Piano Tiles のキーなど。" },
+    },
+    phone: "端末の設定でタッチ操作のフィードバックがオフなら、アプリも振動しません。",
+  },
   moreButton: {
     title: '各行の3点ボタン',
     note:
-      '曲の各行の右端に表示され、長押しと同じメニューを開きます。オフにしても長押しは使えます。',
+      '曲とアルバムの各行の右端に表示され、長押しと同じメニューを開きます。オフにしても長押しは使えます。',
   },
   tabs: {
     title: 'タブ',
@@ -155,6 +181,7 @@ export const settings: Strings['settings'] = {
       albums: 'タグの情報からまとめたアルバムです。',
       artists: '曲にクレジットされているすべてのアーティストです。2人のアーティストの曲は両方に表示されます。',
       folders: 'ライブラリフォルダ以下の、ファイルが保存されているフォルダです。',
+      tapes: 'ライブラリフォルダ内の「Tapes」フォルダにあるオーディオブック、ポッドキャスト、長い録音。前回止めたところから続きを再生します。',
     },
     onlyHint: 'オンの表示がこれだけなので、オフにできません',
     toggleHint: 'ライブラリでのこの表示のオン／オフを切り替えます',
@@ -169,7 +196,7 @@ export const settings: Strings['settings'] = {
   exportAll: {
     title: 'すべてエクスポート',
     note:
-      '再生履歴、リスト、タグ、歌詞、設定を、指定した場所に1つのファイルとして保存します。音楽ファイル自体は含まれません。',
+      '再生履歴、リスト、タグ、歌詞、設定、フォロー中のポッドキャスト、各カセットの再生位置とマークを、指定した場所に1つのファイルとして保存します。音楽ファイル自体は含まれません。',
     failed: 'バックアップを保存できませんでした。',
   },
   importBackup: {
@@ -185,6 +212,39 @@ export const settings: Strings['settings'] = {
   },
   equalizer: { note: 'バンド、低音、サラウンド、ラウドネス' },
   effects: { note: '広がり、クロスフィード、回転、レベル' },
+  /** The tape settings, apart from the music's: see `app/settings-tapes.tsx`. */
+  tapes: {
+    smartRewind: {
+      title: 'スマート巻き戻し',
+      note: 'しばらくしてから再生したカセットは、止めた位置より少し前から始まります。離れていた時間が長いほど前に戻ります。短い休憩なら3秒、1日たてば30秒。オフにすると止めた位置からそのまま再生します。',
+    },
+    skipSilence: { title: '無音をスキップ', note: '話の間の無音を飛ばし、カセットが少し短くなります。音楽には影響しません。' },
+    voiceClarity: { title: '声をはっきり', note: '声の下の低いうなりを抑え、言葉を聞き分ける帯域を少し持ち上げます（イコライザーに重ねて）。カセット再生中のみ。' },
+    skipSponsors: { title: 'スポンサーをスキップ', note: 'YouTube から取得したカセットで、SponsorBlock の利用者が印を付けた部分（スポンサー紹介、自己宣伝、登録のお願い）を飛ばします。' },
+    back: '戻る秒数',
+    forward: '進む秒数',
+    jumpNote: 'カセット再生中に再生ボタンの両側のボタンで移動する秒数。音楽の設定は「プレーヤー」にあります。',
+    podcasts: 'ポッドキャスト',
+    deletePlayed: {
+      title: '聴いたエピソードを削除',
+      off: 'フォロー中のポッドキャストのエピソードは、聴いた後も端末に残ります。',
+      after: (days) => `フォロー中のポッドキャストのエピソードは、アプリで取得したものなら、最後まで聴いてから${format.number(days)}日後に削除されます。マークを付けたものは残ります。`,
+    },
+    /** The podcasts followed, as an OPML file: see `podcasts/opml.ts`. */
+    opml: {
+      heading: 'ポッドキャストの移行',
+      export: 'フォロー中のポッドキャストを保存',
+      exportNote: 'ほかのポッドキャストアプリでも読めるOPMLファイルとして保存します。',
+      import: 'ファイルからフォロー',
+      importNote: 'ほかのポッドキャストアプリのOPMLファイル。番組はフォローされますが、自動では何も取得しません。必要な番組ごとに画面で有効にしてください。',
+      importing: (done, total) => `${format.number(total)}件中${format.number(done)}件を読み込み中…`,
+      imported: (followed, already, failed) => [`${format.number(followed)}件をフォローしました。`, already > 0 ? `${format.number(already)}件はフォロー済みでした。` : '', failed > 0 ? `${format.number(failed)}件は読み込めませんでした。` : ''].filter(Boolean).join(''),
+      nothing: 'このファイルにはポッドキャストがありません。',
+      failed: 'ファイルを読み書きできませんでした。',
+      none: 'まだポッドキャストをフォローしていません。',
+      saved: (count) => `${format.number(count)}件のポッドキャストを保存しました。`,
+    },
+  },
   jump: {
     title: 'スキップ秒数',
     note: '再生ボタンの両側にある2つのボタンで、曲の中を何秒移動するかを設定します。',

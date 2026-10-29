@@ -9,7 +9,7 @@ import { DEFAULT_SIZES, modeFrom, sizesFrom, type AutoplayMode, type BatchSizes 
  * What plays when the queue runs out: Settings → Player.
  *
  * Held where it can be watched, for the reason the heart's switch is
- * (`ui/heartWanted.ts`): what acts on it is not a screen that comes back into
+ * (`playlists/favorites.ts`): what acts on it is not a screen that comes back into
  * focus and reads its settings again, and is running with no screen at all.
  */
 const mode = createStore<AutoplayMode>('off');

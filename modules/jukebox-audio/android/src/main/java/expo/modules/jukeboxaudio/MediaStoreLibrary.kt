@@ -117,7 +117,7 @@ object MediaStoreLibrary {
         arrayOf(underFolderArg(rootFolder)),
         sortOrder
       )?.use { cursor ->
-        val row = TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title))
+        val row = TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title), rootFolder)
         while (cursor.moveToNext()) {
           tracks.add(row.read())
         }
@@ -197,7 +197,7 @@ object MediaStoreLibrary {
         arrayOf(id.toString(), underFolderArg(rootFolder)),
         null
       )?.use { cursor ->
-        if (cursor.moveToFirst()) TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title)).read() else null
+        if (cursor.moveToFirst()) TrackRow(cursor, Localised.text(context, R.string.jukebox_unknown_title), rootFolder).read() else null
       }
     }
   }
@@ -417,7 +417,7 @@ object MediaStoreLibrary {
  * [MediaStoreLibrary.queryTracks] runs this over every track on the device, and
  * getColumnIndexOrThrow is a scan of the column names each time it is called.
  */
-private class TrackRow(private val cursor: Cursor, private val unknown: String) {
+private class TrackRow(private val cursor: Cursor, private val unknown: String, private val root: String) {
   private val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
   private val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
   private val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -449,6 +449,8 @@ private class TrackRow(private val cursor: Cursor, private val unknown: String) 
    */
   private fun tagged(value: String?): String? {
     if (value == null || value == MediaStore.UNKNOWN_STRING) return null
+    // Not in a tapes folder, which is named after the show whose name the file carries: it is a tag, said twice.
+    if (cursor.getStringOrNull(pathColumn)?.let { Tapes.isTapeFolder(it, root) } == true) return value
     return value.takeUnless { it.equals(containingFolder(), ignoreCase = true) }
   }
 

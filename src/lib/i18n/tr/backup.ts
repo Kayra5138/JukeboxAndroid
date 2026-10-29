@@ -18,6 +18,7 @@ export const backup: Strings['backup'] = {
         : 'Bir yedek.',
   listens: (count) => `${format.number(count)} dinleme`,
   tagged: (count) => `${format.number(count)} etiketli şarkı`,
+  followed: (count) => `${format.number(count)} takip edilen show`,
   withLyrics: (count) => `${format.number(count)} sözlü şarkı`,
 
   songs: (found, total) => {

@@ -6,9 +6,10 @@ export const settings: Strings['settings'] = {
   lastBuiltUnknown: 'Son derleme: güncel sürüm yüklendikten sonra görünür',
 
   sections: {
-    look: 'Görünüm',
+    look: 'Görünüm ve his',
     sound: 'Ses',
     player: 'Oynatıcı',
+    tapes: 'Kasetler',
     library: 'Kütüphane',
     downloads: 'İndirmeler ve Keşfet',
     data: 'Verilerin',
@@ -16,9 +17,10 @@ export const settings: Strings['settings'] = {
     experimental: 'Deneysel',
   },
   categories: {
-    look: 'Tema, albümlerin raf görünümü, hareket ve kütüphanenin sunduğu görünümler.',
+    look: 'Tema, albümlerin raf görünümü, hareket, titreşim ve kütüphanenin sunduğu görünümler.',
     sound: 'Ekolayzer ve efektler, ses düzeyini eşitleme, çapraz geçiş, hız ve perde.',
     player: 'Atlama düğmelerinin süresi, sıra bitince ne çalacağı ve şarkı sözlerinin çevrildiği dil.',
+    tapes: 'Akıllı geri sarma, kasetin atlama düğmelerinin süresi ve podcast’leri yalnızca Wi‑Fi’de indirme.',
     library: 'Müziğinin bulunduğu klasör, etiketler ve kapaklar, aynı şarkı olabilecek dosyalar.',
     waiting: (count) => `${format.number(count)} karar bekliyor`,
     downloads: 'İndirme kuyruğu ve yüzen düğmesi, Keşfet ve YouTube indiricisini güncel tutma.',
@@ -81,7 +83,7 @@ export const settings: Strings['settings'] = {
     note:
       'Telefonu yan tutarken liste okumak yerine kapakların arasında gezin. Açmak için öndeki kapağa dokun.',
   },
-  heart: { title: 'Kalp', note: 'Oynatıcıda bir kalp. Hiçbir şey kaydetmez.' },
+  favoritesShown: { title: "Favoriler", note: "Her zaman duran, en yenisi en üstte bir liste. Oynatıcıdaki kalp ve şarkı menüsündeki Favorilere ekle onu doldurur. Kapalıyken üçü de gizlenir, içindekiler bekler." },
   listButton: {
     title: 'Listeye ekle düğmesi',
     note:
@@ -138,10 +140,34 @@ export const settings: Strings['settings'] = {
       'Kare atlayan telefonlar için. Oynatıcı yükselerek açılmak yerine doğrudan belirir, oyun da can kazanıldığında ya da kaybedildiğinde ekranı aydınlatmaz. Tuşlar yine düşer; o süsleme değil, oyunun kendisi.',
   },
   scriptNames: { title: 'Diğer yazılardaki adlar', latin: 'Latin harfleri', original: 'Orijinal', note: 'Bir arama şarkının adını hem kendi yazısıyla (Japonca, Çince, Korece) hem Latin harfleriyle bulduysa kütüphanenin hangisini göstereceği. Bu eklenmeden önce aranmış şarkılar yeniden arandığında dolar.' },
+  haptics: {
+    title: "Titreşim",
+    open: "Uygulama parmağının altında ne kadar ve ne güçte titreşsin.",
+    mode: "Titreşim",
+    modes: { off: "Kapalı", essential: "Temel", all: "Tamamı", custom: "Özel" },
+    modeNotes: {
+      off: "Uygulama hiç titreşmez.",
+      essential: "Yalnızca en çok şey anlattığı yerlerde: uzun basma, istediğin bir şeyin olup olmadığı ve oyun.",
+      all: "Uzun basma ve sürükleme, anahtarlar ve seçimler, kaydırıcı durakları, sonuçlar, oynatıcı düğmeleri ve oyun.",
+      custom: "Aşağıdan hangi anların titreşeceğini seç.",
+    },
+    strength: "Şiddet",
+    strengthNote: "Bıraktığında hissedilir. Motoru hafifletilip güçlendirilemeyen telefonlar kendi şiddetinde titreşir.",
+    groupsHeading: "Neler titreşsin",
+    groups: {
+      holds: { title: "Uzun basma ve sürükleme", note: "Uzun basmanın tutması, taşımak için kaldırılan satır, onay kutularında kaydırılan parmak." },
+      choices: { title: "Anahtarlar ve seçimler", note: "Anahtarlar, bir seçimin sekmeleri, seçilen bir seçenek." },
+      notches: { title: "Duraklar ve adımlar", note: "Normal hız, 0 dB, kaydırıcının ortası, grafiğin sütunları." },
+      results: { title: "Sonuçlar", note: "İstediğin şey oldu ya da olmadı: bulundu, yazıldı, eklendi, içe aktarıldı." },
+      player: { title: "Oynatıcı düğmeleri", note: "Oynat, atla, tekrarla, kalp, sözlerde bir satıra dokunma." },
+      fun: { title: "Oyun ve eğlence", note: "Piano Tiles'ın tuşları ve daha fazlası." },
+    },
+    phone: "Telefonun kendi ayarlarında dokunma titreşimi kapalıysa uygulama da titreşmez.",
+  },
   moreButton: {
     title: 'Satırlarda üç nokta',
     note:
-      'Her şarkı satırının sonunda durur ve basılı tutunca açılan menünün aynısını açar. Kapalıyken de satıra basılı tutabilirsin.',
+      'Her şarkı ve albüm satırının sonunda durur ve basılı tutunca açılan menünün aynısını açar. Kapalıyken de satıra basılı tutabilirsin.',
   },
   tabs: {
     title: 'Sekmeler',
@@ -155,6 +181,7 @@ export const settings: Strings['settings'] = {
       albums: 'Etiketlerdeki bilgilere göre bir araya getirilen albümler.',
       artists: 'Şarkılarda adı geçen herkes. İki sanatçılı bir şarkı ikisinin de altında yer alır.',
       folders: 'Dosyaların bulunduğu, kütüphane klasörünün altındaki klasörler.',
+      tapes: 'Kütüphane klasöründeki Tapes klasöründen sesli kitaplar, podcast’ler ve uzun kayıtlar; kaldığın yerden devam eder.',
     },
     onlyHint: 'Açık kalan tek görünüm olduğu için kapatılamaz',
     toggleHint: 'Bu görünümü kütüphanede gösterir ya da gizler',
@@ -170,7 +197,7 @@ export const settings: Strings['settings'] = {
   exportAll: {
     title: 'Her şeyi dışa aktar',
     note:
-      'Dinleme geçmişin, listelerin, etiketlerin, şarkı sözlerin ve ayarların; yerini senin seçtiğin tek bir dosyada. Müziğin kendisi dahil değildir.',
+      'Dinleme geçmişin, listelerin, etiketlerin, şarkı sözlerin ve ayarların, takip ettiğin podcast\'ler, her kasette kaldığın yer ve koyduğun işaretler; yerini senin seçtiğin tek bir dosyada. Müziğin kendisi dahil değildir.',
     failed: 'Yedek kaydedilemedi.',
   },
   importBackup: {
@@ -187,6 +214,39 @@ export const settings: Strings['settings'] = {
   },
   equalizer: { note: 'Bantlar, bas, surround ve ses yüksekliği' },
   effects: { note: 'Genişlik, crossfeed, döndürme ve seviye' },
+  /** The tape settings, apart from the music's: see `app/settings-tapes.tsx`. */
+  tapes: {
+    smartRewind: {
+      title: 'Akıllı geri sarma',
+      note: 'Bir süre sonra yeniden çalınan kaset, bırakıldığı yerin biraz gerisinden başlar; ne kadar uzun ara verildiyse o kadar geriden: kısa bir aradan sonra üç saniye, bir günden sonra yarım dakika. Kapalıyken tam durduğu yerden devam eder.',
+    },
+    skipSilence: { title: 'Sessizliği atla', note: 'Konuşmadaki duraklamalar atlanır, kaset biraz daha kısa sürer. Müziğe hiç dokunulmaz.' },
+    voiceClarity: { title: 'Daha net ses', note: 'Sesin altındaki uğultu kısılır, kelimeleri ayırt ettiren bölüm ekolayzerinin üstüne biraz yükseltilir. Yalnızca kaset çalarken.' },
+    skipSponsors: { title: 'Sponsorları atla', note: 'YouTube’dan gelen kasetlerde SponsorBlock dinleyicilerinin işaretlediği bölümler (sponsor mesajı, kanalın kendi reklamı, abone ol çağrısı) geldiğinde atlanır.' },
+    back: 'Geri atla',
+    forward: 'İleri atla',
+    jumpNote: 'Kasette oynat düğmesinin iki yanındaki düğmelerin kaç saniye atladığı. Müziğin kendi ayarı Oynatıcı’da.',
+    podcasts: 'Podcast’ler',
+    deletePlayed: {
+      title: 'Dinlenen bölümleri sil',
+      off: 'Takip ettiğin podcast’lerin bölümleri dinledikten sonra da telefonda kalır.',
+      after: (days) => `Takip ettiğin bir podcast’in bölümü, uygulama indirdiyse, sonuna kadar dinlendikten ${format.number(days)} gün sonra silinir. İşaret koyduğun bölüm kalır.`,
+    },
+    /** The podcasts followed, as an OPML file: see `podcasts/opml.ts`. */
+    opml: {
+      heading: 'Podcast’lerini taşı',
+      export: 'Takip ettiğin podcast’leri kaydet',
+      exportNote: 'Başka podcast uygulamalarının okuyabildiği bir OPML dosyası olarak.',
+      import: 'Dosyadan podcast takip et',
+      importNote: 'Başka bir podcast uygulamasından bir OPML dosyası. Programlar takip edilir ama kendiliğinden bir şey indirilmez; bunu her birinin kendi ekranında açabilirsin.',
+      importing: (done, total) => `${format.number(total)} programdan ${format.number(done)} okundu…`,
+      imported: (followed, already, failed) => [`${format.number(followed)} podcast takip edildi.`, already > 0 ? `${format.number(already)} tanesi zaten takip ediliyordu.` : '', failed > 0 ? `${format.number(failed)} tanesi okunamadı.` : ''].filter(Boolean).join(' '),
+      nothing: 'Bu dosyada hiç podcast yok.',
+      failed: 'Dosya okunamadı ya da yazılamadı.',
+      none: 'Henüz hiçbir podcast’i takip etmiyorsun.',
+      saved: (count) => `${format.number(count)} podcast kaydedildi.`,
+    },
+  },
   jump: {
     title: 'Atlama süresi',
     note: 'Çal düğmesinin iki yanındaki düğmelerin parçada kaç saniye ileri ya da geri gittiği.',

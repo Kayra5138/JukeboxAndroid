@@ -3,10 +3,10 @@ import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
 } from 'react-native';
+import { Switch } from '../components/Switch';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -18,6 +18,9 @@ import JukeboxAudio, {
 import { Slider } from '../components/Fader';
 import { useT, type Strings } from '../lib/i18n/index';
 import { makeStyles, outlined, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
+import { useIsFocused } from 'expo-router';
 
 /**
  * A change the player would not take, said in the log.
@@ -27,6 +30,9 @@ import { makeStyles, outlined, scene, switchColours, useColours, usePressed } fr
  * stuck for as long as it did.
  */
 const refused = (failure: unknown) => console.warn('The crossfade could not be set', failure);
+
+/** Where a duration is felt: at nothing, which is off. */
+const OFF = [0] as const;
 
 /**
  * Which of the four durations a row sets. What to call it, and the line
@@ -54,6 +60,9 @@ export default function TransitionsScreen() {
   const [state, setState] = useState<Transitions | null>(null);
   const [missing, setMissing] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  // Back folds the others away before it leaves.
+  const focused = useIsFocused();
+  useBack(expanded && focused, () => setExpanded(false));
 
   /*
     The settings as they stand, read by the drag handlers. A slider sends the
@@ -172,6 +181,7 @@ export default function TransitionsScreen() {
           value={state.autoMs}
           min={0}
           max={state.maxAutoMs}
+          notches={OFF}
           accent={c.accent}
           format={written}
           onDrag={(value) => push({ autoMs: round(value, state.maxAutoMs) })}
@@ -186,7 +196,10 @@ export default function TransitionsScreen() {
           // all that says so to the eye.
           accessibilityRole="checkbox"
           accessibilityState={{ checked: state.skipSameAlbum }}
-          onPress={() => void commit({ skipSameAlbum: !state.skipSameAlbum })}>
+          onPress={() => {
+            haptic('choices', state.skipSameAlbum ? 'toggleOff' : 'toggleOn');
+            void commit({ skipSameAlbum: !state.skipSameAlbum });
+          }}>
           <View style={styles.toggleText}>
             <Text style={styles.toggleLabel}>{say.albums.title}</Text>
             <Text style={styles.hint}>{say.albums.note}</Text>
@@ -203,6 +216,7 @@ export default function TransitionsScreen() {
                   value={state[entry.key]}
                   min={0}
                   max={state[entry.ceiling]}
+                  notches={OFF}
                   accent={c.accent}
                   format={written}
                   onDrag={(value) => push({ [entry.key]: round(value, state[entry.ceiling]) })}
@@ -219,7 +233,10 @@ export default function TransitionsScreen() {
               style={styles.toggle}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: state.equalPower }}
-              onPress={() => void commit({ equalPower: !state.equalPower })}>
+              onPress={() => {
+                haptic('choices', state.equalPower ? 'toggleOff' : 'toggleOn');
+                void commit({ equalPower: !state.equalPower });
+              }}>
               <View style={styles.toggleText}>
                 <Text style={styles.toggleLabel}>{say.equalPower.title}</Text>
                 <Text style={styles.hint}>{say.equalPower.note}</Text>
@@ -252,7 +269,10 @@ export default function TransitionsScreen() {
         // The switch is left where it is. It is the feature; this belongs to
         // the settings under it, and somebody tidying up their durations did
         // not ask for the music to stop crossfading.
-        onPress={() => void commit(state.defaults)}>
+        onPress={() => {
+          haptic('results', 'confirm');
+          void commit(state.defaults);
+        }}>
         <Text style={styles.resetLabel}>{say.reset}</Text>
       </Pressable>
     </ScrollView>

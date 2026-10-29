@@ -14,6 +14,20 @@ object YouTubeData {
     return "https://www.youtube.com/watch?v=$id"
   }
 
+  /**
+   * The address of a file to fetch as it is, not a video: a podcast's episode.
+   * A web address and nothing else, of a length an address is.
+   */
+  fun direct(address: String): String {
+    val value = address.trim()
+    if (value.length !in 10..2000 || !(value.startsWith("https://") || value.startsWith("http://"))) throw YouTubeTrouble(Failure.INVALID_VIDEO)
+    return value
+  }
+
+  /** Where a job's video is fetched from: its own address for a file, YouTube's for a video. */
+  fun urlOf(video: JSONObject): String =
+    if (video.optBoolean("direct")) direct(video.optString("url")) else url(video.getString("id"))
+
   fun input(text: String): String {
     val value = text.trim()
     if (value.isEmpty() || value.length > 500) throw YouTubeTrouble(Failure.QUERY)

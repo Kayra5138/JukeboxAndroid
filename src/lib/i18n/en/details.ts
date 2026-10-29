@@ -35,6 +35,8 @@ export const details = {
   lookUp: 'Look up',
   searchFailed: 'The search did not get through.',
 
+  /** Asked when back is pressed on a tab of the details with something typed and not saved. */
+  unsaved: { title: "Discard your changes?", body: "What you typed here has not been saved.", keep: "Keep editing", discard: "Discard" },
   general: {
     fields: {
       title: 'Title',

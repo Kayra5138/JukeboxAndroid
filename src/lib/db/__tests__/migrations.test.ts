@@ -547,6 +547,14 @@ describe('one spelling per tag', () => {
     database.exec('ALTER TABLE track_metadata DROP COLUMN latin_artist');
     database.exec('ALTER TABLE track_metadata DROP COLUMN native_title');
     database.exec('ALTER TABLE track_metadata DROP COLUMN native_artist');
+    database.exec('ALTER TABLE playlists DROP COLUMN kind');
+    database.exec('ALTER TABLE playlists DROP COLUMN used_at');
+    database.exec('ALTER TABLE podcasts DROP COLUMN fetch_next');
+    database.exec('ALTER TABLE podcasts DROP COLUMN next_count');
+    database.exec('ALTER TABLE podcasts DROP COLUMN folder');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN chapters_url');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_url');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_type');
     return database;
   }
 
@@ -624,6 +632,14 @@ describe('dating what was put away from Discover', () => {
     database.exec('ALTER TABLE track_metadata DROP COLUMN latin_artist');
     database.exec('ALTER TABLE track_metadata DROP COLUMN native_title');
     database.exec('ALTER TABLE track_metadata DROP COLUMN native_artist');
+    database.exec('ALTER TABLE playlists DROP COLUMN kind');
+    database.exec('ALTER TABLE playlists DROP COLUMN used_at');
+    database.exec('ALTER TABLE podcasts DROP COLUMN fetch_next');
+    database.exec('ALTER TABLE podcasts DROP COLUMN next_count');
+    database.exec('ALTER TABLE podcasts DROP COLUMN folder');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN chapters_url');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_url');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_type');
     database.exec(`PRAGMA user_version = ${dated}`);
     database.exec(`INSERT INTO discover_exclusions (id, song_key, title, artist, reason, until_at)
       VALUES ('old', 'artist|song', 'Song', 'Artist', 'blocked', NULL)`);
@@ -652,6 +668,14 @@ describe('album artists, covers taken off, and covers shared by a record', () =>
     database.exec('ALTER TABLE track_metadata DROP COLUMN latin_artist');
     database.exec('ALTER TABLE track_metadata DROP COLUMN native_title');
     database.exec('ALTER TABLE track_metadata DROP COLUMN native_artist');
+    database.exec('ALTER TABLE playlists DROP COLUMN kind');
+    database.exec('ALTER TABLE playlists DROP COLUMN used_at');
+    database.exec('ALTER TABLE podcasts DROP COLUMN fetch_next');
+    database.exec('ALTER TABLE podcasts DROP COLUMN next_count');
+    database.exec('ALTER TABLE podcasts DROP COLUMN folder');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN chapters_url');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_url');
+    database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_type');
     database.exec(`PRAGMA user_version = ${shared}`);
     database.exec(`INSERT INTO track_metadata (track_id, status, artwork_url, fetched_at) VALUES
       ('missed', 'not_found', 'file:///covers/a.jpg', 5),

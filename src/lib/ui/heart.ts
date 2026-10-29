@@ -14,11 +14,11 @@ export const RUN_GAP_MS = 650;
 export type Mood = 'one' | 'flurry' | 'storm' | 'frenzy' | 'glory';
 
 /** How many presses into a run each mood begins. */
-const FLURRY_AT = 4;
-const STORM_AT = 9;
-const FRENZY_AT = 16;
+const FLURRY_AT = 8;
+const STORM_AT = 18;
+const FRENZY_AT = 30;
 /** Some seconds of it without a pause: nobody gets here by accident. */
-export const GLORY_AT = 30;
+export const GLORY_AT = 50;
 
 export type Run = { count: number; at: number };
 

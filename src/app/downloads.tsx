@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { BackHandler, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect, useIsFocused } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DownloadsList } from '../components/downloads/DownloadsList';
@@ -15,6 +15,8 @@ import { youtubeError } from '../lib/youtube/errors';
 import { checkExtractor, updateExtractor, useExtractorAdvice, useExtractorBusy } from '../lib/youtube/extractorState';
 import { downloads } from '../lib/youtube/native';
 import { tallyOf } from '../lib/youtube/queueView';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * The downloads: what is being fetched, what is waiting to be, and what has
@@ -67,16 +69,8 @@ export default function DownloadsScreen() {
     }, [])
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (!asking) return false;
-        setAsking(false);
-        return true;
-      });
-      return () => listener.remove();
-    }, [asking])
-  );
+  const focused = useIsFocused();
+  useBack(asking && focused, () => setAsking(false));
 
   /*
     Each of these is handed to every row, so each is the same function from
@@ -138,6 +132,7 @@ export default function DownloadsScreen() {
             accessibilityRole="button"
             style={styles.button}
             onPress={() => {
+              haptic('choices', paused ? 'toggleOn' : 'toggleOff');
               setPaused(!paused).catch(() => {});
             }}>
             <Text style={styles.buttonLabel}>{paused ? said.resume : said.pause}</Text>
@@ -205,6 +200,7 @@ export default function DownloadsScreen() {
                 accessibilityRole="button"
                 style={styles.confirmButton}
                 onPress={() => {
+                  haptic('results', 'reject');
                   setAsking(false);
                   setMessage(null);
                   cancelAll().catch((failure: unknown) =>

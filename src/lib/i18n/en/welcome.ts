@@ -56,7 +56,13 @@ export const welcome = {
       note: 'Tap one to try it.',
       /** Under the few themes offered here. */
       more:
-        'More themes, and which two to use when following the phone, are in Settings → Look.',
+        'More themes, and which two to use when following the phone, are in Settings → Look & feel.',
+    },
+    /** Which ways of looking at the library its switch offers. */
+    views: {
+      heading: 'What the library shows',
+      note: 'The ways of looking at your music, as a switch over the library. Turn on the ones you want.',
+      more: 'You can change these any time in Settings → Look & feel.',
     },
     discover: {
       heading: 'Discover',

@@ -8,11 +8,13 @@ import {
   mergeTables,
   referencedArtwork,
   referencedIds,
+  remapPlaces,
   remapTables,
   summarise,
   type Summary,
 } from './apply.ts';
-import { BACKUP_FORMAT, parseBackup, type Backup, type BackupTrack, type Cell } from './format.ts';
+import { BACKUP_FORMAT, parseBackup, type Backup, type BackupTapes, type BackupTrack, type Cell } from './format.ts';
+import { setSmartRewind, setTapeFlag, smartRewind, tapeFlag } from '../tapes/settings.ts';
 import { matchTracks } from './match.ts';
 import { holdsAnything, readSettings, readTables, restore, type BackupDb } from './store.ts';
 
@@ -154,6 +156,41 @@ async function writeSound(sound: Backup['sound']): Promise<void> {
   }
 }
 
+/** What the player keeps of tapes: where each was left, and its switches. Nothing, where it cannot say. */
+async function readTapes(): Promise<BackupTapes | undefined> {
+  try {
+    return {
+      places: (await JukeboxAudio.getTapePlacesAsync?.()) ?? {},
+      smartRewind: smartRewind(),
+      flags: { skipSilence: tapeFlag('skipSilence'), voiceClarity: tapeFlag('voiceClarity'), skipSponsors: tapeFlag('skipSponsors') },
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Where tapes were left handed back to the player, under this phone's ids;
+ * and, replacing, its switches as well, as the sound setup is.
+ */
+async function writeTapes(tapes: BackupTapes | undefined, to: Map<string, string>, mode: 'merge' | 'replace'): Promise<void> {
+  if (!tapes) return;
+  try {
+    await JukeboxAudio.bringTapePlacesAsync?.(remapPlaces(tapes.places, to), mode === 'replace');
+  } catch (failure) {
+    unrestored('places in tapes', failure);
+  }
+  if (mode !== 'replace') return;
+  try {
+    if (tapes.smartRewind != null) setSmartRewind(tapes.smartRewind);
+    for (const [name, on] of Object.entries(tapes.flags ?? {})) {
+      if (on != null) setTapeFlag(name as keyof NonNullable<BackupTapes['flags']>, on);
+    }
+  } catch (failure) {
+    unrestored('tape settings', failure);
+  }
+}
+
 /** A name with the day in it, so two backups in one folder can be told apart. */
 function fileName(now: Date): string {
   const two = (value: number) => String(value).padStart(2, '0');
@@ -173,6 +210,7 @@ function fileName(now: Date): string {
 async function gather(): Promise<Backup> {
   const database = open();
   const tables = readTables(database);
+  const tapes = await readTapes();
   // The tracks left out of the library too: a folder switched off still has
   // its plays and tags in the tables, and they need describing like any other.
   const library = new Map((await scanEverything()).map((track) => [track.id, track]));
@@ -198,7 +236,8 @@ async function gather(): Promise<Backup> {
 
   const text = (value: Cell | undefined) => (typeof value === 'string' ? value : null);
   const tracks: BackupTrack[] = [];
-  for (const id of referencedIds(tables)) {
+  // A tape that was only ever listened to has a place and nothing else, and needs describing to be found again too.
+  for (const id of new Set([...referencedIds(tables), ...Object.keys(tapes?.places ?? {})])) {
     const track = library.get(id);
     const heard = lastHeard.get(id);
     tracks.push(
@@ -229,6 +268,7 @@ async function gather(): Promise<Backup> {
     tracks,
     settings: readSettings(database),
     sound: await readSound(),
+    ...(tapes ? { tapes } : {}),
     tables,
   };
 }
@@ -309,6 +349,7 @@ export async function applyBackup(opened: Opened, mode: 'merge' | 'replace'): Pr
   restore(database, final, backup.settings, mode);
 
   if (mode === 'replace') await writeSound(backup.sound);
+  await writeTapes(backup.tapes, to, mode);
 }
 
 /** Starts the app again so that everything on screen is read afresh. */

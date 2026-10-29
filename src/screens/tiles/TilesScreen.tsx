@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, BackHandler, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
@@ -17,7 +17,7 @@ import { motionReduced } from '../../lib/ui/motion';
 import { BackIcon } from '../../components/Icons';
 import { Segmented } from '../../components/Segmented';
 
-import { Image } from 'expo-image';
+import { Image } from '../../components/Picture';
 
 import JukeboxAudio, { type Chart } from '../../../modules/jukebox-audio';
 import { readSetting, SETTINGS, writeSetting } from '../../lib/db/index';
@@ -100,6 +100,8 @@ import { styles } from './styles';
 import { Tile } from './Tile';
 import { Wash } from './Wash';
 import { speedName, Words } from './Words';
+import { useBack } from '../../lib/ui/back';
+import { haptic, hapticsOn } from '../../lib/ui/haptics';
 
 /** Room round the pause button that counts as it: a press that lands beside it was meant for it. */
 const STOP_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
@@ -536,10 +538,16 @@ export default function TilesScreen() {
    *
    * One crossing to the other thread rather than two: both of these are calls
    * out of the process, and the hop that carries them is the expensive part.
+   *
+   * The buzz is the game's own strong knock, sent straight to the phone rather
+   * than through the app's touches for the time it saves, but only where the
+   * game is felt at all. A hit that wins a life back buzzes twice in its place.
    */
-  const touched = useCallback((hit: boolean) => {
+  const touched = useCallback((hit: boolean, healed: boolean) => {
     JukeboxAudio.knocked?.(hit ? 'hit' : 'empty');
-    JukeboxAudio.thump?.();
+    if (!hapticsOn('fun')) return;
+    if (healed) haptic('fun', 'double');
+    else JukeboxAudio.thump?.();
   }, []);
 
   /**
@@ -570,7 +578,7 @@ export default function TilesScreen() {
   }, []);
   const kept = useCallback(() => {
     JukeboxAudio.knocked?.('kept');
-    JukeboxAudio.thump?.();
+    if (hapticsOn('fun')) JukeboxAudio.thump?.();
   }, []);
   const letGo = useCallback(() => {
     JukeboxAudio.knocked?.('letgo');
@@ -615,6 +623,7 @@ export default function TilesScreen() {
   const finished = useCallback(() => {
     setKeep(null);
     setPaper(true);
+    haptic('fun', 'double');
     wound('won');
   }, [wound]);
 
@@ -1076,7 +1085,7 @@ export default function TilesScreen() {
 
             const notes = run.value;
             if (!notes || running.value === 0) {
-              runOnJS(touched)(false);
+              runOnJS(touched)(false, false);
               continue;
             }
 
@@ -1111,7 +1120,12 @@ export default function TilesScreen() {
               thread, after the search rather than before it, because the
               search is a few microseconds and the crossing is not.
             */
-            runOnJS(touched)(found >= 0);
+            /*
+              Whether this hit wins a life back, worked out ahead of the count
+              below by the same rule, so that the one buzz it gets can say so.
+            */
+            const healed = found >= 0 && sClean.value + 1 >= CLEAN_FOR_A_LIFE && sLives.value < LIVES;
+            runOnJS(touched)(found >= 0, healed);
 
             if (found < 0) {
               sMiss.value += 1;
@@ -1502,22 +1516,12 @@ export default function TilesScreen() {
     from the held screen it goes to the menu; and only from the menu does it
     mean what it usually means.
   */
-  useEffect(() => {
-    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (phase === 'playing') {
-        pause();
-        return true;
-      }
-      if (phase === 'paused') {
-        toMenu();
-        return true;
-      }
-      // Out of the screen, but not by simply dropping it: see `leave`.
-      leave();
-      return true;
-    });
-    return () => listener.remove();
-  }, [leave, pause, phase, toMenu]);
+  useBack(true, () => {
+    if (phase === 'playing') pause();
+    else if (phase === 'paused') toMenu();
+    // Out of the screen, but not by simply dropping it: see `leave`.
+    else leave();
+  });
 
   const again = useCallback(() => {
     running.set(0);
@@ -1542,12 +1546,15 @@ export default function TilesScreen() {
   }, []);
 
   const nudge = useCallback((by: number) => {
-    setOffset((was) => {
-      const next = Math.max(-400, Math.min(400, was + by));
-      writeSetting(SETTINGS.tilesOffsetMs, String(next));
-      return next;
-    });
-  }, []);
+    const next = Math.max(-400, Math.min(400, offset + by));
+    if (next === offset) {
+      haptic('results', 'reject');
+      return;
+    }
+    haptic('choices', 'tick');
+    writeSetting(SETTINGS.tilesOffsetMs, String(next));
+    setOffset(next);
+  }, [offset]);
 
 
   return (

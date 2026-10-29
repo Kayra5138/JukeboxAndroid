@@ -49,6 +49,7 @@ export const downloads = {
     search: 'Search',
     album: (name: string) => `Album: ${name}`,
     playlist: (name: string) => `Playlist: ${name}`,
+    tape: (name: string) => `Tapes: ${name}`,
   },
   /** In place of a waiting job’s state, on one of Discover’s own. */
   automatic: 'Automatic · waits for the others',

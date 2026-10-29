@@ -7,7 +7,7 @@ export const player: Strings['player'] = {
   },
   sheet: {
     nothingPlaying: 'Çalan bir şey yok.',
-    heart: 'Kalp',
+    heart: "Favori",
     repeat: { off: 'Tekrarla', all: 'Tümünü tekrarla', one: 'Tek parçayı tekrarla' },
     back: (seconds) => `${seconds} saniye geri`,
     forward: (seconds) => `${seconds} saniye ileri`,
@@ -18,6 +18,17 @@ export const player: Strings['player'] = {
     upNext: (count) => `Sıradaki · ${format.number(count)}`,
     position: 'Çalma konumu',
     positionValue: (position, duration) => `${position}, toplam ${duration}`,
+  },
+  tape: {
+    part: (at, of) => `Parça ${format.number(at)} / ${format.number(of)}`,
+    /** For an episode of a followed show, in place of `part`. */
+    episode: (at, of) => `Bölüm ${format.number(at)} / ${format.number(of)}`,
+    previousPart: 'Önceki parça',
+    nextPart: 'Sonraki parça',
+    parts: (count) => `Parçalar · ${format.number(count)}`,
+    book: (percent, left) => `Tamamının %${format.number(percent)}’i · ${left} kaldı`,
+    speed: (speed) => `Hız ${speed}, sonraki için dokun`,
+    sleep: 'Uyku zamanlayıcısı',
   },
   queue: {
     remove: (title) => `${title} parçasını kaldır`,
@@ -69,11 +80,63 @@ export const player: Strings['player'] = {
     howMany: 'Kaç dakika sonra duraklatılsın?',
     minutes: 'Dakika',
     start: 'Başlat',
+    tape: {
+      about: 'Bir süre sonra duraklatır. Son yarım dakikada ses giderek kısılır.',
+      pauseAtEnd: 'Bu parçanın sonunda duraklat',
+      endOfTrack: 'Parça sonu',
+      finish: {
+        title: 'Çalan parça bitsin',
+        note: 'Süre dolduğunda ses kısılarak kesilmez, parçanın bitmesi beklenir.',
+        label: 'Uyku zamanlayıcısı dolduğunda çalan parça bitsin',
+      },
+    },
+  },
+  /** Places marked in a tape, each with a note: see `tapes/marks.ts`, `MarksSheet` and the Marks screen. */
+  /** A tape's chapters: see `tapes/extras.ts` and `ChaptersSheet`. */
+  /** A tape's captions, shown as a song's words are. */
+  transcript: {
+    heading: 'Metin',
+    show: 'Söylenenleri göster',
+    none: 'Bu videonun takip edilecek altyazısı yok.',
+  },
+  chapters: {
+    heading: (count) => `Bölümler · ${format.number(count)}`,
+    untitled: (at) => `Bölüm ${format.number(at)}`,
+    at: (at, of) => `Bölüm ${format.number(at)} / ${format.number(of)}`,
+    sleepAtEnd: 'Bu bölümün sonunda dur',
+    listHint: 'Bölümleri listeler',
+  },
+  marks: {
+    screen: 'İşaretler',
+    heading: 'Bu kasetteki işaretler',
+    add: 'Burayı işaretle',
+    /** The player's button that opens the tape's marks: how many there are. */
+    list: (count: number) => `İşaretler, şimdiye dek ${format.number(count)}`,
+    noteAt: (time: string) => `${time} konumuna işaret`,
+    noteHint: 'İstersen burada ne olduğuna dair bir not yaz. Boş da bırakabilirsin.',
+    notePlaceholder: 'Burada ne var',
+    save: 'İşaretle',
+    none: 'Bu kasette henüz işaret yok. Uyku zamanlayıcısının yanındaki düğmeyle bir yeri işaretleyebilirsin.',
+    noneAnywhere: 'Henüz işaret yok. Bir kaset çalarken oynatıcıdan bir yeri işaretleyip orada ne olduğunu not edebilirsin; bütün işaretler burada görünür.',
+    noNote: 'Not yok',
+    remove: (time: string) => `${time} konumundaki işareti kaldır`,
+    editNote: 'Notu düzenle',
+    goHint: 'Bu yere gider',
+    playHint: 'Kaseti bu yerden çalar',
+    howTo: 'Bir işarete dokununca oraya gider, basılı tutunca notunu değiştirirsin.',
+    all: 'Tüm işaretler',
+    count: (count: number) => `${format.number(count)} işaret`,
   },
   sleep: {
     endOfTrack: 'Bu parça bitince duraklar',
     thenToTheEnd: (time) => `${time} kaldı, ardından parçanın sonuna kadar`,
     fadingOut: (time) => `Ses kısılıyor, ${time} kaldı`,
     pausesIn: (time) => `${time} sonra duraklar`,
+    endOfChapter: 'Bu bölüm bitince duraklar',
+    chapterIn: (time) => `Bölümün sonuna ${time}`,
+    tape: {
+      endOfTrack: 'Bu parça bitince duraklar',
+      thenToTheEnd: (time) => `${time} kaldı, ardından parçanın sonuna kadar`,
+    },
   },
 };

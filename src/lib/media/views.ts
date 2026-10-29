@@ -10,10 +10,10 @@
  * Nothing here reads a setting. The stored words come in and go out as
  * arguments, so the rules can be exercised without a database behind them.
  */
-export type LibraryView = 'tracks' | 'albums' | 'artists' | 'folders';
+export type LibraryView = 'tracks' | 'albums' | 'artists' | 'tapes' | 'folders';
 
 /** In the order the switch shows them. */
-export const LIBRARY_VIEWS = ['tracks', 'albums', 'artists', 'folders'] as const;
+export const LIBRARY_VIEWS = ['tracks', 'albums', 'artists', 'tapes', 'folders'] as const;
 
 /*
   What each is called is not here: it is `library.views` in the string tables,
@@ -27,6 +27,7 @@ export const LIBRARY_VIEWS = ['tracks', 'albums', 'artists', 'folders'] as const
  * Folders are left off. The other three are read out of the music itself;
  * folders are read out of how the files happen to be kept, which for most
  * collections is one folder with everything in it — a view with a single row.
+ * Tapes are left off too: most libraries are songs and have none.
  */
 const UNLESS_TOLD: readonly LibraryView[] = ['tracks', 'albums', 'artists'];
 

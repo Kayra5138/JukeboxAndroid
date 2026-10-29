@@ -87,6 +87,36 @@ class PlayerController(
       }
     }
 
+    /*
+      A track starting over by itself, on repeat. The player calls it a
+      transition of reason REPEAT, but a controller only passes a transition
+      on when the item changes (MediaControllerImplBase.onPlayerInfoChanged),
+      and here it is the same one; so the loop never reached the app, an hour
+      of one song was one listen, and pressing next at the end of it filed the
+      whole hour as a skip. The jump back to the start does arrive, as an
+      automatic one within the same item, and is told as the ending it is.
+    */
+    override fun onPositionDiscontinuity(
+      oldPosition: Player.PositionInfo,
+      newPosition: Player.PositionInfo,
+      reason: Int
+    ) {
+      if (reason != Player.DISCONTINUITY_REASON_AUTO_TRANSITION) return
+      if (oldPosition.mediaItemIndex != newPosition.mediaItemIndex) return
+      val id = newPosition.mediaItem?.mediaId ?: return
+      if (oldPosition.mediaItem?.mediaId != id) return
+      emit(
+        "onTrackChange",
+        mapOf(
+          "trackId" to id,
+          "index" to newPosition.mediaItemIndex,
+          "completedPrevious" to true,
+          "repeated" to true,
+          "playWhenReady" to (controller?.playWhenReady ?: false)
+        )
+      )
+    }
+
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
       emit(
         "onTrackChange",
@@ -154,6 +184,19 @@ class PlayerController(
             else -> "off"
           }
         )
+      )
+    }
+
+    /*
+      Speed and pitch, whoever changed them: the app, or the player itself
+      putting a tape at its own speed and the music back at its own (see
+      [Tapes.applySpeed]), which nothing on the app's side asked for and the
+      speed button has to show.
+    */
+    override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
+      emit(
+        "onPlaybackParamsChange",
+        mapOf("speed" to playbackParameters.speed.toDouble(), "pitch" to playbackParameters.pitch.toDouble())
       )
     }
 
@@ -300,7 +343,8 @@ class PlayerController(
    * convention through seekToPrevious().
    */
   fun previous() = withPlayer { player ->
-    player.seekToPrevious()
+    // A tape's previous, pressed in the app, is the part before; a press from anywhere else is a jump back (see [Tapes.jump]).
+    if (Tapes.isTape(context, player.currentMediaItem)) player.seekToPreviousMediaItem() else player.seekToPrevious()
     player.prepareIfIdle()
   }
 
@@ -537,6 +581,8 @@ class PlayerController(
       putString(EXTRA_FOLDER, track["folder"] as? String)
       putDouble(EXTRA_DURATION, (track["durationSec"] as? Number)?.toDouble() ?: -1.0)
       putInt(EXTRA_TRACK_NUMBER, (track["trackNumber"] as? Number)?.toInt() ?: -1)
+      // Played on from where it was left: see [TapeKeeper].
+      putBoolean(EXTRA_TAPE, track["tape"] == true)
     }
 
     val metadata = MediaMetadata.Builder()
@@ -606,7 +652,8 @@ class PlayerController(
       "durationSec" to extras?.getDouble(EXTRA_DURATION, -1.0)?.takeIf { it >= 0.0 },
       "trackNumber" to extras?.getInt(EXTRA_TRACK_NUMBER, -1)?.takeIf { it >= 0 },
       "filename" to extras?.getString(EXTRA_FILENAME),
-      "folder" to extras?.getString(EXTRA_FOLDER)
+      "folder" to extras?.getString(EXTRA_FOLDER),
+      "tape" to (extras?.getBoolean(EXTRA_TAPE, false) == true)
     )
   }
 }

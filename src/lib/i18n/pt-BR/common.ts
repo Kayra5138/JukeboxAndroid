@@ -12,6 +12,8 @@ export const common: Strings['common'] = {
   save: 'Salvar',
   done: 'Concluído',
   ok: 'OK',
+  typeNumber: 'Digitar um número',
+  wholeFrom: (min, max) => `Um número inteiro de ${format.number(min)} a ${format.number(max)}`,
   close: 'Fechar',
   back: 'Voltar',
   delete: 'Excluir',

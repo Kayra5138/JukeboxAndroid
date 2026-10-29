@@ -42,6 +42,8 @@ const ORDER: Record<TableName, string> = {
   lyric_translations: 'track_id, target',
   playlists: 'id',
   playlist_tracks: 'playlist_id, position',
+  podcasts: 'subscribed_at, feed_url',
+  tape_marks: 'track_id, position_sec, id',
 };
 
 const columns = (name: TableName) => Object.keys(TABLES[name]);
@@ -72,7 +74,7 @@ export function readSettings(database: BackupDb): Record<string, string> {
  * merging with nothing and replacing nothing.
  */
 export function holdsAnything(database: BackupDb): boolean {
-  return (['plays', 'skips', 'playlists', 'track_metadata', 'track_tags', 'track_lyrics'] as const).some(
+  return (['plays', 'skips', 'playlists', 'track_metadata', 'track_tags', 'track_lyrics', 'podcasts', 'tape_marks'] as const).some(
     (name) => database.all<{ found: number }>(`SELECT 1 AS found FROM ${name} LIMIT 1`).length > 0
   );
 }

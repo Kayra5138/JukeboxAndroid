@@ -5,20 +5,25 @@ import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';
 import type { Mark } from '../lib/media/selection';
 import { makeStyles, usePressed } from '../lib/theme/index';
+import { haptic } from '../lib/ui/haptics';
 import type { Track } from '../lib/types';
+import { MoreButton } from './MoreButton';
 import { PlaylistCover } from './PlaylistCover';
+import { trackRowHeight } from './TrackRow';
+
+/** A track row's cover, in size. */
+const COVER = 46;
 
 /**
  * Declared rather than left to the row, so a list of these can say where every
- * one of them is without drawing it first: the cover and the room above and
- * below it, which is all a row is as tall as at the ordinary size of writing.
+ * one of them is without drawing it first.
  *
- * Taller as the writing is turned up, by what the two lines beside the cover
- * grow by, so that at twice the size they are not cut; see `trackRowHeight`.
+ * A track row's height, as the rest of the row is a track row's: going from
+ * the tracks to the albums or the artists, the covers, the names and the
+ * margins stay where they were and only what the rows say changes.
  */
 export function browseRowHeight(fontScale: number): number {
-  const scale = Math.min(Math.max(fontScale, 1), 2);
-  return Math.round(38 + 32 * scale);
+  return trackRowHeight(fontScale);
 }
 
 /** The row's height at the size of writing the phone is set to now. */
@@ -113,11 +118,16 @@ export const BrowseRow = memo(function BrowseRow({
         styles.row,
         { height },
         shared && styles.shared,
-        choosing && styles.choosing,
         mark === true && styles.chosen,
       ]}
       onPress={() => onPress(id)}
-      onLongPress={onLongPress && (() => onLongPress(id))}>
+      onLongPress={
+        onLongPress &&
+        (() => {
+          haptic('holds', 'hold');
+          onLongPress(id);
+        })
+      }>
       {choosing ? (
         // The track rows' box, with a third thing to say that theirs never
         // has: some. Outlined in the accent and barred rather than filled, so
@@ -128,7 +138,7 @@ export const BrowseRow = memo(function BrowseRow({
           {mark === 'mixed' ? <View style={styles.bar} /> : null}
         </View>
       ) : null}
-      <PlaylistCover tracks={tracks} chosen={null} sleeve={cover} size={52} />
+      <PlaylistCover tracks={tracks} chosen={null} sleeve={cover} size={COVER} />
       <View style={styles.text}>
         <Text style={styles.title} numberOfLines={1}>
           {title}
@@ -137,6 +147,8 @@ export const BrowseRow = memo(function BrowseRow({
           {detail}
         </Text>
       </View>
+      {/* A record's menu, as a track's: only where a hold opens one, and not while tracks are being ticked. */}
+      {onLongPress && held && !choosing ? <MoreButton onPress={() => onLongPress(id)} /> : null}
     </Pressable>
   );
 });
@@ -145,13 +157,11 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    paddingHorizontal: 4,
+    // As `TrackRow` lays its row out.
+    gap: 12,
+    paddingHorizontal: 16,
   },
   shared: { flex: 1, minWidth: 0 },
-  // The margin the track rows keep, so the boxes stand in one column whichever
-  // view they are met in — and clear of the corner of the screen.
-  choosing: { paddingLeft: 16 },
   chosen: { backgroundColor: c.accentSoft },
   // As `TrackRow` draws it.
   checkbox: {
@@ -168,6 +178,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   checkMark: { color: c.onAccent, fontSize: 13, fontWeight: '700', lineHeight: 15 },
   bar: { width: 10, height: 2, borderRadius: 1, backgroundColor: c.accent },
   text: { flex: 1, minWidth: 0, gap: 3 },
-  title: { color: c.text, fontSize: 15 },
-  detail: { color: c.textFaint, fontSize: 12.5 },
+  title: { color: c.text, fontSize: 15.5 },
+  detail: { color: c.textMuted, fontSize: 12.5 },
 }));

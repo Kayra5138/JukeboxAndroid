@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { glassOf, glassPage } from '../lib/theme/Veil';
 import { Image } from './Picture';
-import { useFocusEffect } from 'expo-router';
-import { Animated, BackHandler, Easing, StyleSheet, Text, View } from 'react-native';
+import { useIsFocused } from 'expo-router';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumTools } from './AlbumTools';
@@ -18,6 +18,7 @@ import type { EnrichedTrack } from '../lib/media/merge';
 import { shuffled } from '../lib/media/shuffle';
 import { makeStyles, page } from '../lib/theme/index';
 import { motionReduced } from '../lib/ui/motion';
+import { useBack } from '../lib/ui/back';
 
 /** How long a sleeve takes to become its record, and to go back. */
 const OPEN_MS = 300;
@@ -211,15 +212,7 @@ export function AlbumListing({
     beside this, and a record left open under another tab would otherwise go
     on answering presses meant for that one.
   */
-  useFocusEffect(
-    useCallback(() => {
-      const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-        close();
-        return true;
-      });
-      return () => listener.remove();
-    }, [close])
-  );
+  useBack(useIsFocused(), close);
 
   /*
     Drawn at the size the sleeve was tapped at and shrunk from there, rather

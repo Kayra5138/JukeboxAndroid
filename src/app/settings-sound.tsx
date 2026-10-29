@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
-import { Link, useFocusEffect } from 'expo-router';
-import { BackHandler, Switch, Text, View } from 'react-native';
+import { Link, useFocusEffect, useIsFocused } from 'expo-router';
+import { Text, View } from 'react-native';
+import { Switch } from '../components/Switch';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
 import { PlayerSettings } from '../components/PlayerSettings';
@@ -10,6 +11,8 @@ import { useT } from '../lib/i18n/index';
 import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
 import { switchColours, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
+import { useBack } from '../lib/ui/back';
+import { haptic } from '../lib/ui/haptics';
 
 /**
  * What is done to the sound on its way out: the equalizer, the effects, the
@@ -43,14 +46,8 @@ export default function SoundSettingsScreen() {
       .then((loudness) => setEven(loudness.enabled))
       .catch(() => setEven(null));
   }, []));
-  useFocusEffect(useCallback(() => {
-    const listener = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!playbackOpen) return false;
-      setPlaybackOpen(false);
-      return true;
-    });
-    return () => listener.remove();
-  }, [playbackOpen]));
+  const focused = useIsFocused();
+  useBack(playbackOpen && focused, () => setPlaybackOpen(false));
 
   const shaping = (
     <>
@@ -94,9 +91,14 @@ export default function SoundSettingsScreen() {
                   // take it, so the switch never lags the finger.
                   setEven(on);
                   JukeboxAudio.setLoudnessAsync?.({ enabled: on })
-                    .then((loudness) => setEven(loudness.enabled))
+                    .then((loudness) => {
+                      // Felt as a refusal where the switch goes back on its own.
+                      if (loudness.enabled !== on) haptic('results', 'reject');
+                      setEven(loudness.enabled);
+                    })
                     .catch((failure: unknown) => {
                       console.warn('Even loudness could not be set', failure);
+                      haptic('results', 'reject');
                       setEven(!on);
                     });
                 }}

@@ -23,14 +23,25 @@ import java.io.OutputStream
  */
 object LibraryImport {
   /** Native-only entry point. Never accepts a filesystem path from JavaScript. */
-  fun fromDownload(context: Context, file: File, folder: String, filename: String, onReserved: (String) -> Unit): String {
+  /** [limit] is how large the file may be: a song's, unless it is a tape, which may be a whole book. */
+  fun fromDownload(context: Context, file: File, folder: String, filename: String, limit: Long = MAX_BYTES, onReserved: (String) -> Unit): String {
     val root = File(context.cacheDir, "youtube").canonicalFile
     val discovery = File(context.noBackupFilesDir, "discover").canonicalFile
     require(file.canonicalFile.toPath().startsWith(root.toPath()) || file.canonicalFile.toPath().startsWith(discovery.toPath()))
     return store(context, folder, filename, onReserved) { output ->
-      file.inputStream().use { pump(it, output, file.length()) }
+      file.inputStream().use { pump(it, output, file.length(), limit) }
     }
   }
+  /**
+   * A file chosen on the phone, copied into [folder] as [filename]: a tape
+   * brought in by hand. As large as a tape may be.
+   */
+  fun fromDocument(context: Context, uri: Uri, folder: String, filename: String): String =
+    store(context, folder, filename) { output ->
+      val input = context.contentResolver.openInputStream(uri) ?: throw Told(R.string.jukebox_file_not_opened)
+      input.use { pump(it, output, -1L, TAPE_MAX_BYTES) }
+    }
+
   /** Buffer for the copy; a network read rarely fills more than this. */
   private const val CHUNK = 64 * 1024
 
@@ -38,7 +49,10 @@ object LibraryImport {
   private const val READ_TIMEOUT_MS = 30_000
 
   /** Guards against a mistyped link filling the phone. */
-  private const val MAX_BYTES = 300L * 1024 * 1024
+  const val MAX_BYTES = 300L * 1024 * 1024
+
+  /** As large as a tape may be: hours of a book. The extractor is told the same. */
+  const val TAPE_MAX_BYTES = 1500L * 1024 * 1024
 
   private const val MAX_REDIRECTS = 5
 
@@ -138,14 +152,14 @@ object LibraryImport {
    * truncated one is published into the library as an ordinary track that plays
    * for a minute and then errors, with nothing to tell it apart from a good one.
    */
-  private fun pump(input: InputStream, output: OutputStream, expected: Long = -1L) {
+  private fun pump(input: InputStream, output: OutputStream, expected: Long = -1L, limit: Long = MAX_BYTES) {
     val buffer = ByteArray(CHUNK)
     var total = 0L
     while (true) {
       val read = input.read(buffer)
       if (read < 0) break
       total += read
-      if (total > MAX_BYTES) throw Told(R.string.jukebox_import_too_large)
+      if (total > limit) throw Told(R.string.jukebox_import_too_large)
       output.write(buffer, 0, read)
     }
     if (total == 0L) throw Told(R.string.jukebox_import_empty)

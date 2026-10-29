@@ -15,6 +15,8 @@ export const backup = {
   listens: (count: number) => `${format.number(count)} ${oneOrMany(count, 'listen', 'listens')}`,
   tagged: (count: number) =>
     `${format.number(count)} ${oneOrMany(count, 'tagged song', 'tagged songs')}`,
+  /** The podcasts and channels a backup follows, said where it follows any. */
+  followed: (count: number) => oneOrMany(count, '1 show followed', `${format.number(count)} shows followed`),
   withLyrics: (count: number) =>
     `${format.number(count)} ${oneOrMany(count, 'song with lyrics', 'songs with lyrics')}`,
 

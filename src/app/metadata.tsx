@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter, useIsFocused } from 'expo-router';
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Image } from '../components/Picture';
 import {
   ActivityIndicator,
+  AppState,
   FlatList,
   PanResponder,
   StyleSheet,
@@ -42,8 +43,11 @@ import { ensureAudioPermission, scanLibrary } from '../lib/media/library';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { Behind } from '../lib/theme/Veil';
 import { useAnnounce } from '../lib/ui/announce';
+import { haptic } from '../lib/ui/haptics';
 import type { Track } from '../lib/types';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { useBack } from '../lib/ui/back';
+import { isTape } from '../lib/tapes/tape';
 
 type Row = { track: Track; metadata: TrackMetadata | undefined };
 
@@ -107,6 +111,7 @@ export default function MetadataScreen() {
   const bulk = useBulkLookup();
   const progress = bulk.progress;
   const running = progress !== null;
+  const focused = useIsFocused();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [query, setQuery] = useState('');
   /** What the last thing done to the selection came to, until the next. */
@@ -167,7 +172,8 @@ export default function MetadataScreen() {
     if (!(await ensureAudioPermission())) return;
     const tracks = await scanLibrary();
     const known = readAllMetadata();
-    setRows(tracks.map((track) => ({ track, metadata: known.get(track.id) })));
+    // Songs only: a tape is never looked up nor tagged.
+    setRows(tracks.filter((track) => !isTape(track)).map((track) => ({ track, metadata: known.get(track.id) })));
     setSummary(metadataSummary());
   }, []);
 
@@ -223,8 +229,10 @@ export default function MetadataScreen() {
     wasRunning.current = running;
     if (running) setNote(null);
     if (!ended) return;
+    // Felt only by somebody looking at it: a run that ends behind another screen, or with the app put away, is not.
+    if (focused && AppState.currentState === 'active') haptic('results', 'confirm');
     void refresh();
-  }, [running, refresh]);
+  }, [running, refresh, focused]);
 
   // Re-read on focus so an edit made on the other screen shows up on return.
   useFocusEffect(
@@ -318,7 +326,8 @@ export default function MetadataScreen() {
     async (subset?: Track[]) => {
       // One at a time: see `metadata/bulk.ts`, which turns a second away.
       if (bulkLookupRunning()) return;
-      const tracks = subset ?? rowsRef.current.map((row) => row.track);
+      // Every row, but the tapes, when nobody chose: a book is not looked up as a song. One chosen by hand is.
+      const tracks = subset ?? rowsRef.current.map((row) => row.track).filter((track) => !isTape(track));
       if (tracks.length === 0) return;
       // The selection is let go of and the list read again when the run ends,
       // by the effect above that watches for it, wherever the run began.
@@ -366,6 +375,9 @@ export default function MetadataScreen() {
     is handed the same thing to draw with and leaves its rows alone.
   */
   const selecting = selected.size > 0;
+  // Back lets go of a selection, then of a search, before it leaves the screen.
+  useBack(query !== '' && focused, () => setQuery(''));
+  useBack(selecting && focused, () => setSelected(new Set()));
   const renderRow = useCallback(
     ({ item }: { item: Row }) => (
       <MetadataRow

@@ -1,8 +1,8 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Segmented } from './Segmented';
+import { NumberStepper } from './NumberStepper';
 import { useT } from '../lib/i18n/index';
-import { SIZE_CHOICES } from '../lib/player/autoplay/plan';
+import { SIZE_RANGES } from '../lib/player/autoplay/plan';
 import { setAutoplaySizes, useAutoplaySizes } from '../lib/player/autoplay/setting';
 import { makeStyles } from '../lib/theme/index';
 
@@ -11,8 +11,8 @@ import { makeStyles } from '../lib/theme/index';
  * time, from the library and from Discover. For the end of any queue and for
  * a queue begun as similar songs alike, so it stands under both choices.
  *
- * The numbers themselves, as the jump buttons' are: a few that anybody would
- * want, readable at a glance.
+ * Any number in a range, one more or one less or typed, as the jump buttons'
+ * are: what somebody wants, rather than one of a few offered.
  */
 export function AutoplaySizes() {
   const t = useT();
@@ -24,22 +24,18 @@ export function AutoplaySizes() {
       <Text style={styles.title}>{said.title}</Text>
       <View style={styles.line}>
         <Text style={styles.label}>{said.library}</Text>
-        <Segmented
-          role="button"
-          variant="chips"
-          size="compact"
-          options={SIZE_CHOICES.library.map((count) => ({ value: count, label: String(count) }))}
+        <NumberStepper
+          name={said.library}
+          range={SIZE_RANGES.library}
           value={sizes.library}
           onChange={(library) => setAutoplaySizes({ ...sizes, library })}
         />
       </View>
       <View style={styles.line}>
         <Text style={styles.label}>{said.fresh}</Text>
-        <Segmented
-          role="button"
-          variant="chips"
-          size="compact"
-          options={SIZE_CHOICES.fresh.map((count) => ({ value: count, label: String(count) }))}
+        <NumberStepper
+          name={said.fresh}
+          range={SIZE_RANGES.fresh}
           value={sizes.fresh}
           onChange={(fresh) => setAutoplaySizes({ ...sizes, fresh })}
         />

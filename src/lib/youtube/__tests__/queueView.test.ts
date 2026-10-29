@@ -81,6 +81,8 @@ test('where a download came from', () => {
   assert.deepEqual(sourceOf(job('a', 'queued', { video: { ...video, sourcePlaylist: { id: 'p', name: 'Mix' } } })), { kind: 'playlist', name: 'Mix' });
   assert.deepEqual(sourceOf(job('a', 'queued', { video: { ...video, placement, sourcePlaylist: { id: 'p', name: 'Mix' } } })), { kind: 'album', name: 'Blue' });
   assert.deepEqual(sourceOf(job('a', 'queued', { discoverKey: 'k', video: { ...video, placement } })), { kind: 'discover' });
+  // A book's part or a show's episode is the book's or the show's, not a search's.
+  assert.deepEqual(sourceOf(job('a', 'queued', { video: { ...video, tape: { name: '49W' } } })), { kind: 'tape', name: '49W' });
   // An empty key is still Discover's; only null and absent are not.
   assert.deepEqual(sourceOf(job('a', 'queued', { discoverKey: null })), { kind: 'search' });
   // What comes back from the phone is not always what was sent.

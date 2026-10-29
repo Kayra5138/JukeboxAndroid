@@ -12,6 +12,77 @@ export const library = {
     albums: 'Albums',
     artists: 'Artists',
     folders: 'Folders',
+    tapes: 'Tapes',
+  },
+
+  /** The library's view of tapes: books, podcasts and long recordings, which play on from where they were left. */
+  tapes: {
+    /** In place of a tape's length, while it is part way through: [minutes] still to go. */
+    left: (minutes: number) => `${format.number(minutes)} min left`,
+    played: 'Played',
+    /** On a tape's row: how many minutes of it have been heard, of how many. */
+    heard: (heard: number, total: number) => `${format.number(heard)} / ${format.number(total)} min`,
+    add: 'Add tapes',
+    settings: 'Tape settings',
+    /** A followed show's arrow, which lays its episodes out under it and folds them away. */
+    showEpisodes: 'Show episodes',
+    hideEpisodes: 'Hide episodes',
+    /** A tape's own details screen: see `app/tape.tsx`. */
+    details: {
+      title: 'Tape details',
+      listening: 'Listening',
+      heard: 'Heard',
+      notBegun: 'Not begun yet',
+      lastHeard: 'Last listened',
+      part: 'Part',
+      partOf: (at: number, of: number) => `${format.number(at)} of ${format.number(of)}`,
+      speed: 'Speed',
+      marks: 'Marks',
+      source: 'Source',
+      from: 'From',
+      kinds: { youtube: 'A YouTube video', playlist: 'A YouTube playlist', podcast: 'A podcast episode', book: 'A book from LibriVox', byHand: 'Put in the Tapes folder by hand' },
+      show: 'Show',
+      book: 'Book',
+      channel: 'Channel',
+      list: 'Playlist',
+      published: 'Came out',
+      fetched: 'Fetched',
+      chapters: 'Chapters',
+      skipped: 'Passed over',
+      skippedUnknown: 'Looked up when it next plays',
+      skippedOff: 'Off in the tape settings',
+      skippedTrouble: 'SponsorBlock could not be reached; asked again when it next plays',
+      skippedNone: 'None marked',
+      skippedSome: (count: number, seconds: number) => `${oneOrMany(count, '1 part', `${format.number(count)} parts`)} · ${format.number(seconds)} s`,
+      address: 'Address',
+      listAddress: 'Playlist address',
+      openSeries: 'Open the show',
+      file: 'File',
+      name: 'Name',
+      folder: 'Folder',
+      format: 'Format',
+      size: 'Size',
+      megabytes: (mb: number) => `${format.number(mb)} MB`,
+      added: 'Added to the phone',
+      missing: 'This tape is no longer in the library.',
+    },
+    /** The tapes view's two parts: the podcasts followed, each a row, and every other tape. */
+    seriesHeading: 'Following',
+    singlesHeading: 'Tapes',
+    booksHeading: 'Books',
+    /** The tapes view's filter: all of it, or one of its parts. */
+    filter: { all: 'All', series: 'Following', books: 'Books', tapes: 'Tapes' },
+    seriesLine: (count: number, fresh: number) => `${oneOrMany(count, '1 episode', `${format.number(count)} episodes`)}${fresh > 0 ? ` · ${format.number(fresh)} new` : ''}`,
+    seriesNone: 'No episodes fetched yet',
+    /** A folder of several tapes as one row: how many parts, and how many of them not begun. */
+    bookLine: (count: number, fresh: number) => `${format.number(count)} parts${fresh > 0 ? ` · ${format.number(fresh)} not begun` : ''}`,
+    count: (count: number) => `${format.number(count)} ${oneOrMany(count, 'tape', 'tapes')}`,
+    /** Over the tapes view while tapes are being chosen. */
+    selected: (count: number) => `${format.number(count)} ${oneOrMany(count, 'tape', 'tapes')} selected`,
+    /** Where there are none yet: where to put them, [folder] being the tapes folder's path. */
+    empty: (folder: string) => `Put books, podcasts and long recordings in a folder called Tapes inside your library folder (${folder}). They show up here, play on from where you left them, and stay out of your music.`,
+    markPlayed: 'Mark as played',
+    markUnplayed: 'Mark as not played',
   },
 
   /** Said by more than one of the files below. */
@@ -36,6 +107,7 @@ export const library = {
       albums: 'Search titles, artists and tags',
       artists: 'Search artists',
       folders: 'Search folders',
+      tapes: 'Search tapes, shows and authors',
     },
     /** The small word over the order; the order itself has to fit a button 56 points wide. */
     sort: 'Sort',
@@ -216,8 +288,14 @@ export const library = {
     addToQueue: { label: common.addToQueue, hint: 'At the end' },
     playSimilar: { label: 'Play with similar songs', hint: 'This one, then a batch of songs like it' },
     playOnly: { label: 'Play only this', hint: 'The queue is this one song' },
+    playFromStart: { label: 'Play from the start', hint: 'Where it was left is forgotten' },
+    series: { label: 'Open the show', hint: 'Its episodes, and how new ones are fetched' },
+    tapeFolder: { label: 'Open its folder', hint: 'Everything else in the folder it is in' },
+    tapeDetails: { label: 'View details', hint: 'How far in, where it came from, and the file' },
     album: { label: 'Go to album', hint: 'The rest of the record, in order' },
     addToPlaylist: { label: 'Add to a list', hint: 'One of your lists, or a new one' },
+    favoriteAdd: { label: "Add to Favorites", hint: "The list the heart fills, newest first" },
+    favoriteRemove: { label: "Remove from Favorites", hint: "Out of the list the heart fills" },
     tiles: { label: 'Play piano tiles', hint: 'Keys falling in time with this record' },
     details: {
       label: 'View & edit details',

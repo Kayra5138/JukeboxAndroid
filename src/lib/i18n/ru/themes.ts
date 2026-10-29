@@ -28,6 +28,8 @@ export const themes: Strings['themes'] = {
   frost: 'Матовое стекло',
   aero: 'Aero',
   aurora: 'Стекло обложки',
+  auroraLight: 'Стекло обложки, светлое',
+  sundown: 'Закатное стекло',
 
   lightGroup: 'Светлые',
   darkGroup: 'Тёмные',

@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useIsFocused } from 'expo-router';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import { libraryRoot } from '../lib/media/library';
 import type { EnrichedTrack } from '../lib/media/enriched';
 import { makeStyles, outlined, outlinedClip, scene, useColours, usePressed } from '../lib/theme/index';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { useBack } from '../lib/ui/back';
 
 /** What a song's copies are known by on this screen: the ids of all of them, in the order found. */
 const keyOf = (group: readonly EnrichedTrack[]) => group.map((track) => track.id).join(',');
@@ -128,6 +129,9 @@ export default function DuplicatesScreen() {
   const [picked, setPicked] = useState<ReadonlyMap<string, string>>(new Map());
   /** Whether the cleaning up of every song is waiting for a yes. */
   const [asking, setAsking] = useState(false);
+  // Back takes the question back rather than leaving with it up.
+  const focused = useIsFocused();
+  useBack(asking && focused, () => setAsking(false));
   /** While Android is asking, so that nothing is asked twice. */
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<string | null>(null);

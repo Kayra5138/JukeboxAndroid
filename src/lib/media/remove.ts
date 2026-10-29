@@ -3,6 +3,7 @@ import { db } from '../db/index.ts';
 import { dropFromEveryList } from '../db/playlists.ts';
 import { forgetErased } from '../identity/index.ts';
 import { libraryFilesChanged } from '../library/index.ts';
+import { marksChanged } from '../tapes/marks.ts';
 
 /**
  * Erases tracks from the device.
@@ -19,7 +20,7 @@ export async function deleteTracks(trackIds: string[]): Promise<boolean> {
   const deleted = await JukeboxAudio.deleteTracksAsync(trackIds);
   if (!deleted) return false;
 
-  forgetEverythingAbout(trackIds);
+  forgetTracks(trackIds);
   // Said here, so that no way of erasing a file can leave it standing in a
   // list: the library every screen shows is read again from the device.
   libraryFilesChanged();
@@ -33,7 +34,8 @@ export async function deleteTracks(trackIds: string[]): Promise<boolean> {
  * precisely so that it outlives the file it came from: what you listened to
  * last year happened, whether or not the file is still on the phone.
  */
-function forgetEverythingAbout(trackIds: string[]): void {
+export function forgetTracks(trackIds: readonly string[]): void {
+  if (trackIds.length === 0) return;
   const placeholders = trackIds.map(() => '?').join(',');
   const database = db();
 
@@ -41,15 +43,17 @@ function forgetEverythingAbout(trackIds: string[]): void {
   // the rows left behind belong to a track that no longer exists, and nothing
   // ever visits them again to notice.
   database.withTransactionSync(() => {
-    for (const table of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations', 'shared_covers']) {
+    // A tape's marks too: places in a recording that is no longer there to go back to.
+    for (const table of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations', 'shared_covers', 'tape_marks']) {
       database.runSync(
         `DELETE FROM ${table} WHERE track_id IN (${placeholders})`,
         ...trackIds
       );
     }
-    dropFromEveryList(trackIds);
+    dropFromEveryList([...trackIds]);
     // And it stops being looked for. Until now a file that had gone might
     // have been moved; this one is known to have been erased.
-    forgetErased(trackIds);
+    forgetErased([...trackIds]);
   });
+  marksChanged();
 }

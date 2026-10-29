@@ -7,6 +7,7 @@ import { whyLines } from './show';
 import { useDiscoverActions, useDiscoverEntry, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, usePressed } from '../../lib/theme/index';
+import { haptic, type Feel } from '../../lib/ui/haptics';
 
 /**
  * Everything that can be done to one song of the list, from a long press on
@@ -44,7 +45,8 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
   const said = t.discover.menu;
   const { id } = entry;
   const bad = entry.state === 'failed';
-  const then = (act: (id: string) => void) => () => {
+  const then = (act: (id: string) => void, felt?: Feel) => () => {
+    if (felt) haptic('results', felt);
     onClose();
     act(id);
   };
@@ -75,11 +77,11 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
             accessibilityRole="button"
             disabled={entry.keeping}
             style={[styles.action, entry.keeping && styles.off]}
-            onPress={then(keep)}>
+            onPress={then(keep, 'confirm')}>
             <Text style={styles.label}>{said.keep.label}</Text>
             <Text style={styles.hint}>{entry.keeping ? t.discover.row.keeping : said.keep.hint}</Text>
           </Pressable>
-          <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.action} onPress={then(exclude)}>
+          <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.action} onPress={then(exclude, 'reject')}>
             <Text style={styles.label}>{said.exclude.label}</Text>
             <Text style={styles.hint}>{said.exclude.hint}</Text>
           </Pressable>
@@ -87,7 +89,7 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
             android_ripple={pressed}
             accessibilityRole="button"
             style={styles.action}
-            onPress={then(excludeArtist)}>
+            onPress={then(excludeArtist, 'reject')}>
             <Text style={styles.destructive} numberOfLines={1}>
               {said.neverArtist.label(entry.artist)}
             </Text>

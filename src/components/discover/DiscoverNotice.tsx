@@ -11,6 +11,7 @@ import { useDiscoverActions, type DiscoverNotice as Notice } from '../../lib/dis
 import { useT } from '../../lib/i18n/index';
 import { laid, makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 import { useDownloadsButtonWanted } from '../../lib/ui/downloadsButton';
+import { haptic } from '../../lib/ui/haptics';
 import { useLandscape } from '../../lib/ui/layout';
 import { motionReduced } from '../../lib/ui/motion';
 
@@ -94,7 +95,14 @@ function Snack({ notice, room }: { notice: Notice; room: number }) {
           {notice.text}
         </Text>
         {notice.canUndo ? (
-          <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.undo} onPress={undo}>
+          <Pressable
+            android_ripple={pressed}
+            accessibilityRole="button"
+            style={styles.undo}
+            onPress={() => {
+              haptic('choices', 'tick');
+              undo();
+            }}>
             <Text style={styles.undoLabel}>{t.discover.notice.undo}</Text>
           </Pressable>
         ) : null}

@@ -29,6 +29,8 @@ export const themes: Strings['themes'] = {
   frost: 'Milchglas',
   aero: 'Aero',
   aurora: 'Coverglas',
+  auroraLight: 'Coverglas, hell',
+  sundown: 'Abendrot-Glas',
 
   lightGroup: 'Hell',
   darkGroup: 'Dunkel',

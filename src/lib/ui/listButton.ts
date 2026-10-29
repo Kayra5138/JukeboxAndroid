@@ -7,7 +7,7 @@ import { createStore } from './store';
  * Whether the player has the button that puts the song playing into a list.
  * On unless switched off.
  *
- * Held where it can be watched, for the heart's reason (`heartWanted.ts`):
+ * Held where it can be watched, for Favorites' reason (`playlists/favorites.ts`):
  * the player is not a screen that comes back into focus and reads its
  * settings again.
  */

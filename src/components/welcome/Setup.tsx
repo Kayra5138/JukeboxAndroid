@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { AccessibilityInfo, BackHandler, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../Switch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Choices } from '../DiscoverSettings';
@@ -8,8 +9,9 @@ import { Pressable } from '../Pressable';
 import { useDiscoverSettings } from '../discover/hooks';
 import { scheduleDiscover } from '../../lib/discover/background';
 import { useDiscoverActions } from '../../lib/discover/DiscoverProvider';
-import { previewsOn, READY_CHOICES, type DiscoverSettings } from '../../lib/discover/policy';
+import { DISCOVER_RANGES, previewsOn, type DiscoverSettings } from '../../lib/discover/policy';
 import { libraryFilesChanged } from '../../lib/library/index';
+import { LIBRARY_VIEWS, withView } from '../../lib/media/views';
 import {
   DEFAULT_ROOT,
   hasAudioPermission,
@@ -38,6 +40,10 @@ import {
 import { ThemePicker } from '../../lib/theme/ThemePicker';
 import { languageForLocale, type SetupStep } from '../../lib/ui/welcome';
 import { finishWelcome, welcomeSteps } from '../../lib/ui/welcomeStore';
+import { useBack } from '../../lib/ui/back';
+import { setLibraryViews, useLibraryViews } from '../../lib/ui/libraryViews';
+import { haptic } from '../../lib/ui/haptics';
+import { NumberStepper } from '../NumberStepper';
 
 /**
  * The themes the first start offers: following the phone, which is what the
@@ -117,7 +123,12 @@ export function Setup() {
     if (kind === 'again') router.navigate('/');
   };
 
-  const next = () => (last ? finish() : setAt(at + 1));
+  // Done on the last screen is felt; skipping, and moving between screens, are not.
+  const next = () => {
+    if (!last) return setAt(at + 1);
+    haptic('results', 'confirm');
+    finish();
+  };
 
   /*
     Back is the screen before. On the first, a new install has nowhere behind
@@ -129,13 +140,7 @@ export function Setup() {
     else if (kind !== 'new') finish();
   };
 
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      back();
-      return true;
-    });
-    return () => sub.remove();
-  });
+  useBack(true, back);
 
   /*
     A screen reader is taken to each screen's heading as it comes, which
@@ -159,6 +164,7 @@ export function Setup() {
     language: t.welcome.language.heading,
     folder: said.folder.heading,
     look: said.look.heading,
+    views: said.views.heading,
     discover: said.discover.heading,
     tap: t.settings.tap.title,
     autoplay: t.settings.autoplay.title,
@@ -207,6 +213,7 @@ export function Setup() {
           {step === 'language' ? <LanguageStep /> : null}
           {step === 'folder' ? <FolderStep /> : null}
           {step === 'look' ? <LookStep /> : null}
+          {step === 'views' ? <ViewsStep /> : null}
           {step === 'discover' ? <DiscoverStep /> : null}
           {step === 'tap' ? <TapStep /> : null}
           {step === 'autoplay' ? <AutoplayStep /> : null}
@@ -272,7 +279,10 @@ function LanguageStep() {
                 accessibilityState={{ checked: on }}
                 accessibilityLanguage={entry.id}
                 style={styles.option}
-                onPress={() => tryLanguage(entry.id as Language)}>
+                onPress={() => {
+                  if (!on) haptic('choices', 'click');
+                  tryLanguage(entry.id as Language);
+                }}>
                 <Text style={[styles.label, on && styles.labelOn]} numberOfLines={1}>
                   {entry.name}
                 </Text>
@@ -428,11 +438,12 @@ function DiscoverStep() {
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.title}>{said.ready}</Text>
-          <Choices
-            options={READY_CHOICES}
-            chosen={settings.ready}
+          <NumberStepper
+            name={said.ready}
+            range={DISCOVER_RANGES.ready}
+            value={settings.ready}
             label={(ready) => (ready ? t.format.number(ready) : said.readyNone)}
-            onChoose={(ready) => change({ ready })}
+            onChange={(ready) => change({ ready })}
           />
           <Text style={styles.muted}>{said.readyNote}</Text>
         </View>
@@ -473,6 +484,50 @@ function DiscoverStep() {
         </Text>
       ) : null}
       <Text style={styles.small}>{t.welcome.setup.discover.more}</Text>
+    </>
+  );
+}
+
+/**
+ * Which ways of looking at the library its switch offers, each with what it
+ * is, as Settings → Look & feel has them: tracks, albums and artists to begin
+ * with, tapes and folders for whoever has a use for them.
+ */
+function ViewsStep() {
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const views = useLibraryViews();
+  return (
+    <>
+      <Text style={styles.note}>{t.welcome.setup.views.note}</Text>
+      <View style={styles.card}>
+        {LIBRARY_VIEWS.map((view, index) => {
+          const on = views.includes(view);
+          // The last one on stays on, and says so by not moving: see Settings.
+          const only = on && views.length === 1;
+          return (
+            <View key={view}>
+              {index > 0 ? <View style={styles.rule} /> : null}
+              <View style={styles.row}>
+                <View style={styles.line}>
+                  <Text style={styles.title}>{t.library.views[view]}</Text>
+                  <Switch
+                    accessibilityLabel={t.library.views[view]}
+                    accessibilityHint={only ? t.settings.views.onlyHint : t.settings.views.toggleHint}
+                    value={on}
+                    disabled={only}
+                    onValueChange={(wanted) => setLibraryViews(withView(views, view, wanted))}
+                    {...switchColours(c, on)}
+                  />
+                </View>
+                <Text style={styles.muted}>{t.settings.views.notes[view]}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+      <Text style={styles.small}>{t.welcome.setup.views.more}</Text>
     </>
   );
 }
@@ -539,7 +594,10 @@ function Choice({ on, label, detail, onPress }: { on: boolean; label: string; de
       accessibilityRole="radio"
       accessibilityState={{ checked: on }}
       style={styles.option}
-      onPress={onPress}>
+      onPress={() => {
+        if (!on) haptic('choices', 'click');
+        onPress();
+      }}>
       <View style={styles.optionText}>
         <Text style={[styles.answer, on && styles.labelOn]}>{label}</Text>
         <Text style={styles.muted}>{detail}</Text>

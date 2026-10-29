@@ -5,15 +5,16 @@ import { HeartIcon } from './Icons';
 import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';
 import { useColours, usePressed } from '../lib/theme/index';
-import { flightsOf, MOST_AT_ONCE, NO_RUN, pressed as pressedAt, type Flight } from '../lib/ui/heart';
+import { flightsOf, moodOf, MOST_AT_ONCE, NO_RUN, pressed as pressedAt, type Flight } from '../lib/ui/heart';
+import { haptic } from '../lib/ui/haptics';
 import { motionReduced } from '../lib/ui/motion';
+import { setFavorite, useIsFavorite } from '../lib/playlists/favorites';
 
 /**
  * The player's heart.
  *
- * It is not a like. Nothing is counted, sent or kept. A press fills it and
- * the next empties it, and it is empty again for the next song and whenever
- * the player is opened: it remembers nothing at all. It is here to be
+ * Full for a song in Favorites: a press puts the song playing there, and the
+ * next takes it out again (`playlists/favorites.ts`). It is also here to be
  * pressed, and to answer being pressed a great many times in a row with
  * more than it was asked for.
  *
@@ -23,12 +24,15 @@ import { motionReduced } from '../lib/ui/motion';
  */
 
 export function HeartButton({
+  trackId,
   size,
   on,
   off,
   style,
   hitSlop,
 }: {
+  /** The song playing, whose place in Favorites the heart shows and changes. */
+  trackId: string | null;
   size: number;
   /** The ink of a heart that has been pressed, and of one that has not. */
   on: string;
@@ -45,7 +49,12 @@ export function HeartButton({
   // Where the middle of the button is on the screen, for the hearts that are placed by the screen and not by it.
   const [middle, setMiddle] = useState({ x: 0, y: 0 });
   const anchor = useRef<View | null>(null);
-  const [full, setFull] = useState(false);
+  // Full where the song is in Favorites, however it got there: this heart, the menu, the list itself.
+  const full = useIsFavorite(trackId);
+  const held = useRef(full);
+  useEffect(() => {
+    held.current = full;
+  }, [full]);
   const run = useRef(NO_RUN);
   const [beat] = useState(() => new Animated.Value(1));
 
@@ -53,12 +62,19 @@ export function HeartButton({
     const next = pressedAt(run.current, Date.now());
     run.current = next;
     /*
-      Filled by one press and emptied by the next. A press that empties it
-      lets nothing go, unless it is one of a run: pressing again and again
-      is asking for hearts, whichever way the button happens to be left.
+      Every press puts the song in Favorites or takes it out again, a run of
+      them included: what the heart shows is always where the song is. A
+      press that empties it lets nothing go, unless it is one of a run.
+
+      Read from the press before rather than from the last drawing, which
+      a run of presses can be quicker than.
     */
-    const filling = !full;
-    setFull(filling);
+    const filling = !held.current;
+    held.current = filling;
+    if (trackId) setFavorite(trackId, filling);
+    // Heavier once a run has become a storm, as the shuffle's presses grow.
+    const mood = moodOf(next);
+    haptic('player', mood === 'one' || mood === 'flurry' ? (filling ? 'toggleOn' : 'toggleOff') : 'heavy');
     anchor.current?.measureInWindow((x, y, wide, tall) => {
       const found = { x: x + wide / 2, y: y + tall / 2 };
       setMiddle((had) => (Math.abs(had.x - found.x) < 1 && Math.abs(had.y - found.y) < 1 ? had : found));

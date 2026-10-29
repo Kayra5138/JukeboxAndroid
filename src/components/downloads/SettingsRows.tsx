@@ -1,5 +1,6 @@
 import { Link } from 'expo-router';
-import { StyleSheet, Switch, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { Switch } from '../Switch';
 
 import { Pressable } from '../Pressable';
 import { CategoryRow } from '../settings/rows';
