@@ -235,7 +235,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: 'Ensuite',
+    quickQueue: 'File',
+    quickList: 'Liste',
     playNext: { label: 'Lire ensuite', hint: 'Juste après le titre en cours' },
+    keepListened: { label: 'Garder dans la bibliothèque', hint: 'Copié dans ta bibliothèque, avec son historique' },
     addToQueue: { label: common.addToQueue, hint: 'À la fin' },
     playSimilar: { label: 'Écouter avec des titres proches', hint: 'Celui-ci, puis une série de titres proches' },
     playOnly: { label: 'Écouter seulement celui-ci', hint: 'La file ne contient que ce titre' },
@@ -243,6 +247,8 @@ export const library: Strings['library'] = {
     series: { label: 'Ouvrir l’émission', hint: 'Ses épisodes, et comment les nouveaux sont téléchargés' },
     tapeFolder: { label: 'Ouvrir son dossier', hint: 'Tout le reste de son dossier' },
     tapeDetails: { label: 'Voir les détails', hint: 'Où vous en êtes, d’où elle vient, et le fichier' },
+    share: { label: 'Partager', hint: 'Envoyé comme un son : une discussion le lit sur place' },
+    shareFile: { label: 'Partager comme fichier', hint: 'Envoyé tel quel : une discussion le garde comme document' },
     album: { label: 'Aller à l’album', hint: 'Le reste du disque, dans l’ordre' },
     addToPlaylist: { label: 'Ajouter à une liste', hint: 'Une de tes listes, ou une nouvelle' },
     favoriteAdd: { label: "Ajouter aux Favoris", hint: "La liste que remplit le cœur, les plus récents en haut" },

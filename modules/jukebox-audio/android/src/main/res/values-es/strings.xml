@@ -29,6 +29,7 @@
   <string name="jukebox_widget_up_next">A continuación</string>
   <string name="jukebox_widget_up_next_empty">No hay nada a continuación</string>
   <string name="jukebox_widget_open">Abre el reproductor</string>
+  <string name="jukebox_widget_continue">Continuar: %1$s</string>
 
   <!-- La notificación de reproducción. -->
   <string name="jukebox_playback_channel">Reproduciendo</string>
@@ -77,6 +78,31 @@
     <item quantity="one">%d canción</item>
     <item quantity="many">%d canciones</item>
     <item quantity="other">%d canciones</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">Casetes</string>
+  <string name="jukebox_auto_following">Siguiendo</string>
+  <string name="jukebox_auto_books">Libros</string>
+  <string name="jukebox_auto_tape_left">quedan %1$d min</string>
+  <string name="jukebox_auto_tape_played">Escuchado</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="one">%d episodio</item>
+    <item quantity="many">%d de episodios</item>
+    <item quantity="other">%d episodios</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="one">%d parte</item>
+    <item quantity="many">%d de partes</item>
+    <item quantity="other">%d partes</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="one">Retroceder %d segundo</item>
+    <item quantity="many">Retroceder %d de segundos</item>
+    <item quantity="other">Retroceder %d segundos</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="one">Avanzar %d segundo</item>
+    <item quantity="many">Avanzar %d de segundos</item>
+    <item quantity="other">Avanzar %d segundos</item>
   </plurals>
 
   <!-- Una pista sin título ni nombre de archivo, y el ecualizador traído del teléfono. -->
@@ -208,4 +234,5 @@
   <string name="jukebox_tags_untouched_after">%1$s. El archivo no se ha tocado.</string>
   <!-- Un aviso, cuando se pulsa reproducir durante una llamada y la música suena bajito por debajo. -->
   <string name="jukebox_under_a_call">Hay una llamada en curso. Reproduciendo a volumen bajo.</string>
+  <string name="jukebox_sleep_extended">Temporizador: 10 minutos más</string>
 </resources>

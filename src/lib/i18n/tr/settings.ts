@@ -123,6 +123,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: 'Dinlenip saklanmayan şarkılar', note: 'Saklamazsan (kalp, listeye ekleme ya da menüden “Kütüphaneye al”) indirildikten bu kadar gün sonra silinir.', days: (days) => `${format.number(days)} gün`  },
     note: 'İndirilmekte olanlar, sırada bekleyenler ve tamamlananlar.',
     button: {
       title: 'Yüzen indirmeler düğmesi',
@@ -199,6 +200,26 @@ export const settings: Strings['settings'] = {
     note:
       'Dinleme geçmişin, listelerin, etiketlerin, şarkı sözlerin ve ayarların, takip ettiğin podcast\'ler, her kasette kaldığın yer ve koyduğun işaretler; yerini senin seçtiğin tek bir dosyada. Müziğin kendisi dahil değildir.',
     failed: 'Yedek kaydedilemedi.',
+  },
+  autoBackup: {
+    title: 'Otomatik yedekle',
+    off: '"Her şeyi dışa aktar" ile aynı dosya, her gün ya da her hafta seçtiğin bir klasöre kendiliğinden kaydedilir.',
+    folder: 'Klasör',
+    folderUnnamed: 'Seçilen klasör',
+    chooseOther: 'Başka bir klasör seç',
+    lost: 'Jukebox bu klasöre artık ulaşamıyor: taşınmış ya da silinmiş, veya izin geri alınmış. Yedeklemeye devam etmek için klasörü yeniden seç.',
+    chooseAgain: 'Klasörü yeniden seç',
+    every: 'Ne sıklıkla',
+    daily: 'Her gün',
+    weekly: 'Her hafta',
+    keep: 'Saklanan yedekler',
+    keepNote: (count) =>
+      `Klasörde en yeni ${format.number(count)} yedek saklanır, daha eskileri silinir. Klasördeki başka hiçbir şeye dokunulmaz.`,
+    last: (when) => `Son yedek: ${when}.`,
+    never: 'Henüz yedek alınmadı.',
+    failed: 'Son yedek alınamadı. Bir dahaki sefere yeniden denenecek.',
+    now: 'Şimdi yedekle',
+    made: 'Yedeklendi.',
   },
   importBackup: {
     title: 'İçe aktar',

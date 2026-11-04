@@ -6,15 +6,18 @@ import { PlaylistPicker } from './PlaylistPicker';
 import { TrackMenu, type TrackAction } from './TrackMenu';
 import { albumKey } from '../lib/media/albums';
 import { deleteTracks } from '../lib/media/remove';
-import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
+import { queueNow } from '../lib/player/current';
+import { isFavorite, setFavorite } from '../lib/playlists/favorites';
+import { usePlayerActions } from '../lib/player/PlayerProvider';
 import type { Track } from '../lib/types';
 import { useBack } from '../lib/ui/back';
 import { haptic } from '../lib/ui/haptics';
-import { isFavorite, setFavorite } from '../lib/playlists/favorites';
+import { keepListened } from '../lib/listen/index';
 import { withoutTapes } from '../lib/tapes/tape';
 import { markTape } from '../lib/tapes/places';
 import { seriesOf } from '../lib/podcasts/series';
 import { folderKey } from '../lib/media/folders';
+import { shareTracks } from '../lib/media/share';
 
 /** For a row of a record's own page, where "go to album" would lead to itself. */
 export const WITHOUT_ALBUM: readonly TrackAction[] = ['album'];
@@ -33,7 +36,9 @@ export const WITHOUT_ALBUM: readonly TrackAction[] = ['album'];
  *
  * The list picker comes with it, since one of the entries opens it — and is
  * offered to the screen as `addToList` too, so a screen that also adds a whole
- * selection to a list does not need a second picker for that.
+ * selection to a list does not need a second picker for that. A selection's
+ * picker offers Favorites among the lists, where a song has a heart of its own
+ * for it and its picker does not.
  */
 export function useTrackMenu({
   onChanged,
@@ -42,7 +47,10 @@ export function useTrackMenu({
 }: {
   /** A file was erased, or a list gained a track: read again what is shown. */
   onChanged?: () => void;
-  /** What the list picker did, in words, for a screen with somewhere to say it. */
+  /**
+   * What the list picker did, or why a song could not be shared, in words,
+   * for a screen with somewhere to say it.
+   */
   onAdded?: (message: string) => void;
   /**
    * Run before an entry that goes to another screen. For the player, which is
@@ -52,7 +60,10 @@ export function useTrackMenu({
   beforeLeaving?: () => void;
 } = {}): {
   open: (track: Track, hidden?: readonly TrackAction[]) => void;
-  addToList: (trackIds: string[]) => void;
+  /** Does what an entry of the menu does, with the menu not having been opened: for a screen with another way to it. */
+  run: (action: TrackAction, track: Track) => void;
+  /** [favorites]: Favorites offered among the lists, for a selection, which has no heart to press. */
+  addToList: (trackIds: string[], options?: { favorites?: boolean }) => void;
   /**
    * Erases files the way the menu's own entry does, queue and all, for a
    * screen that has its own way of choosing them. Answers whether they went.
@@ -68,19 +79,17 @@ export function useTrackMenu({
 } {
   const router = useRouter();
   const { playNext, addToQueue, playQueue, removeFromQueue } = usePlayerActions();
-  const { queue } = usePlayerState();
   const [menu, setMenu] = useState<{ track: Track; hidden?: readonly TrackAction[] } | null>(
     null
   );
   const [addingTo, setAddingTo] = useState<string[] | null>(null);
+  const [withFavorites, setWithFavorites] = useState(false);
 
   /*
     The latest of each, for work that finishes long after it was started: the
     system's own question about a delete can sit on screen for as long as the
     user likes, and the queue may have moved on by the time it is answered.
   */
-  const queueRef = useRef(queue);
-  queueRef.current = queue;
   const hooks = useRef({ onChanged, onAdded, beforeLeaving });
   hooks.current = { onChanged, onAdded, beforeLeaving };
 
@@ -91,9 +100,11 @@ export function useTrackMenu({
   );
   const close = useCallback(() => setMenu(null), []);
   // Never with a tape in it, from whichever screen the tracks were chosen on: see `lib/tapes`.
-  const addToList = useCallback((trackIds: string[]) => {
+  const addToList = useCallback((trackIds: string[], options?: { favorites?: boolean }) => {
     const songs = withoutTapes(trackIds);
-    if (songs.length > 0) setAddingTo(songs);
+    if (songs.length === 0) return;
+    setWithFavorites(options?.favorites === true);
+    setAddingTo(songs);
   }, []);
   const closePicker = useCallback(() => setAddingTo(null), []);
 
@@ -114,7 +125,7 @@ export function useTrackMenu({
       if (!(await deleteTracks(trackIds))) return false;
       hooks.current.onChanged?.();
       const gone = new Set(trackIds);
-      const rows = queueRef.current
+      const rows = queueNow.get()
         .map((entry, row) => (gone.has(entry.id) ? row : -1))
         .filter((row) => row >= 0)
         .reverse();
@@ -130,6 +141,12 @@ export function useTrackMenu({
       // Spelled out rather than built from `action`: a menu entry that is not a
       // route is then a type error here instead of a dead end at the tap.
       if (action === 'playNext') void playNext(track);
+      else if (action === 'keepListened') {
+        void keepListened(track.id).then((kept) => {
+          haptic('results', kept ? 'confirm' : 'reject');
+          if (kept) hooks.current.onChanged?.();
+        });
+      }
       else if (action === 'addToQueue') void addToQueue(track);
       else if (action === 'playSimilar') void playQueue([track], 0, { similar: true });
       else if (action === 'playOnly') void playQueue([track], 0);
@@ -138,7 +155,16 @@ export function useTrackMenu({
           if (gone) haptic('results', 'confirm');
         });
       }
-      else if (action === 'addToPlaylist') setAddingTo([track.id]);
+      else if (action === 'addToPlaylist') {
+        setWithFavorites(false);
+        setAddingTo([track.id]);
+      }
+      else if (action === 'share' || action === 'shareFile') {
+        void shareTracks([track], action === 'shareFile').catch((error: unknown) => {
+          haptic('results', 'reject');
+          hooks.current.onAdded?.(error instanceof Error ? error.message : String(error));
+        });
+      }
       else if (action === 'favorite') {
         const on = !isFavorite(track.id);
         setFavorite(track.id, on);
@@ -210,6 +236,7 @@ export function useTrackMenu({
       <PlaylistPicker
         visible={addingTo != null}
         trackIds={addingTo ?? []}
+        withFavorites={withFavorites}
         onClose={closePicker}
         onAdded={(message) => {
           setAddingTo(null);
@@ -221,5 +248,5 @@ export function useTrackMenu({
     </>
   );
 
-  return { open, addToList, erase, element, veiled: addingTo != null };
+  return { open, run, addToList, erase, element, veiled: addingTo != null };
 }

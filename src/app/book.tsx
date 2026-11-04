@@ -7,6 +7,8 @@ import { PauseIcon, PlayIcon } from '../components/Icons';
 import { Image } from '../components/Picture';
 import { Pressable } from '../components/Pressable';
 import { useTrackMenu } from '../components/useTrackMenu';
+import { PressRing } from '../components/PressMenu';
+import { useTrackRing } from '../components/trackRing';
 import { fetchBook, type Book, type BookPart } from '../lib/books/archive';
 import { bookPartId, fetchBookParts } from '../lib/books/fetch';
 import { useT } from '../lib/i18n/index';
@@ -47,6 +49,8 @@ export default function BookScreen() {
   const { playQueue, toggle } = usePlayerActions();
   const { current, playWhenReady } = usePlayerState();
   const menu = useTrackMenu({});
+  // A part held and slid from, with the finger never lifted: see `pressMenu.ts`.
+  const ring = useTrackRing(menu);
 
   // Opened before any screen has read the library: read it now.
   useEffect(() => {
@@ -207,6 +211,7 @@ export default function BookScreen() {
                 ? t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))
                 : durationLabel(track.durationSec);
             return (
+              <PressRing ring={ring} item={track}>
               <Pressable
                 android_ripple={pressed}
                 accessibilityRole="button"
@@ -220,6 +225,7 @@ export default function BookScreen() {
                 <Text style={[styles.partTitle, track.id === current?.id && styles.partOn]} numberOfLines={2}>{part.title}</Text>
                 <Text style={[styles.state, place?.finished && styles.stateHeard]}>{state}</Text>
               </Pressable>
+              </PressRing>
             );
           }
           const locked = job != null && isActive(job);

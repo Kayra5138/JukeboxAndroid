@@ -1,0 +1,20 @@
+[
+  {
+    "endTime" : "2023-04-01 13:52",
+    "artistName" : "Radiohead",
+    "trackName" : "Paranoid Android",
+    "msPlayed" : 383000
+  },
+  {
+    "endTime" : "2023-04-01 13:53",
+    "artistName" : "Radiohead",
+    "trackName" : "Karma Police",
+    "msPlayed" : 4200
+  },
+  {
+    "endTime" : "2023-04-02 08:00",
+    "artistName" : "Nobody Here",
+    "trackName" : "Unknown Song",
+    "msPlayed" : 61000
+  }
+]

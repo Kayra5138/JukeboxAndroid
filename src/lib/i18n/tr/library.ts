@@ -230,7 +230,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: 'Sonraki',
+    quickQueue: 'Sıra',
+    quickList: 'Liste',
     playNext: { label: 'Sonraki olarak çal', hint: 'Çalan parçanın hemen ardından' },
+    keepListened: { label: 'Kütüphaneye al', hint: 'Kütüphanene kopyalanır, geçmişiyle birlikte' },
     addToQueue: { label: common.addToQueue, hint: 'En sona' },
     playSimilar: { label: 'Benzerleriyle çal', hint: 'Önce bu, sonra bir grup benzer şarkı' },
     playOnly: { label: 'Sadece bunu çal', hint: 'Sırada yalnızca bu şarkı olur' },
@@ -238,6 +242,8 @@ export const library: Strings['library'] = {
     series: { label: 'Programı aç', hint: 'Bölümleri ve yenilerinin nasıl indirileceği' },
     tapeFolder: { label: 'Klasörünü aç', hint: 'Bulunduğu klasördeki diğer her şey' },
     tapeDetails: { label: 'Ayrıntıları gör', hint: 'Ne kadar dinlendiği, nereden geldiği ve dosyası' },
+    share: { label: 'Paylaş', hint: 'Ses olarak gider: sohbet onu orada çalar' },
+    shareFile: { label: 'Dosya olarak paylaş', hint: 'Dosyanın kendisi olarak gider: sohbet onu belge olarak tutar' },
     album: { label: 'Albüme git', hint: 'Albümün geri kalanı, sırasıyla' },
     addToPlaylist: { label: 'Listeye ekle', hint: 'Listelerinden biri ya da yeni bir liste' },
     favoriteAdd: { label: "Favorilere ekle", hint: "Kalbin doldurduğu liste, en yeni en üstte" },

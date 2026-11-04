@@ -136,28 +136,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Recherche les paroles de ce titre comme le fait la lecture, et remplace celles qui sont enregistrées si elle en trouve.',
-    nothingMatched: 'Rien ne correspond à ce titre. La recherche ci-dessous n’écarte rien.',
-    foundAndSaved: 'Trouvées et enregistrées.',
     nothingCameBack: 'Aucun résultat pour cette recherche.',
     cleared: 'Effacées. La prochaine recherche cherchera de nouveau.',
     notSeconds: 'Ce n’est pas un nombre de secondes.',
 
-    stored: 'Paroles enregistrées',
     none: 'Aucune pour l’instant',
     kept: (timed, byHand, lines) =>
       `${timed ? 'Synchronisées' : 'Non synchronisées'}, ${byHand ? 'choisies à la main' : 'issues de LRCLIB'}` +
       (lines > 0 ? ` · ${format.number(lines)} ${one(lines, 'ligne', 'lignes')}` : ''),
     forget: 'Oublier et chercher à nouveau',
-    saveChanges: 'Enregistrer les modifications',
     timedHint:
       'Chaque ligne garde le temps placé devant elle. Modifie les mots mais laisse les crochets, sinon la ligne perd sa place.',
-    plainHint: 'Modifie ce que tu veux. Les paroles enregistrées sont considérées comme les tiennes et aucune recherche ne les remplace.',
 
     timing: 'Synchronisation',
     timingHint:
-      'Décale toutes les lignes à la fois. À utiliser quand les paroles sont justes mais arrivent trop tôt ou trop tard : ouvre le lecteur et ajuste jusqu’à ce qu’elles tombent juste, ou touche le chiffre pour le saisir. Un décalage positif fait arriver les paroles plus tard.',
+      'Déplace toutes les lignes d’un coup, pour des paroles justes qui arrivent trop tôt ou trop tard. Touchez le chiffre pour le saisir. Une valeur positive les retarde.',
     earlier: (seconds) => `−${seconds} s`,
     later: (seconds) => `+${seconds} s`,
     shiftedEarlier: (written) => `−${written} s`,
@@ -169,16 +162,24 @@ export const details: Strings['details'] = {
     typeOffset: 'Saisir un décalage précis',
     wordsField: 'Paroles',
 
-    byHand: 'Recherche manuelle',
-    byHandHint:
-      'Ici, rien n’est écarté, contrairement à la recherche automatique, qui refuse tout ce dont la durée ne correspond pas : c’est pour cela que certains titres ne trouvent jamais leurs paroles.',
     queryPlaceholder: 'Artiste et titre',
     candidateTimed: 'synchronisées',
     candidatePlain: 'texte seul',
 
-    paste: 'Coller',
-    pasteHint: 'Accepte un fichier LRC ou du texte simple. Avec des horodatages, les paroles sont synchronisées.',
-    savePasted: 'Enregistrer le texte collé',
+    find: 'Chercher les paroles',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)} trouvées`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'Dans le fichier du morceau', lrc: 'Dans un fichier .lrc à côté du morceau' },
+    sameLength: 'même durée',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Collez ou écrivez les paroles ici. Les lignes minutées comme [00:12.34] suivent le morceau.',
+    clearBox: 'Vider le champ',
+    undo: 'Annuler',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Retirer les paroles',
+    removed: 'Paroles retirées. Aucune recherche ne les ramènera.',
+    removedByHand: 'Retirées à la main',
   },
 
   library: {
@@ -225,6 +226,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'Liste',
+    quickEdit: 'Modifier',
+    quickLookUp: 'Rechercher',
     more: 'Plus…',
     moreHint: 'Tout ce qu’on peut faire avec les titres sélectionnés',
     heading: (count) =>
@@ -255,6 +259,8 @@ export const details: Strings['details'] = {
         hint: 'Écrit dans les fichiers eux-mêmes les infos que la bibliothèque affiche. Android demande d’abord.',
       },
       addToList: { label: 'Ajouter à une liste', hint: 'Les met dans une de tes listes' },
+      share: { label: 'Partager', hint: 'Envoie les fichiers à une autre app : une discussion, un e-mail, un téléphone à proximité' },
+      shareFile: { label: 'Partager comme fichier', hint: 'Envoyé tel quel : une discussion le garde comme document' },
       reset: {
         label: 'Réinitialiser',
         hint: 'Oublie ce que les recherches ont trouvé pour eux. Tes propres modifications restent.',

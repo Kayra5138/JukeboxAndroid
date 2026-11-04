@@ -33,6 +33,7 @@ export const downloads: Strings['downloads'] = {
 
   source: {
     discover: 'Keşfet',
+    listen: 'Dinlendi',
     search: 'Arama',
     album: (name) => `Albüm: ${name}`,
     playlist: (name) => `Oynatma listesi: ${name}`,

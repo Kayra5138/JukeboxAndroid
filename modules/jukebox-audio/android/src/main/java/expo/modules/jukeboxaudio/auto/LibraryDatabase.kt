@@ -161,6 +161,24 @@ internal object LibraryDatabase {
       }
     }
 
+  /**
+   * The shows followed, as the name each keeps for its folder of the Tapes
+   * folder to the name it is shown by. None where the copy has none, which
+   * a copy written by an app from before the car showed tapes does not: the
+   * car then shows a show's folder as a folder of tapes, and nothing worse.
+   */
+  fun followed(context: Context): List<Pair<String, String>> =
+    read(context, emptyList()) { database ->
+      database.rawQuery("SELECT title, folder FROM podcasts", null).use { cursor ->
+        buildList {
+          while (cursor.moveToNext()) {
+            val title = cursor.getString(0) ?: continue
+            add((cursor.getString(1)?.takeIf { it.isNotBlank() } ?: title) to title)
+          }
+        }
+      }
+    }
+
   /** How often each track has been listened to, and when it last was. */
   fun plays(context: Context): Map<String, Pair<Int, Long>> =
     read(context, emptyMap()) { database ->

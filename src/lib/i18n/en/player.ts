@@ -80,6 +80,15 @@ export const player = {
     equalizer: { note: 'Bands, bass and loudness' },
     crossfade: { note: 'How one track gives way to the next' },
     allEffects: { title: 'All effects', note: 'Width, crossfeed, rotation and level' },
+    /** A tape's own jumps, for its book or show: see `tapes/ownJumps.ts`. */
+    jumps: {
+      heading: 'Jumps for this book or show',
+      general: 'General',
+      backToGeneral: 'Back to the jumps of all tapes',
+      back: 'Jump back',
+      forward: 'Jump forward',
+      note: 'In seconds, for this book or show alone, and for a headset, the notification and the car too. Every other tape keeps the jumps in the tape settings.',
+    },
   },
   /** Asking for a sleep timer, at the foot of that sheet. */
   sleepTimer: {
@@ -96,6 +105,12 @@ export const player = {
       title: 'Let the current track finish',
       note: 'When the time is up, wait for the song to end instead of fading it out.',
       label: 'Let the current track finish when the sleep timer runs out',
+    },
+    /** A shake in the last minutes adds ten: see `sleep/ShakeToExtend.kt`. */
+    shake: {
+      title: 'Shake for ten more minutes',
+      note: 'In the last three minutes, shake the phone to add ten minutes, even with the screen off. A short buzz says it worked.',
+      label: 'Shake the phone in the last three minutes to add ten minutes to the sleep timer',
     },
     refused: (most: number) => `A whole number of minutes, from 1 to ${most}`,
     howMany: 'Pause after how many minutes?',

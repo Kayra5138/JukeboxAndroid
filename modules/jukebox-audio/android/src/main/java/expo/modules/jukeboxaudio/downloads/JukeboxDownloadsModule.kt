@@ -199,6 +199,16 @@ class JukeboxDownloadsModule : Module() {
       id
     }.runOnQueue(io)
 
+    /** A video to listen to without keeping it, fetched first: see [DownloadQueue.listen]. Answers with its job. */
+    AsyncFunction("listenAsync") { video: Map<String, Any?>, format: String, folder: String ->
+      DownloadStore.init(context)
+      val asked = JSONObject(video)
+      val id = DownloadStore.listen(context, asked, format, folder)
+      start(listOf(id), Failure.OPEN_SEARCH)
+      DownloadArtwork.thumbnailAhead(context, asked)
+      id
+    }.runOnQueue(io)
+
     AsyncFunction("cancelAsync") { id: String ->
       DownloadStore.init(context)
       stop(id, DownloadStore.cancel(id))

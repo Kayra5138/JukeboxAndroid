@@ -46,6 +46,8 @@ declare class DownloadsModule extends NativeModule<DownloadsEvents> {
   /** YouTube channels by name, the nearest first. */
   searchChannelsAsync?(words: string): Promise<{ id: string; title: string; handle: string | null; image: string | null; followers: number | null }[]>;
   enqueueAsync(video: YouTubeVideo, format: AudioFormat, folder: string): Promise<string>;
+  /** A video to listen to without keeping it, fetched first into the app's own files: see `lib/listen`. Answers with its job. */
+  listenAsync?(video: YouTubeVideo, format: AudioFormat, folder: string): Promise<string>;
   cancelAsync(jobId: string): Promise<void>;
   markDescribedAsync(jobId: string): Promise<void>;
   /** Points finished downloads, by job id, at their files' new ids; answers how many it moved. Missing from an older build. */

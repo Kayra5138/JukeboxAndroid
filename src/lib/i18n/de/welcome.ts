@@ -75,7 +75,7 @@ export const welcome: Strings['welcome'] = {
 
   tips: {
     library:
-      'Halte einen Song gedrückt, um sein Menü zu öffnen: zu einer Liste hinzufügen, Details bearbeiten oder als Piano Tiles spielen. Zieh einen Song nach rechts, um ihn als Nächstes zu spielen, oder nach links, um ihn zur Warteschlange hinzuzufügen.',
+      'Halte einen Song gedrückt, und unter deinem Finger öffnet sich ein Ring: Fahr mit dem Finger auf ein Feld und lass los. Lässt du los, ohne dich zu bewegen, öffnet sich das ganze Menü, Piano Tiles inklusive. Zieh einen Song nach rechts, um ihn als Nächstes zu spielen, oder nach links, um ihn zur Warteschlange hinzuzufügen.',
     player:
       'Unter den Steuerelementen blendet die Songtext-Taste den Text ein, während der Song läuft; sobald er zu sehen ist, übersetzt ihn die Taste, die daneben erscheint. Hinter dem Zahnrad findest du Tempo und Tonhöhe, Effekte und den Sleep-Timer.',
     discover:

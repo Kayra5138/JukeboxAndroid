@@ -74,7 +74,7 @@ export const welcome: Strings['welcome'] = {
 
   tips: {
     library:
-      'Menüsü için bir şarkıya basılı tut: listeye ekle, bilgilerini düzenle ya da piyano karoları olarak oyna. Sıradaki olarak çalmak için şarkıyı sağa, kuyruğa eklemek için sola çek.',
+      'Bir şarkıya basılı tut, parmağının altında bir halka açılır: bir dilime kaydır ve bırak. Kıpırdatmadan bırakırsan menünün tamamı açılır, piyano karoları da orada. Sıradaki olarak çalmak için şarkıyı sağa, kuyruğa eklemek için sola çek.',
     player:
       'Kontrollerin altındaki sözler düğmesi, şarkı çalarken sözleri gösterir; sözler açılınca yanında beliren düğme onları çevirir. Dişli simgesinde hız ve perde, efektler ve uyku zamanlayıcısı var.',
     discover:

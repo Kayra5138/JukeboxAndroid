@@ -237,7 +237,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: 'Следующим',
+    quickQueue: 'Очередь',
+    quickList: 'Список',
     playNext: { label: 'Играть следующим', hint: 'Сразу после текущего трека' },
+    keepListened: { label: 'Сохранить в медиатеку', hint: 'Копируется в медиатеку вместе с историей' },
     addToQueue: { label: common.addToQueue, hint: 'В конец' },
     playSimilar: { label: 'Слушать с похожими', hint: 'Сначала эта, потом подборка похожих песен' },
     playOnly: { label: 'Слушать только эту', hint: 'В очереди будет только эта песня' },
@@ -245,6 +249,8 @@ export const library: Strings['library'] = {
     series: { label: 'Открыть передачу', hint: 'Её выпуски и как скачиваются новые' },
     tapeFolder: { label: 'Открыть папку', hint: 'Всё остальное в той же папке' },
     tapeDetails: { label: 'Подробности', hint: 'Сколько прослушано, откуда она и файл' },
+    share: { label: 'Поделиться', hint: 'Отправляется как звук: чат проигрывает его на месте' },
+    shareFile: { label: 'Отправить файлом', hint: 'Отправляется сам файл: чат сохраняет его как документ' },
     album: { label: 'Перейти к альбому', hint: 'Весь альбом, по порядку' },
     addToPlaylist: { label: 'Добавить в плейлист', hint: 'В один из твоих плейлистов или в новый' },
     favoriteAdd: { label: "В Избранное", hint: "Список, который наполняет сердечко, новые сверху" },

@@ -55,4 +55,24 @@ export const backup: Strings['backup'] = {
   newer: 'Dieses Backup stammt aus einer neueren Jukebox-Version. Aktualisiere die App, um es zu lesen.',
   needsBuildToExport: 'Installiere die aktualisierte Android-Version, um zu exportieren.',
   needsBuildToImport: 'Installiere die aktualisierte Android-Version, um zu importieren.',
+
+  history: {
+    title: 'Hörverlauf importieren',
+    note: 'Deine Wiedergaben von Last.fm, Spotify oder ListenBrainz, aus den Dateien, die du dort herunterladen kannst. Du siehst, was gefunden wurde, und wirst gefragt, bevor sich etwas ändert.',
+    question: 'Diese Wiedergaben importieren?',
+    range: (from, to) => (from === to ? `Alle am ${from}.` : `Von ${from} bis ${to}.`),
+    matched: (matched, total) =>
+      `${format.number(matched)} von ${format.number(total)} ${oneOrMany(matched, 'gehört zu einem Song', 'gehören zu Songs')} in deiner Bibliothek. Die übrigen bleiben unter ihren eigenen Namen erhalten und zählen trotzdem in deiner Statistik.`,
+    short: (count) =>
+      `${oneOrMany(count, 'Eine Wiedergabe ist', `${format.number(count)} Wiedergaben sind`)} kürzer als eine halbe Minute und ${oneOrMany(count, 'wird', 'werden')} ausgelassen.`,
+    already: (count) =>
+      `${oneOrMany(count, 'Eine Wiedergabe ist', `${format.number(count)} Wiedergaben sind`)} schon in deinem Verlauf und ${oneOrMany(count, 'wird', 'werden')} ausgelassen.`,
+    nothing: 'Alle Wiedergaben darin sind schon in deinem Verlauf oder zu kurz, um zu zählen.',
+    added: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'Wiedergabe', 'Wiedergaben')} zu deinem Verlauf hinzugefügt.`,
+    notHistory:
+      'Das ist kein Hörverlauf, den Jukebox lesen kann. Wähle die Dateien, die du von Last.fm, Spotify oder ListenBrainz bekommen hast: CSV oder JSON oder die ZIP-Datei, in der sie kamen.',
+    tooBig: 'Diese Datei ist zu groß, um sie zu lesen.',
+    failed: 'Die Wiedergaben konnten nicht importiert werden. Es wurde nichts geändert.',
+  },
 };

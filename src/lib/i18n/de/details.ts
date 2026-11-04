@@ -131,28 +131,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Sucht den Songtext zu diesem Titel so wie beim Abspielen und ersetzt den gespeicherten, falls einer gefunden wird.',
-    nothingMatched: 'Nichts passte zu diesem Titel. Die Suche unten schließt nichts aus.',
-    foundAndSaved: 'Gefunden und gespeichert.',
     nothingCameBack: 'Dazu wurde nichts gefunden.',
     cleared: 'Gelöscht. Das nächste Nachschlagen sucht erneut.',
     notSeconds: 'Das ist keine Sekundenangabe.',
 
-    stored: 'Gespeichert',
     none: 'Noch keiner',
     kept: (timed, byHand, lines) =>
       `${timed ? 'Synchronisiert' : 'Nur Text'}, ${byHand ? 'manuell gewählt' : 'von LRCLIB'}` +
       (lines > 0 ? ` · ${oneOrMany(lines, '1 Zeile', `${format.number(lines)} Zeilen`)}` : ''),
     forget: 'Verwerfen und neu suchen',
-    saveChanges: 'Änderungen speichern',
     timedHint:
       'Jede Zeile behält ihre Zeitangabe davor. Ändere die Wörter und lass die Klammern stehen, sonst verliert die Zeile ihren Platz.',
-    plainHint: 'Ändere, was du willst. Gespeicherter Text gilt als deiner und wird durch kein Nachschlagen ersetzt.',
 
     timing: 'Timing',
     timingHint:
-      'Verschiebt alle Zeilen auf einmal. Nutze das, wenn der Text stimmt, aber zu früh oder zu spät kommt – öffne den Player und justiere, bis es passt, oder tippe auf die Zahl und gib sie ein. Ein positiver Wert lässt den Text später erscheinen.',
+      'Verschiebt alle Zeilen zugleich, wenn der Text stimmt, aber zu früh oder zu spät kommt. Tippe auf den Wert, um ihn einzugeben. Ein positiver Wert verzögert den Text.',
     earlier: (seconds) => `−${comma(seconds)}${NNBSP}s`,
     later: (seconds) => `+${comma(seconds)}${NNBSP}s`,
     shiftedEarlier: (written) => `−${written}${NNBSP}s`,
@@ -164,16 +157,24 @@ export const details: Strings['details'] = {
     typeOffset: 'Genaue Verschiebung eingeben',
     wordsField: 'Songtext',
 
-    byHand: 'Manuell suchen',
-    byHandHint:
-      'Hier wird nichts ausgeschlossen, anders als bei der automatischen Suche. Die lehnt alles ab, dessen Länge nicht passt – deshalb finden manche Titel nie ihren Text.',
     queryPlaceholder: 'Künstler und Titel',
     candidateTimed: 'synchron',
     candidatePlain: 'nur Text',
 
-    paste: 'Einfügen',
-    pasteHint: 'Nimmt eine LRC-Datei oder reinen Text. Mit Zeitstempeln wird er synchronisiert.',
-    savePasted: 'Eingefügtes speichern',
+    find: 'Songtext suchen',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)} gefunden`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'In der Datei des Songs', lrc: 'In einer .lrc-Datei neben dem Song' },
+    sameLength: 'gleiche Länge',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Text hier einfügen oder schreiben. Zeilen mit Zeitangabe wie [00:12.34] laufen mit dem Song mit.',
+    clearBox: 'Feld leeren',
+    undo: 'Rückgängig',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Songtext entfernen',
+    removed: 'Songtext entfernt. Keine Suche holt ihn zurück.',
+    removedByHand: 'Von Hand entfernt',
   },
 
   library: {
@@ -219,6 +220,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'Liste',
+    quickEdit: 'Bearbeiten',
+    quickLookUp: 'Nachschlagen',
     more: 'Mehr…',
     moreHint: 'Alles, was du mit den ausgewählten Titeln tun kannst',
     heading: (count) => `${format.number(count)} Titel ausgewählt`,
@@ -248,6 +252,8 @@ export const details: Strings['details'] = {
         hint: 'Schreibt die Details, wie die Bibliothek sie zeigt, in die Dateien selbst. Android fragt vorher.',
       },
       addToList: { label: 'Zur Liste hinzufügen', hint: 'Legt sie in eine deiner Listen' },
+      share: { label: 'Teilen', hint: 'Schickt die Dateien an eine andere App: einen Chat, eine Mail, ein Handy in der Nähe' },
+      shareFile: { label: 'Als Datei teilen', hint: 'Als die Datei selbst gesendet: ein Chat behält sie als Dokument' },
       reset: {
         label: 'Zurücksetzen',
         hint: 'Vergisst, was beim Nachschlagen für sie gefunden wurde. Deine eigenen Änderungen bleiben.',

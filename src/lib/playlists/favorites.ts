@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import { readSetting, SETTINGS, writeSetting } from '../db/index';
 import { addToPlaylist, ensureFavorites, favoritesId, inPlaylist, removeFromPlaylist } from '../db/playlists';
 import { strings } from '../i18n/index';
+import { keptAs } from '../listen/kept';
 import { createStore } from '../ui/store';
 import { subscribeLists } from './listEvents';
 
@@ -31,7 +32,8 @@ export function isFavorite(trackId: string | null | undefined): boolean {
   if (!trackId) return false;
   try {
     const id = favoritesId();
-    return id != null && inPlaylist(id, trackId);
+    // A song listened to and kept is asked after as the song it became: see `listen/kept.ts`.
+    return id != null && inPlaylist(id, keptAs(trackId));
   } catch {
     return false;
   }
@@ -48,8 +50,9 @@ export function setFavorite(trackId: string, on: boolean): boolean {
   const id = favorites();
   if (id == null) return false;
   try {
-    if (on) addToPlaylist(id, [trackId], Date.now());
-    else removeFromPlaylist(id, trackId, Date.now());
+    const song = keptAs(trackId);
+    if (on) addToPlaylist(id, [song], Date.now());
+    else removeFromPlaylist(id, song, Date.now());
     return on;
   } catch {
     return !on;

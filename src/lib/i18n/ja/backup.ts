@@ -40,4 +40,21 @@ export const backup: Strings['backup'] = {
   newer: 'このバックアップは新しいバージョンのJukeboxで作成されています。読み込むにはアプリを更新してください。',
   needsBuildToExport: 'エクスポートするには、更新版のAndroidアプリをインストールしてください。',
   needsBuildToImport: 'インポートするには、更新版のAndroidアプリをインストールしてください。',
+
+  history: {
+    title: '再生履歴をインポート',
+    note: 'Last.fm、Spotify、ListenBrainzの再生記録を、それぞれでダウンロードできるファイルから取り込みます。見つかった内容が表示され、何かが変更される前に確認されます。',
+    question: 'これらの再生記録をインポートしますか？',
+    range: (from, to) => (from === to ? `すべて${from}の記録です。` : `${from}から${to}までの記録です。`),
+    matched: (matched, total) =>
+      `${format.number(total)}件のうち${format.number(matched)}件はライブラリにある曲の記録です。残りは曲名のまま保存され、統計にもそのまま数えられます。`,
+    short: (count) => `30秒未満の${format.number(count)}件は除外されます。`,
+    already: (count) => `すでに履歴にある${format.number(count)}件は除外されます。`,
+    nothing: 'どの再生記録もすでに履歴にあるか、短すぎて数えられません。',
+    added: (count) => `${format.number(count)}件の再生記録を履歴に追加しました。`,
+    notHistory:
+      'Jukeboxで読み込める再生履歴ではありません。Last.fm、Spotify、ListenBrainzから受け取ったファイル（CSVかJSON、またはそれらが入ったzip）を選んでください。',
+    tooBig: 'このファイルは大きすぎて読み込めません。',
+    failed: '再生記録をインポートできませんでした。何も変更されていません。',
+  },
 };

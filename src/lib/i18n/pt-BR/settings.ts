@@ -124,6 +124,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: 'Músicas ouvidas e não guardadas', note: 'Apagadas tantos dias depois de baixadas, a menos que você as guarde: com o coração, numa lista ou pelo menu.', days: (days) => oneOrMany(days, '1 dia', `${format.number(days)} dias`)  },
     note: 'O que está sendo baixado, o que está aguardando e o que já terminou.',
     button: {
       title: 'Botão flutuante de downloads',
@@ -203,6 +204,30 @@ export const settings: Strings['settings'] = {
     note:
       'Seu histórico de reprodução, listas, tags, letras e ajustes, os podcasts que você segue e onde parou em cada fita com o que marcou, em um arquivo salvo onde você escolher. Não inclui as músicas.',
     failed: 'Não foi possível salvar o backup.',
+  },
+  autoBackup: {
+    title: 'Backup automático',
+    off: 'O mesmo arquivo de "Exportar tudo", salvo sozinho todo dia ou toda semana numa pasta que você escolher.',
+    folder: 'Pasta',
+    folderUnnamed: 'Pasta escolhida',
+    chooseOther: 'Escolher outra pasta',
+    lost: 'O Jukebox não consegue mais acessar esta pasta: ela foi movida ou apagada, ou a permissão foi retirada. Escolha a pasta de novo para continuar os backups.',
+    chooseAgain: 'Escolher a pasta de novo',
+    every: 'Frequência',
+    daily: 'Todo dia',
+    weekly: 'Toda semana',
+    keep: 'Backups mantidos',
+    keepNote: (count) =>
+      oneOrMany(
+        count,
+        'Só o mais recente fica na pasta e os mais antigos são apagados. Nada mais na pasta é mexido.',
+        `Os ${format.number(count)} mais recentes ficam na pasta e os mais antigos são apagados. Nada mais na pasta é mexido.`
+      ),
+    last: (when) => `Último backup: ${when}.`,
+    never: 'Nenhum backup feito ainda.',
+    failed: 'Não foi possível fazer o último backup. Ele será tentado de novo na próxima vez.',
+    now: 'Fazer backup agora',
+    made: 'Backup feito.',
   },
   importBackup: {
     title: 'Importar',

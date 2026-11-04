@@ -1,4 +1,4 @@
-import { finishOf } from './effects.ts';
+import { finishOf, type Edges } from './effects.ts';
 import type { Palette } from './tokens.ts';
 
 /**
@@ -30,7 +30,7 @@ type Edge = {
   borderColor?: string;
   experimental_backgroundImage?: string;
   boxShadow?: string;
-};
+} & Partial<Edges>;
 
 /** Nothing, and always the same nothing, so that a style spread from it is as it was. */
 const NO_EDGE: Edge = Object.freeze({});
@@ -75,7 +75,7 @@ function finished(c: Palette, edge: Edge): Edge {
     from anything, and there is no surface to put a light across.
   */
   if (edge.borderColor === 'transparent') return edge;
-  const finish = finishOf(c);
+  const finish = finishOf(c, edge.borderWidth ?? 0);
   return finish ? { ...edge, ...finish } : edge;
 }
 

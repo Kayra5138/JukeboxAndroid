@@ -168,10 +168,82 @@ export function ListAddIcon({ size = 20, color: asked }: { size?: number; color?
   return <VectorIcon source={require('../../assets/icons/list-add.svg')} size={size} color={color} />;
 }
 
+/** Play and a stop just past it: this one, straight after the one on now. */
+export function PlayNextIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/play-next.svg')} size={size} color={color} />;
+}
+
+/** Lines of a list with play beside the last: the queue. */
+export function QueueIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/queue.svg')} size={size} color={color} />;
+}
+
+/** Up and out of a tray: to another app. */
+export function ShareIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/share.svg')} size={size} color={color} />;
+}
+
+/** A record: the album it is on. */
+export function DiscIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/disc.svg')} size={size} color={color} />;
+}
+
+/** A pencil: its details, to be changed. */
+export function PencilIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/pencil.svg')} size={size} color={color} />;
+}
+
+/** Play in outline, for a list of the rest in outline. */
+export function PlayOutlineIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/play-outline.svg')} size={size} color={color} />;
+}
+
+/** A picture: a cover. */
+export function PictureIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/picture.svg')} size={size} color={color} />;
+}
+
+/** A sheet with an arrow into it: written into the file itself. */
+export function FileWriteIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/file-write.svg')} size={size} color={color} />;
+}
+
+/** Keys of a piano: the game. */
+export function KeysIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/keys.svg')} size={size} color={color} />;
+}
+
+/** A sheet with its corner folded: the file itself. */
+export function FileIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/file.svg')} size={size} color={color} />;
+}
+
+/** A bin: gone from the phone. */
+export function TrashIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/trash.svg')} size={size} color={color} />;
+}
+
 /** A tag: a list that follows one. */
 export function TagIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
   const color = useInk(asked);
   return <VectorIcon source={require('../../assets/icons/tag.svg')} size={size} color={color} />;
+}
+
+/** A funnel: a smart list, which lets in the songs its rules ask for. */
+export function SmartIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/smart.svg')} size={size} color={color} />;
 }
 
 /** Three dots: more, in a menu. */

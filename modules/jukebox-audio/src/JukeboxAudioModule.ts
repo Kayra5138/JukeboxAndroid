@@ -276,6 +276,18 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
   /** The chapters written into a tape's file, read once and kept. */
   /** Where tapes were left, from a backup, by this phone's ids: in place of every place there was, or beside them, the later of two kept. */
   bringTapePlacesAsync?(places: Record<string, { positionSec: number; durationSec: number; at: number; finished: boolean }>, replace: boolean): Promise<void>;
+  /** The sound files the app was started to open, or was shared, once; none otherwise. */
+  takeOpenedAudio?(): string[];
+  /** A sound file opened with the app, made ready to play: the media store's id where it has one, an address to play, and what it says it is. */
+  readOpenedAudioAsync?(address: string): Promise<{
+    mediaId: string | null;
+    uri: string;
+    filename: string | null;
+    title: string | null;
+    artist: string | null;
+    album: string | null;
+    durationSec: number;
+  }>;
   readEmbeddedChaptersAsync?(trackId: string, uri: string): Promise<{ startSec: number; title: string }[]>;
   /** Whether a tape has a transcript kept, as a podcast's episode does where its feed gave one. */
   tapeTranscriptKept?(trackId: string): boolean;
@@ -293,6 +305,8 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
   lookUpTapeSkipsAsync?(trackId: string, videoId: string): Promise<number>;
   /** How far a press of previous or next moves a tape from outside the app, in seconds. */
   setTapeJumps?(backSec: number, forwardSec: number): void;
+  /** The jumps of the books and shows given their own, `{key: {back, forward}}` in seconds as JSON. */
+  setTapeJumpsByKey?(json: string): void;
   /** Each tape's speed by its key, as JSON, and the music's where the app had put it aside. */
   setTapeSpeeds?(json: string, musicSpeed: number | null): void;
   /** Insert into the live queue without interrupting playback. -1 appends. */
@@ -334,6 +348,9 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
   setSleepTimerAsync?(request: SleepTimerRequest): Promise<SleepTimer>;
   cancelSleepTimerAsync?(): Promise<SleepTimer>;
   getSleepTimerAsync?(): Promise<SleepTimer>;
+  /** Whether a shake of the phone in a timer's last few minutes adds ten more, kept by the player; and setting it. */
+  getShakeToExtend?(): boolean;
+  setShakeToExtend?(on: boolean): void;
   /**
    * ExoPlayer time-stretches, so `speed` changes tempo while keeping the
    * original pitch, and `pitch` moves independently of it. Both are clamped to
@@ -371,6 +388,22 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * artwork folder and nowhere else. Answers false if the user backed out.
    */
   exportBackupAsync?(name: string, document: string, pictures: string[]): Promise<boolean>;
+  /**
+   * Lets the user choose the folder automatic backups go into, and keeps the
+   * app's grant to it across restarts; answers its address and name, or null
+   * if they backed out. The grant to [previous], a folder chosen before, is
+   * let go of.
+   */
+  pickBackupFolderAsync?(previous: string | null): Promise<{ uri: string; name: string | null } | null>;
+  /** The name of the folder at [tree], or null where the app may no longer write there or it is gone. */
+  backupFolderNameAsync?(tree: string): Promise<string | null>;
+  /**
+   * Writes the same backup `exportBackupAsync` does into the folder at [tree]
+   * with no picker, as [name] or with `-2` and on where that is taken, and
+   * deletes the oldest `Jukebox-backup-*.zip` there beyond [keep]. Answers
+   * the name it was written under; throws where the folder cannot be written.
+   */
+  writeBackupToFolderAsync?(tree: string, name: string, document: string, pictures: string[], keep: number): Promise<string>;
   /**
    * Lets the user choose a backup and answers what it says, or null if they
    * backed out. Nothing on the phone has changed when this returns: the
@@ -439,6 +472,19 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * own equalizer; pasting the text needs nothing from the native side.
    */
   pickTextFileAsync?(): Promise<{ text: string; name: string | null } | null>;
+  /**
+   * Lets the user choose the files another app exported a listening history
+   * in, several at once; each one's address and name, or none if they backed
+   * out. Absent on a build from before histories could be brought in.
+   */
+  pickHistoryFilesAsync?(): Promise<{ uri: string; name: string }[]>;
+  /**
+   * The parts of a picked file worth reading: `''` for the file itself, or
+   * the names of the histories inside a zip, and nothing else of it.
+   */
+  historyPartsAsync?(uri: string): Promise<string[]>;
+  /** One part's text, or null when it is too large to be read. */
+  readHistoryPartAsync?(uri: string, part: string): Promise<string | null>;
   /** How one track gives way to the next. Answers even with nothing playing. */
   getTransitionsAsync?(): Promise<Transitions>;
   /**
@@ -525,6 +571,13 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
   saveImageAsync?(path: string): Promise<string>;
   /** Saves the picture, then offers it to whatever the reader picks. */
   shareImageAsync?(path: string): Promise<void>;
+  /**
+   * Offers sound files, by their `content://` addresses, to whichever app the
+   * user picks from the system's chooser headed [title]. False when none of
+   * them is a file of the phone's library that can be lent; absent on a build
+   * from before songs could be shared.
+   */
+  shareTracksAsync?(uris: string[], title: string, asFile?: boolean): Promise<boolean>;
 }
 
 /** What the end-of-chain effects processor is doing to the sound. */

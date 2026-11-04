@@ -5,6 +5,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { CrossIcon } from '../Icons';
 import { Pressable } from '../Pressable';
 
 import { useT } from '../../lib/i18n/index';
@@ -14,21 +15,23 @@ import { FormScroll, TextField } from '../FormScroll';
 import { SearchField } from '../SearchField';
 import { TextPrompt } from '../TextPrompt';
 import {
-  fetchLyrics,
   findLyricsCandidates,
+  rankCandidates,
+  sameLength,
   type LyricsCandidate,
 } from '../../lib/lyrics/lrclib';
 import {
   clearLyrics,
+  isManual,
   readLyrics,
   writeLocalLyrics,
-  writeLyrics,
   writeLyricsOffset,
   writeManualLyrics,
   type StoredLyrics,
 } from '../../lib/db/lyrics';
 import { readLocalLyrics } from '../../lib/lyrics/device';
-import { isAbortError } from '../../lib/metadata/http';
+import type { LocalLyrics } from '../../lib/lyrics/local';
+import { withoutPackaging } from '../../lib/metadata/credit';
 import { bareTitle } from '../../lib/metadata/text';
 import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
@@ -38,6 +41,9 @@ import { useUnsavedBack } from './unsaved';
 
 /** One nudge of the timings, in milliseconds. */
 const STEP_MS = 250;
+
+/** What is under the box of words and stays above the keyboard with it: the button and the gap before it. */
+const SAVE_ROW = 56;
 
 /** The figure of the shift is a line of text; this makes it a finger's height to press. */
 const OFFSET_SLOP = { top: 12, bottom: 12 };
@@ -49,34 +55,39 @@ function seconds(value: number | null): string {
 }
 
 /**
- * A track's words: reading them, correcting them, and finding them.
+ * A track's words: finding them, and correcting them.
  *
- * The automatic path fails in three ways, and each has its answer here.
- * Timings that are right but early or late are shifted. A song whose words
- * were never found — usually because its recorded length disagrees with the
- * catalogue's, which the automatic match refuses on purpose — is searched for
- * by hand, with nothing ruled out. Anything left over is pasted in.
+ * Two things on the page, in the order they are wanted. The search at the top
+ * looks everywhere at once — the song's file, a .lrc beside it, and LRCLIB
+ * with nothing ruled out, which is the way round the automatic match's
+ * refusing a song whose recorded length disagrees — and shows what it found,
+ * the same length as the song first, to be chosen with a press.
  *
- * And the words themselves are on the page to be changed: a wrong line or a
- * misheard word is fixed where it stands rather than by pasting the whole
- * song again.
+ * And one box for the words themselves. Correcting a line and pasting a whole
+ * song are the same thing done to the same words, so it is the one box with
+ * what is stored in it: the cross in its corner empties it for a paste, and
+ * saving it empty takes the words away. They stay away, as anything somebody
+ * chose stays, until the link under the box says otherwise.
+ *
+ * Timings that are right but early or late are shifted underneath.
  */
 export function LyricsTab({ track }: { track: Track }) {
   const trackId = track.id;
   const [stored, setStored] = useState<StoredLyrics | null>(null);
+  /** The words were taken away by hand, so there are none and no lookup is to bring them back. */
+  const [removed, setRemoved] = useState(false);
   const [query, setQuery] = useState('');
-  const [pasted, setPasted] = useState('');
   const [results, setResults] = useState<LyricsCandidate[] | null>(null);
+  /** The words on the phone itself, offered above what the search found. */
+  const [onPhone, setOnPhone] = useState<LocalLyrics | null>(null);
   const [searching, setSearching] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
   useAnnounce(note);
   const [typingOffset, setTypingOffset] = useState(false);
-  /** The stored words as they are being edited. */
+  /** The words as they are being edited. */
   const [edited, setEdited] = useState('');
-  const [lookingUp, setLookingUp] = useState(false);
   const search = useRef<AbortController | null>(null);
-  const lookup = useRef<AbortController | null>(null);
   const t = useT();
   const c = useColours();
   const styles = useStyles();
@@ -86,40 +97,41 @@ export function LyricsTab({ track }: { track: Track }) {
   useEffect(
     () => () => {
       search.current?.abort();
-      lookup.current?.abort();
     },
     []
   );
 
   const refresh = useCallback(() => {
-    if (trackId) setStored(readLyrics(trackId));
+    if (!trackId) return;
+    const now = readLyrics(trackId);
+    setStored(now);
+    setRemoved(now == null && isManual(trackId));
   }, [trackId]);
 
   // The timed text where there is one, since that is the one that carries
   // everything; the plain words otherwise.
   const storedText = stored?.synced ?? stored?.plain ?? '';
+  const changed = edited.trim() !== storedText.trim();
 
-  // Whenever what is stored changes — a lookup, a search result chosen, a
-  // paste — the box shows that, and not what was being typed over the old.
+  // Whenever what is stored changes — a result chosen, the box saved — the
+  // box shows that, and not what was being typed over the old.
   useEffect(() => {
     setEdited(storedText);
   }, [storedText]);
   // Words pasted in or edited and not kept are asked about on the way out.
-  useUnsavedBack(pasted.trim() !== '' || (edited.trim() !== '' && edited.trim() !== storedText.trim()), () => {
-    setPasted('');
-    setEdited(storedText);
-  });
+  useUnsavedBack(changed, () => setEdited(storedText));
 
-  // Seeded with what the track calls itself, since that is what is being
-  // looked for; the point of typing is to be able to change it. Done while
-  // drawing, once for each track, rather than in an effect that would have to
-  // pretend not to read the title: a title corrected on another tab must not
-  // throw away what is being typed here.
+  // Seeded with what the track calls itself, as a lyrics site would have it,
+  // since that is what is being looked for; the point of typing is to be able
+  // to change it. Done while drawing, once for each track, rather than in an
+  // effect that would have to pretend not to read the title: a title corrected
+  // on another tab must not throw away what is being typed here.
   const [seededFor, setSeededFor] = useState<string | null>(null);
   if (seededFor !== trackId) {
     setSeededFor(trackId);
-    setQuery([track.artist, bareTitle(track.title, track.artist)].filter(Boolean).join(' '));
+    setQuery([track.artist, withoutPackaging(bareTitle(track.title, track.artist))].filter(Boolean).join(' '));
     setResults(null);
+    setOnPhone(null);
     setNote(null);
   }
 
@@ -127,146 +139,82 @@ export function LyricsTab({ track }: { track: Track }) {
     refresh();
   }, [refresh]);
 
+  const closeResults = useCallback(() => {
+    setResults(null);
+    setOnPhone(null);
+  }, []);
+
   /**
-   * The automatic search, asked for by hand.
-   *
-   * The same one a play runs — the song's file and a .lrc beside it first,
-   * then LRCLIB, strict about length and all — and here it is allowed to
-   * replace words somebody chose: pressing the button is asking for exactly
-   * that. Finding nothing leaves what is stored alone, though. A miss is no
-   * reason to throw away the words there are.
+   * Looks everywhere there is to look, for a person to choose from. Nothing is
+   * replaced until they do: what is stored stays if nothing here is any good,
+   * and a miss is no reason to throw away the words there are.
    */
-  const lookUp = useCallback(async () => {
-    lookup.current?.abort();
-    const controller = new AbortController();
-    lookup.current = controller;
-    setLookingUp(true);
-    setNote(null);
-    // Everything that can fail is caught inside, so that what follows it runs
-    // whatever happened, as a `finally` would; the compiler does not take one.
-    const attempt = async () => {
-      try {
-        const local = await readLocalLyrics(trackId);
-        if (controller.signal.aborted) return;
-        if (local) {
-          // Cleared first, as for a lookup: a shift and translations made for
-          // other words do not belong to these.
-          clearLyrics(trackId);
-          writeLocalLyrics(trackId, local, Date.now());
-          haptic('results', 'confirm');
-          setResults(null);
-          setNote(t.lyrics.found[local.source]);
-          refresh();
-          return;
-        }
-
-        const found = await fetchLyrics(
-          {
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            durationSec: track.durationSec,
-          },
-          controller.signal
-        );
-        if (controller.signal.aborted) return;
-        if (!found) {
-          haptic('results', 'reject');
-          setNote(said.nothingMatched);
-          return;
-        }
-        // Cleared first: the old row takes its shift and its translations with
-        // it, and neither belongs to the words that are replacing it.
-        clearLyrics(trackId);
-        writeLyrics(trackId, found, Date.now());
-        haptic('results', 'confirm');
-        setResults(null);
-        setNote(said.foundAndSaved);
-        refresh();
-      } catch (error) {
-        if (controller.signal.aborted || isAbortError(error)) return;
-        haptic('results', 'reject');
-        setNote(t.details.searchFailed);
-      }
-    };
-    await attempt();
-    if (!controller.signal.aborted) setLookingUp(false);
-  }, [track, trackId, refresh, t, said]);
-
-  const saveEdited = useCallback(() => {
-    const body = edited.trim();
-    if (body.length === 0) return;
-    haptic('results', 'confirm');
-    // Timed or not is decided by what is in the box, the same as a paste.
-    writeManualLyrics(
-      trackId,
-      { plain: isSynced(body) ? null : body, synced: isSynced(body) ? body : null },
-      Date.now()
-    );
-    setNote(t.common.saved);
-    refresh();
-  }, [edited, trackId, refresh, t]);
-
-  const runSearch = useCallback(async () => {
+  const find = useCallback(async () => {
     search.current?.abort();
     const controller = new AbortController();
     search.current = controller;
-
     setSearching(true);
     setNote(null);
-    try {
-      const found = await findLyricsCandidates(query, controller.signal);
-      if (!controller.signal.aborted) {
-        setResults(found);
-        if (found.length === 0) {
-          haptic('results', 'reject');
-          setNote(said.nothingCameBack);
-        } else haptic('results', 'confirm');
-      }
-    } catch {
-      if (!controller.signal.aborted) {
-        haptic('results', 'reject');
-        setNote(t.details.searchFailed);
-      }
-    }
-    // After the try rather than in a `finally`, which the compiler does not
-    // take; nothing above it can throw past the catch.
-    if (!controller.signal.aborted) setSearching(false);
-  }, [query, t, said]);
+    const [local, found] = await Promise.all([
+      readLocalLyrics(trackId).catch(() => null),
+      findLyricsCandidates(query, controller.signal).catch(() => null),
+    ]);
+    if (controller.signal.aborted) return;
+    setSearching(false);
+    setOnPhone(local);
+    setResults(rankCandidates(found ?? [], track.durationSec));
+    const any = local != null || (found?.length ?? 0) > 0;
+    haptic('results', any ? 'confirm' : 'reject');
+    if (found == null) setNote(t.details.searchFailed);
+    else if (!any) setNote(said.nothingCameBack);
+  }, [query, track.durationSec, trackId, t, said]);
 
   const choose = useCallback(
     (candidate: LyricsCandidate) => {
       haptic('results', 'confirm');
       writeManualLyrics(trackId, candidate.lyrics, Date.now());
-      setResults(null);
+      closeResults();
       setNote(t.common.saved);
       refresh();
     },
-    [trackId, refresh, t]
+    [trackId, closeResults, refresh, t]
   );
 
-  const savePasted = useCallback(() => {
-    const body = pasted.trim();
-    if (body.length === 0) return;
+  const chooseOnPhone = useCallback(
+    (local: LocalLyrics) => {
+      haptic('results', 'confirm');
+      // Cleared first, as for a lookup: a shift and translations made for
+      // other words do not belong to these.
+      clearLyrics(trackId);
+      writeLocalLyrics(trackId, local, Date.now());
+      closeResults();
+      setNote(t.lyrics.found[local.source]);
+      refresh();
+    },
+    [trackId, closeResults, refresh, t]
+  );
+
+  const save = useCallback(() => {
+    const body = edited.trim();
     haptic('results', 'confirm');
-    // Timed or not is decided by what was pasted, not by asking: a paste with
-    // timestamps in it is a timed set of lyrics whatever it is called.
+    // Timed or not is decided by what is in the box, not by asking: words with
+    // timestamps in them are timed whatever they are called. Nothing in it is
+    // a choice too, kept as one so that the next play does not fetch them back.
     writeManualLyrics(
       trackId,
-      { plain: isSynced(body) ? null : body, synced: isSynced(body) ? body : null },
+      { plain: body && !isSynced(body) ? body : null, synced: body && isSynced(body) ? body : null },
       Date.now()
     );
-    setPasted('');
-    setNote(t.common.saved);
+    setNote(body ? t.common.saved : said.removed);
     refresh();
-  }, [pasted, trackId, refresh, t]);
+  }, [edited, trackId, refresh, t, said]);
 
   const revert = useCallback(() => {
     clearLyrics(trackId);
-    setResults(null);
+    closeResults();
     setNote(said.cleared);
     refresh();
-  }, [trackId, refresh, said]);
+  }, [trackId, closeResults, refresh, said]);
 
   const nudge = useCallback(
     (milliseconds: number) => {
@@ -296,78 +244,157 @@ export function LyricsTab({ track }: { track: Track }) {
 
   const timed = stored?.synced ? parseLrc(stored.synced).length : 0;
   const offset = stored?.offsetMs ?? 0;
+  const found = (results?.length ?? 0) + (onPhone ? 1 : 0);
 
   return (
     <View style={styles.screen}>
-      <FormScroll contentContainerStyle={styles.content}>
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={[styles.action, lookingUp && styles.actionOff]}
-          disabled={lookingUp}
-          onPress={() => void lookUp()}>
-          {lookingUp ? (
-            <ActivityIndicator color={c.onPrimary} />
-          ) : (
-            <Text style={styles.actionLabel}>{t.details.lookUp}</Text>
-          )}
-        </Pressable>
-        <Text style={styles.hint}>{said.lookUpHint}</Text>
+      <FormScroll contentContainerStyle={styles.content} under={SAVE_ROW}>
+        <View style={styles.finding}>
+          <SearchField
+            style={styles.grow}
+            // Named for what the box is for; the hint says what to put in it,
+            // and is gone once anything is typed.
+            accessibilityLabel={said.find}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={said.queryPlaceholder}
+            onSubmitEditing={() => void find()}
+          />
+          <Pressable
+            accessibilityRole="button"
+            android_ripple={pressed}
+            style={[styles.action, styles.findButton, (!query.trim() || searching) && styles.actionOff]}
+            disabled={!query.trim() || searching}
+            onPress={() => void find()}>
+            {searching ? (
+              <ActivityIndicator color={c.onPrimary} />
+            ) : (
+              <Text style={styles.actionLabel}>{t.common.search}</Text>
+            )}
+          </Pressable>
+        </View>
+
+        {found > 0 ? (
+          <View>
+            <View style={styles.resultsHead}>
+              <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.results(found))}</Text>
+              <Pressable accessibilityRole="button" android_ripple={pressed} hitSlop={OFFSET_SLOP} onPress={closeResults}>
+                <Text style={styles.link}>{t.common.close}</Text>
+              </Pressable>
+            </View>
+            {onPhone ? (
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={pressed}
+                style={styles.candidate}
+                onPress={() => chooseOnPhone(onPhone)}>
+                <Text style={styles.candidateTitle} numberOfLines={1}>
+                  {said.onPhone[onPhone.source]}
+                </Text>
+                <Text style={styles.candidateMeta} numberOfLines={1}>
+                  {onPhone.lyrics.synced ? said.candidateTimed : said.candidatePlain}
+                </Text>
+              </Pressable>
+            ) : null}
+            {results?.map((candidate) => (
+              <Pressable
+                accessibilityRole="button"
+                android_ripple={pressed}
+                key={candidate.id}
+                style={styles.candidate}
+                onPress={() => choose(candidate)}>
+                <Text style={styles.candidateTitle} numberOfLines={1}>
+                  {candidate.title}
+                </Text>
+                <Text style={styles.candidateMeta} numberOfLines={1}>
+                  {[
+                    candidate.artist,
+                    candidate.album,
+                    seconds(candidate.durationSec),
+                    candidate.synced ? said.candidateTimed : said.candidatePlain,
+                    sameLength(candidate, track.durationSec) ? said.sameLength : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
 
         {note ? <Text style={styles.note}>{note}</Text> : null}
 
-        <Text style={[styles.section, styles.sectionFirst]}>{t.format.upper(said.stored)}</Text>
-        <Text style={styles.body}>
+        <Text style={styles.status}>
           {stored
             ? stored.source === 'file' || stored.source === 'lrc'
               ? t.lyrics.stored(Boolean(stored.synced), stored.source, timed)
               : said.kept(Boolean(stored.synced), stored.source === 'manual', timed)
-            : said.none}
+            : removed
+              ? said.removedByHand
+              : said.none}
         </Text>
-        {stored?.source === 'manual' ? (
-          // The only way back. A hand-made choice is deliberately left alone by
-          // every lookup, so without this a wrong correction would be permanent.
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.revert} onPress={revert}>
-            <Text style={styles.revertLabel}>{said.forget}</Text>
-          </Pressable>
-        ) : null}
 
-        {stored ? (
-          <>
-            <TextField
-              style={[styles.input, styles.words]}
-              accessibilityLabel={said.wordsField}
-              value={edited}
-              onChangeText={setEdited}
-              multiline
-              // A box of its own height that scrolls inside. It used to grow
-              // with the words, and a song is taller than the screen: the
-              // line being changed was then wherever it fell, usually under
-              // the keyboard, and a field can only be moved clear as a whole.
-              // Held to this height, the field keeps its own caret in view.
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+        <View>
+          <TextField
+            style={[styles.input, styles.words]}
+            accessibilityLabel={said.wordsField}
+            value={edited}
+            onChangeText={setEdited}
+            placeholder={said.wordsPlaceholder}
+            placeholderTextColor={c.textFaint}
+            multiline
+            // A box of its own height that scrolls inside. It used to grow
+            // with the words, and a song is taller than the screen: the
+            // line being changed was then wherever it fell, usually under
+            // the keyboard, and a field can only be moved clear as a whole.
+            // Held to this height, the field keeps its own caret in view.
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {edited.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={said.clearBox}
+              android_ripple={pressed}
+              hitSlop={8}
+              style={styles.clear}
+              onPress={() => setEdited('')}>
+              <CrossIcon size={14} color={c.text} />
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={styles.saving}>
+          {changed ? (
             <Pressable
               accessibilityRole="button"
               android_ripple={pressed}
-              style={[
-                styles.action,
-                (edited.trim() === storedText.trim() || !edited.trim()) && styles.actionOff,
-              ]}
-              disabled={edited.trim() === storedText.trim() || !edited.trim()}
-              onPress={saveEdited}>
-              <Text style={styles.actionLabel}>{said.saveChanges}</Text>
+              style={styles.undo}
+              onPress={() => setEdited(storedText)}>
+              <Text style={styles.undoLabel}>{said.undo}</Text>
             </Pressable>
-            <Text style={styles.hint}>
-              {timed > 0 ? said.timedHint : said.plainHint}
-            </Text>
-          </>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            android_ripple={pressed}
+            style={[styles.action, styles.grow, !changed && styles.actionOff]}
+            disabled={!changed}
+            onPress={save}>
+            <Text style={styles.actionLabel}>{changed && !edited.trim() ? said.removeWords : t.common.save}</Text>
+          </Pressable>
+        </View>
+        {timed > 0 ? <Text style={styles.hint}>{said.timedHint}</Text> : null}
+        {stored?.source === 'manual' || removed ? (
+          // The only way back. A hand-made choice is deliberately left alone by
+          // every lookup, so without this a wrong correction would be permanent.
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.revert} onPress={revert}>
+            <Text style={styles.link}>{said.forget}</Text>
+          </Pressable>
         ) : null}
 
         {timed > 0 ? (
           <>
-            <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.timing)}</Text>
+            <Text accessibilityRole="header" style={[styles.section, styles.sectionApart]}>{t.format.upper(said.timing)}</Text>
             <Text style={styles.hint}>{said.timingHint}</Text>
             <View style={styles.row}>
               <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(-STEP_MS)}>
@@ -394,76 +421,6 @@ export function LyricsTab({ track }: { track: Track }) {
             </View>
           </>
         ) : null}
-
-        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.byHand)}</Text>
-        <Text style={styles.hint}>{said.byHandHint}</Text>
-        <SearchField
-          // Named for what the box is for; the hint says what to put in it,
-          // and is gone once anything is typed.
-          accessibilityLabel={said.byHand}
-          value={query}
-          onChangeText={setQuery}
-          placeholder={said.queryPlaceholder}
-          onSubmitEditing={() => void runSearch()}
-        />
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={[styles.action, (!query.trim() || searching) && styles.actionOff]}
-          disabled={!query.trim() || searching}
-          onPress={() => void runSearch()}>
-          {searching ? (
-            <ActivityIndicator color={c.onPrimary} />
-          ) : (
-            <Text style={styles.actionLabel}>{t.common.search}</Text>
-          )}
-        </Pressable>
-
-        {results?.map((candidate) => (
-          <Pressable
-            accessibilityRole="button"
-            android_ripple={pressed}
-            key={candidate.id}
-            style={styles.candidate}
-            onPress={() => choose(candidate)}>
-            <Text style={styles.candidateTitle} numberOfLines={1}>
-              {candidate.title}
-            </Text>
-            <Text style={styles.candidateMeta} numberOfLines={1}>
-              {[
-                candidate.artist,
-                candidate.album,
-                seconds(candidate.durationSec),
-                candidate.synced ? said.candidateTimed : said.candidatePlain,
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-          </Pressable>
-        ))}
-
-        <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.paste)}</Text>
-        <Text style={styles.hint}>{said.pasteHint}</Text>
-        <TextField
-          style={[styles.input, styles.paste]}
-          // The hint is a sample of a timestamp, which read aloud is noise.
-          accessibilityLabel={said.paste}
-          value={pasted}
-          onChangeText={setPasted}
-          placeholder="[00:12.34] …"
-          placeholderTextColor={c.textFaint}
-          multiline
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={[styles.action, !pasted.trim() && styles.actionOff]}
-          disabled={!pasted.trim()}
-          onPress={savePasted}>
-          <Text style={styles.actionLabel}>{said.savePasted}</Text>
-        </Pressable>
       </FormScroll>
 
       <TextPrompt
@@ -481,13 +438,17 @@ export function LyricsTab({ track }: { track: Track }) {
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1 },
   content: { padding: 20, paddingBottom: 48, gap: 10 },
+  grow: { flex: 1 },
+  finding: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  findButton: { paddingHorizontal: 16 },
+  resultsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 },
   section: {
     color: c.textFaint,
     fontSize: 11,
     letterSpacing: 1,
-    paddingTop: 22,
   },
-  body: { color: c.text, fontSize: 14 },
+  sectionApart: { paddingTop: 22 },
+  status: { color: c.textMuted, fontSize: 13, paddingTop: 6 },
   hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   step: {
@@ -516,9 +477,31 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingVertical: 11,
     ...outlined(c),
   },
-  paste: { minHeight: 132, textAlignVertical: 'top' },
-  words: { height: 260, textAlignVertical: 'top', lineHeight: 21 },
-  sectionFirst: { paddingTop: 10 },
+  // Room down the right for the cross, so that a long line is not read through it. Short enough
+  // to fit above the keyboard with the button that saves it.
+  words: { height: 270, textAlignVertical: 'top', lineHeight: 21, paddingRight: 44 },
+  clear: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.surfaceRaised,
+  },
+  saving: { flexDirection: 'row', gap: 8 },
+  undo: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    minHeight: 44,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.borderStrong,
+  },
+  undoLabel: { color: c.text, fontSize: 15 },
   action: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -530,9 +513,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   actionOff: { opacity: 0.35 },
   actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
-  note: { color: c.success, fontSize: 13 },
+  // Good news and bad both come here, so it is neither colour.
+  note: { color: c.text, fontSize: 13 },
   revert: { alignSelf: 'flex-start', paddingVertical: 4 },
-  revertLabel: { color: c.accent, fontSize: 13.5 },
+  link: { color: c.accent, fontSize: 13.5 },
   candidate: {
     gap: 3,
     paddingVertical: 11,

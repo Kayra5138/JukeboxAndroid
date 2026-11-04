@@ -12,7 +12,7 @@ import { Animated, StyleSheet, useWindowDimensions, View } from 'react-native';
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { PlayerSheet } from '../../components/PlayerSheet';
 import { useColours } from '../theme/index';
-import { underGlass } from '../theme/Veil';
+import { underGlass, Veiled } from '../theme/Veil';
 import { useCoveredByRoute } from './overlayRoutes';
 import { motionReduced } from '../ui/motion';
 
@@ -99,12 +99,12 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
         the same window as the library, and a swipe past its last button
         otherwise walked on through every row of the list it is covering.
       */}
-      <View
-        collapsable={false}
-        style={mounted && !covered ? [styles.under, glass] : styles.under}
+      <Veiled
+        blur={mounted && !covered ? glass : 0}
+        style={styles.under}
         importantForAccessibility={mounted && !covered ? 'no-hide-descendants' : 'auto'}>
         {children}
-      </View>
+      </Veiled>
       {mounted ? (
         <Animated.View
           /*

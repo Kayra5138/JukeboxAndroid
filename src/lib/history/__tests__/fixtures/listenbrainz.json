@@ -1,0 +1,4 @@
+[
+  {"listened_at": 1680356700, "recording_msid": "a", "track_metadata": {"artist_name": "Radiohead", "track_name": "Paranoid Android", "release_name": "OK Computer", "additional_info": {"duration_ms": 383000}}},
+  {"listened_at": 1680253320, "recording_msid": "b", "track_metadata": {"artist_name": "Céline Dion", "track_name": "My Heart Will Go On", "release_name": null, "additional_info": {}}}
+]

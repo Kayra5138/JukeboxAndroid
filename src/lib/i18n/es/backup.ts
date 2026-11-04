@@ -57,4 +57,24 @@ export const backup: Strings['backup'] = {
   newer: 'Esa copia se creó con una versión más reciente de Jukebox. Actualiza la app para leerla.',
   needsBuildToExport: 'Instala la versión actualizada de la app para exportar.',
   needsBuildToImport: 'Instala la versión actualizada de la app para importar.',
+
+  history: {
+    title: 'Importar historial de escucha',
+    note: 'Tus escuchas de Last.fm, Spotify o ListenBrainz, de los archivos que te dejan descargar. Verás lo que se ha encontrado y se te preguntará antes de cambiar nada.',
+    question: '¿Importar estas escuchas?',
+    range: (from, to) => (from === to ? `Todas del ${from}.` : `Del ${from} al ${to}.`),
+    matched: (matched, total) =>
+      `${format.number(matched)} de ${format.number(total)} ${oneOrMany(matched, 'es de una canción', 'son de canciones')} de tu biblioteca. Las demás se guardan con sus propios nombres y cuentan igualmente en tus estadísticas.`,
+    short: (count) =>
+      `${oneOrMany(count, 'Una escucha dura', `${format.number(count)} escuchas duran`)} menos de medio minuto y ${oneOrMany(count, 'se descarta', 'se descartan')}.`,
+    already: (count) =>
+      `${oneOrMany(count, 'Una escucha ya está', `${format.number(count)} escuchas ya están`)} en tu historial y ${oneOrMany(count, 'se descarta', 'se descartan')}.`,
+    nothing: 'Todas sus escuchas ya están en tu historial o son demasiado cortas para contar.',
+    added: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'escucha añadida', 'escuchas añadidas')} a tu historial.`,
+    notHistory:
+      'Eso no es un historial de escucha que Jukebox pueda leer. Elige los archivos que te dio Last.fm, Spotify o ListenBrainz: CSV o JSON, o el zip en el que venían.',
+    tooBig: 'Ese archivo es demasiado grande para leerlo.',
+    failed: 'No se han podido importar las escuchas. No se ha cambiado nada.',
+  },
 };

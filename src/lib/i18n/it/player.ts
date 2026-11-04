@@ -62,6 +62,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'Bande, bassi e loudness' },
     crossfade: { note: 'Come un brano lascia il posto al successivo' },
     allEffects: { title: 'Tutti gli effetti', note: 'Ampiezza, crossfeed, rotazione e livello' },
+    jumps: {
+      heading: 'Salti per questo libro o programma',
+      general: 'Generale',
+      backToGeneral: 'Torna ai salti di tutte le cassette',
+      back: 'Salta indietro',
+      forward: 'Salta avanti',
+      note: 'In secondi, solo per questo libro o programma, anche per le cuffie, la notifica e l’auto. Le altre cassette tengono i salti delle impostazioni cassette.',
+    },
   },
   sleepTimer: {
     title: 'Timer di spegnimento',
@@ -77,6 +85,11 @@ export const player: Strings['player'] = {
       title: 'Lascia finire il brano in corso',
       note: 'Allo scadere del tempo, aspetta che la canzone finisca invece di sfumarla.',
       label: 'Lascia finire il brano in corso allo scadere del timer di spegnimento',
+    },
+    shake: {
+      title: 'Scuoti per altri dieci minuti',
+      note: 'Negli ultimi tre minuti, scuoti il telefono per aggiungere dieci minuti, anche a schermo spento. Una breve vibrazione lo conferma.',
+      label: 'Scuoti il telefono negli ultimi tre minuti per aggiungere dieci minuti al timer di spegnimento',
     },
     refused: (most) => `Un numero intero di minuti, da 1 a ${most}`,
     howMany: 'Pausa dopo quanti minuti?',

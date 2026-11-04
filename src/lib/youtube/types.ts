@@ -20,6 +20,8 @@ export type YouTubeVideo = {
   tape?: { name: string; part?: number; album?: string; title?: string; date?: string; list?: { id: string; name: string } };
   /** A file fetched as it is from [url], not a video of YouTube's: a podcast's episode. */
   direct?: boolean;
+  /** Listened to without keeping it: fetched into the app's own files and played, kept only when somebody keeps it. See `lib/listen`. */
+  listen?: boolean;
   /** A podcast's episode's chapters and transcript, as its feed gives them: fetched with it. */
   chaptersUrl?: string;
   transcriptUrl?: string;
@@ -148,5 +150,7 @@ export function statusLabel(job: DownloadJob, t: Strings = strings()): string {
   const said = t.search.status;
   // A held job is on no screen that says this; were it ever, waiting is the nearest true thing to say of it.
   if (job.status === 'found') return said.queued;
+  // Listened to and not kept: in, but not in the library.
+  if (job.status === 'done' && job.video.listen === true) return said.listened;
   return job.status === 'downloading' ? said.downloading(job.progress) : said[job.status];
 }

@@ -124,6 +124,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: 'Canciones escuchadas y no guardadas', note: 'Se borran estos días después de descargarse, salvo que las guardes: con el corazón, en una lista o desde su menú.', days: (days) => oneOrMany(days, '1 día', `${format.number(days)} días`)  },
     note: 'Lo que se está descargando, lo que espera y lo que ha terminado.',
     button: {
       title: 'Botón flotante de descargas',
@@ -203,6 +204,30 @@ export const settings: Strings['settings'] = {
     note:
       'Tu historial de escucha, listas, etiquetas, letras y ajustes, los pódcasts que sigues y dónde vas en cada casete y lo que marcaste, en un archivo que guardas donde quieras. No incluye la música.',
     failed: 'No se ha podido guardar la copia de seguridad.',
+  },
+  autoBackup: {
+    title: 'Copia de seguridad automática',
+    off: 'El mismo archivo que «Exportar todo», guardado solo cada día o cada semana en una carpeta que eliges tú.',
+    folder: 'Carpeta',
+    folderUnnamed: 'Carpeta elegida',
+    chooseOther: 'Elegir otra carpeta',
+    lost: 'Jukebox ya no puede acceder a esta carpeta: se movió o se borró, o se retiró el permiso. Vuelve a elegirla para seguir haciendo copias.',
+    chooseAgain: 'Elegir la carpeta de nuevo',
+    every: 'Frecuencia',
+    daily: 'Cada día',
+    weekly: 'Cada semana',
+    keep: 'Copias guardadas',
+    keepNote: (count) =>
+      oneOrMany(
+        count,
+        'Solo se guarda la más reciente en la carpeta y las anteriores se borran. No se toca nada más de la carpeta.',
+        `Se guardan las ${format.number(count)} más recientes en la carpeta y las anteriores se borran. No se toca nada más de la carpeta.`
+      ),
+    last: (when) => `Última copia: ${when}.`,
+    never: 'Todavía no se ha hecho ninguna copia.',
+    failed: 'No se ha podido hacer la última copia. Se volverá a intentar la próxima vez.',
+    now: 'Hacer una copia ahora',
+    made: 'Copia hecha.',
   },
   importBackup: {
     title: 'Importar',

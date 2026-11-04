@@ -54,6 +54,7 @@ const play = (track: string, at: number, extra: Row = {}): Row => ({
   started_at: at,
   seconds_played: 120,
   completed: 1,
+  source: null,
   ...extra,
 });
 const details = (track: string, status: string, fetched: number, extra: Row = {}): Row => ({
@@ -102,6 +103,7 @@ const list = (id: number, name: string, extra: Row = {}): Row => ({
   cover_uri: null,
   tag: null,
   kind: null,
+  rules: null,
   ...extra,
 });
 const entry = (playlist: number, track: string, position: number): Row => ({
@@ -603,6 +605,21 @@ describe('merging a backup into what is here', () => {
     assert.equal(merged.playlists.length, 2);
   });
 
+  it('pours a smart list only into a smart list of its name, keeping the rules here', () => {
+    const merged = mergeTables(
+      tables({ playlists: [list(1, 'Loud'), list(2, 'Quiet', { kind: 'smart', rules: 'here' })] }),
+      tables({ playlists: [list(1, 'Loud', { kind: 'smart', rules: 'a' }), list(2, 'quiet', { kind: 'smart', rules: 'b' })] })
+    );
+    assert.deepEqual(
+      merged.playlists.map((row) => [row.id, row.name, row.kind, row.rules]),
+      [
+        [1, 'Loud', null, null],
+        [2, 'Quiet', 'smart', 'here'],
+        [3, 'Loud', 'smart', 'a'],
+      ]
+    );
+  });
+
   it('gives a list here at most one list from the backup', () => {
     const merged = mergeTables(
       tables({ playlists: [list(1, 'Mix')] }),
@@ -655,7 +672,11 @@ describe('the database, there and back', () => {
     track_tags: [tag('1', 'rock', 0, 'manual'), tag('1', 'live', 1)],
     track_lyrics: [{ ...lyric('1', 'la la', 7, 'manual'), synced: '[00:01.00]la', offset_ms: -250 }],
     lyric_translations: [{ track_id: '1', target: 'en', source: 'tr', lines: '["x"]', translated_at: 8 }],
-    playlists: [list(3, 'Mine', { cover_track_id: '1' }), list(9, 'rock', { tag: 'rock', cover_uri: `${HOME}c.jpg` })],
+    playlists: [
+      list(3, 'Mine', { cover_track_id: '1' }),
+      list(9, 'rock', { tag: 'rock', cover_uri: `${HOME}c.jpg` }),
+      list(11, 'Loud', { kind: 'smart', rules: '{"v":1,"match":"all","rules":[],"limit":null,"order":"title"}' }),
+    ],
     playlist_tracks: [entry(3, '1', 0), entry(3, '2', 1)],
     podcasts: [show('https://feed', { fetch_next: 1, next_count: 2, checked_at: 4 })],
     tape_marks: [mark('1', 61.5, 'here'), mark('1', 300)],

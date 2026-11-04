@@ -11,6 +11,7 @@ import { NextIcon, PauseIcon, PlayIcon, PreviousIcon } from './Icons';
 import { TrackStrip } from './TrackStrip';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
+import { useHasCurrent } from '../lib/player/current';
 import { useOpenPlayer } from '../lib/player/NowPlayingSheet';
 import { usePlayerActions, usePlayerPosition, usePlayerState } from '../lib/player/PlayerProvider';
 import { isTape } from '../lib/tapes/tape';
@@ -71,7 +72,7 @@ export function WithNowPlaying({ children, style }: { children: ReactNode; style
 export function usePageSides(): { left: number; right: number } {
   const insets = useSafeAreaInsets();
   const landscape = useLandscape();
-  const playing = usePlayerState().current != null;
+  const playing = useHasCurrent();
   const previewing = useDiscoverPreview() != null;
   if (!landscape) return { left: insets.left, right: insets.right };
   return { left: 0, right: playing || previewing ? 0 : insets.right };

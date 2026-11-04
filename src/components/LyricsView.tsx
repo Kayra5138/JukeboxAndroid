@@ -56,6 +56,8 @@ export function LyricsView({
   const c = useColours();
   const scroll = useRef<ScrollView>(null);
   const shown = useRef(-1);
+  /** Which words these are, counted: what a measurement is asked about may be gone by the time it answers. */
+  const wordsNow = useRef(0);
   /*
     The words themselves, as one view, so a line can be measured against the
     thing the scroll offset is counted from. Every bit of padding lives inside
@@ -114,16 +116,27 @@ export function LyricsView({
     Asking at the moment of use cannot be stale and has nothing to accumulate.
   */
   const anchorToActive = useCallback((index: number) => {
-    if (index < 0 || index === shown.current) return;
+    // Back before the first line, by a seek: the top is where the words are then.
+    if (index < 0) {
+      if (shown.current >= 0) {
+        shown.current = -1;
+        scroll.current?.scrollTo({ y: 0, animated: true });
+      }
+      return;
+    }
+    if (index === shown.current) return;
 
     const list = scroll.current;
     const frame = body.current;
     const row = rows.current[index];
     if (!list || !frame || !row) return;
 
+    const asked = wordsNow.current;
     row.measureLayout(
       frame,
       (_x, y) => {
+        // The answer to a question about words that have since gone: see below.
+        if (asked !== wordsNow.current) return;
         /*
           Marked as done only once the scroll has actually gone out. Anything
           that stops it — the view not mounted, a measurement that failed — is
@@ -138,6 +151,30 @@ export function LyricsView({
       }
     );
   }, []);
+
+  /*
+    A new song, or new words for it, starts at the top rather than wherever the
+    last one was.
+
+    On the song as well as the timed text, which is the same for two songs
+    with none, and ahead of what follows the sung line, so that a line asked
+    for against the old position does not land after this has gone to the top.
+    A measurement can be on its way when this runs, and its answer would take
+    the words straight back down until the first line was sung: hence
+    `wordsNow`, which it is held against.
+
+    Keyed on the timed text and not on the plain as well, which is not
+    rendered at all when there are timings — and that field arrives a moment
+    after the timed one does, so this ran a second time just after the lines
+    had been measured and threw every measurement away. Nothing refills them:
+    a layout that has not changed does not call back, so the words stopped
+    following for the rest of the song.
+  */
+  useEffect(() => {
+    wordsNow.current += 1;
+    shown.current = -1;
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  }, [trackId, synced]);
 
   /*
     Runs on the position as well as on the line, so that a failed attempt is
@@ -156,21 +193,6 @@ export function LyricsView({
   useEffect(() => {
     anchorToActive(active);
   }, [active, positionSec, height, translation.lines, anchorToActive]);
-
-  /*
-    A new set of lyrics starts at the top rather than wherever the last one was.
-
-    Keyed on the timed text alone. It used to watch the plain text as well,
-    which is not rendered at all when there are timings — and that field
-    arrives a moment after the timed one does, so this ran a second time just
-    after the lines had been measured and threw every measurement away. Nothing
-    refills them: a layout that has not changed does not call back, so the
-    words stopped following for the rest of the song.
-  */
-  useEffect(() => {
-    shown.current = -1;
-    scroll.current?.scrollTo({ y: 0, animated: false });
-  }, [synced]);
 
   /*
     A translation appearing or going puts a second row under every line, so
@@ -219,7 +241,7 @@ export function LyricsView({
 
   if (lines.length === 0) {
     return (
-      <ScrollView style={{ height }} contentContainerStyle={styles.plainBody}>
+      <ScrollView ref={scroll} style={{ height }} contentContainerStyle={styles.plainBody}>
         {aside ? <Text style={styles.aside}>{aside}</Text> : null}
         {plainLines.map((line, index) => (
           <View key={index}>

@@ -79,7 +79,7 @@ export const welcome: Strings['welcome'] = {
 
   tips: {
     library:
-      'Mantenha uma música pressionada para abrir o menu: adicione a uma lista, edite os detalhes ou jogue com ela no piano tiles. Arraste uma música para a direita para tocá-la a seguir, ou para a esquerda para adicioná-la à fila.',
+      'Mantenha uma música pressionada e um anel se abre sob o seu dedo: deslize até uma fatia e solte. Solte sem mover para abrir o menu completo, com o piano tiles. Arraste uma música para a direita para tocá-la a seguir, ou para a esquerda para adicioná-la à fila.',
     player:
       'Abaixo dos controles, o botão de letra mostra a letra enquanto a música toca, e, com ela aberta, o botão que aparece ao lado a traduz. A engrenagem reúne velocidade e tom, efeitos e o timer para dormir.',
     discover:

@@ -1,7 +1,6 @@
 package expo.modules.jukeboxaudio.downloads
 
 import android.content.Context
-import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import org.json.JSONObject
@@ -98,7 +97,11 @@ object YouTubeEngine {
   private fun init(context: Context) {
     if (initialized) return
     YoutubeDL.init(context)
-    FFmpeg.getInstance().init(context)
+    // FFmpeg is the app's own now, two programs among its native libraries that
+    // need nothing unpacked (build.gradle, `buildFfmpeg`). The library's used to
+    // be unpacked here, a hundred-odd megabytes of it, which an older version
+    // left behind and nothing will read again.
+    File(context.noBackupFilesDir, "${YoutubeDL.baseName}/packages/ffmpeg").takeIf { it.exists() }?.deleteRecursively()
     Place(context).settle()
     cacheDirectory = File(context.cacheDir, "yt-dlp").absolutePath
     initialized = true

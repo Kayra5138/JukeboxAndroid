@@ -137,6 +137,10 @@ export const search: Strings['search'] = {
   downloadLabel: (title) => `İndir: ${title}`,
   download: { mp3: 'MP3 indir', original: 'Sesi indir' },
   adding: 'Ekleniyor…',
+  listen: 'Dinle',
+  listenLabel: (title) => `${title} şarkısını saklamadan dinle`,
+  readying: 'Hazırlanıyor…',
+  listenDrop: 'Saklama',
 
   addingPlaylist: 'Oynatma listesi ekleniyor…',
   downloadListed: {
@@ -163,6 +167,7 @@ export const search: Strings['search'] = {
     cancelled: 'İptal edildi',
     failed: 'İndirme başarısız',
     done: 'Kütüphanede',
+    listened: 'Çalmaya hazır, saklanmadı',
     missing: 'Dosya kaldırılmış',
   },
 

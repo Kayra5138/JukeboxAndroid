@@ -9,6 +9,7 @@ import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.MediaStoreLibrary
 import expo.modules.jukeboxaudio.QueueStore
 import expo.modules.jukeboxaudio.R
+import expo.modules.jukeboxaudio.TapePlace
 import expo.modules.jukeboxaudio.Tapes
 import expo.modules.jukeboxaudio.TapeStore
 
@@ -43,6 +44,19 @@ internal object BrowseTree {
   private const val TAPES = "tapes"
   /** How many of them the home tab offers: the ones being listened to, not a library of books. */
   private const val TAPES_ON_HOME = 3
+
+  /**
+   * Every tape, behind one tile on the home tab: the shows followed and the
+   * books, each a tile of its own, and the other folders and tapes beside
+   * them. On the home tab and not a tab of its own because a car shows four
+   * tabs and there are four already; a fifth would be one nobody can reach.
+   */
+  private const val TAPE_SHELF = "tapeshelf"
+  private const val FOLLOWING = "tapeshelf/following"
+  private const val BOOKS = "tapeshelf/books"
+
+  /** One show, book or folder of tapes, by its folder's key: see [TapeShelves.Series]. */
+  private const val SERIES = "series/"
 
   /**
    * One record, one list, and the answer to one search: `album/key`, `list/7`,
@@ -146,7 +160,7 @@ internal object BrowseTree {
    * changed, so these are what it has to be sent back to when the language
    * does. The root is first because the tabs' names are its children.
    */
-  val SPOKEN: List<String> = listOf(ROOT, HOME, TRACKS, ALBUMS, LISTS) +
+  val SPOKEN: List<String> = listOf(ROOT, HOME, TRACKS, ALBUMS, LISTS, TAPE_SHELF) +
     listOf(TRACKS, ALBUMS, LISTS).map { "$it$SORT" }
 
   /** The children of [parentId], or an empty list for an id with none. */
@@ -170,7 +184,7 @@ internal object BrowseTree {
       val entries = entriesOf(context, root, whole)
       if (entries != null) {
         return slices(entries).getOrNull(part)
-          ?.map { playable(context, it, parentId) }
+          ?.let { rows(context, parentId, it, tapes = isTapeNode(whole)) }
           .orEmpty()
       }
     }
@@ -223,7 +237,10 @@ internal object BrowseTree {
         would play, so the row looks like the music and not like a toolbar.
       */
       parentId == HOME -> buildList {
-        val everything = tracks(context, root)
+        // One reading of the library for both: the songs, and the tapes kept out of them.
+        val library = tracks(context, root, tapes = true)
+        val tapes = library.filter { Tapes.isTapeFolder(it.folder ?: "", root) }
+        val everything = library.filter { !Tapes.isTapeFolder(it.folder ?: "", root) }
         val recent = inOrderOf(everything, LibraryDatabase.recentlyPlayed(context, ON_HOME))
 
         val last = runCatching { QueueStore.load(context) }.getOrNull()
@@ -254,8 +271,21 @@ internal object BrowseTree {
           ))
         }
 
-        // The books and shows part way through, the latest first, before the songs: carried on with from here.
-        tapesBegun(context, root).take(TAPES_ON_HOME).forEach { add(playable(context, it, TAPES)) }
+        /*
+          Every tape behind one tile, and straight after it the books and
+          shows part way through, the latest first, each saying how much of
+          it is left: carried on with from here, before the songs. Neither
+          where the library has no tapes at all.
+        */
+        if (tapes.isNotEmpty()) {
+          val places = TapeStore.all(context)
+          val begun = tapesBegun(tapes, places)
+          add(browsable(
+            context, TAPE_SHELF, words.getString(R.string.jukebox_auto_tapes),
+            cover = (begun.firstOrNull() ?: tapes.first()).id
+          ))
+          begun.take(TAPES_ON_HOME).forEach { add(playable(context, it, TAPES, line = tapeLine(context, it, places))) }
+        }
 
         recent.forEach { add(playable(context, it, RECENT)) }
 
@@ -267,10 +297,95 @@ internal object BrowseTree {
         }
       }
 
+      /*
+        The tapes, as the app's tapes view divides them: the shows followed
+        and the books, a tile each that opens them, then the other folders of
+        tapes, the one listened to last first, then the tapes on their own in
+        the view's order. Only the parts that have anything in them.
+      */
+      parentId == TAPE_SHELF -> buildList {
+        val places = TapeStore.all(context)
+        val shelves = shelves(context, root)
+        if (shelves.shows.isNotEmpty()) {
+          add(browsable(
+            context, FOLLOWING, words.getString(R.string.jukebox_auto_following),
+            cover = coverOf(lastHeard(shelves.shows, places).first(), places)
+          ))
+        }
+        if (shelves.books.isNotEmpty()) {
+          add(browsable(
+            context, BOOKS, words.getString(R.string.jukebox_auto_books),
+            cover = coverOf(lastHeard(shelves.books, places).first(), places)
+          ))
+        }
+        lastHeard(shelves.folders, places).forEach { add(seriesTile(context, it, places)) }
+        // As many as one answer carries: more loose tapes than that is a
+        // Tapes folder nobody is choosing from in a car.
+        TapeShelves.ordered(shelves.loose, places) { it.id }.take((MOST_IN_ONE_NODE - size).coerceAtLeast(0))
+          .forEach { add(playable(context, it, TAPE_SHELF, line = tapeLine(context, it, places))) }
+      }
+
+      parentId == FOLLOWING || parentId == BOOKS -> {
+        val places = TapeStore.all(context)
+        val shelves = shelves(context, root)
+        lastHeard(if (parentId == FOLLOWING) shelves.shows else shelves.books, places).map { seriesTile(context, it, places) }
+      }
+
       else -> entriesOf(context, root, parentId)
         ?.let { songs(context, parentId, it) }
         .orEmpty()
     }
+  }
+
+  /** Every tape in the library: the files in its Tapes folder, as [tracks] reads them. */
+  private fun tapeEntries(context: Context, root: String): List<Entry> =
+    tracks(context, root, tapes = true).filter { Tapes.isTapeFolder(it.folder ?: "", root) }
+
+  /** [tapes] divided as the app's tapes view divides them, the shows followed told by their folders. */
+  private fun shelves(context: Context, root: String, tapes: List<Entry> = tapeEntries(context, root)): TapeShelves.Shelves<Entry> {
+    val followed = LibraryDatabase.followed(context).associate { (folder, title) -> TapeShelves.followedKey(root, folder) to title }
+    return TapeShelves.divide(tapes, followed, { it.folder }, { it.filename ?: it.title })
+  }
+
+  /** [series] with the one listened to last first, and those never listened to by name. */
+  private fun lastHeard(series: List<TapeShelves.Series<Entry>>, places: Map<String, TapePlace>): List<TapeShelves.Series<Entry>> =
+    series.sortedWith(
+      compareByDescending<TapeShelves.Series<Entry>> { TapeShelves.heardAt(it, places) { tape -> tape.id } }
+        .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
+    )
+
+  /** A show, a book or a folder of tapes, as a tile that opens it, saying how many there are in it. */
+  private fun seriesTile(context: Context, series: TapeShelves.Series<Entry>, places: Map<String, TapePlace>): MediaItem =
+    browsable(
+      context, "$SERIES${series.key}", series.name,
+      subtitle = Localised.count(
+        context,
+        if (series.kind == TapeShelves.Kind.BOOK) R.plurals.jukebox_count_parts else R.plurals.jukebox_count_episodes,
+        series.tapes.size
+      ),
+      cover = coverOf(series, places)
+    )
+
+  /** The tape whose picture stands for a series: the one being listened to, or a show's newest, or a book's first part. */
+  private fun coverOf(series: TapeShelves.Series<Entry>, places: Map<String, TapePlace>): String? =
+    (series.tapes.filter { TapeShelves.begun(places[it.id]) }.maxByOrNull { places[it.id]?.at ?: 0L }
+      ?: if (series.kind == TapeShelves.Kind.SHOW) series.tapes.lastOrNull() else series.tapes.firstOrNull())?.id
+
+  /** Whether the rows under [parentId] are tapes, and say how far in each is. */
+  private fun isTapeNode(parentId: String): Boolean =
+    parentId == TAPES || parentId == TAPE_SHELF || parentId.startsWith(SERIES)
+
+  /**
+   * What a tape's row says in place of who it is by: how many minutes are
+   * left of one part way through, and that one heard to the end was played.
+   * Nothing for one not begun, which is said to be by whoever it is by.
+   */
+  private fun tapeLine(context: Context, entry: Entry, places: Map<String, TapePlace>): String? {
+    val place = places[entry.id] ?: return null
+    if (place.finished) return Localised.text(context, R.string.jukebox_auto_tape_played)
+    if (!TapeShelves.begun(place)) return null
+    val minutes = TapeShelves.minutesLeft(place, (entry.durationSec * 1000).toLong()) ?: return null
+    return Localised.text(context, R.string.jukebox_auto_tape_left, minutes)
   }
 
   /**
@@ -363,20 +478,25 @@ internal object BrowseTree {
     }
   }
 
-  /** The tapes part way through and not yet heard, the one listened to last first. */
-  private fun tapesBegun(context: Context, root: String): List<Entry> {
-    val places = TapeStore.all(context)
-    return tracks(context, root, tapes = true)
-      .filter { Tapes.isTapeFolder(it.folder ?: "", root) }
-      .mapNotNull { entry -> places[entry.id]?.takeIf { !it.finished && it.positionMs >= 10_000 }?.let { entry to it.at } }
+  /** Of [tapes], the ones part way through and not yet heard, the one listened to last first. */
+  private fun tapesBegun(tapes: List<Entry>, places: Map<String, TapePlace>): List<Entry> =
+    tapes
+      .mapNotNull { entry -> places[entry.id]?.takeIf { TapeShelves.begun(it) }?.let { entry to it.at } }
       .sortedByDescending { it.second }
       .map { it.first }
-  }
 
-  /** The songs that answer [query], best first. */
+  /**
+   * The songs and tapes that answer [query], best first. A tape is found by
+   * the name of its show or book as well as its own, so that asking for a
+   * show by name finds its episodes.
+   */
   private fun found(context: Context, root: String, query: String): List<Entry> =
-    tracks(context, root)
-      .mapNotNull { entry -> searchRank(query, entry.title, listOf(entry.artist, entry.album))?.let { it to entry } }
+    tracks(context, root, tapes = true)
+      .mapNotNull { entry ->
+        val series = entry.folder?.takeIf { Tapes.isTapeFolder(it, root) }?.trim('/')?.substringAfterLast('/')
+          ?.takeIf { !Tapes.isTapesFolderName(it) }
+        searchRank(query, entry.title, listOf(entry.artist, entry.album, series))?.let { it to entry }
+      }
       .sortedWith(compareBy({ it.first }, { folded(it.second.title) }))
       .take(FOUND)
       .map { it.second }
@@ -401,7 +521,14 @@ internal object BrowseTree {
     // The history knows ids and when they were heard; what those ids are is
     // still the library's to say, and a track played once and deleted since
     // simply falls out of the shelf.
-    parentId == TAPES -> tapesBegun(context, root)
+    parentId == TAPES -> tapesBegun(tapeEntries(context, root), TapeStore.all(context))
+
+    // A show, a book or a folder of tapes: the ones part way through first, then the rest as it is listed.
+    parentId.startsWith(SERIES) -> {
+      val key = parentId.removePrefix(SERIES)
+      shelves(context, root).series.firstOrNull { it.key == key }
+        ?.let { series -> TapeShelves.listed(series, TapeStore.all(context)) { it.id } }
+    }
 
     parentId == RECENT -> inOrderOf(
       tracks(context, root), LibraryDatabase.recentlyPlayed(context, SHELF)
@@ -425,7 +552,7 @@ internal object BrowseTree {
   /** Songs as they should be offered: whole if it fits, in named parts if not. */
   private fun songs(context: Context, parentId: String, entries: List<Entry>): List<MediaItem> {
     val parts = slices(entries)
-    if (parts.size <= 1) return entries.map { playable(context, it, parentId) }
+    if (parts.size <= 1) return rows(context, parentId, entries, tapes = isTapeNode(parentId))
 
     return parts.mapIndexed { index, part ->
       browsable(
@@ -438,6 +565,12 @@ internal object BrowseTree {
         cover = part.firstOrNull()?.id
       )
     }
+  }
+
+  /** [entries] as rows under [parentId]; [tapes] for rows that say how far in each tape is. */
+  private fun rows(context: Context, parentId: String, entries: List<Entry>, tapes: Boolean): List<MediaItem> {
+    val places = if (tapes) TapeStore.all(context) else null
+    return entries.map { playable(context, it, parentId, line = places?.let { known -> tapeLine(context, it, known) }) }
   }
 
   /**
@@ -498,19 +631,23 @@ internal object BrowseTree {
     val parent = body.substring(0, separator)
     val trackId = body.substring(separator + 1)
 
-    // A tape carried on with plays with the rest of its book or show after it, in their order, from where it was left.
-    if (parent == TAPES) {
-      val root = LibraryDatabase.libraryRoot(context)
-      val all = tracks(context, root, tapes = true)
-      val chosen = all.firstOrNull { it.id == trackId } ?: return emptyList<MediaItem>() to 0
-      val parts = all.filter { it.folder == chosen.folder }
-        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.filename ?: it.title })
-      return parts.map { playable(context, it, TAPES) } to parts.indexOfFirst { it.id == trackId }.coerceAtLeast(0)
-    }
+    // A tape plays with the rest of its book or show after it, in their order, from where it was left.
+    if (isTapeNode(parent.substringBeforeLast(PART))) return tapeQueue(context, trackId, parent)
 
     val siblings = children(context, parent)
     val index = siblings.indexOfFirst { it.mediaId == mediaId }
-    if (index >= 0) return siblings to index
+    if (index >= 0) {
+      if (!parent.startsWith(SEARCH)) return siblings to index
+      // A tape found by a search plays as it would from the tapes, and a song
+      // found plays with the other songs found, not with the tapes among them.
+      val root = LibraryDatabase.libraryRoot(context)
+      val tape = { item: MediaItem -> Tapes.isTapeFolder(item.mediaMetadata.extras?.getString("jukebox.folder") ?: "", root) }
+      if (tape(siblings[index])) {
+        return tapeQueue(context, trackId, parent).takeIf { it.first.isNotEmpty() } ?: (listOf(siblings[index]) to 0)
+      }
+      val songs = siblings.filterNot(tape)
+      return songs to songs.indexOfFirst { it.mediaId == mediaId }.coerceAtLeast(0)
+    }
 
     // The list it came from has changed underneath the head unit — a track
     // removed, a folder repointed. Playing the one thing that was asked for is
@@ -519,6 +656,28 @@ internal object BrowseTree {
       .firstOrNull { it.id == trackId }
       ?.let { playable(context, it, parent) }
     return listOfNotNull(single) to 0
+  }
+
+  /**
+   * The id that carries on with the tape [trackId], as the home tab's rows
+   * of tapes part way through do: for the widget, which offers the last one
+   * listened to.
+   */
+  fun tapeToContinue(trackId: String): String = "$PLAYABLE$TAPES|$trackId"
+
+  /**
+   * What playing the tape [trackId] plays: the rest of its show, book or
+   * folder of tapes with it, in their order, from it — or the tape alone,
+   * where it is nothing's part. Rows under [parent], which is where it was
+   * chosen. Nothing where it is not a tape.
+   */
+  private fun tapeQueue(context: Context, trackId: String, parent: String): Pair<List<MediaItem>, Int> {
+    val root = LibraryDatabase.libraryRoot(context)
+    val tapes = tapeEntries(context, root)
+    val chosen = tapes.firstOrNull { it.id == trackId } ?: return emptyList<MediaItem>() to 0
+    val parts = shelves(context, root, tapes).series.firstOrNull { series -> series.tapes.any { it.id == trackId } }?.tapes
+      ?: listOf(chosen)
+    return parts.map { playable(context, it, parent) } to parts.indexOfFirst { it.id == trackId }.coerceAtLeast(0)
   }
 
   private data class Entry(
@@ -723,11 +882,17 @@ internal object BrowseTree {
     putInt(PLAYABLE_STYLE, TILE)
   }
 
+  /**
+   * A song or a tape as a row. [line] is said under it in place of who it
+   * is by: for a tape in a car's list, how far in it is. Never on what goes
+   * into the queue, where it would be taken for the artist.
+   */
   private fun playable(
     context: Context,
     entry: Entry,
     parent: String,
-    group: String? = null
+    group: String? = null,
+    line: String? = null
   ): MediaItem {
     /*
       The same extras the app's own queue entries carry. A media item's local
@@ -760,7 +925,7 @@ internal object BrowseTree {
           // Said as unknown rather than left out: a car showed nothing under
           // the title, which reads as something gone wrong, and a screen in
           // a car is read at a glance or aloud.
-          .setArtist(entry.artist ?: Localised.text(context, R.string.jukebox_unknown_artist))
+          .setArtist(line ?: entry.artist ?: Localised.text(context, R.string.jukebox_unknown_artist))
           .setAlbumTitle(entry.album)
           .setIsBrowsable(false)
           .setIsPlayable(true)

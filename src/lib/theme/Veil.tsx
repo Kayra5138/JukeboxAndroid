@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { requireNativeViewManager } from 'expo-modules-core';
+import { Platform, StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 
 import { withAlpha } from './colour.ts';
 import { effectsOf, veilOf } from './effects.ts';
@@ -33,8 +34,24 @@ import { createStore } from '../ui/store.ts';
  * that counts and is not listened to.
  */
 
-/** Android drew nothing out of focus before 12; there, a veil is not drawn and the scrim does more. */
-const CAN_BLUR = Platform.OS !== 'android' || Number(Platform.Version) >= 31;
+/**
+ * Whether what is under glass can go out of focus: on every Android the app
+ * runs on, 10 and 11 by a way of their own (see `VeilView.kt`). Where it
+ * cannot, a veil is not drawn and the scrim does more.
+ */
+const CAN_BLUR = Platform.OS !== 'android' || Number(Platform.Version) >= 29;
+
+/** Out of focus, and set back where [dim] says, as React Native's `filter` did from Android 12 only: see `VeilView.kt`. */
+const NativeVeil = requireNativeViewManager<ViewProps & { blur: number; dim: number }>('JukeboxAudio', 'VeilView');
+
+/**
+ * A view whose contents go out of focus by [blur] points, and keep [dim] of
+ * their light; a plain view at nought and one. Never folded away, being a
+ * view of the app's own, so it can be given a blur where it stands.
+ */
+export function Veiled({ blur = 0, dim = 1, ...rest }: ViewProps & { blur?: number; dim?: number }) {
+  return <NativeVeil {...rest} blur={blur} dim={dim} />;
+}
 
 /**
  * How far, in pixels, what a page of glass is opened over goes out of focus,
@@ -74,30 +91,23 @@ export function glassPage(c: Palette): ViewStyle {
   return made;
 }
 
-/** The style that puts what a screen of glass is over out of focus, or null where the theme is not glass. */
-export function underGlass(c: Palette): ViewStyle | null {
-  return glassOf(c) > 0 ? veils(Math.min(glassOf(c), OUT_OF_FOCUS)) : null;
+/** How far what a screen of glass is over goes out of focus, for a `Veiled` round it: nought where the theme is not glass. */
+export function underGlass(c: Palette): number {
+  return glassOf(c) > 0 ? Math.min(glassOf(c), OUT_OF_FOCUS) : 0;
 }
 
 /** How much of its light what is under a screen of glass keeps, where it is also set back. */
 const SET_BACK = 0.72;
 
-const BACKS = new Map<number, ViewStyle>();
-
 /**
  * The same, and set back as well: out of focus and with some of its light
  * taken, which is how a thing further off looks. For a screen that is to
- * read as standing in front of the one below and not merely over it.
+ * read as standing in front of the one below and not merely over it. For a
+ * `Veiled`; nothing where the theme is not glass.
  */
-export function setBack(c: Palette): ViewStyle | null {
-  if (glassOf(c) <= 0) return null;
-  const radius = Math.min(glassOf(c), OUT_OF_FOCUS);
-  let made = BACKS.get(radius);
-  if (!made) {
-    made = { filter: [{ blur: radius }, { brightness: SET_BACK }] };
-    BACKS.set(radius, made);
-  }
-  return made;
+export function setBack(c: Palette): { blur: number; dim: number } {
+  if (glassOf(c) <= 0) return { blur: 0, dim: 1 };
+  return { blur: Math.min(glassOf(c), OUT_OF_FOCUS), dim: SET_BACK };
 }
 
 /** How many sheets in windows of their own are open. */
@@ -174,12 +184,9 @@ export function Behind({
     a window of its own is a window of its own and is not affected.
   */
   return (
-    <View
-      collapsable={false}
-      style={radius > 0 ? [style, veils(radius)] : style}
-      importantForAccessibility={veiled ? 'no-hide-descendants' : 'auto'}>
+    <Veiled blur={radius} style={style} importantForAccessibility={veiled ? 'no-hide-descendants' : 'auto'}>
       {children}
-    </View>
+    </Veiled>
   );
 }
 
@@ -193,17 +200,6 @@ export function WindowBehind({ children }: { children: ReactNode }) {
   );
 }
 
-const VEILS = new Map<number, ViewStyle>();
-
-/** One style a radius, so that a veil that stays up is not a new style each time anything is drawn. */
-function veils(radius: number): ViewStyle {
-  let made = VEILS.get(radius);
-  if (!made) {
-    made = { filter: [{ blur: radius }] };
-    VEILS.set(radius, made);
-  }
-  return made;
-}
 
 const SCRIMS = new WeakMap<Palette, string>();
 

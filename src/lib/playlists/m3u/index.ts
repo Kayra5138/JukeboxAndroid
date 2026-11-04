@@ -12,7 +12,8 @@ import {
 } from '../../db/playlists.ts';
 import { trackIdsWithTag } from '../../db/tags.ts';
 import { libraryRoot, scanEverything } from '../../media/library.ts';
-import { withMetadata } from '../../media/merge.ts';
+import { withMetadata, type EnrichedTrack } from '../../media/merge.ts';
+import { smartListTracks } from '../../lists/smartLive.ts';
 import { readings } from './decode.ts';
 import { foundCount, indexLibrary, matchEntries, type EntryResult, type ListTrack } from './match.ts';
 import { listsNative, type PickedListFile } from './native.ts';
@@ -52,8 +53,8 @@ export function setPathStyle(style: PathStyle): void {
 }
 
 type Library = {
-  tracks: (ListTrack & WrittenTrack)[];
-  byId: Map<string, ListTrack & WrittenTrack>;
+  tracks: (EnrichedTrack & ListTrack & WrittenTrack)[];
+  byId: Map<string, EnrichedTrack & ListTrack & WrittenTrack>;
 };
 
 /**
@@ -214,7 +215,8 @@ export type ListSource = { kind: 'list'; id: number } | { kind: 'auto'; id: Auto
 
 /**
  * What a list holds, by id, in its order: what was put in it, or what
- * carries its tag in the library's order, or what an auto list finds today.
+ * carries its tag in the library's order, or what a smart list's rules or an
+ * auto list find today.
  * Members that are hidden from the library are in it: they are files, and
  * the list has them.
  */
@@ -222,6 +224,9 @@ function memberIds(source: ListSource, library: Library): { name: string; ids: s
   if (source.kind === 'auto') return { name: source.name, ids: autoListTrackIds(source.id, Date.now()) };
   const details = playlist(source.id);
   if (!details) return null;
+  if (details.kind === 'smart') {
+    return { name: details.name, ids: smartListTracks(library.tracks, details.rules).map((track) => track.id) };
+  }
   if (details.tag) {
     const tagged = new Set(trackIdsWithTag(details.tag));
     return { name: details.name, ids: library.tracks.filter((track) => tagged.has(track.id)).map((track) => track.id) };

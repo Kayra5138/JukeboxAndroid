@@ -82,10 +82,50 @@ const MINIFY = 'android.enableMinifyInReleaseBuilds';
 const JVM_ARGS = 'org.gradle.jvmargs';
 const JVM_ARGS_VALUE = '-Xmx4096m -XX:MaxMetaspaceSize=1024m';
 
+/**
+ * Jukebox offered for any sound file: opened from Files, from a chat's
+ * attachment, from a download, and shared to it from another app, one file or
+ * several. What arrives is played (see `OpenedAudio.kt` and
+ * `player/OpenedAudio.tsx`). Added to the main activity once, should the
+ * plugin run again over a manifest that has them.
+ */
+const OPEN_WITH_MIME = ['audio/*', 'application/ogg', 'application/x-flac'];
+
+function withOpenWith(manifest) {
+  const application = manifest.manifest.application[0];
+  const activity = (application.activity ?? []).find((one) => one.$['android:name'] === '.MainActivity');
+  if (!activity) return;
+  const filters = activity['intent-filter'] ?? [];
+  // Ours are the ones that take sound files: told apart by that, with nothing added to them that a person would see.
+  const ours = (filter) => (filter.data ?? []).some((one) => one.$?.['android:mimeType'] === 'audio/*');
+  const kept = filters.filter((filter) => !ours(filter));
+  const data = (schemes) =>
+    OPEN_WITH_MIME.flatMap((mime) =>
+      schemes.length ? schemes.map((scheme) => ({ $: { 'android:scheme': scheme, 'android:mimeType': mime } })) : [{ $: { 'android:mimeType': mime } }]
+    );
+  kept.push(
+    {
+      action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
+      category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
+      data: data(['content', 'file']),
+    },
+    {
+      action: [
+        { $: { 'android:name': 'android.intent.action.SEND' } },
+        { $: { 'android:name': 'android.intent.action.SEND_MULTIPLE' } },
+      ],
+      category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
+      data: data([]),
+    }
+  );
+  activity['intent-filter'] = kept;
+}
+
 module.exports = function withJukeboxMinSdk(config) {
   config = withWindowBehindTheSplash(config);
   config = withAndroidManifest(config, (mod) => {
     mod.modResults.manifest.application[0].$['android:extractNativeLibs'] = 'true';
+    withOpenWith(mod.modResults);
     return mod;
   });
   return withGradleProperties(config, (mod) => {

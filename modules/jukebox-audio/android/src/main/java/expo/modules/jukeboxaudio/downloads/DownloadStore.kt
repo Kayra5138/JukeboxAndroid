@@ -192,6 +192,11 @@ object DownloadStore {
   fun enqueue(context: Context, video: JSONObject, format: String, folder: String, discoverKey: String? = null): String =
     kept { queue.enqueue(video, format, folder, discoverKey) { exists(context, it) } }
 
+  /** A video to listen to without keeping it: see [DownloadQueue.listen]. */
+  @Synchronized
+  fun listen(context: Context, video: JSONObject, format: String, folder: String): String =
+    kept { queue.listen(video, format, folder) { exists(context, it) } }
+
   @Synchronized
   fun enqueueBatch(context: Context, videos: List<JSONObject>, format: String, folder: String): List<String> =
     kept { queue.enqueueBatch(videos, format, folder) { exists(context, it) } }

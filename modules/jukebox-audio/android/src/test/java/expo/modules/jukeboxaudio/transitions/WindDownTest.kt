@@ -94,6 +94,42 @@ class WindDownTest {
   }
 
   @Test
+  fun `comes back up over a moment when lifted part way down`() {
+    windDown.over(0, 30_000)
+    now = 24_000
+    assertEquals(0.2f, windDown.gain(), 0.001f)
+    // A shake: lifted, and the ramp booked again ten minutes on.
+    windDown.lift(2_000)
+    windDown.over(600_000, 630_000)
+    assertEquals(0.2f, windDown.gain(), 0.001f)
+    assertTrue(windDown.begun())
+    now = 25_000
+    assertEquals(0.6f, windDown.gain(), 0.001f)
+    now = 26_000
+    assertEquals(1f, windDown.gain(), 0f)
+    assertFalse(windDown.begun())
+    // And down again at the new end.
+    now = 615_000
+    assertEquals(0.5f, windDown.gain(), 0.001f)
+  }
+
+  @Test
+  fun `a lift with nothing turned down changes nothing`() {
+    windDown.over(60_000, 90_000)
+    now = 1_000
+    windDown.lift(2_000)
+    assertEquals(1f, windDown.gain(), 0f)
+    assertFalse(windDown.begun())
+  }
+
+  @Test
+  fun `the way up is a straight line`() {
+    assertEquals(0.2f, liftGain(0.2f, 1_000, 3_000, 500), 0f)
+    assertEquals(0.6f, liftGain(0.2f, 1_000, 3_000, 2_000), 0.001f)
+    assertEquals(1f, liftGain(0.2f, 1_000, 3_000, 3_000), 0f)
+  }
+
+  @Test
   fun `keeps the fader awake only once it has begun`() {
     windDown.over(60_000, 90_000)
     now = 1_000

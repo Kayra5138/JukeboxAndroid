@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Pressable } from '../Pressable';
+import { CrossIcon, MinusIcon, PlayOutlineIcon, PlusIcon } from '../Icons';
+import { MenuEntry, MenuHeader } from '../MenuSheet';
 import { Sheet } from './Sheet';
 import { whyLines } from './show';
 import { useDiscoverActions, useDiscoverEntry, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, usePressed } from '../../lib/theme/index';
+import { makeStyles } from '../../lib/theme/index';
 import { haptic, type Feel } from '../../lib/ui/haptics';
 
 /**
@@ -41,7 +42,6 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
   const { play, keep, exclude, excludeArtist } = useDiscoverActions();
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.discover.menu;
   const { id } = entry;
   const bad = entry.state === 'failed';
@@ -53,48 +53,36 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
 
   return (
     <>
-      <View style={styles.header}>
-        <Text style={styles.title} numberOfLines={2}>
-          {entry.title}
-        </Text>
-        <Text style={styles.artist} numberOfLines={1}>
-          {entry.artist}
-        </Text>
-        {/* The state in full: the row said it with a mark. */}
-        <Text accessibilityRole={bad ? 'alert' : undefined} style={bad ? styles.stateBad : styles.state}>
-          {entry.said}
-        </Text>
-      </View>
+      <MenuHeader
+        title={entry.title}
+        detail={entry.artist}
+        picture={entry.coverUrl ?? null}
+        under={
+          // The state in full: the row said it with a mark.
+          <Text accessibilityRole={bad ? 'alert' : undefined} style={bad ? styles.stateBad : styles.state}>
+            {entry.said}
+          </Text>
+        }
+      />
 
       {entry.canPlay ? (
         <>
-          <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.action} onPress={then(play)}>
-            <Text style={styles.label}>{said.play.label}</Text>
-            <Text style={styles.hint}>{said.play.hint}</Text>
-          </Pressable>
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
+          <MenuEntry icon={PlayOutlineIcon} label={said.play.label} hint={said.play.hint} onPress={then(play)} />
+          <MenuEntry
+            icon={PlusIcon}
+            label={entry.keeping ? t.discover.row.keeping : said.keep.label}
+            hint={said.keep.hint}
             disabled={entry.keeping}
-            style={[styles.action, entry.keeping && styles.off]}
-            onPress={then(keep, 'confirm')}>
-            <Text style={styles.label}>{said.keep.label}</Text>
-            <Text style={styles.hint}>{entry.keeping ? t.discover.row.keeping : said.keep.hint}</Text>
-          </Pressable>
-          <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.action} onPress={then(exclude, 'reject')}>
-            <Text style={styles.label}>{said.exclude.label}</Text>
-            <Text style={styles.hint}>{said.exclude.hint}</Text>
-          </Pressable>
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            style={styles.action}
-            onPress={then(excludeArtist, 'reject')}>
-            <Text style={styles.destructive} numberOfLines={1}>
-              {said.neverArtist.label(entry.artist)}
-            </Text>
-            <Text style={styles.hint}>{said.neverArtist.hint}</Text>
-          </Pressable>
+            onPress={then(keep, 'confirm')}
+          />
+          <MenuEntry icon={MinusIcon} label={said.exclude.label} hint={said.exclude.hint} onPress={then(exclude, 'reject')} />
+          <MenuEntry
+            icon={CrossIcon}
+            label={said.neverArtist.label(entry.artist)}
+            hint={said.neverArtist.hint}
+            danger
+            onPress={then(excludeArtist, 'reject')}
+          />
         </>
       ) : null}
 
@@ -111,22 +99,8 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  header: {
-    gap: 3,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  title: { color: c.text, fontSize: 16, fontWeight: '600' },
-  artist: { color: c.textMuted, fontSize: 13 },
   state: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
   stateBad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
-  action: { paddingHorizontal: 20, paddingVertical: 13, gap: 2 },
-  off: { opacity: 0.45 },
-  label: { color: c.text, fontSize: 15 },
-  destructive: { color: c.danger, fontSize: 15 },
-  hint: { color: c.textFaint, fontSize: 12 },
   why: {
     gap: 4,
     marginTop: 8,

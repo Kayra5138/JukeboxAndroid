@@ -2,7 +2,7 @@ import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../../comp
 import { SearchField } from '../../components/SearchField';
 import { usePageSides, WithNowPlaying } from '../../components/NowPlayingBar';
 import { BarsOver, topGlass, useLaidOver, useUnderBars } from '../../components/UnderBars';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { DiscoverPanel } from '../../components/DiscoverPanel';
 import { QueueLink } from '../../components/downloads/QueueLink';
 import { useLocalSearchParams, useFocusEffect, useIsFocused } from 'expo-router';
@@ -24,6 +24,7 @@ import { useLibraryTracks } from '../../lib/library/useLibrary';
 import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
 import { useBack } from '../../lib/ui/back';
 import { haptic } from '../../lib/ui/haptics';
+import { listening, listenTo } from '../../lib/listen/index';
 
 const cache = new Map<string, { at: number; videos: YouTubeResult[] }>();
 
@@ -33,6 +34,9 @@ const lookUp = (playlist: boolean, text: string, id: string) =>
 
 export default function YouTubeScreen() {
   const { jobs, error, refresh, enqueue, enqueueBatch } = useDownloads();
+  const downloadJobs = jobs.filter((job) => !job.video.listen);
+  const listenJobs = jobs.filter((job) => job.video.listen === true);
+  const listeningTo = useSyncExternalStore(listening.subscribe, listening.get);
   const libraryTracks = useLibraryTracks();
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
@@ -156,6 +160,17 @@ export default function YouTubeScreen() {
   useBack(openedFrom != null && focused, () => {
     if (openedFrom) backTo(openedFrom);
   });
+
+  const listen = async (video: YouTubeVideo) => {
+    setMessage(null);
+    try {
+      await listenTo(video);
+      haptic('results', 'confirm');
+    } catch (failure) {
+      haptic('results', 'reject');
+      setMessage(youtubeError(failure, said.failed.queue, t));
+    }
+  };
 
   const add = async (video: YouTubeVideo, choice: AudioFormat = format) => {
     if (addingRef.current) return;
@@ -313,7 +328,10 @@ export default function YouTubeScreen() {
         </View> : null}
         renderItem={({ item }) => {
           const playlist = item.kind === 'playlist';
-          const job = playlist ? undefined : jobForVideo(jobs, item.id);
+          // A song listened to has a job of its own, which says nothing of whether it is in the library.
+          const job = playlist ? undefined : jobForVideo(downloadJobs, item.id);
+          const heard = playlist ? undefined : listenJobs.findLast((one) => one.video.id === item.id);
+          const readying = heard != null && (isActive(heard) || listeningTo?.jobId === heard.id);
           // In the library already, by a file that came some other way: see `owned.ts`.
           const have = !playlist && !job && owned.has(item.id);
           const locked = have || (job && (isActive(job) || job.status === 'done'));
@@ -345,11 +363,21 @@ export default function YouTubeScreen() {
             {thumbnail}
             <View style={styles.flex}>
               {named}
-              <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.downloadLabel(item.title)}
-                disabled={!!locked || adding !== null} style={[styles.downloadButton, locked && styles.disabled]}
-                onPress={() => void add(item)}>
-                <Text style={styles.link}>{adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : said.download[format]}</Text>
-              </Pressable>
+              <View style={styles.actions}>
+                {/* Heard at once, kept only if kept: see `lib/listen`. Not for one in the library already. */}
+                {have ? null : (
+                  <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.listenLabel(item.title)}
+                    disabled={readying} style={[styles.downloadButton, readying && styles.disabled]}
+                    onPress={() => void listen(item)}>
+                    <Text style={styles.link}>{readying ? (heard && heard.status === 'downloading' ? statusLabel(heard, t) : said.readying) : said.listen}</Text>
+                  </Pressable>
+                )}
+                <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.downloadLabel(item.title)}
+                  disabled={!!locked || adding !== null} style={[styles.downloadButton, locked && styles.disabled]}
+                  onPress={() => void add(item)}>
+                  <Text style={styles.link}>{adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : said.download[format]}</Text>
+                </Pressable>
+              </View>
             </View>
           </View>;
         }}
@@ -412,6 +440,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   thumbnail: { width: 112, height: 76, borderRadius: 8 },
   thumbnailEmpty: { backgroundColor: c.surfaceRaised },
   downloadButton: { alignSelf: 'flex-start', paddingVertical: 12, minHeight: 44 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
   empty: { paddingTop: 22, paddingBottom: 4, alignItems: 'center' },
   emptyText: { color: c.textFaint, fontSize: 13, lineHeight: 19, textAlign: 'center' },
   unavailable: { flex: 1, ...scene(c), padding: 24, justifyContent: 'center', gap: 10 },

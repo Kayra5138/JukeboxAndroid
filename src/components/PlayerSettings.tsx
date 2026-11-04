@@ -22,6 +22,9 @@ import {
   type SleepPreferences,
 } from '../lib/player/sleep';
 import { useSleepTimer } from '../lib/player/useSleepTimer';
+import { setShakeToExtend, shakeSupported, shakeToExtend } from '../lib/player/shake';
+import { TAPE_JUMP_RANGE } from '../lib/tapes/settings';
+import { NumberStepper } from './NumberStepper';
 import {
   formatSemitones,
   formatSpeed,
@@ -62,10 +65,16 @@ export function PlayerSettings({
   onClose,
   sleepOnly = false,
   tape = false,
+  jumps,
+  onJump,
 }: {
   visible: boolean;
   /** A tape is playing: the sleep timer speaks of a part, not of the music or a song. */
   tape?: boolean;
+  /** For a tape: the jumps of its book or show, and which of them are its own rather than the general ones. */
+  jumps?: { back: number; forward: number; ownBack: boolean; ownForward: boolean };
+  /** One of them given a figure of its own, or given back to the general one for null. */
+  onJump?: (which: 'back' | 'forward', seconds: number | null) => void;
   /** The sleep timer and nothing else: for a tape, whose player has a button of its own for it. */
   sleepOnly?: boolean;
   speed: number;
@@ -197,6 +206,43 @@ export function PlayerSettings({
           </>
           )}
         </View>
+
+        {/*
+          A tape's jumps, for its book or show, beside its speed, which is
+          kept the same way: a lecture wants a longer step back than a novel.
+          The general ones until changed here; `General` gives both back.
+        */}
+        {tape && jumps && onJump ? (
+          <>
+            <View style={styles.headingRow}>
+              <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.jumps.heading)}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t.player.settings.jumps.backToGeneral}
+                disabled={!jumps.ownBack && !jumps.ownForward}
+                hitSlop={12}
+                onPress={() => {
+                  haptic('results', 'confirm');
+                  onJump('back', null);
+                  onJump('forward', null);
+                }}>
+                <Text style={[styles.reset, !jumps.ownBack && !jumps.ownForward && styles.resetOff]}>{t.player.settings.jumps.general}</Text>
+              </Pressable>
+            </View>
+            {(['back', 'forward'] as const).map((which) => (
+              <View key={which} style={styles.switchRow}>
+                <Text style={[styles.rowTitle, styles.switchWords]}>{t.player.settings.jumps[which]}</Text>
+                <NumberStepper
+                  name={t.player.settings.jumps[which]}
+                  range={TAPE_JUMP_RANGE}
+                  value={jumps[which]}
+                  onChange={(seconds) => onJump(which, seconds)}
+                />
+              </View>
+            ))}
+            <Text style={styles.hint}>{t.player.settings.jumps.note}</Text>
+          </>
+        ) : null}
 
         {/*
           The choices worth making without leaving the song, in one row.
@@ -348,6 +394,7 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
   );
   const [asking, setAsking] = useState(false);
   const [refused, setRefused] = useState(false);
+  const [shake, setShake] = useState(shakeToExtend);
 
   const remember = (next: SleepPreferences) => {
     setPreferences(next);
@@ -462,6 +509,26 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
           {...switchColours(c, preferences.finishTrack)}
         />
       </View>
+
+      {/* Kept by the player, which listens for the shake, and in force at once on a timer already near its end. */}
+      {shakeSupported() ? (
+        <View style={styles.switchRow}>
+          <View style={styles.switchWords}>
+            <Text style={styles.rowTitle}>{t.player.sleepTimer.shake.title}</Text>
+            <Text style={styles.hint}>{t.player.sleepTimer.shake.note}</Text>
+          </View>
+          <Switch
+            accessibilityLabel={t.player.sleepTimer.shake.label}
+            value={shake}
+            disabled={!supported}
+            onValueChange={(on) => {
+              setShakeToExtend(on);
+              setShake(on);
+            }}
+            {...switchColours(c, shake)}
+          />
+        </View>
+      ) : null}
 
       <TextPrompt
         visible={asking}

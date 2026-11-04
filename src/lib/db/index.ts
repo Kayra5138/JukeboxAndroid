@@ -197,8 +197,14 @@ export const SETTINGS = {
   /** How far a tape's jump buttons go back and forward, in seconds: see `tapes/settings.ts`. */
   tapeBack: 'tapes:back',
   tapeForward: 'tapes:forward',
+  /** The jumps a book or a show was given of its own, by its folder, as `{ folder: { back, forward } }`: see `tapes/ownJumps.ts`. */
+  tapeOwnJumps: 'tapes:ownJumps',
   /** `'false'` when the episodes of followed podcasts may be fetched by themselves on mobile data too; on Wi‑Fi only otherwise. */
   podcastsWifiOnly: 'podcasts:wifiOnly',
+  /** How many days a song listened to from the Search tab and not kept stays: see `listen/`. Absent, a week. */
+  listenDays: 'listen:days',
+  /** The songs listened to and kept, by the song each became: see `listen/kept.ts`. */
+  listenKept: 'listen:kept',
   /** `'true'` once the marks of tapes deleted before marks went with them were taken away: see `tapes/marks.ts`. */
   marksSwept: 'tapes:marksSwept',
   /** The language books are searched in on Add tapes, by its two letters, or `all`: see `books/archive.ts`. Absent, the app's own. */
@@ -397,4 +403,30 @@ export const SETTINGS = {
    * first, since somebody exporting for their PC does it again.
    */
   listFilePaths: 'lists:filePaths',
+  /**
+   * Automatic backup: see `backup/auto.ts`. `'true'` while it is on; the
+   * address of the folder this phone was given to write them into; when the
+   * last was made, in milliseconds; and `'folder'` or `'failed'` where the
+   * last try came to nothing, empty after one that worked. All four are this
+   * phone's and stay behind in a backup (see `carried` in `backup/format.ts`):
+   * the folder is a grant made here and means nothing anywhere else.
+   */
+  backupAuto: 'backup:auto',
+  backupFolder: 'backup:folder',
+  backupLast: 'backup:last',
+  backupTrouble: 'backup:trouble',
+  /** How often one is made, `'daily'` or `'weekly'`, and how many are kept: `backup/due.ts`. Preferences, and travel. */
+  backupEvery: 'backup:every',
+  backupKeep: 'backup:keep',
+  /**
+   * `'true'` where songs the app downloaded itself are deleted by themselves
+   * once nobody has listened to them for a while; off otherwise. See
+   * `space/auto.ts`, which also reads the four after it: after how many months,
+   * whether Favorites and other lists are let go of too, and when it last looked.
+   */
+  spaceAutoDelete: 'space:autoDelete',
+  spaceAutoMonths: 'space:autoMonths',
+  spaceAutoFavorites: 'space:autoFavorites',
+  spaceAutoLists: 'space:autoLists',
+  spaceAutoLooked: 'space:autoLooked',
 } as const;

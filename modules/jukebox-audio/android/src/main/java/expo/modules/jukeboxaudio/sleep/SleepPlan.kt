@@ -91,3 +91,30 @@ fun sleepLength(askedMs: Long?): Long? {
   if (askedMs == null || askedMs < MIN_SLEEP_MS) return null
   return askedMs.coerceAtMost(MAX_SLEEP_MS)
 }
+
+/**
+ * How near the end a shake of the phone is listened for: the last few
+ * minutes, the half minute of the fade among them. Somebody still awake as
+ * the music begins to go quiet can ask for more without finding the phone,
+ * unlocking it and opening the app; earlier than this there is nothing yet
+ * to ask about, and the accelerometer is left alone.
+ */
+const val SHAKE_WINDOW_MS = 3 * 60_000L
+
+/** What a shake adds. */
+const val SHAKE_ADDS_MS = 10 * 60_000L
+
+/**
+ * How long from [nowMs] until a shake is listened for, for a timer due at
+ * [deadlineMs]: nought where it already is.
+ */
+fun shakeListenIn(deadlineMs: Long, nowMs: Long): Long =
+  (deadlineMs - SHAKE_WINDOW_MS - nowMs).coerceAtLeast(0L)
+
+/**
+ * The deadline after a shake: [SHAKE_ADDS_MS] past the one there was, or past
+ * now where that has already gone by — a timer that ran out and is letting
+ * the track finish. Held to a day from now, as a timer asked for is.
+ */
+fun extendedDeadline(deadlineMs: Long, nowMs: Long, addsMs: Long = SHAKE_ADDS_MS): Long =
+  minOf(maxOf(deadlineMs, nowMs) + addsMs, nowMs + MAX_SLEEP_MS)

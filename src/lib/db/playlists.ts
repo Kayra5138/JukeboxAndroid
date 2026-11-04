@@ -28,8 +28,20 @@ export type Playlist = {
    * somebody chose, which is the thing a tag can never express.
    */
   tag: string | null;
-  /** `favorites` for the list the heart fills, of which there is one and which cannot be deleted; null for any other. */
+  /**
+   * `favorites` for the list the heart fills, of which there is one and which
+   * cannot be deleted; `smart` for a list of rules (see [rules]); null for any
+   * other.
+   */
   kind: string | null;
+  /**
+   * A smart list's rules, as `lists/smart.ts` writes them, and null for every
+   * other list. Like a tag, they are a standing question: nothing is kept in
+   * `playlist_tracks` for a smart list, and its songs are worked out from the
+   * library and the history each time it is shown, so its stored count is
+   * nought and the screens count it themselves.
+   */
+  rules: string | null;
 };
 
 /**
@@ -49,6 +61,7 @@ export function playlists(): Playlist[] {
             p.cover_uri      AS coverUri,
             p.tag            AS tag,
             p.kind           AS kind,
+            p.rules          AS rules,
             /*
               Counted from whichever side holds the members. The tagged count
               can read a little high on a library that has lost files, since a
@@ -56,7 +69,8 @@ export function playlists(): Playlist[] {
               against the library when it is opened, which is where the number
               has to be right.
             */
-            CASE WHEN p.tag IS NULL
+            CASE WHEN p.kind = 'smart' THEN 0
+              WHEN p.tag IS NULL
               THEN (SELECT COUNT(*) FROM playlist_tracks t WHERE t.playlist_id = p.id)
               ELSE (SELECT COUNT(DISTINCT t.track_id) FROM track_tags t WHERE t.tag = p.tag)
             END AS trackCount
@@ -75,6 +89,7 @@ export function playlist(id: number): Playlist | null {
             p.cover_uri      AS coverUri,
             p.tag            AS tag,
             p.kind           AS kind,
+            p.rules          AS rules,
             /*
               Counted from whichever side holds the members. The tagged count
               can read a little high on a library that has lost files, since a
@@ -82,7 +97,8 @@ export function playlist(id: number): Playlist | null {
               against the library when it is opened, which is where the number
               has to be right.
             */
-            CASE WHEN p.tag IS NULL
+            CASE WHEN p.kind = 'smart' THEN 0
+              WHEN p.tag IS NULL
               THEN (SELECT COUNT(*) FROM playlist_tracks t WHERE t.playlist_id = p.id)
               ELSE (SELECT COUNT(DISTINCT t.track_id) FROM track_tags t WHERE t.tag = p.tag)
             END AS trackCount
@@ -104,6 +120,30 @@ export function createPlaylist(name: string, at: number, tag?: string): number {
     tag ?? null
   );
   return result.lastInsertRowId;
+}
+
+/** A smart list of [rules] (as `lists/smart.ts` writes them), under [name]. */
+export function createSmartList(name: string, rules: string, at: number): number {
+  const result = db().runSync(
+    `INSERT INTO playlists (name, created_at, updated_at, kind, rules) VALUES (?, ?, ?, 'smart', ?)`,
+    name.trim(),
+    Math.round(at),
+    Math.round(at),
+    rules
+  );
+  listsChanged();
+  return result.lastInsertRowId;
+}
+
+/** Gives smart list [id] new rules. A list of any other kind is left as it is. */
+export function setSmartRules(id: number, rules: string, at: number): void {
+  db().runSync(
+    `UPDATE playlists SET rules = ?, updated_at = ? WHERE id = ? AND kind = 'smart'`,
+    rules,
+    Math.round(at),
+    id
+  );
+  listsChanged();
 }
 
 export function renamePlaylist(id: number, name: string, at: number): void {
@@ -264,7 +304,8 @@ export function addToPlaylist(id: number, trackIds: string[], at: number): numbe
  * The list stays the same list -- its id, its name, a picture chosen for it
  * -- and only what is in it changes. A list that followed a tag stops
  * following it: what the file holds is an order somebody chose, which is the
- * one thing a tag list cannot be. A cover chosen from a track the list no
+ * one thing a tag list cannot be; a smart list stops being one, and its
+ * rules go, for the same reason. A cover chosen from a track the list no
  * longer holds is let go, as taking that track off by hand would.
  *
  * Each track once, as everywhere else: the caller has already taken out the
@@ -288,6 +329,8 @@ export function setPlaylistTracks(id: number, trackIds: string[], at: number): v
     database.runSync(
       `UPDATE playlists
        SET tag = NULL,
+           kind = CASE WHEN kind = 'smart' THEN NULL ELSE kind END,
+           rules = NULL,
            updated_at = ?,
            cover_track_id = CASE
              WHEN cover_track_id IN (SELECT track_id FROM playlist_tracks WHERE playlist_id = ?)

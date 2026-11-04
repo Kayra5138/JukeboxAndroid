@@ -51,4 +51,24 @@ export const backup: Strings['backup'] = {
   newer: 'Esse backup foi feito por uma versão mais nova do Jukebox. Atualize o app para lê-lo.',
   needsBuildToExport: 'Instale a versão atualizada para Android para exportar.',
   needsBuildToImport: 'Instale a versão atualizada para Android para importar.',
+
+  history: {
+    title: 'Importar histórico de reprodução',
+    note: 'Suas reproduções do Last.fm, Spotify ou ListenBrainz, a partir dos arquivos que eles deixam você baixar. Você vê o que foi encontrado e confirma antes de qualquer mudança.',
+    question: 'Importar estas reproduções?',
+    range: (from, to) => (from === to ? `Todas em ${from}.` : `De ${from} a ${to}.`),
+    matched: (matched, total) =>
+      `${format.number(matched)} de ${format.number(total)} ${oneOrMany(matched, 'é de uma música', 'são de músicas')} da sua biblioteca. As outras ficam guardadas com os próprios nomes e contam nas suas estatísticas do mesmo jeito.`,
+    short: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'reprodução dura', 'reproduções duram')} menos de meio minuto e ${oneOrMany(count, 'fica', 'ficam')} de fora.`,
+    already: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'reprodução já está', 'reproduções já estão')} no seu histórico e ${oneOrMany(count, 'fica', 'ficam')} de fora.`,
+    nothing: 'Todas as reproduções deles já estão no seu histórico ou são curtas demais para contar.',
+    added: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'reprodução adicionada', 'reproduções adicionadas')} ao seu histórico.`,
+    notHistory:
+      'Isso não é um histórico de reprodução que o Jukebox consiga ler. Escolha os arquivos que o Last.fm, o Spotify ou o ListenBrainz te deram: CSV ou JSON, ou o zip em que vieram.',
+    tooBig: 'Esse arquivo é grande demais para ser lido.',
+    failed: 'Não foi possível importar as reproduções. Nada foi alterado.',
+  },
 };

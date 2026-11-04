@@ -245,6 +245,11 @@ export function scrobbleStore(database: ScrobbleDb) {
      * What was left out before is offered again as well. The usual reason for
      * leaving a listen out is a track with no artist, and the usual reason for
      * asking a second time is having just given it one.
+     *
+     * Never a listen brought in from another app's history. It was heard
+     * there, and whoever kept it there -- Last.fm, Spotify, ListenBrainz
+     * itself -- is where it belongs; sent again from here it would be one
+     * listen counted twice, under this app's name.
      */
     queuePast(now: number): void {
       database.transaction(() => {
@@ -253,7 +258,7 @@ export function scrobbleStore(database: ScrobbleDb) {
           `INSERT INTO listenbrainz_listens (play_id, state, at)
            SELECT plays.id, 'past', ? FROM plays
            LEFT JOIN listenbrainz_listens known ON known.play_id = plays.id
-           WHERE known.play_id IS NULL`,
+           WHERE known.play_id IS NULL AND plays.source IS NULL`,
           Math.round(now)
         );
       });
@@ -327,7 +332,7 @@ export function scrobbleStore(database: ScrobbleDb) {
         database.all<{ found: number }>(
           `SELECT COUNT(*) AS found FROM plays
            LEFT JOIN listenbrainz_listens known ON known.play_id = plays.id
-           WHERE known.play_id IS NULL`
+           WHERE known.play_id IS NULL AND plays.source IS NULL`
         )[0]?.found ?? 0;
       return counts;
     },

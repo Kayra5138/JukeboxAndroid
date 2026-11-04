@@ -37,6 +37,7 @@
   <string name="jukebox_widget_up_next">待播</string>
   <string name="jukebox_widget_up_next_empty">没有待播歌曲</string>
   <string name="jukebox_widget_open">打开播放器</string>
+  <string name="jukebox_widget_continue">继续播放：%1$s</string>
 
   <string name="jukebox_playback_channel">正在播放</string>
 
@@ -76,6 +77,23 @@
   </plurals>
   <plurals name="jukebox_count_songs">
     <item quantity="other">%d 首歌曲</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">磁带</string>
+  <string name="jukebox_auto_following">关注中</string>
+  <string name="jukebox_auto_books">图书</string>
+  <string name="jukebox_auto_tape_left">剩余 %1$d 分钟</string>
+  <string name="jukebox_auto_tape_played">已听完</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="other">%d 集</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="other">%d 个部分</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="other">后退 %d 秒</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="other">前进 %d 秒</item>
   </plurals>
 
   <string name="jukebox_unknown_title">未知</string>
@@ -199,4 +217,5 @@
   <!-- %1$s is whatever the system said went wrong, which has no full stop. -->
   <string name="jukebox_tags_untouched_after">%1$s。文件未被改动。</string>
   <string name="jukebox_under_a_call">正在通话中，将以低音量播放。</string>
+  <string name="jukebox_sleep_extended">睡眠定时器：再延长 10 分钟</string>
 </resources>

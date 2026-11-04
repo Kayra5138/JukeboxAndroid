@@ -1,0 +1,98 @@
+import { format } from './format.ts';
+import type { Strings } from '../en/index.ts';
+import { oneOrMany } from '../write.ts';
+
+export const smart: Strings['smart'] = {
+  newList: 'Nuova lista intelligente',
+  sign: 'Lista intelligente',
+  detail: (count) => `${format.number(count)} ${oneOrMany(count, 'canzone', 'canzoni')} · intelligente`,
+  hint: 'Le canzoni che rispettano le sue regole, in questo momento',
+  editRules: 'Modifica regole',
+  empty: 'Al momento nessuna canzone rispetta queste regole. Modificale, oppure ascolta qualcosa e ricontrolla.',
+
+  editor: {
+    newTitle: 'Nuova lista intelligente',
+    editTitle: 'Modifica regole',
+    name: 'Nome',
+    namePlaceholder: 'Nome della lista',
+    match: 'Una canzone deve rispettare',
+    all: 'Tutte le regole',
+    any: 'Una regola qualsiasi',
+    rules: 'Regole',
+    noRules: 'Ancora nessuna regola, quindi ci sono tutte le canzoni.',
+    addRule: 'Aggiungi una regola',
+    removeRule: (at) => `Rimuovi la regola ${format.number(at)}`,
+    chooseField: 'Su cosa si basa la regola',
+    asksAbout: (field) => `Si basa su: ${field}`,
+    chooseTag: 'Scegli…',
+    tagSheet: 'Scegli un tag',
+    noTags: 'Ancora nessun tag.',
+    textPlaceholder: 'Scrivi un nome',
+    tagPlaceholder: 'Scrivi un tag',
+    valueOf: (field, op) => `${field} ${op}`,
+    fromOf: (field) => `${field}, da`,
+    toOf: (field) => `${field}, a`,
+    and: 'e',
+    limit: 'Quante',
+    limitOff: 'Tutte',
+    limitOn: 'Al massimo',
+    order: 'Ordina per',
+    matching: (count) => oneOrMany(count, '1 canzone corrisponde', `${format.number(count)} canzoni corrispondono`),
+    matchingKept: (count, kept) =>
+      `${format.number(count)} ${oneOrMany(count, 'canzone corrisponde', 'canzoni corrispondono')}; la lista ne tiene ${format.number(kept)}`,
+    save: 'Salva',
+    create: 'Crea',
+    problems: {
+      name: 'Dai un nome alla lista.',
+      text: 'Scrivi cosa cercare.',
+      value: 'Quel numero è fuori dall’intervallo.',
+      range: 'Il secondo numero è più piccolo del primo.',
+      rule: (at) => `La regola ${format.number(at)} non è completa.`,
+    },
+  },
+
+  fields: {
+    tag: 'Tag',
+    artist: 'Artista',
+    albumArtist: 'Artista dell’album',
+    album: 'Album',
+    genre: 'Genere',
+    title: 'Titolo',
+    year: 'Anno',
+    added: 'Aggiunta',
+    plays: 'Ascolti',
+    lastPlayed: 'Ultimo ascolto',
+    skips: 'Volte saltata',
+    length: 'Durata',
+  },
+
+  ops: {
+    is: 'è',
+    isNot: 'non è',
+    contains: 'contiene',
+    notContains: 'non contiene',
+    between: 'tra',
+    year: { more: 'dopo il', less: 'prima del' },
+    count: { more: 'più di', less: 'meno di' },
+    length: { more: 'più lunga di', less: 'più corta di' },
+    within: 'negli ultimi',
+    before: 'più di … fa',
+    never: 'mai',
+  },
+
+  units: {
+    days: (count) => `${format.number(count)} ${oneOrMany(count, 'giorno', 'giorni')}`,
+    minutes: (count) => `${format.number(count)} min`,
+    times: (count) => `${format.number(count)} ${oneOrMany(count, 'volta', 'volte')}`,
+    songs: (count) => `${format.number(count)} ${oneOrMany(count, 'canzone', 'canzoni')}`,
+  },
+
+  orders: {
+    random: 'Casuale',
+    mostPlayed: 'Più ascoltate',
+    leastPlayed: 'Meno ascoltate',
+    newest: 'Aggiunte di recente',
+    oldest: 'Aggiunte per prime',
+    title: 'Titolo',
+  },
+};

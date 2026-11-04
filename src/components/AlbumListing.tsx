@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { glassOf, glassPage } from '../lib/theme/Veil';
+import type { PressRingFor } from './PressMenu';
+import type { Track } from '../lib/types';
 import { Image } from './Picture';
 import { useIsFocused } from 'expo-router';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
@@ -66,6 +68,7 @@ export function AlbumListing({
   onPlay,
   onTap,
   onLongPress,
+  ring,
   onFindRest,
   onClosed,
 }: {
@@ -91,6 +94,8 @@ export function AlbumListing({
    * leaves the record open under it.
    */
   onLongPress?: (track: EnrichedTrack) => void;
+  /** The ring a row opens when held and slid from: see `PressMenu.tsx`. */
+  ring?: PressRingFor<Track>;
   /**
    * Asked for the tracks of this record that are not here. Goes to a screen of
    * its own, with the record left open under it to come back to.
@@ -300,6 +305,7 @@ export function AlbumListing({
               if (track) onLongPress(track);
             })
           }
+          ring={ring}
           header={
             <View style={{ paddingTop: top }}>
               <ListHeading

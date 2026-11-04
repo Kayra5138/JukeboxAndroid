@@ -1,0 +1,98 @@
+import { format } from './format.ts';
+import type { Strings } from '../en/index.ts';
+import { oneOrMany } from '../write.ts';
+
+export const smart: Strings['smart'] = {
+  newList: 'Nueva lista inteligente',
+  sign: 'Lista inteligente',
+  detail: (count) => `${format.number(count)} ${oneOrMany(count, 'canción', 'canciones')} · inteligente`,
+  hint: 'Las canciones que cumplen sus reglas ahora mismo',
+  editRules: 'Editar reglas',
+  empty: 'Ahora mismo ninguna canción cumple estas reglas. Edítalas, o escucha algo y vuelve a mirar.',
+
+  editor: {
+    newTitle: 'Nueva lista inteligente',
+    editTitle: 'Editar reglas',
+    name: 'Nombre',
+    namePlaceholder: 'Nombre de la lista',
+    match: 'Una canción debe cumplir',
+    all: 'Todas las reglas',
+    any: 'Alguna regla',
+    rules: 'Reglas',
+    noRules: 'Aún no hay reglas, así que entran todas las canciones.',
+    addRule: 'Añadir una regla',
+    removeRule: (at) => `Quitar la regla ${format.number(at)}`,
+    chooseField: 'Sobre qué pregunta la regla',
+    asksAbout: (field) => `Pregunta por: ${field}`,
+    chooseTag: 'Elegir…',
+    tagSheet: 'Elige una etiqueta',
+    noTags: 'Aún no hay etiquetas.',
+    textPlaceholder: 'Escribe un nombre',
+    tagPlaceholder: 'Escribe una etiqueta',
+    valueOf: (field, op) => `${field} ${op}`,
+    fromOf: (field) => `${field}, desde`,
+    toOf: (field) => `${field}, hasta`,
+    and: 'y',
+    limit: 'Cuántas',
+    limitOff: 'Todas',
+    limitOn: 'Como mucho',
+    order: 'Ordenar por',
+    matching: (count) => oneOrMany(count, '1 canción coincide', `${format.number(count)} canciones coinciden`),
+    matchingKept: (count, kept) =>
+      `${format.number(count)} ${oneOrMany(count, 'canción coincide', 'canciones coinciden')}; la lista se queda con ${format.number(kept)}`,
+    save: 'Guardar',
+    create: 'Crear',
+    problems: {
+      name: 'Ponle un nombre a la lista.',
+      text: 'Escribe lo que hay que buscar.',
+      value: 'Ese número está fuera del rango.',
+      range: 'El segundo número es menor que el primero.',
+      rule: (at) => `La regla ${format.number(at)} no está terminada.`,
+    },
+  },
+
+  fields: {
+    tag: 'Etiqueta',
+    artist: 'Artista',
+    albumArtist: 'Artista del álbum',
+    album: 'Álbum',
+    genre: 'Género',
+    title: 'Título',
+    year: 'Año',
+    added: 'Añadida',
+    plays: 'Veces escuchada',
+    lastPlayed: 'Escuchada por última vez',
+    skips: 'Veces saltada',
+    length: 'Duración',
+  },
+
+  ops: {
+    is: 'es',
+    isNot: 'no es',
+    contains: 'contiene',
+    notContains: 'no contiene',
+    between: 'entre',
+    year: { more: 'después de', less: 'antes de' },
+    count: { more: 'más de', less: 'menos de' },
+    length: { more: 'más larga que', less: 'más corta que' },
+    within: 'en los últimos',
+    before: 'hace más de',
+    never: 'nunca',
+  },
+
+  units: {
+    days: (count) => `${format.number(count)} ${oneOrMany(count, 'día', 'días')}`,
+    minutes: (count) => `${format.number(count)} min`,
+    times: (count) => `${format.number(count)} ${oneOrMany(count, 'vez', 'veces')}`,
+    songs: (count) => `${format.number(count)} ${oneOrMany(count, 'canción', 'canciones')}`,
+  },
+
+  orders: {
+    random: 'Aleatorio',
+    mostPlayed: 'Más escuchadas',
+    leastPlayed: 'Menos escuchadas',
+    newest: 'Añadidas hace menos',
+    oldest: 'Añadidas hace más',
+    title: 'Título',
+  },
+};

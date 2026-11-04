@@ -1,7 +1,9 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 
+import { AutoBackupSettings } from '../components/AutoBackupSettings';
 import { BackupSheet } from '../components/BackupSheet';
+import { HistorySheet } from '../components/HistorySheet';
 import { ListenBrainzSettings } from '../components/ListenBrainzSettings';
 import { Pressable } from '../components/Pressable';
 import { SettingsPage, useRows } from '../components/settings/rows';
@@ -14,6 +16,7 @@ import {
   restart,
   type Opened,
 } from '../lib/backup/index';
+import { applyHistory, HistoryError, openHistory, type ImportPlan } from '../lib/history/index';
 import { useT } from '../lib/i18n/index';
 import { useColours, usePressed } from '../lib/theme/index';
 import { useAnnounce } from '../lib/ui/announce';
@@ -39,7 +42,7 @@ export default function DataSettingsScreen() {
     about either; `opened` is a backup that has been read and is waiting on
     the answer to merge or replace.
   */
-  const [busy, setBusy] = useState<'export' | 'import' | null>(null);
+  const [busy, setBusy] = useState<'export' | 'import' | 'history' | null>(null);
   const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
   // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
   useAnnounce(note?.text);
@@ -47,10 +50,22 @@ export default function DataSettingsScreen() {
   const [applying, setApplying] = useState(false);
   const [imported, setImported] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  /*
+    Another app's history, read and waiting on Import or Cancel, and why the
+    write failed if it did. Kept apart from the backup's, since the two
+    sheets ask different things.
+  */
+  const [history, setHistory] = useState<ImportPlan | null>(null);
+  const [historyWriting, setHistoryWriting] = useState(false);
+  const [historyRefused, setHistoryRefused] = useState<string | null>(null);
 
   /** What went wrong, in words meant for a person where there are any. */
   const said = (trouble: unknown, otherwise: string) =>
-    trouble instanceof BackupError ? trouble.message : trouble instanceof Error && trouble.message ? trouble.message : otherwise;
+    trouble instanceof BackupError || trouble instanceof HistoryError
+      ? trouble.message
+      : trouble instanceof Error && trouble.message
+        ? trouble.message
+        : otherwise;
 
   /*
     None of these ends in a `finally`, though each has something to do
@@ -93,6 +108,44 @@ export default function DataSettingsScreen() {
     setBusy(null);
   }, [t]);
 
+  const chooseHistory = useCallback(async () => {
+    setBusy('history');
+    setNote(null);
+    // Caught on the promise rather than in a `try`, around which the React
+    // Compiler will not take the questions asked of the answer below.
+    const plan = await openHistory().catch((trouble: unknown) => {
+      haptic('results', 'reject');
+      setNote({ text: said(trouble, t.common.fileUnreadable), bad: true });
+      return null;
+    });
+    if (plan && plan.rows.length === 0) {
+      // Nothing to ask about: everything in it is here already, or too short.
+      setNote({ text: t.backup.history.nothing, bad: false });
+    } else if (plan) {
+      setHistoryRefused(null);
+      setHistory(plan);
+    }
+    setBusy(null);
+  }, [t]);
+
+  const bringHistoryIn = useCallback(async () => {
+    if (!history) return;
+    setHistoryWriting(true);
+    setHistoryRefused(null);
+    try {
+      const added = await applyHistory(history);
+      haptic('results', 'confirm');
+      setHistory(null);
+      setNote({ text: t.backup.history.added(added), bad: false });
+    } catch (trouble) {
+      haptic('results', 'reject');
+      // All in one transaction, so a failure here has changed nothing.
+      setHistoryRefused(t.backup.history.failed);
+      console.warn('Could not import a listening history', trouble);
+    }
+    setHistoryWriting(false);
+  }, [history, t]);
+
   const bringIn = useCallback(
     async (mode: 'merge' | 'replace') => {
       if (!opened) return;
@@ -115,16 +168,25 @@ export default function DataSettingsScreen() {
   return (
     <SettingsPage
       sheets={
-        <BackupSheet
-          opened={opened}
-          working={applying}
-          finished={imported}
-          failure={refused}
-          onMerge={() => void bringIn('merge')}
-          onReplace={() => void bringIn('replace')}
-          onCancel={() => setOpened(null)}
-          onRestart={() => void restart()}
-        />
+        <>
+          <BackupSheet
+            opened={opened}
+            working={applying}
+            finished={imported}
+            failure={refused}
+            onMerge={() => void bringIn('merge')}
+            onReplace={() => void bringIn('replace')}
+            onCancel={() => setOpened(null)}
+            onRestart={() => void restart()}
+          />
+          <HistorySheet
+            plan={history}
+            working={historyWriting}
+            failure={historyRefused}
+            onImport={() => void bringHistoryIn()}
+            onCancel={() => setHistory(null)}
+          />
+        </>
       }>
       <View style={styles.card}>
         <Pressable
@@ -152,12 +214,27 @@ export default function DataSettingsScreen() {
           </View>
           <Text style={styles.muted}>{t.settings.importBackup.note}</Text>
         </Pressable>
+        <View style={styles.rule} />
+        <Pressable
+          android_ripple={pressed}
+          accessibilityRole="button"
+          disabled={busy != null}
+          style={styles.row}
+          onPress={() => void chooseHistory()}>
+          <View style={styles.line}>
+            <Text style={styles.title}>{t.backup.history.title}</Text>
+            {busy === 'history' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
+          </View>
+          <Text style={styles.muted}>{t.backup.history.note}</Text>
+        </Pressable>
       </View>
       {note ? (
         <Text accessibilityRole={note.bad ? 'alert' : undefined} style={note.bad ? styles.noteBad : styles.note}>
           {note.text}
         </Text>
       ) : null}
+      {/* The same backup, made by itself into a folder chosen once: see `backup/auto.ts`. */}
+      <AutoBackupSettings />
       {/*
         Whether the app may ask GitHub about a newer version of itself: what
         the app sends about itself, kept with the rest of what it sends.

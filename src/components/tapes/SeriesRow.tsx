@@ -7,6 +7,7 @@ import { Pressable } from '../Pressable';
 import { useT } from '../../lib/i18n/index';
 import type { EnrichedTrack } from '../../lib/media/merge';
 import { useTrackArtwork } from '../../lib/media/artwork';
+import { usePlayingId } from '../../lib/player/current';
 import { nextToPlay } from '../../lib/tapes/order';
 import { progressOf, type TapePlace } from '../../lib/tapes/places';
 import { makeStyles, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
@@ -36,7 +37,6 @@ export const SeriesRow = memo(function SeriesRow({
   places,
   onPress,
   onPlay,
-  playingId = null,
   book = false,
   expanded,
   onExpand,
@@ -49,10 +49,8 @@ export const SeriesRow = memo(function SeriesRow({
   episodes: readonly EnrichedTrack[];
   places: ReadonlyMap<string, TapePlace>;
   onPress: (show: SeriesShow) => void;
-  /** Pressed while [playingId] is the one it offers, it pauses it; otherwise it plays it. */
+  /** Pressed while the one it offers is playing, it pauses it; otherwise it plays it. */
   onPlay: (episode: EnrichedTrack) => void;
-  /** The tape playing, if it is playing and not paused: its button is then a pause. */
-  playingId?: string | null;
   /** A folder of tapes — a book's parts — rather than a followed show: taken up at its first part not heard, and said in parts. */
   book?: boolean;
   /** Whether its episodes are laid out under it. */
@@ -79,6 +77,8 @@ export const SeriesRow = memo(function SeriesRow({
   const picture = show.image ?? cover;
   const place = next ? (places.get(next.id) ?? null) : null;
   const progress = progressOf(place);
+  // Asked by the row itself, as `TrackRow` does: its button is a pause while what it offers plays.
+  const playingId = usePlayingId();
   const on = next != null && next.id === playingId;
   const verb = on ? t.common.pause : progress != null ? said.continue : said.start;
   const artwork = useTrackArtwork(next);

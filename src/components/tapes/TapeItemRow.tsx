@@ -7,6 +7,7 @@ import { Pressable } from '../Pressable';
 import { useT } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
 import type { EnrichedTrack } from '../../lib/media/merge';
+import { useIsCurrent, usePlayingId } from '../../lib/player/current';
 import { progressOf, type TapePlace } from '../../lib/tapes/places';
 import { makeStyles, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
@@ -22,8 +23,6 @@ import { durationLabel } from '../../lib/youtube/types';
 export const TapeItemRow = memo(function TapeItemRow({
   track,
   place,
-  playingId,
-  current,
   onPress,
   onPlay,
   onLongPress,
@@ -32,10 +31,6 @@ export const TapeItemRow = memo(function TapeItemRow({
 }: {
   track: EnrichedTrack;
   place: TapePlace | null;
-  /** The tape playing, if it is playing and not paused: its button is then a pause. */
-  playingId: string | null;
-  /** Whether it is the one in the player, playing or not: said to a screen reader; the button says it to the eye, as a show's does. */
-  current: boolean;
   onPress: (track: EnrichedTrack) => void;
   /** Its button: played, played on, or paused where it is the one playing. */
   onPlay: (track: EnrichedTrack) => void;
@@ -49,7 +44,10 @@ export const TapeItemRow = memo(function TapeItemRow({
   const pressed = usePressed();
   const artwork = useTrackArtwork(track);
   const progress = progressOf(place);
-  const on = track.id === playingId;
+  // Asked by the row itself, as `TrackRow` does: its button is a pause while it plays.
+  const on = usePlayingId() === track.id;
+  // In the player, playing or not: said to a screen reader; the button says it to the eye, as a show's does.
+  const current = useIsCurrent(track.id);
   const verb = on ? t.common.pause : progress != null ? t.search.tapes.podcasts.continue : t.search.tapes.podcasts.start;
   const state = place?.finished
     ? t.library.tapes.played

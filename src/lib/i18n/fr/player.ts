@@ -62,6 +62,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'Bandes, basses et loudness' },
     crossfade: { note: 'Comment un titre laisse place au suivant' },
     allEffects: { title: 'Tous les effets', note: 'Largeur, crossfeed, rotation et niveau' },
+    jumps: {
+      heading: 'Sauts pour ce livre ou cette émission',
+      general: 'Général',
+      backToGeneral: 'Revenir aux sauts de toutes les cassettes',
+      back: 'Reculer de',
+      forward: 'Avancer de',
+      note: 'En secondes, pour ce livre ou cette émission seulement, y compris depuis un casque, la notification et la voiture. Les autres cassettes gardent les sauts des réglages des cassettes.',
+    },
   },
   sleepTimer: {
     title: 'Minuteur de veille',
@@ -78,6 +86,11 @@ export const player: Strings['player'] = {
       title: 'Laisser finir le titre en cours',
       note: 'Quand le temps est écoulé, attendre la fin du morceau au lieu de baisser le son.',
       label: 'Laisser finir le titre en cours quand le minuteur de veille arrive à zéro',
+    },
+    shake: {
+      title: 'Secouer pour dix minutes de plus',
+      note: 'Pendant les trois dernières minutes, secoue le téléphone pour ajouter dix minutes, même écran éteint. Une courte vibration le confirme.',
+      label: 'Secouer le téléphone pendant les trois dernières minutes pour ajouter dix minutes au minuteur de veille',
     },
     refused: (most) => `Un nombre entier de minutes, de 1 à ${most}`,
     howMany: 'Pause dans combien de minutes ?',

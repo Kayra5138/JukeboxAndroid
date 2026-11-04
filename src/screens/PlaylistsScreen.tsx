@@ -37,14 +37,17 @@ import {
   SkipIcon,
   PlusIcon,
   ShuffleIcon,
+  SmartIcon,
   SparkleIcon,
   TagIcon,
 } from '../components/Icons';
+import { readSmartStats, smartListTracks } from '../lib/lists/smartLive';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { haptic } from '../lib/ui/haptics';
 import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
 import type { Track } from '../lib/types';
+import type { EnrichedTrack } from '../lib/media/merge';
 import { useBack } from '../lib/ui/back';
 
 /** Enough tags to pick from without the sheet becoming the tag screen. */
@@ -155,6 +158,8 @@ export default function PlaylistsScreen() {
   */
   const shared = useLibrary();
   const library: Track[] | null = shared.kind === 'library' ? shared.tracks : null;
+  // The same tracks with what is known of each beyond the file, which a smart list's rules ask about.
+  const enriched: EnrichedTrack[] | null = shared.kind === 'library' ? shared.tracks : null;
 
   /*
     The covers are worked out after the rows rather than with them. The names
@@ -201,11 +206,26 @@ export default function PlaylistsScreen() {
       length.set(list.id, here.reduce((sum, entry) => sum + (entry.durationSec > 0 ? entry.durationSec : 0), 0));
       whole.set(list.id, here);
     }
+    /*
+      A smart list keeps no membership either, and its songs are worked out
+      from its rules here as they are on its own page: what listening has been
+      done is read once for all of them.
+    */
+    const smart = (lists ?? []).filter((list) => list.kind === 'smart');
+    const stats = smart.length > 0 ? readSmartStats() : null;
+    for (const list of smart) {
+      if (!stats) break;
+      const here = smartListTracks(enriched ?? [], list.rules, stats);
+      present.set(list.id, here.length);
+      resolved.set(list.id, here.slice(0, COVER_TRACKS));
+      length.set(list.id, here.reduce((sum, entry) => sum + (entry.durationSec > 0 ? entry.durationSec : 0), 0));
+      whole.set(list.id, here);
+    }
     setCovers(resolved);
     setCounts(present);
     setLengths(length);
     members.current = whole;
-  }, [library, lists]);
+  }, [library, enriched, lists]);
 
   /** What the row says a list holds: the stored number until the library is in. */
   const held = (list: Playlist) => counts.get(list.id) ?? list.trackCount;
@@ -309,7 +329,7 @@ export default function PlaylistsScreen() {
         ]}>
         {/*
           The name of the tab, how many lists there are, and what can be made:
-          a list from a tag, the files, and a new list, as round buttons on
+          a smart list, a list from a tag, the files, and a new list, as round buttons on
           the right where there used to be two wide ones and a row of links.
         */}
         <View style={styles.head}>
@@ -317,6 +337,14 @@ export default function PlaylistsScreen() {
             <Text accessibilityRole="header" style={styles.title}>{t.nav.lists}</Text>
             <Text style={styles.subtitle}>{t.lists.screen.count(shownLists.length)}</Text>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t.smart.newList}
+            android_ripple={pressed}
+            style={styles.round}
+            onPress={() => router.push('/smart-list')}>
+            <SmartIcon size={20} color={c.text} />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t.lists.screen.fromTag}
@@ -380,13 +408,20 @@ export default function PlaylistsScreen() {
                   <View style={styles.rowText}>
                     <View style={styles.nameLine}>
                       {list.tag ? <TagIcon size={14} color={c.textSecondary} /> : null}
+                      {list.kind === 'smart' ? (
+                        <View accessible accessibilityLabel={t.smart.sign}>
+                          <SmartIcon size={14} color={c.textSecondary} />
+                        </View>
+                      ) : null}
                       <Text style={styles.rowName} numberOfLines={1}>
                         {list.name}
                       </Text>
                     </View>
                     <Text style={styles.rowDetail} numberOfLines={1}>
                       {/* Worth saying on the row: the two look alike here and behave differently once opened. */}
-                      {list.tag
+                      {list.kind === 'smart'
+                        ? [t.smart.detail(held(list)), lengthOf(list)].filter(Boolean).join(' · ')
+                        : list.tag
                         ? t.lists.screen.followingTag(held(list), list.tag)
                         : [t.common.tracks(held(list)), lengthOf(list)].filter(Boolean).join(' · ')}
                     </Text>

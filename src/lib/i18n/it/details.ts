@@ -131,28 +131,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Cerca il testo di questo brano come fa quando lo riproduci, e se lo trova sostituisce quello salvato.',
-    nothingMatched: 'Niente corrisponde a questo brano. La ricerca qui sotto non esclude nulla.',
-    foundAndSaved: 'Trovato e salvato.',
     nothingCameBack: 'Nessun risultato.',
     cleared: 'Cancellato. La prossima ricerca lo cercherà di nuovo.',
     notSeconds: 'Questo non è un numero di secondi.',
 
-    stored: 'Testo salvato',
     none: 'Ancora nessuno',
     kept: (timed, byHand, lines) =>
       `${timed ? 'Sincronizzato' : 'Testo semplice'}, ${byHand ? 'scelto a mano' : 'da LRCLIB'}` +
       (lines > 0 ? ` · ${oneOrMany(lines, '1 riga', `${format.number(lines)} righe`)}` : ''),
     forget: 'Dimentica e cerca di nuovo',
-    saveChanges: 'Salva modifiche',
     timedHint:
       'Ogni riga ha il suo tempo all’inizio. Cambia le parole ma lascia le parentesi, altrimenti la riga perde la sua posizione.',
-    plainHint: 'Cambia quello che vuoi. Il testo salvato resta tuo e nessuna ricerca lo sostituisce.',
 
     timing: 'Sincronia',
     timingHint:
-      'Sposta tutte le righe insieme. Usala quando le parole sono giuste ma arrivano in anticipo o in ritardo: apri il lettore e regola finché non coincidono, oppure tocca il numero e scrivilo. Uno spostamento positivo fa arrivare le parole più tardi.',
+      'Sposta tutte le righe insieme, per un testo giusto che arriva presto o tardi. Tocca il valore per scriverlo. Un valore positivo lo ritarda.',
     earlier: (seconds) => `−${seconds} s`,
     later: (seconds) => `+${seconds} s`,
     shiftedEarlier: (written) => `−${written} s`,
@@ -164,16 +157,24 @@ export const details: Strings['details'] = {
     typeOffset: 'Inserisci uno spostamento esatto',
     wordsField: 'Testo',
 
-    byHand: 'Cerca a mano',
-    byHandHint:
-      'Qui non viene escluso niente, a differenza della ricerca automatica, che scarta tutto ciò che ha una durata diversa: per questo alcuni brani non trovano mai il loro testo.',
     queryPlaceholder: 'Artista e titolo',
     candidateTimed: 'sincronizzato',
     candidatePlain: 'semplice',
 
-    paste: 'Incolla',
-    pasteHint: 'Accetta un file LRC o testo semplice. Con i timestamp diventa un testo sincronizzato.',
-    savePasted: 'Salva testo incollato',
+    find: 'Cerca il testo',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)} trovati`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'Nel file del brano', lrc: 'In un file .lrc accanto al brano' },
+    sameLength: 'stessa durata',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Incolla o scrivi il testo qui. Le righe temporizzate come [00:12.34] seguono il brano.',
+    clearBox: 'Svuota il riquadro',
+    undo: 'Annulla',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Rimuovi il testo',
+    removed: 'Testo rimosso. Nessuna ricerca lo riporterà.',
+    removedByHand: 'Rimosso a mano',
   },
 
   library: {
@@ -220,6 +221,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'Lista',
+    quickEdit: 'Modifica',
+    quickLookUp: 'Cerca',
     more: 'Altro…',
     moreHint: 'Tutto quello che puoi fare con i brani selezionati',
     heading: (count) =>
@@ -250,6 +254,8 @@ export const details: Strings['details'] = {
         hint: 'Scrive nei file stessi i dettagli come li mostra la libreria. Android chiede prima.',
       },
       addToList: { label: 'Aggiungi a una lista', hint: 'Li mette in una delle tue liste' },
+      share: { label: 'Condividi', hint: 'Invia i file a un’altra app: una chat, una mail, un telefono vicino' },
+      shareFile: { label: 'Condividi come file', hint: 'Inviato come file: una chat lo tiene come documento' },
       reset: {
         label: 'Azzera',
         hint: 'Dimentica ciò che le ricerche hanno trovato per loro. Le tue modifiche restano.',

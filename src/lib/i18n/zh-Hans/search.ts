@@ -135,6 +135,10 @@ export const search: Strings['search'] = {
   downloadLabel: (title) => `下载“${title}”`,
   download: { mp3: '下载 MP3', original: '下载音频' },
   adding: '正在添加…',
+  listen: '收听',
+  listenLabel: (title) => `收听 ${title} 而不保存`,
+  readying: '正在准备…',
+  listenDrop: '不保存',
 
   addingPlaylist: '正在添加播放列表…',
   downloadListed: {
@@ -160,6 +164,7 @@ export const search: Strings['search'] = {
     cancelled: '已取消',
     failed: '下载失败',
     done: '已在音乐库中',
+    listened: '可播放，未保存',
     missing: '文件已删除',
   },
 

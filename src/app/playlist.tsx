@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import { BlurArea, GlassScene } from '../components/Frosted';
+import { Image } from '../components/Picture';
 import { Pressable } from '../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -46,6 +47,7 @@ import JukeboxAudio from '../../modules/jukebox-audio';
 import { readLibrary } from '../lib/library/index';
 import { useLibraryTracks } from '../lib/library/useLibrary';
 import { libraryRoot } from '../lib/media/library';
+import { useTrackArtwork } from '../lib/media/artwork';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { usePlayTapped } from '../lib/player/usePlayTapped';
@@ -57,6 +59,8 @@ import { useAnnounce } from '../lib/ui/announce';
 import { useBack } from '../lib/ui/back';
 import { haptic } from '../lib/ui/haptics';
 import { isTape } from '../lib/tapes/tape';
+import { smartListTracks } from '../lib/lists/smartLive';
+import { useTrackRing } from '../components/trackRing';
 
 /** How many suggestions are worth showing before the section becomes a list. */
 const SUGGESTIONS = 8;
@@ -97,6 +101,8 @@ type Loaded = {
   sleeve?: EnrichedTrack[] | null;
   /** Favorites, which can be renamed and emptied but not deleted. */
   favorites?: boolean;
+  /** A smart list, whose songs are what its rules let in today: see `lists/smart.ts`. */
+  smart?: boolean;
 };
 
 export default function PlaylistScreen() {
@@ -262,6 +268,29 @@ export default function PlaylistScreen() {
     const details = playlist(listId);
 
     /*
+      A smart list is worked out from its rules, every time, against the
+      library as it is now and the history as it stands: nothing was written
+      down for it, so it cannot be out of date. In the order its rules ask
+      for, which is the one thing about its order anybody chose.
+    */
+    if (details?.kind === 'smart') {
+      const found = smartListTracks(library, details.rules);
+      setData({
+        name: details.name,
+        tag: null,
+        smart: true,
+        hint: t.smart.hint,
+        cover: found.find((track) => track.id === details.coverTrackId) ?? null,
+        picture: details.coverUri,
+        tracks: found,
+        albums: [],
+        // Nothing to suggest for a list that fills itself.
+        suggestions: [],
+      });
+      return;
+    }
+
+    /*
       A list that is a standing question about a tag is read from the tag,
       every time. Nothing was written down for it, so there is nothing that
       can be out of date: a track tagged this morning is in it now.
@@ -354,6 +383,9 @@ export default function PlaylistScreen() {
     onChanged: () => void load(),
     onAdded: setNote,
   });
+  // A row held and slid from, with the finger never lifted: see `pressMenu.ts`. On a record's own page, without the way to it.
+  const ring = useTrackRing(menu);
+  const albumRing = useTrackRing(menu, WITHOUT_ALBUM);
 
   /*
     Writing the list out as a playlist file. Its sheets are windows of their
@@ -456,7 +488,7 @@ export default function PlaylistScreen() {
     each quietly contradict the thing they asked for.
   */
   const stored = listId != null;
-  const editable = stored && data.tag == null;
+  const editable = stored && data.tag == null && !data.smart;
   /*
     What can be written out as a playlist: a list somebody made, and one
     made from listening, as it stands today. A record, an artist or a folder
@@ -509,6 +541,7 @@ export default function PlaylistScreen() {
             const track = tracks[index];
             if (track) menu.open(track, album ? WITHOUT_ALBUM : undefined);
           }}
+          ring={album ? albumRing : ring}
           /*
             Left off entirely where there is nothing to arrange. A record's
             running order is the record's, an artist's tracks and a folder's
@@ -601,6 +634,15 @@ export default function PlaylistScreen() {
                           <Text style={styles.link}>{t.lists.list.addTracks}</Text>
                         </Pressable>
                       ) : null}
+                      {/* What a smart list holds is changed by changing what it asks for. */}
+                      {data.smart && listId != null ? (
+                        <Pressable
+                          style={styles.linkHit}
+                          accessibilityRole="button"
+                          onPress={() => router.push({ pathname: '/smart-list', params: { id: String(listId) } })}>
+                          <Text style={styles.link}>{t.smart.editRules}</Text>
+                        </Pressable>
+                      ) : null}
                       <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setRenaming(true)}>
                         <Text style={styles.link}>{t.common.rename}</Text>
                       </Pressable>
@@ -677,6 +719,8 @@ export default function PlaylistScreen() {
                 <Text style={styles.empty}>
                   {editable
                     ? t.lists.list.empty.editable
+                    : data.smart
+                      ? t.smart.empty
                     : data.tag
                       ? t.lists.list.empty.tag
                     : album
@@ -697,28 +741,16 @@ export default function PlaylistScreen() {
                   <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.mightBelong)}</Text>
                   <Text style={styles.hint}>{t.lists.list.mightBelongHint}</Text>
                   {data.suggestions.map((entry) => (
-                    <Pressable
-                      accessibilityRole="button"
-                      android_ripple={pressed}
+                    <Suggested
                       key={entry.track.id}
-                      style={styles.suggestion}
-                      onPress={() => {
+                      track={entry.track}
+                      reasons={entry.reasons}
+                      onAdd={() => {
                         if (listId == null) return;
                         addToPlaylist(listId, [entry.track.id], Date.now());
                         void load();
-                      }}>
-                      <View style={styles.suggestionText}>
-                        <Text style={styles.suggestionTitle} numberOfLines={1}>
-                          {entry.track.title}
-                        </Text>
-                        <Text style={styles.suggestionWhy} numberOfLines={1}>
-                          {[entry.track.artist, entry.reasons.join(' · ')]
-                            .filter(Boolean)
-                            .join(' — ')}
-                        </Text>
-                      </View>
-                      <Text style={styles.add}>{t.common.add}</Text>
-                    </Pressable>
+                      }}
+                    />
                   ))}
                 </View>
               ) : null}
@@ -860,6 +892,32 @@ export default function PlaylistScreen() {
   );
 }
 
+/** A song that might belong in the list, with its cover, and a tap to add it. */
+function Suggested({ track, reasons, onAdd }: { track: EnrichedTrack; reasons: string[]; onAdd: () => void }) {
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
+  const artwork = useTrackArtwork(track);
+  return (
+    <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.suggestion} onPress={onAdd}>
+      {artwork ? (
+        <Image source={{ uri: artwork }} style={styles.suggestionArt} contentFit="cover" />
+      ) : (
+        <View style={[styles.suggestionArt, styles.suggestionArtEmpty]} />
+      )}
+      <View style={styles.suggestionText}>
+        <Text style={styles.suggestionTitle} numberOfLines={1}>
+          {track.title}
+        </Text>
+        <Text style={styles.suggestionWhy} numberOfLines={1}>
+          {[track.artist, reasons.join(' · ')].filter(Boolean).join(' — ')}
+        </Text>
+      </View>
+      <Text style={styles.add}>{t.common.add}</Text>
+    </Pressable>
+  );
+}
+
 /**
  * Builds the suggestion engine's inputs out of the library and the database.
  *
@@ -957,6 +1015,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,
   },
+  suggestionArt: { width: 42, height: 42, borderRadius: 6 },
+  suggestionArtEmpty: { backgroundColor: c.surfaceRaised },
   suggestionText: { flex: 1, minWidth: 0, gap: 2 },
   suggestionTitle: { color: c.text, fontSize: 14.5 },
   suggestionWhy: { color: c.textFaint, fontSize: 12 },

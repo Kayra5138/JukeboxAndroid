@@ -49,9 +49,12 @@ const RevealContext = createContext<Reveal | null>(null);
 export function FormScroll({
   children,
   contentContainerStyle,
+  under = 0,
 }: {
   children: ReactNode;
   contentContainerStyle?: StyleProp<ViewStyle>;
+  /** How much under a field is to stay above the keyboard with it: the button that saves it. */
+  under?: number;
 }) {
   const box = useRef<View>(null);
   const scroll = useRef<ScrollView>(null);
@@ -76,7 +79,7 @@ export function FormScroll({
         input.measureInWindow((_x, y, _width, height) => {
           // Nothing to measure: the field is on a tab that is not showing.
           if (height <= 0) return;
-          const over = y + height + CLEAR - top;
+          const over = y + height + CLEAR + under - top;
           if (over <= 0) return;
           // A field taller than the space there is cannot be shown whole, and
           // its top is where the typing starts, so that is what is kept.
@@ -95,7 +98,7 @@ export function FormScroll({
       right.
     */
     pending.current = [setTimeout(look, SETTLE_MS), setTimeout(look, SETTLE_MS + 320)];
-  }, []);
+  }, [under]);
 
   useEffect(() => {
     const shown = Keyboard.addListener('keyboardDidShow', (event) => {

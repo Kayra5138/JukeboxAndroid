@@ -15,6 +15,8 @@ import { KEEP_RANGE, savedEpisodes, setAutoDownload, setFetchNext, setKeep, setN
 import { makeStyles, outlined, outlinedClip, scene, switchColours, useColours, usePressed } from '../lib/theme/index';
 import { haptic } from '../lib/ui/haptics';
 import { useTrackMenu } from '../components/useTrackMenu';
+import { PressRing } from '../components/PressMenu';
+import { useTrackRing } from '../components/trackRing';
 import { libraryState, refreshLibrary } from '../lib/library/index';
 import { useLibraryTracks } from '../lib/library/useLibrary';
 import { folderKey } from '../lib/media/folders';
@@ -76,6 +78,8 @@ export default function PodcastScreen() {
   const { playQueue, toggle } = usePlayerActions();
   const { current, playWhenReady } = usePlayerState();
   const menu = useTrackMenu({});
+  // A part held and slid from, with the finger never lifted: see `pressMenu.ts`.
+  const ring = useTrackRing(menu);
   // The folder it was followed under, should the show have renamed itself since.
   const folder = followed ? seriesFolderOf(followed) : show ? seriesFolderOf(show) : null;
   const here = useMemo(
@@ -376,6 +380,7 @@ export default function PodcastScreen() {
                 ? t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))
                 : durationLabel(track.durationSec);
             return (
+              <PressRing ring={ring} item={track}>
               <Pressable
                 android_ripple={pressed}
                 accessibilityRole="button"
@@ -392,6 +397,7 @@ export default function PodcastScreen() {
                 </View>
                 <Text style={[styles.state, place?.finished && styles.stateHeard]}>{state}</Text>
               </Pressable>
+              </PressRing>
             );
           }
           // Fetched and here is the row above, to play; fetched and deleted since, or never, it can be fetched (again).

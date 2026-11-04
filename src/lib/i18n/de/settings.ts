@@ -124,6 +124,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: 'Angehörte, nicht behaltene Songs', note: 'So viele Tage nach dem Laden gelöscht, außer du behältst sie: mit dem Herz, in einer Liste oder über ihr Menü.', days: (days) => oneOrMany(days, '1 Tag', `${format.number(days)} Tage`)  },
     note: 'Was gerade heruntergeladen wird, was wartet und was fertig ist.',
     button: {
       title: 'Schwebender Download-Button',
@@ -203,6 +204,30 @@ export const settings: Strings['settings'] = {
     note:
       'Dein Hörverlauf, deine Listen, Tags, Songtexte und Einstellungen, die Podcasts, denen du folgst, und wo du in jeder Kassette bist und was du darin markiert hast, in einer Datei, deren Speicherort du wählst. Nicht die Musik selbst.',
     failed: 'Das Backup konnte nicht gespeichert werden.',
+  },
+  autoBackup: {
+    title: 'Automatisch sichern',
+    off: 'Dieselbe Datei wie bei „Alles exportieren“, von selbst jeden Tag oder jede Woche in einem Ordner deiner Wahl gespeichert.',
+    folder: 'Ordner',
+    folderUnnamed: 'Gewählter Ordner',
+    chooseOther: 'Anderen Ordner wählen',
+    lost: 'Jukebox kann diesen Ordner nicht mehr erreichen: Er wurde verschoben oder gelöscht, oder die Berechtigung wurde zurückgenommen. Wähle ihn erneut, damit weiter gesichert wird.',
+    chooseAgain: 'Ordner erneut wählen',
+    every: 'Wie oft',
+    daily: 'Jeden Tag',
+    weekly: 'Jede Woche',
+    keep: 'Behaltene Backups',
+    keepNote: (count) =>
+      oneOrMany(
+        count,
+        'Nur das neueste Backup bleibt im Ordner, ältere werden gelöscht. Sonst wird im Ordner nichts angerührt.',
+        `Die neuesten ${format.number(count)} Backups bleiben im Ordner, ältere werden gelöscht. Sonst wird im Ordner nichts angerührt.`
+      ),
+    last: (when) => `Letztes Backup: ${when}.`,
+    never: 'Noch kein Backup erstellt.',
+    failed: 'Das letzte Backup konnte nicht erstellt werden. Beim nächsten Mal wird es erneut versucht.',
+    now: 'Jetzt sichern',
+    made: 'Gesichert.',
   },
   importBackup: {
     title: 'Importieren',

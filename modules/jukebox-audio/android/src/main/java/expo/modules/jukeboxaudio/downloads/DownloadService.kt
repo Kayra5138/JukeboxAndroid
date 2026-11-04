@@ -242,7 +242,7 @@ class DownloadService : Service() {
         */
         DownloadStore.ready(id, job.getString("discoverKey"), stored)
         if (stored.isNull("artworkUri")) DiscoverFiles.pictureLater(this, id, video)
-        "discover:$id"
+        stored.getString("id")
       } else LibraryImport.fromDownload(this, file, job.getString("folder"),
         // A part of a book named by its place in it, and an episode by its day, so that the files stand in the order they go.
         "${tape?.optInt("part", 0)?.takeIf { it > 0 }?.let { "%02d - ".format(it) }

@@ -40,4 +40,28 @@ export const backup = {
   newer: 'That backup was made by a newer Jukebox. Update the app to read it.',
   needsBuildToExport: 'Install the updated Android build to export.',
   needsBuildToImport: 'Install the updated Android build to import.',
+
+  /** Settings → Your data: listens brought in from another app's history, and what is asked first. */
+  history: {
+    title: 'Import listening history',
+    note: 'Your listens from Last.fm, Spotify or ListenBrainz, from the files they let you download. You are shown what was found and asked before anything changes.',
+    question: 'Import these listens?',
+    /** The first and last listen brought in, each a date. */
+    range: (from: string, to: string) => (from === to ? `All on ${from}.` : `From ${from} to ${to}.`),
+    /** How many of the listens are of songs in the library; [total] is never nought. */
+    matched: (matched: number, total: number) =>
+      `${format.number(matched)} of the ${format.number(total)} ${oneOrMany(matched, 'is of a song', 'are of songs')} in your library. The rest are kept under their own names, and count in your statistics all the same.`,
+    /** Said only where [count] is not nought. */
+    short: (count: number) =>
+      `${format.number(count)} shorter than half a minute ${oneOrMany(count, 'is', 'are')} left out.`,
+    /** Said only where [count] is not nought. */
+    already: (count: number) =>
+      `${format.number(count)} already in your history ${oneOrMany(count, 'is', 'are')} left out.`,
+    nothing: 'Every listen in them is in your history already, or too short to count.',
+    added: (count: number) => `${format.number(count)} ${oneOrMany(count, 'listen', 'listens')} added to your history.`,
+    notHistory:
+      'That is not a listening history Jukebox can read. Choose the files Last.fm, Spotify or ListenBrainz gave you: CSV or JSON, or the zip they came in.',
+    tooBig: 'That file is too big to read.',
+    failed: 'The listens could not be imported. Nothing was changed.',
+  },
 };

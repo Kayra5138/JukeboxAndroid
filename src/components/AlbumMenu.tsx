@@ -1,8 +1,12 @@
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet } from 'react-native';
+import { DiscIcon, PictureIcon, SearchIcon, SelectIcon } from './Icons';
+import { MenuEntry, MenuHeader, type MenuIcon } from './MenuSheet';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, usePressed } from '../lib/theme/index';
+import { useAlbumArtwork } from '../lib/media/artwork';
+import type { Track } from '../lib/types';
+import { makeStyles, outlined } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
 export type AlbumAction = 'select' | 'rest' | 'lookUp' | 'cover';
@@ -24,21 +28,29 @@ export const WITHOUT_SELECT: readonly AlbumAction[] = ['select'];
  * That is the first entry here now, one tap further on, because a long press
  * can only do one thing and there is more than one thing to do to an album.
  */
+const ICONS: Record<AlbumAction, MenuIcon> = {
+  select: SelectIcon,
+  // The rest of the record: the tracks on it not had yet.
+  rest: DiscIcon,
+  lookUp: SearchIcon,
+  cover: PictureIcon,
+};
+
 export function AlbumMenu({
   album,
   hidden,
   onSelect,
   onClose,
 }: {
-  /** What the sheet is headed with; null when it is not up. */
-  album: { name: string; detail: string } | null;
+  /** [covers] are what its one cover is found among, as the rack and the list of albums find it. */
+  album: { name: string; detail: string; covers?: readonly Track[] } | null;
   hidden?: readonly AlbumAction[];
   onSelect: (action: AlbumAction) => void;
   onClose: () => void;
 }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
+  const cover = useAlbumArtwork(album?.covers ?? null);
   useWindowVeil(album !== null);
   return (
     <Modal visible={album !== null} transparent animationType="fade" onRequestClose={onClose}>
@@ -46,27 +58,16 @@ export function AlbumMenu({
           heading as one button that closes the menu. The back gesture closes it. */}
       <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {album ? (
-          // Bounded and scrolling, as the track's is, for a screen on its side.
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
-            <View style={styles.header}>
-              <Text accessibilityRole="header" style={styles.title} numberOfLines={2}>
-                {album.name}
-              </Text>
-              <Text style={styles.detail} numberOfLines={1}>
-                {album.detail}
-              </Text>
-            </View>
-
+            <MenuHeader title={album.name} detail={album.detail} picture={cover} />
             {ACTIONS.filter((action) => !hidden?.includes(action)).map((action) => (
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
+              <MenuEntry
                 key={action}
-                style={styles.action}
-                onPress={() => onSelect(action)}>
-                <Text style={styles.actionLabel}>{t.library.albumActions[action].label}</Text>
-                <Text style={styles.actionHint}>{t.library.albumActions[action].hint}</Text>
-              </Pressable>
+                icon={ICONS[action]}
+                label={t.library.albumActions[action].label}
+                hint={t.library.albumActions[action].hint}
+                onPress={() => onSelect(action)}
+              />
             ))}
           </ScrollView>
         ) : null}
@@ -75,7 +76,6 @@ export function AlbumMenu({
   );
 }
 
-// `TrackMenu`'s, line for line.
 const useStyles = makeStyles((c) => StyleSheet.create({
   backdrop: {
     flex: 1,
@@ -90,17 +90,5 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     flexGrow: 0,
     ...outlined(c),
   },
-  sheetBody: { paddingBottom: 28 },
-  header: {
-    gap: 3,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  title: { color: c.text, fontSize: 16, fontWeight: '600' },
-  detail: { color: c.textMuted, fontSize: 13 },
-  action: { paddingHorizontal: 20, paddingVertical: 13, gap: 2 },
-  actionLabel: { color: c.text, fontSize: 15 },
-  actionHint: { color: c.textFaint, fontSize: 12 },
+  sheetBody: { paddingTop: 4, paddingBottom: 28 },
 }));

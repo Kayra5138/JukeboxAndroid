@@ -60,6 +60,14 @@ export const player: Strings['player'] = {
     equalizer: { note: '频段、低音和响度' },
     crossfade: { note: '一首歌如何过渡到下一首' },
     allEffects: { title: '全部音效', note: '宽度、交叉馈送、旋转和电平' },
+    jumps: {
+      heading: '本书或节目的跳转',
+      general: '通用',
+      backToGeneral: '恢复为所有磁带的跳转',
+      back: '后退',
+      forward: '前进',
+      note: '以秒计，仅用于本书或节目，耳机、通知和车机上的按键也会使用。其他磁带仍按磁带设置跳转。',
+    },
   },
   sleepTimer: {
     title: '睡眠定时',
@@ -75,6 +83,11 @@ export const player: Strings['player'] = {
       title: '播完当前歌曲',
       note: '时间到了以后，等这首歌播完再停，而不是淡出。',
       label: '睡眠定时结束时播完当前歌曲',
+    },
+    shake: {
+      title: '摇一摇，再加十分钟',
+      note: '最后三分钟内摇动手机即可加十分钟，熄屏时也有效。短暂振动表示已生效。',
+      label: '在最后三分钟内摇动手机，为睡眠定时加十分钟',
     },
     refused: (most) => `请输入 1 到 ${most} 之间的整数（分钟）`,
     howMany: '多少分钟后暂停？',

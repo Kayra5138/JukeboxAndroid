@@ -234,7 +234,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: 'Als Nächstes',
+    quickQueue: 'Warteschlange',
+    quickList: 'Liste',
     playNext: { label: 'Als Nächstes spielen', hint: 'Direkt nach dem aktuellen Titel' },
+    keepListened: { label: 'In der Mediathek behalten', hint: 'Wird mit seinem Verlauf in deine Mediathek kopiert' },
     addToQueue: { label: common.addToQueue, hint: 'Ans Ende' },
     playSimilar: { label: 'Mit ähnlichen Titeln abspielen', hint: 'Dieser, dann eine Reihe ähnlicher Titel' },
     playOnly: { label: 'Nur diesen abspielen', hint: 'Die Warteschlange ist nur dieser Titel' },
@@ -242,6 +246,8 @@ export const library: Strings['library'] = {
     series: { label: 'Sendung öffnen', hint: 'Ihre Folgen und wie neue geladen werden' },
     tapeFolder: { label: 'Ordner öffnen', hint: 'Alles andere im selben Ordner' },
     tapeDetails: { label: 'Details ansehen', hint: 'Wie weit du bist, woher sie stammt, und die Datei' },
+    share: { label: 'Teilen', hint: 'Als Ton gesendet: ein Chat spielt ihn direkt ab' },
+    shareFile: { label: 'Als Datei teilen', hint: 'Als die Datei selbst gesendet: ein Chat behält sie als Dokument' },
     album: { label: 'Zum Album', hint: 'Der Rest des Albums, in Reihenfolge' },
     addToPlaylist: { label: 'Zu einer Liste hinzufügen', hint: 'Eine deiner Listen oder eine neue' },
     favoriteAdd: { label: "Zu Favoriten hinzufügen", hint: "Die Liste, die das Herz füllt, Neueste zuerst" },

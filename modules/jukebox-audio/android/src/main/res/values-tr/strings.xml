@@ -28,6 +28,7 @@
   <string name="jukebox_widget_up_next">Sıradaki</string>
   <string name="jukebox_widget_up_next_empty">Sırada başka şarkı yok</string>
   <string name="jukebox_widget_open">Oynatıcıyı açar</string>
+  <string name="jukebox_widget_continue">Devam et: %1$s</string>
 
   <string name="jukebox_playback_channel">Şimdi çalıyor</string>
 
@@ -68,6 +69,27 @@
   <plurals name="jukebox_count_songs">
     <item quantity="one">%d şarkı</item>
     <item quantity="other">%d şarkı</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">Kasetler</string>
+  <string name="jukebox_auto_following">Takip ettiklerin</string>
+  <string name="jukebox_auto_books">Kitaplar</string>
+  <string name="jukebox_auto_tape_left">%1$d dk kaldı</string>
+  <string name="jukebox_auto_tape_played">Dinlendi</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="one">%d bölüm</item>
+    <item quantity="other">%d bölüm</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="one">%d parça</item>
+    <item quantity="other">%d parça</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="one">%d saniye geri</item>
+    <item quantity="other">%d saniye geri</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="one">%d saniye ileri</item>
+    <item quantity="other">%d saniye ileri</item>
   </plurals>
 
   <string name="jukebox_unknown_title">Bilinmeyen</string>
@@ -186,4 +208,5 @@
   <string name="jukebox_tags_untouched">%1$s Dosyaya dokunulmadı.</string>
   <string name="jukebox_tags_untouched_after">%1$s. Dosyaya dokunulmadı.</string>
   <string name="jukebox_under_a_call">Arama sürüyor. Kısık sesle çalıyor.</string>
+  <string name="jukebox_sleep_extended">Uyku zamanlayıcısı: 10 dakika daha</string>
 </resources>

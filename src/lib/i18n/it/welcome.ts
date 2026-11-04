@@ -78,7 +78,7 @@ export const welcome: Strings['welcome'] = {
 
   tips: {
     library:
-      'Tieni premuta una canzone per il suo menu: aggiungila a una lista, modificane i dettagli o suonala come Piano Tiles. Trascina una canzone a destra per riprodurla dopo, o a sinistra per aggiungerla alla coda.',
+      'Tieni premuta una canzone e sotto il dito si apre un anello: scorri su uno spicchio e rilascia. Rilascia senza muoverti per il menu completo, Piano Tiles compreso. Trascina una canzone a destra per riprodurla dopo, o a sinistra per aggiungerla alla coda.',
     player:
       'Sotto i comandi, il pulsante del testo mostra le parole mentre la canzone suona e, quando sono visibili, il pulsante che compare accanto le traduce. L’ingranaggio contiene velocità e tonalità, effetti e timer di spegnimento.',
     discover:

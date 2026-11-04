@@ -1499,7 +1499,8 @@ function tidy(d: Draft): void {
   const ids = new Set(items.map((item) => item.id));
   const retired = new Set(d.s.retired.filter((id) => !mine.has(id)));
   for (const job of d.s.jobs) {
-    if (!job.discoverKey || mine.has(job.id)) continue;
+    // A song listened to from the Search tab has a key of its own too, and is not Discover's to let go of: see `listen/`.
+    if (!job.discoverKey || job.video.listen || mine.has(job.id)) continue;
     // Asked for a moment ago and not yet answered: its song is on the list and will claim it.
     if (ids.has(job.discoverKey) && (job.status === 'done' || isLive(job)) && !retired.has(job.id)) continue;
     retired.add(job.id);

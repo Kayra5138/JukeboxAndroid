@@ -29,4 +29,6 @@
   <string name="jukebox_widget_up_next_empty">Nothing up next</string>
   <!-- What a screen reader says a press of the cover does. -->
   <string name="jukebox_widget_open">Opens the player</string>
+  <!-- With nothing playing, the tape last listened to, carried on with at a press. %1$s is its title. -->
+  <string name="jukebox_widget_continue">Continue: %1$s</string>
 </resources>

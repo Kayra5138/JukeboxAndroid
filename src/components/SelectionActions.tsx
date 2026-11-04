@@ -1,7 +1,23 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Pressable } from './Pressable';
+import JukeboxAudio from '../../modules/jukebox-audio/index';
 
+import {
+  FileIcon,
+  FileWriteIcon,
+  ListAddIcon,
+  LyricsIcon,
+  MinusIcon,
+  PencilIcon,
+  PictureIcon,
+  RefreshIcon,
+  SearchIcon,
+  ShareIcon,
+  TagIcon,
+  TrashIcon,
+} from './Icons';
+import { MenuEntry, MenuHeader, MenuQuick, type MenuIcon } from './MenuSheet';
 import { OptionSheet } from './OptionSheet';
 import { TagPrompt } from './TagPrompt';
 import { WriteFilesSheet } from './WriteFilesSheet';
@@ -22,6 +38,7 @@ import { artworkChanged } from '../lib/media/artworkEvents';
 import { spreadCovers } from '../lib/media/coverSpread';
 import type { EnrichedTrack } from '../lib/media/enriched';
 import { scanLibrary } from '../lib/media/library';
+import { shareTracks } from '../lib/media/share';
 import { withMetadata } from '../lib/media/merge';
 import { chooseCoverFor } from '../lib/metadata/albumActions';
 import {
@@ -46,7 +63,6 @@ import {
 import { describeOutcome } from '../lib/metadata/outcome';
 import { numberComplaint } from '../lib/metadata/single';
 import { canonicalLabel } from '../lib/metadata/text';
-import { usePlayerState } from '../lib/player/PlayerProvider';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 import type { Track } from '../lib/types';
@@ -79,15 +95,11 @@ export type SelectionAction =
   | 'cover'
   | 'write'
   | 'addToList'
+  | 'share'
+  | 'shareFile'
   | 'reset'
   | 'delete';
 
-/** The sheet's parts, in order; `details.selection.actions` says what each entry is. */
-const SECTIONS: readonly { key: 'find' | 'change' | 'other'; actions: readonly SelectionAction[] }[] = [
-  { key: 'find', actions: ['lookUp', 'covers', 'lyrics'] },
-  { key: 'change', actions: ['edit', 'addTag', 'removeTag', 'cover', 'write'] },
-  { key: 'other', actions: ['addToList', 'reset', 'delete'] },
-];
 
 /** The entries that start the app's one run (`metadata/bulk.ts`), and wait while one is going. */
 const RUNS: ReadonlySet<SelectionAction> = new Set(['lookUp', 'covers', 'lyrics']);
@@ -123,7 +135,7 @@ export function useSelectionActions({
   /** The tracks chosen. */
   trackIds: readonly string[];
   /** The screen's track menu's list picker, opened for these ids. */
-  addToList: (trackIds: string[]) => void;
+  addToList: (trackIds: string[], options?: { favorites?: boolean }) => void;
   /** The screen's track menu's eraser, which takes the files out of the queue as well. */
   erase: (trackIds: string[]) => Promise<boolean>;
   /** What is shown may have changed; see above for the two kinds. */
@@ -146,7 +158,6 @@ export function useSelectionActions({
   const said = t.details.selection;
   const bulk = useBulkLookup();
   const busy = bulk.progress !== null;
-  const { current } = usePlayerState();
   const [sheet, setSheet] = useState(false);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [tagging, setTagging] = useState(false);
@@ -333,7 +344,16 @@ export function useSelectionActions({
         );
       } else if (action === 'write') {
         void filesOf(ids).then(({ chosen }) => setWritingTo(withMetadata(chosen)));
-      } else if (action === 'addToList') addToList(ids);
+      } else if (action === 'addToList') addToList(ids, { favorites: true });
+      else if (action === 'share' || action === 'shareFile') {
+        // By the files' own addresses, which the library has and the ids do not.
+        void filesOf(ids)
+          .then(({ chosen }) => shareTracks(chosen, action === 'shareFile'))
+          .catch((error: unknown) => {
+            haptic('results', 'reject');
+            onSaid(error instanceof Error ? error.message : t.common.shareFailed);
+          });
+      }
       else if (action === 'reset') setResetting(true);
       else {
         // Android asks first. Backing out of that leaves the choice as it was.
@@ -388,7 +408,6 @@ export function useSelectionActions({
       <WriteFilesSheet
         visible={writingTo != null}
         tracks={writingTo ?? []}
-        playingId={current?.id ?? null}
         onClose={(wroteAny) => {
           setWritingTo(null);
           // The files' own tags are different now, and what is shown of them.
@@ -406,6 +425,39 @@ export function useSelectionActions({
  * A lookup cannot be started while another is going, and says so in place
  * of what it does.
  */
+/** Across the top, as a track's menu has its most used: the rest of the sheet in a list below. */
+const QUICK: readonly SelectionAction[] = ['addToList', 'share', 'edit', 'lookUp'];
+
+/** The rest, in the order of finding things out, changing them, and the others, the one that erases last. */
+const LISTED: readonly SelectionAction[] = ['covers', 'lyrics', 'addTag', 'removeTag', 'cover', 'write', 'shareFile', 'reset', 'delete'];
+
+const ICONS: Record<SelectionAction, MenuIcon> = {
+  lookUp: SearchIcon,
+  covers: PictureIcon,
+  lyrics: LyricsIcon,
+  edit: PencilIcon,
+  addTag: TagIcon,
+  removeTag: MinusIcon,
+  cover: PictureIcon,
+  write: FileWriteIcon,
+  addToList: ListAddIcon,
+  share: ShareIcon,
+  shareFile: FileIcon,
+  reset: RefreshIcon,
+  delete: TrashIcon,
+};
+
+/** The shorter name an entry goes by across the top, where there is a quarter of the width for it. */
+const SHORT: Partial<Record<SelectionAction, 'quickList' | 'quickEdit' | 'quickLookUp'>> = {
+  addToList: 'quickList',
+  edit: 'quickEdit',
+  lookUp: 'quickLookUp',
+};
+
+/**
+ * The sheet itself: a track's menu's look, for a run of tracks. A lookup
+ * cannot be started while another is going, and says so under the heading.
+ */
 function ActionSheet({
   visible,
   count,
@@ -422,67 +474,57 @@ function ActionSheet({
   const t = useT();
   const said = t.details.selection;
   const styles = useStyles();
-  const pressed = usePressed();
   useWindowVeil(visible);
-  // Not offered where it cannot be done: Android 10, or a native build from
-  // before it could.
   const writable = canWriteFiles();
+  const sharing = JukeboxAudio.shareTracksAsync != null;
+  const offered = (action: SelectionAction) =>
+    (action !== 'write' || writable) && ((action !== 'share' && action !== 'shareFile') || sharing);
+  const waiting = (action: SelectionAction) => busy && RUNS.has(action);
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       {/* Not a stop for a screen reader; see `AlbumMenu`. The back gesture closes it. */}
       <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
-          <View style={styles.header}>
-            <Text accessibilityRole="header" style={styles.title}>
-              {said.heading(count)}
-            </Text>
-          </View>
-          {SECTIONS.map((section) => (
-            <View key={section.key}>
-              <Text accessibilityRole="header" style={styles.section}>
-                {t.format.upper(said.sections[section.key])}
-              </Text>
-              {section.actions
-                .filter((action) => action !== 'write' || writable)
-                .map((action) => {
-                  const waiting = busy && RUNS.has(action);
-                  const entry = said.actions[action];
-                  return (
-                    <Pressable
-                      key={action}
-                      accessibilityRole="button"
-                      accessibilityLabel={entry.label}
-                      accessibilityHint={waiting ? said.busy : entry.hint}
-                      accessibilityState={{ disabled: waiting }}
-                      android_ripple={pressed}
-                      disabled={waiting}
-                      style={[styles.action, waiting && styles.off]}
-                      onPress={() => onSelect(action)}>
-                      <Text style={action === 'delete' ? styles.danger : styles.actionLabel}>
-                        {entry.label}
-                      </Text>
-                      <Text style={styles.actionHint}>{waiting ? said.busy : entry.hint}</Text>
-                    </Pressable>
-                  );
-                })}
-            </View>
-          ))}
+          <MenuHeader
+            title={said.heading(count)}
+            picture={false}
+            under={busy ? <Text style={styles.busy}>{said.busy}</Text> : null}
+          />
+          <MenuQuick
+            entries={QUICK.filter(offered).map((action) => {
+              const entry = said.actions[action];
+              const short = SHORT[action];
+              return {
+                key: action,
+                icon: ICONS[action],
+                short: short ? said[short] : entry.label,
+                label: entry.label,
+                hint: waiting(action) ? said.busy : entry.hint,
+                disabled: waiting(action),
+                onPress: () => onSelect(action),
+              };
+            })}
+          />
+          {LISTED.filter(offered).map((action) => {
+            const entry = said.actions[action];
+            return (
+              <MenuEntry
+                key={action}
+                icon={ICONS[action]}
+                label={entry.label}
+                hint={waiting(action) ? said.busy : entry.hint}
+                danger={action === 'delete'}
+                disabled={waiting(action)}
+                onPress={() => onSelect(action)}
+              />
+            );
+          })}
         </ScrollView>
       </Pressable>
     </Modal>
   );
 }
 
-/**
- * The fields that can be set on all of them at once. Each box shows, faintly,
- * what the tracks already share, or that they do not; what is typed is what
- * goes on every one of them, and a box left empty changes nothing.
- *
- * Under each box is a tick box that empties the field on every one of them
- * instead, since an empty box cannot say that. Ticked, the box above is
- * closed and says what will happen in place of what was typed, which is kept
- * for when it is unticked again.
- */
 function EditSheet({
   editing,
   onSave,
@@ -653,6 +695,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     ...outlined(c),
   },
   sheetBody: { paddingBottom: 28 },
+  busy: { color: c.textFaint, fontSize: 12, marginTop: 2 },
   header: {
     gap: 3,
     paddingHorizontal: 20,

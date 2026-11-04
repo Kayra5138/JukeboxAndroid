@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { fetchLyrics } from '../lrclib.ts';
+import { fetchLyrics, rankCandidates, sameLength, type LyricsCandidate } from '../lrclib.ts';
 import { queryOf, stubFetch, withoutWaiting } from '../../metadata/__tests__/support.ts';
 
 const record = (fields: Record<string, unknown>) => ({
@@ -121,5 +121,34 @@ describe('fetchLyrics', () => {
     );
 
     assert.equal(asked.length, 1);
+  });
+});
+
+describe('lyrics to choose from', () => {
+  const candidate = (id: number, durationSec: number | null, synced: boolean): LyricsCandidate => ({
+    id,
+    title: 't',
+    artist: 'a',
+    album: null,
+    durationSec,
+    synced,
+    lyrics: { plain: 'x', synced: synced ? '[00:01.00] x' : null },
+  });
+
+  it('come as long as the song first, and timed before plain', () => {
+    const found = [candidate(1, 300, false), candidate(2, 300, true), candidate(3, 200, false), candidate(4, 203, true)];
+    assert.deepEqual(rankCandidates(found, 200).map((one) => one.id), [4, 3, 2, 1]);
+  });
+
+  it('keep their order where nothing tells them apart', () => {
+    const found = [candidate(1, 200, true), candidate(2, 210, true)];
+    assert.deepEqual(rankCandidates(found, null).map((one) => one.id), [1, 2]);
+  });
+
+  it('are the same length within a few seconds, and never where a length is not known', () => {
+    assert.equal(sameLength(candidate(1, 204, true), 200), true);
+    assert.equal(sameLength(candidate(1, 205, true), 200), false);
+    assert.equal(sameLength(candidate(1, null, true), 200), false);
+    assert.equal(sameLength(candidate(1, 200, true), 0), false);
   });
 });

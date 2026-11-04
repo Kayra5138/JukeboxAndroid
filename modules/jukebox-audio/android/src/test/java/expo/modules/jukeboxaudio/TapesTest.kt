@@ -26,6 +26,26 @@ class TapesTest {
   }
 
   @Test
+  fun aBookGivenJumpsOfItsOwnIsJumpedByThem() {
+    val general = 15_000L to 30_000L
+    val json = """{"Music/Tapes/Dune":{"back":10,"forward":60},"Music/Tapes/Show":{"forward":45}}"""
+    assertEquals(10_000L to 60_000L, Tapes.jumpsFor(json, "Music/Tapes/Dune", general))
+    // Only the one it was given; the other is the general one.
+    assertEquals(15_000L to 45_000L, Tapes.jumpsFor(json, "Music/Tapes/Show", general))
+  }
+
+  @Test
+  fun anyOtherIsJumpedByTheGeneralOnes() {
+    val general = 15_000L to 30_000L
+    assertEquals(general, Tapes.jumpsFor("""{"Music/Tapes/Dune":{"back":10}}""", "Music/Tapes/Other", general))
+    assertEquals(general, Tapes.jumpsFor(null, "Music/Tapes/Dune", general))
+    assertEquals(general, Tapes.jumpsFor("not json", "Music/Tapes/Dune", general))
+    // Nought, past ten minutes, or not a number: no jump of its own.
+    assertEquals(general, Tapes.jumpsFor("""{"k":{"back":0,"forward":601}}""", "k", general))
+    assertEquals(general, Tapes.jumpsFor("""{"k":{"back":"far","forward":null}}""", "k", general))
+  }
+
+  @Test
   fun theLongerAwayTheFurtherBack() {
     org.junit.Assert.assertEquals(3_000L, Tapes.rewindMsFor(2 * 60_000L))
     org.junit.Assert.assertEquals(10_000L, Tapes.rewindMsFor(30 * 60_000L))

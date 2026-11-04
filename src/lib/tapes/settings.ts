@@ -1,10 +1,12 @@
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { wholeIn, type Range } from '../ui/range.ts';
+import { jumpsFor, ownJumpsFrom, withOwnJump, type OwnJumps } from './ownJumps.ts';
 
 /**
  * The settings of tapes alone, apart from the music's: how far a tape's jump
- * buttons go, and whether it goes back a little on being played again.
+ * buttons go, for all of them and for a book or show given its own, and
+ * whether it goes back a little on being played again.
  */
 
 /** How far a tape's jump buttons may go, in seconds: up to two minutes, for a talk that wanders. */
@@ -27,15 +29,37 @@ export function setTapeJump(which: 'back' | 'forward', seconds: number): void {
   syncTapeJumps();
 }
 
+function ownJumps(): OwnJumps {
+  return ownJumpsFrom(readSetting(SETTINGS.tapeOwnJumps));
+}
+
+/**
+ * The steps for the book or show under [key] (`tapeKeyOf`): those it was
+ * given in the player's tape settings, or the general ones above where it
+ * was given none, and which are its own.
+ */
+export function tapeJumpsFor(key: string | null): ReturnType<typeof jumpsFor> {
+  const general = tapeJumps();
+  return key ? jumpsFor(ownJumps(), key, general, TAPE_JUMP_RANGE) : { ...general, ownBack: false, ownForward: false };
+}
+
+/** The book or show under [key] given a step of its own, or back to the general one for null. */
+export function setOwnTapeJump(key: string, which: 'back' | 'forward', seconds: number | null): void {
+  writeSetting(SETTINGS.tapeOwnJumps, JSON.stringify(withOwnJump(ownJumps(), key, which, seconds)));
+  syncTapeJumps();
+}
+
 /**
  * The steps handed to the player as well, which makes a press of previous or
  * next on a tape from a headset, the notification or the car the same jump
- * as the app's buttons (`Tapes.jump`). Asked as the app starts, and after a change.
+ * as the app's buttons (`Tapes.jump`): the general ones, and those the books
+ * and shows were given of their own. Asked as the app starts, and after a change.
  */
 export function syncTapeJumps(): void {
   try {
     const { back, forward } = tapeJumps();
     JukeboxAudio.setTapeJumps?.(back, forward);
+    JukeboxAudio.setTapeJumpsByKey?.(JSON.stringify(ownJumps()));
   } catch {
     // An older player: its presses do as they always did.
   }
@@ -61,7 +85,11 @@ export function smartRewind(): boolean {
  */
 export type TapeFlag = 'skipSilence' | 'voiceClarity' | 'skipSponsors';
 
-/** What each is until it is set: the sound left as it is, and the interruptions passed over. */
+/**
+ * What each is until it is set: the sound left as it is, and the interruptions
+ * passed over. Skipping silence and the clearer voice are experimental (they
+ * stand apart at the foot of the tape settings) and stay off until turned on.
+ */
 const FLAG_DEFAULTS: Record<TapeFlag, boolean> = { skipSilence: false, voiceClarity: false, skipSponsors: true };
 
 export function tapeFlag(name: TapeFlag): boolean {

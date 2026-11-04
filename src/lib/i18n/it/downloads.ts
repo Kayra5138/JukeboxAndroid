@@ -35,6 +35,7 @@ export const downloads: Strings['downloads'] = {
 
   source: {
     discover: 'Scopri',
+    listen: 'Ascoltato',
     search: 'Cerca',
     album: (name) => `Album: ${name}`,
     playlist: (name) => `Playlist: ${name}`,

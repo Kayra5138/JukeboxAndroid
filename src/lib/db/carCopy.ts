@@ -56,6 +56,9 @@ const TABLES: Record<string, string> = {
   // The covers tracks with no row of their own were given by their record:
   // the car's tiles should wear what the phone's rows do.
   shared_covers: `SELECT track_id, artwork_url FROM main.shared_covers`,
+  // The shows followed, by name and folder alone: the car's Tapes tell a
+  // show's episodes from a book's parts by the folder they are in.
+  podcasts: `SELECT title, folder FROM main.podcasts`,
 };
 
 /** How many rows this connection had changed when the copy was last made. */

@@ -62,4 +62,24 @@ export const backup: Strings['backup'] = {
   newer: 'Questo backup è stato creato da una versione più recente di Jukebox. Aggiorna l’app per leggerlo.',
   needsBuildToExport: 'Installa la versione Android aggiornata per esportare.',
   needsBuildToImport: 'Installa la versione Android aggiornata per importare.',
+
+  history: {
+    title: 'Importa la cronologia degli ascolti',
+    note: 'I tuoi ascolti da Last.fm, Spotify o ListenBrainz, dai file che ti lasciano scaricare. Ti viene mostrato cosa è stato trovato e ti viene chiesta conferma prima di cambiare qualsiasi cosa.',
+    question: 'Importare questi ascolti?',
+    range: (from, to) => (from === to ? `Tutti del ${from}.` : `Dal ${from} al ${to}.`),
+    matched: (matched, total) =>
+      `${format.number(matched)} su ${format.number(total)} ${oneOrMany(matched, 'è di una canzone', 'sono di canzoni')} della tua libreria. Gli altri vengono tenuti con il loro nome e contano comunque nelle tue statistiche.`,
+    short: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'ascolto dura', 'ascolti durano')} meno di mezzo minuto e ${oneOrMany(count, 'viene tralasciato', 'vengono tralasciati')}.`,
+    already: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'ascolto è', 'ascolti sono')} già nella tua cronologia e ${oneOrMany(count, 'viene tralasciato', 'vengono tralasciati')}.`,
+    nothing: 'Tutti i loro ascolti sono già nella tua cronologia, o troppo brevi per contare.',
+    added: (count) =>
+      `${format.number(count)} ${oneOrMany(count, 'ascolto aggiunto', 'ascolti aggiunti')} alla tua cronologia.`,
+    notHistory:
+      'Questa non è una cronologia di ascolti che Jukebox sa leggere. Scegli i file che ti hanno dato Last.fm, Spotify o ListenBrainz: CSV o JSON, o lo zip in cui sono arrivati.',
+    tooBig: 'Il file è troppo grande per essere letto.',
+    failed: 'Non è stato possibile importare gli ascolti. Non è stato cambiato nulla.',
+  },
 };

@@ -21,7 +21,7 @@ const fold = (value: Cell | undefined) =>
   typeof value === 'string' ? value.normalize('NFKC').trim().toLowerCase() : '';
 
 /** FNV-1a, which is enough to give the same song the same name twice. */
-function hash(value: string): string {
+export function hash(value: string): string {
   let state = 0x811c9dc5;
   for (let i = 0; i < value.length; i++) {
     state ^= value.charCodeAt(i);
@@ -406,14 +406,18 @@ export function consolidate(tables: Tables): Tables {
  * the rules above. Tags and list entries are pooled.
  *
  * A list in the backup is poured into a list here when the two have the same
- * name and are the same kind (both plain, or both following the same tag), and
- * is otherwise added as a list of its own. A list here takes in at most one
+ * name and are the same kind (both plain, both following the same tag, or both
+ * smart), and is otherwise added as a list of its own. A list here takes in at most one
  * from the backup, so two lists called the same thing in the backup do not both
  * end up in whichever one happened to be here.
  */
 export function mergeTables(here: Tables, there: Tables): Tables {
   // Favorites are poured into favorites whatever either is called by now: there is one of them on each side.
-  const kind = (row: Row) => (row.kind === 'favorites' ? 'favorites' : `${fold(row.name)}\u0000${row.tag ?? ''}`);
+  // A smart list is poured into a smart list of its name, which keeps the rules it has here, and never into a list of songs.
+  const kind = (row: Row) =>
+    row.kind === 'favorites'
+      ? 'favorites'
+      : `${fold(row.name)}\u0000${row.tag ?? ''}\u0000${row.kind === 'smart' ? 'smart' : ''}`;
 
   const lists = here.playlists.map((row) => ({ ...row }));
   const free = new Map<string, Row[]>();

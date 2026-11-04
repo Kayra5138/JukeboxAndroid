@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -24,6 +25,8 @@ import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.LibraryResult
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
@@ -284,6 +287,8 @@ class PlaybackService : MediaLibraryService() {
         widgetHandler.removeCallbacks(placeTick)
         if (player.isPlaying) widgetHandler.postDelayed(placeTick, PLACE_EVERY_MS)
       }
+      // A tape after a song, or a song after a tape: the buttons in place of previous and next go with it.
+      if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_TIMELINE_CHANGED)) showTapeButtons()
       // The repeat mode as well, which the larger widgets draw, and which
       // decides whether the queue they list runs round to the start again.
       if (events.containsAny(Player.EVENT_MEDIA_ITEM_TRANSITION, Player.EVENT_IS_PLAYING_CHANGED,
@@ -314,6 +319,31 @@ class PlaybackService : MediaLibraryService() {
 
   /** Where each tape was left, kept and gone back to: see [TapeKeeper]. */
   private var tapeKeeper: TapeKeeper? = null
+
+  /** The chapter of the tape playing, said in place of its artist: see [ChapterLine]. */
+  private var chapterLine: ChapterLine? = null
+
+  /** The player itself, under the wrapper the session is given, for a tape's jumps: see [Tapes.jump]. */
+  private var exoPlayer: ExoPlayer? = null
+
+  /** What the buttons set for a tape were last drawn from: see [showTapeButtons]. */
+  private var tapeButtonsFor: String? = null
+
+  /**
+   * Back and on by a tape's jumps in place of previous and next while a
+   * tape plays, and previous and next again for anything else (see
+   * [TapeButtons]). Set only when what they are drawn from has changed: a
+   * change of track between two songs, or two parts of one book, is not one.
+   */
+  private fun showTapeButtons() {
+    val session = mediaSession ?: return
+    val tape = Tapes.isTape(this, session.player.currentMediaItem)
+    val state = TapeButtons.stateOf(this, tape)
+    if (state == tapeButtonsFor) return
+    tapeButtonsFor = state
+    runCatching { session.setMediaButtonPreferences(TapeButtons.forPlaying(this, tape)) }
+      .onFailure { android.util.Log.w("JukeboxPlayback", "could not set the buttons for a tape", it) }
+  }
 
   private val faultRecovery = object : Player.Listener {
     private var tries = 0
@@ -348,6 +378,9 @@ class PlaybackService : MediaLibraryService() {
     val trackId = player.currentMediaItem?.mediaId
     val before = NowPlaying.read(this)
     val loaded = player.mediaItemCount > 0
+    // The tape last listened to, kept through the songs played after it, for the widget to offer carrying on with.
+    val current = player.currentMediaItem
+    val tape = current != null && Tapes.isTape(this, current)
 
     val state = NowPlaying(
       trackId = trackId,
@@ -369,7 +402,11 @@ class PlaybackService : MediaLibraryService() {
         one chosen, just before restoreQueueIfEmpty reads it back.
       */
       repeatMode = if (loaded) player.repeatMode else NowPlaying.repeatMode(this),
-      upcoming = upcoming(player)
+      upcoming = upcoming(player),
+      tapeId = if (tape) Tapes.idOf(current!!) else before.tapeId,
+      tapeTitle = if (tape) {
+        metadata.title?.toString() ?: current!!.mediaMetadata.extras?.getString("jukebox.filename")
+      } else before.tapeTitle
     )
 
     NowPlaying.write(this, state)
@@ -537,7 +574,7 @@ class PlaybackService : MediaLibraryService() {
       and the notification are given no timer to set -- and what it does when
       it fires is a plain pause that all of them see like any other.
     */
-    sleepTimer = SleepTimer(player, transitions, windDown).also {
+    sleepTimer = SleepTimer(player, transitions, windDown, this).also {
       player.addListener(it)
       SleepTimers.register(it)
     }
@@ -560,13 +597,16 @@ class PlaybackService : MediaLibraryService() {
       all of them, and the only place the fades have to be woven in.
     */
     val quiet = CallQuiet(this, player).also { callQuiet = it }
-    mediaSession = MediaLibrarySession.Builder(this, FadingPlayer(
+    exoPlayer = player
+    val fading = FadingPlayer(
       player,
       transitions,
       quiet,
       tapeJump = { forward -> Tapes.jump(this, player, forward) },
       tapeNow = { Tapes.isTape(this, player.currentMediaItem) },
-    ), browsing)
+      chapter = { chapterLine?.titleFor(player.currentMediaItem) },
+    )
+    mediaSession = MediaLibrarySession.Builder(this, fading, browsing)
       .apply { launchAppIntent()?.let { setSessionActivity(it) } }
       .build()
 
@@ -575,6 +615,10 @@ class PlaybackService : MediaLibraryService() {
     // Playing in name and silent in fact, after the phone froze the app: see [StallGuard].
     stallGuard = StallGuard(player, transitions).also { player.addListener(it) }
     tapeKeeper = TapeKeeper(this, player).also { player.addListener(it) }
+    chapterLine = ChapterLine(this, player) { fading.chapterChanged() }.also { player.addListener(it) }
+    // The jumps changed in the app while a tape plays: its buttons say the new seconds at once.
+    Tapes.jumpsChanged = { widgetHandler.post { showTapeButtons() } }
+    showTapeButtons()
     speak()
     Localised.watch(languageChanged)
     publish()
@@ -631,6 +675,8 @@ class PlaybackService : MediaLibraryService() {
   @OptIn(UnstableApi::class)
   private val languageChanged: () -> Unit = {
     speak()
+    // A tape's buttons are named in words, and are named again.
+    showTapeButtons()
     mediaSession?.let { session ->
       runCatching { onUpdateNotification(session, false) }
       BrowseTree.SPOKEN.forEach { node ->
@@ -708,11 +754,43 @@ class PlaybackService : MediaLibraryService() {
       controller: MediaSession.ControllerInfo
     ): MediaSession.ConnectionResult =
       if (mayBrowse(controller)) {
-        MediaSession.ConnectionResult.AcceptedResultBuilder(session).build()
+        // With the two a tape's buttons send, which nobody could press otherwise: see [TapeButtons].
+        MediaSession.ConnectionResult.AcceptedResultBuilder(session)
+          .setAvailableSessionCommands(
+            MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
+              .add(TapeButtons.back)
+              .add(TapeButtons.forward)
+              .build()
+          )
+          .build()
       } else {
         android.util.Log.i("JukeboxPlayback", "refused ${controller.packageName}")
         MediaSession.ConnectionResult.reject()
       }
+
+    /**
+     * A press of one of a tape's buttons: a jump back or on within it, as a
+     * press of previous or next on a tape is. One left over from a moment
+     * ago, pressed as a song came on, is the previous or next it stood in
+     * for.
+     */
+    override fun onCustomCommand(
+      session: MediaSession,
+      controller: MediaSession.ControllerInfo,
+      customCommand: SessionCommand,
+      args: Bundle
+    ): ListenableFuture<SessionResult> {
+      val forward = when (customCommand.customAction) {
+        TapeButtons.BACK -> false
+        TapeButtons.FORWARD -> true
+        else -> return super.onCustomCommand(session, controller, customCommand, args)
+      }
+      val player = exoPlayer
+      if (player == null || !Tapes.jump(this@PlaybackService, player, forward)) {
+        if (forward) session.player.seekToNext() else session.player.seekToPrevious()
+      }
+      return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+    }
 
     override fun onGetLibraryRoot(
       session: MediaLibrarySession,
@@ -855,14 +933,25 @@ class PlaybackService : MediaLibraryService() {
       */
       val spoken = mediaItems.first().requestMetadata.searchQuery
       if (chosen.isEmpty() && spoken != null) {
-        val found = runCatching {
-          if (spoken.isBlank()) BrowseTree.resolve(this@PlaybackService, BrowseTree.CONTINUE).first
-          else BrowseTree.search(this@PlaybackService, spoken)
-        }.getOrElse { emptyList() }
+        /*
+          A tape found first is played as it would be from the tapes, with
+          the rest of its show or book after it, from where it was left; songs
+          found first are played with the other songs found, and without the
+          tapes among them.
+        */
+        val (found, at) = runCatching {
+          if (spoken.isBlank()) BrowseTree.resolve(this@PlaybackService, BrowseTree.CONTINUE).first to 0
+          else {
+            val all = BrowseTree.search(this@PlaybackService, spoken)
+            val first = all.firstOrNull()
+            if (first != null && Tapes.isTape(this@PlaybackService, first)) BrowseTree.resolve(this@PlaybackService, first.mediaId)
+            else all.filterNot { Tapes.isTape(this@PlaybackService, it) } to 0
+          }
+        }.getOrElse { emptyList<MediaItem>() to 0 }
         if (found.isNotEmpty()) {
           QueueReplaced.mark()
           return Futures.immediateFuture(
-            MediaSession.MediaItemsWithStartPosition(found.map(BrowseTree::queued), 0, 0)
+            MediaSession.MediaItemsWithStartPosition(found.map(BrowseTree::queued), at, 0)
           )
         }
       }
@@ -1023,27 +1112,45 @@ class PlaybackService : MediaLibraryService() {
       WidgetCommands.SHELF -> {
         val shelf = intent.getStringExtra(WidgetCommands.EXTRA_SHELF)
           ?.takeIf { it == BrowseTree.SHUFFLE || it == BrowseTree.SHUFFLE_RECENT } ?: return
-        /*
-          The library is read off the playback thread, as covers are: it is the
-          whole of it, from the app's database. The few hundred milliseconds
-          that can take are well inside the time the foreground start allows,
-          and foregroundOwed pays it anyway if they are not.
-        */
-        aside {
-          val (items, index) = runCatching { BrowseTree.resolve(this, shelf) }
-            .getOrElse { emptyList<MediaItem>() to 0 }
-          if (items.isEmpty()) return@aside
-          val queued = items.map(BrowseTree::queued)
-          widgetHandler.post {
-            val target = mediaSession?.player ?: return@post
-            // Not the app's doing, so the app is told to read the queue again,
-            // as it is when a car chooses something.
-            QueueReplaced.mark()
-            target.setMediaItems(queued, index, 0L)
-            target.prepare()
-            target.playWhenReady = true
-          }
+        playFromTree(shelf)
+      }
+      WidgetCommands.TAPE -> {
+        val id = intent.getStringExtra(WidgetCommands.EXTRA_ID) ?: return
+        // Loaded already, and only paused: played on from where it is.
+        if (player.currentMediaItem?.let(Tapes::idOf) == id) {
+          player.playWhenReady = true
+          return
         }
+        // Otherwise as the car's home tab carries a tape on: with the rest of
+        // its show or book after it, from where it was left.
+        playFromTree(BrowseTree.tapeToContinue(id))
+      }
+    }
+  }
+
+  /**
+   * Replaces the queue with what the car's tree plays for [mediaId], and
+   * plays it.
+   *
+   * The library is read off the playback thread, as covers are: it is the
+   * whole of it, from the app's database. The few hundred milliseconds that
+   * can take are well inside the time the foreground start allows, and
+   * foregroundOwed pays it anyway if they are not.
+   */
+  private fun playFromTree(mediaId: String) {
+    aside {
+      val (items, index) = runCatching { BrowseTree.resolve(this, mediaId) }
+        .getOrElse { emptyList<MediaItem>() to 0 }
+      if (items.isEmpty()) return@aside
+      val queued = items.map(BrowseTree::queued)
+      widgetHandler.post {
+        val target = mediaSession?.player ?: return@post
+        // Not the app's doing, so the app is told to read the queue again,
+        // as it is when a car chooses something.
+        QueueReplaced.mark()
+        target.setMediaItems(queued, index, 0L)
+        target.prepare()
+        target.playWhenReady = true
       }
     }
   }
@@ -1190,6 +1297,10 @@ class PlaybackService : MediaLibraryService() {
     tapeKeeper?.saveCurrent()
     tapeKeeper?.release()
     tapeKeeper = null
+    chapterLine?.release()
+    chapterLine = null
+    Tapes.jumpsChanged = null
+    exoPlayer = null
     // The last word on where playback was. The writer is shut down below, and
     // shutting it down lets what it has already been given finish.
     savePlace()

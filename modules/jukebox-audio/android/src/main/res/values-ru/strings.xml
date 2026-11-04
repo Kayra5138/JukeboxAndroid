@@ -30,6 +30,7 @@
   <string name="jukebox_widget_up_next">Далее</string>
   <string name="jukebox_widget_up_next_empty">Дальше ничего нет</string>
   <string name="jukebox_widget_open">Открывает плеер</string>
+  <string name="jukebox_widget_continue">Продолжить: %1$s</string>
 
   <!-- Уведомление о воспроизведении. -->
   <string name="jukebox_playback_channel">Сейчас играет</string>
@@ -79,6 +80,35 @@
     <item quantity="few">%d песни</item>
     <item quantity="many">%d песен</item>
     <item quantity="other">%d песни</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">Кассеты</string>
+  <string name="jukebox_auto_following">Подписки</string>
+  <string name="jukebox_auto_books">Книги</string>
+  <string name="jukebox_auto_tape_left">осталось %1$d мин</string>
+  <string name="jukebox_auto_tape_played">Прослушано</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="one">%d выпуск</item>
+    <item quantity="few">%d выпуска</item>
+    <item quantity="many">%d выпусков</item>
+    <item quantity="other">%d выпуска</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="one">%d часть</item>
+    <item quantity="few">%d части</item>
+    <item quantity="many">%d частей</item>
+    <item quantity="other">%d части</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="one">Назад на %d секунду</item>
+    <item quantity="few">Назад на %d секунды</item>
+    <item quantity="many">Назад на %d секунд</item>
+    <item quantity="other">Назад на %d секунды</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="one">Вперёд на %d секунду</item>
+    <item quantity="few">Вперёд на %d секунды</item>
+    <item quantity="many">Вперёд на %d секунд</item>
+    <item quantity="other">Вперёд на %d секунды</item>
   </plurals>
 
   <string name="jukebox_unknown_title">Неизвестно</string>
@@ -208,4 +238,5 @@
   <string name="jukebox_tags_untouched_after">%1$s. Файл не изменён.</string>
   <!-- Всплывающее сообщение, когда воспроизведение включают во время звонка. -->
   <string name="jukebox_under_a_call">Идёт звонок. Музыка играет тихо.</string>
+  <string name="jukebox_sleep_extended">Таймер сна: ещё 10 минут</string>
 </resources>

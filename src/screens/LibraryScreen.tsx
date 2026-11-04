@@ -18,12 +18,14 @@ import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../compone
 import { Pressable } from '../components/Pressable';
 
 import { MarksIcon, PlayIcon, PlusIcon, SearchIcon, SettingsIcon, ShuffleIcon } from '../components/Icons';
+import { PressRing } from '../components/PressMenu';
+import { useTrackRing } from '../components/trackRing';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
 import { SearchField } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, outlinedClip, scene, useColours, usePressed } from '../lib/theme/index';
-import { underGlass } from '../lib/theme/Veil';
+import { underGlass, Veiled } from '../lib/theme/Veil';
 import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
 import { useHiddenTabs } from '../lib/ui/tabs';
@@ -81,13 +83,17 @@ import {
 import { lastPlayedAt, playCounts } from '../lib/db/history';
 import { artistKey, spreadShuffle } from '../lib/media/shuffle';
 import { usePlayTapped, type TapPlace } from '../lib/player/usePlayTapped';
-import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
+import { currentTrack, playingTrack } from '../lib/player/current';
+import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { motionReduced } from '../lib/ui/motion';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { followsScrolling } from '../lib/ui/moving';
+import { useStartingOffset } from '../lib/ui/useStartingOffset';
 import { useLibraryViews } from '../lib/ui/libraryViews';
 import { downloads } from '../lib/youtube/native';
-import { inRecordOrder, inSeriesOrder, orderTapes, partsOf } from '../lib/tapes/order';
+import { inRecordOrder, inSeriesOrder, orderTapes } from '../lib/tapes/order';
+import { tapeQueueOf } from '../lib/tapes/play';
 import { asTapeFilter, asTapeSort, nextTapeSort, type TapeFilter, type TapeSort } from '../lib/tapes/sort';
 import { TapeItemRow } from '../components/tapes/TapeItemRow';
 import { markTape, useTapePlaces } from '../lib/tapes/places';
@@ -384,7 +390,6 @@ export default function LibraryScreen() {
     if (music.length === 0) return;
     void playQueue(spreadShuffle(music, artistKey), 0);
   };
-  const { current, playWhenReady } = usePlayerState();
   const router = useRouter();
 
   /*
@@ -814,6 +819,7 @@ export default function LibraryScreen() {
     key: string;
     name: string;
     detail: string;
+    covers: readonly EnrichedTrack[];
     /** Held in the rack, where there is nothing to choose with. */
     racked: boolean;
   } | null>(null);
@@ -826,7 +832,7 @@ export default function LibraryScreen() {
       if (viewRef.current !== 'albums' || selecting) return chooseUnder(id);
       const heading = headingsRef.current.find((entry) => entry.id === id);
       if (heading) {
-        setAlbumMenu({ key: id, name: heading.title, detail: heading.detail, racked: false });
+        setAlbumMenu({ key: id, name: heading.title, detail: heading.detail, covers: heading.cover, racked: false });
       }
     },
     [chooseUnder, selecting]
@@ -838,6 +844,7 @@ export default function LibraryScreen() {
         key: album.key,
         name: album.name,
         detail: [album.artist, t.common.tracks(album.tracks.length)].filter(Boolean).join(' · '),
+        covers: album.tracks,
         racked: true,
       }),
     [t]
@@ -1039,22 +1046,15 @@ export default function LibraryScreen() {
         return;
       }
       // The one playing is left where it is, and played on if it was paused: put on again, it would go back a little.
-      if (track.id === current?.id) {
-        if (!playWhenReady) void toggle();
+      if (track.id === currentTrack.get()) {
+        if (playingTrack.get() == null) void toggle();
         return;
       }
-      // An episode of a followed show plays with the rest of the show, in the order they came out.
-      const show = seriesOf(track);
-      if (show) {
-        const folder = folderKey(track.folder ?? '').toLocaleLowerCase();
-        const episodes = inSeriesOrder(allTapesRef.current.filter((one) => folderKey(one.folder ?? '').toLocaleLowerCase() === folder));
-        void start(episodes, Math.max(0, episodes.findIndex((one) => one.id === track.id)));
-        return;
-      }
-      const { tracks, index } = partsOf(track, allTapesRef.current);
+      // An episode of a followed show plays with the rest of the show, in the order they came out; a part with its record.
+      const { tracks, index } = tapeQueueOf(track, allTapesRef.current);
       void start(tracks, index);
     },
-    [current?.id, playWhenReady, selecting, start, toggle, toggleSelected]
+    [selecting, start, toggle, toggleSelected]
   );
 
   /** Leaves the mode and forgets the run; one never outlives the other. */
@@ -1118,7 +1118,7 @@ export default function LibraryScreen() {
     shows tracks has the same one of. The picker is borrowed for a whole
     selection as well, so what it did is said and the selection ended here.
   */
-  const { open: openMenu, addToList, erase, element: menuElement, veiled: menuVeiled } = useTrackMenu({
+  const { open: openMenu, run: runMenu, addToList, erase, element: menuElement, veiled: menuVeiled } = useTrackMenu({
     onChanged: () => void load(),
     onAdded: (message) => {
       setNote(message);
@@ -1133,6 +1133,9 @@ export default function LibraryScreen() {
     (track: EnrichedTrack) => openMenu(track, WITHOUT_ALBUM),
     [openMenu]
   );
+  // A row held and slid from, with the finger never lifted: see `pressMenu.ts`. On a record's own page, without the way to it.
+  const ring = useTrackRing({ open: openMenu, run: runMenu });
+  const albumRing = useTrackRing({ open: openMenu, run: runMenu }, WITHOUT_ALBUM);
 
   // A selection is left as it is. It is tracks whichever view it was made in,
   // every view can show it and end it, and choosing an artist and then going to
@@ -1264,9 +1267,10 @@ export default function LibraryScreen() {
           tint: c.success,
           onAct: () => void addToQueue(item),
         }}>
+        <PressRing ring={ring} item={item as EnrichedTrack} enabled={!selecting}>
         <TrackRow
+          // Whether it is the one playing, it asks the player itself: told it here, every row was drawn again at each change of song.
           track={item}
-          playing={item.id === current?.id}
           onPress={onRowPress}
           // The per-track menu would be reached by the same gesture that picks a
           // row, so while choosing it steps aside.
@@ -1278,9 +1282,10 @@ export default function LibraryScreen() {
           selectable={selecting}
           selected={selected.has(item.id)}
         />
+        </PressRing>
       </SwipeRow>
     ),
-    [addToQueue, c, columns, current?.id, onRowPress, openMenu, playNext, playNextTrack, queueTrack, selected, selecting, styles, t, toggleSelected]
+    [addToQueue, c, columns, onRowPress, openMenu, playNext, playNextTrack, queueTrack, ring, selected, selecting, styles, t, toggleSelected]
   );
 
   const expandSeries = useCallback((show: SeriesShow) => {
@@ -1308,10 +1313,10 @@ export default function LibraryScreen() {
   // A show's button: the episode it offers paused where it is playing, played or played on otherwise.
   const playFromSeries = useCallback(
     (track: EnrichedTrack) => {
-      if (track.id === current?.id && playWhenReady) void toggle();
+      if (track.id === playingTrack.get()) void toggle();
       else onTapePress(track);
     },
-    [current?.id, onTapePress, playWhenReady, toggle]
+    [onTapePress, toggle]
   );
 
   // A followed show's own screen; a folder of tapes, its page, where it plays in its order.
@@ -1335,7 +1340,6 @@ export default function LibraryScreen() {
           places={places}
           onPress={openSeries}
           onPlay={playFromSeries}
-          playingId={playWhenReady ? (current?.id ?? null) : null}
           expanded={expanded.has(item.show.feedUrl)}
           onExpand={expandSeries}
           book={item.book}
@@ -1346,30 +1350,31 @@ export default function LibraryScreen() {
       ) : item.kind === 'episode' ? (
         // Set in under its show, as one of it.
         <View style={styles.tapeEpisode}>
+          <PressRing ring={ring} item={item.track as EnrichedTrack} enabled={!selecting}>
           <TrackRow
             track={item.track}
-            playing={item.track.id === current?.id}
             onPress={onTapePress}
             onLongPress={selecting ? toggleSelected : openMenu}
             selectable={selecting}
             selected={selected.has(item.track.id)}
           />
+          </PressRing>
         </View>
       ) : (
         // A tape on its own, with a button that carries it on as a show's and a book's have.
+        <PressRing ring={ring} item={item.track as EnrichedTrack} enabled={!selecting}>
         <TapeItemRow
           track={item.track}
           place={places.get(item.track.id) ?? null}
-          playingId={playWhenReady ? (current?.id ?? null) : null}
-          current={item.track.id === current?.id}
           onPress={onTapePress}
           onPlay={playFromSeries}
           onLongPress={selecting ? toggleSelected : openMenu}
           selectable={selecting}
           selected={selected.has(item.track.id)}
         />
+        </PressRing>
       ),
-    [current?.id, expandSeries, expanded, onTapePress, openMenu, openSeries, playFromSeries, playWhenReady, places, selectSeries, selected, selecting, styles, t, toggleSelected]
+    [expandSeries, expanded, onTapePress, openMenu, openSeries, playFromSeries, places, ring, selectSeries, selected, selecting, styles, t, toggleSelected]
   );
 
   /*
@@ -1380,6 +1385,7 @@ export default function LibraryScreen() {
     the whole library to record a number only the list itself reads back.
   */
   const restoreTo = useRef(0);
+  const tracksStart = useStartingOffset(columns, () => restoreTo.current);
 
   const drag = useDragSelect({
     ids: useMemo(() => results.map((track) => track.id), [results]),
@@ -1390,6 +1396,7 @@ export default function LibraryScreen() {
     onChange: setSelected,
     top: topRoom,
   });
+
 
   /*
     Everything the view is currently showing, not the whole library: the tracks
@@ -1573,10 +1580,10 @@ export default function LibraryScreen() {
           finding its way to a search box underneath a list would be finding
           something nobody can see.
         */}
-        <View
+        <Veiled
           // Out of focus under an open record, where screens are glass.
-          collapsable={false}
-          style={opened && glass ? [styles.upright, glass] : styles.upright}
+          blur={opened ? glass : 0}
+          style={styles.upright}
           pointerEvents={opened ? 'none' : 'auto'}
           importantForAccessibility={opened ? 'no-hide-descendants' : 'auto'}
           accessibilityElementsHidden={opened != null}>
@@ -1744,7 +1751,7 @@ export default function LibraryScreen() {
                 android_ripple={pressed}
                 style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
                 disabled={selected.size === 0}
-                onPress={() => addToList([...selected])}>
+                onPress={() => addToList([...selected], { favorites: true })}>
                 <Text style={styles.bulkLabel}>{t.library.screen.addToList}</Text>
               </Pressable>
               <Pressable
@@ -1904,6 +1911,7 @@ export default function LibraryScreen() {
               <FlatList
                         removeClippedSubviews={CLIP_SUBVIEWS}
                 data={headingsOf[kind]}
+                {...followsScrolling}
                 // Remounted when the columns change, which React Native will not alter on a list that is up.
                 key={columns}
                 numColumns={columns}
@@ -1956,6 +1964,7 @@ export default function LibraryScreen() {
               <FlatList
                       removeClippedSubviews={CLIP_SUBVIEWS}
                 data={results}
+                {...followsScrolling}
                 onLayout={(event) => drag.onWidth(event.nativeEvent.layout.width)}
                 /*
                   Remounts the list when the count changes. React Native refuses to
@@ -1973,9 +1982,10 @@ export default function LibraryScreen() {
                   drag.onScroll(event.nativeEvent.contentOffset.y);
                 }}
                 scrollEventThrottle={16}
-                // Read once, when the list is built. Covers the case the guard above
-                // cannot: the list being torn down while the screen around it lives on.
-                contentOffset={{ x: 0, y: restoreTo.current }}
+                // Covers the case the guard above cannot: the list being torn down while the screen
+                // around it lives on. What it is given stays put while the list does: see `startingOffset`.
+                ref={tracksStart.ref}
+                contentOffset={tracksStart.contentOffset}
                 /*
                   Measured rather than calculated once there is more than one column.
 
@@ -2062,6 +2072,7 @@ export default function LibraryScreen() {
               <FlatList
                 removeClippedSubviews={CLIP_SUBVIEWS}
                 data={tapeRows}
+                {...followsScrolling}
                 keyExtractor={(row) => row.id}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
@@ -2078,7 +2089,7 @@ export default function LibraryScreen() {
         </>
       )}
       </BlurArea>
-        </View>
+        </Veiled>
 
         {/*
           The record a sleeve was tapped for, over the header and the rack and
@@ -2101,6 +2112,7 @@ export default function LibraryScreen() {
             bottom={under.bottom}
             onPlay={playFrom}
             onTap={tapInAlbum}
+            ring={albumRing}
             // Its own record is the one place "go to album" has nowhere to go.
             onLongPress={openFromAlbum}
             onFindRest={findRest}

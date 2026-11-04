@@ -9,6 +9,7 @@ import expo.modules.kotlin.activityresult.AppContextActivityResultLauncher
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Coroutine
 import expo.modules.kotlin.modules.Module
+import expo.modules.jukeboxaudio.sleep.ShakeToExtend
 import expo.modules.jukeboxaudio.sleep.SleepTimers
 import expo.modules.jukeboxaudio.transitions.Crossfades
 import expo.modules.jukeboxaudio.equalizer.ParametricSettings
@@ -61,7 +62,9 @@ class JukeboxAudioModule : Module() {
   private var backupSave: AppContextActivityResultLauncher<BackupSave.Input, String?>? = null
   private var backupOpen: AppContextActivityResultLauncher<BackupOpen.Input, String?>? = null
   private var textSave: AppContextActivityResultLauncher<TextSave.Input, String?>? = null
+  private var backupFolderPick: AppContextActivityResultLauncher<BackupFolderPick.Input, String?>? = null
   private var audioOpen: AppContextActivityResultLauncher<AudioFilesOpen.Input, List<String>>? = null
+  private var historyOpen: AppContextActivityResultLauncher<HistoryFilesOpen.Input, List<String>>? = null
 
   /**
    * Scanning a library, extracting a cover and downloading three hundred
@@ -72,12 +75,36 @@ class JukeboxAudioModule : Module() {
    */
   private val io = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+  /** The covers a backup refers to, by name, looked for in the app's own artwork folder and nowhere else. */
+  private fun backupPictures(names: List<String>): List<java.io.File> {
+    val home = java.io.File(context.filesDir, "album-artwork")
+    return names.filter(BackupArchive::safeName).map { java.io.File(home, it) }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("JukeboxAudio")
     Constant("buildTimestamp") { BuildConfig.BUILD_TIMESTAMP }
 
+    // A bar's glass, the strip of the list under it out of focus: see [FrostView].
+    View(FrostView::class) {
+      Name("FrostView")
+      Prop("targetId") { view: FrostView, id: Int? -> view.setTargetId(id) }
+      Prop("radius") { view: FrostView, pixels: Float -> view.setRadius(pixels) }
+      Prop("overlay") { view: FrostView, colour: Int -> view.setOverlay(colour) }
+    }
+    // What is under a sheet or a screen of glass, out of focus: see [VeilView].
+    View(VeilView::class) {
+      Name("VeilView")
+      Prop("blur") { view: VeilView, points: Float -> view.setBlur(points) }
+      Prop("dim") { view: VeilView, light: Float -> view.setDim(light) }
+    }
+    // What scrolls under the bars, kept as a record for them to blur: see [FrostTargetView].
+    View(FrostTargetView::class) {
+      Name("FrostTargetView")
+    }
+
     Events("onTrackChange", "onPlaybackStateChange", "onQueueEnded", "onPlaybackError", "onQueueReplaced",
-      "onSleepTimerChange", "onRepeatModeChange", "onOpenPlayer", "onPlaybackParamsChange")
+      "onSleepTimerChange", "onRepeatModeChange", "onOpenPlayer", "onPlaybackParamsChange", "onOpenAudio")
 
     /*
       The widget's cover, pressed while the app was already running. The app
@@ -90,6 +117,20 @@ class JukeboxAudioModule : Module() {
         intent.removeExtra(JukeboxWidget.OPEN_PLAYER)
         sendEvent("onOpenPlayer", emptyMap<String, Any?>())
       }
+      // A sound file opened with the app, or shared to it, while it was running: see [OpenedAudio].
+      val opened = OpenedAudio.take(intent)
+      if (opened.isNotEmpty()) sendEvent("onOpenAudio", mapOf("uris" to opened))
+    }
+
+    /** The sound files the app was started to open or was shared, once: see [OpenedAudio]. */
+    Function("takeOpenedAudio") {
+      OpenedAudio.take(appContext.currentActivity?.intent)
+    }
+
+    /** A sound file opened with the app made ready to play: see [OpenedAudio.read]. */
+    AsyncFunction("readOpenedAudioAsync") Coroutine { address: String ->
+      val context = appContext.reactContext ?: throw IllegalStateException("No context")
+      withContext(Dispatchers.IO) { OpenedAudio.read(context, address) }
     }
 
     /**
@@ -131,7 +172,9 @@ class JukeboxAudioModule : Module() {
       backupSave = registerForActivityResult(BackupSave())
       backupOpen = registerForActivityResult(BackupOpen())
       textSave = registerForActivityResult(TextSave())
+      backupFolderPick = registerForActivityResult(BackupFolderPick())
       audioOpen = registerForActivityResult(AudioFilesOpen())
+      historyOpen = registerForActivityResult(HistoryFilesOpen())
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         remover = registerForActivityResult(DeleteRequest())
       }
@@ -145,7 +188,9 @@ class JukeboxAudioModule : Module() {
       backupSave = null
       backupOpen = null
       textSave = null
+      backupFolderPick = null
       audioOpen = null
+      historyOpen = null
       io.cancel()
     }
 
@@ -323,6 +368,15 @@ class JukeboxAudioModule : Module() {
     }.runOnQueue(io)
 
     /**
+     * Offers sound files to whichever app the user picks, under the system's
+     * chooser headed [title]. False when none of them is a file this app can
+     * lend; see [TrackShare].
+     */
+    AsyncFunction("shareTracksAsync") { uris: List<String>, title: String, asFile: Boolean? ->
+      TrackShare.share(context, uris, title, asFile == true)
+    }.runOnQueue(io)
+
+    /**
      * Asks for a picture and keeps a copy of it.
      *
      * Answers with where the copy landed, or null if the user backed out. The
@@ -365,8 +419,7 @@ class JukeboxAudioModule : Module() {
         ?: return@Coroutine false
       withContext(Dispatchers.IO) {
         val uri = android.net.Uri.parse(target)
-        val home = java.io.File(context.filesDir, "album-artwork")
-        val files = pictures.filter(BackupArchive::safeName).map { java.io.File(home, it) }
+        val files = backupPictures(pictures)
         try {
           val out = context.contentResolver.openOutputStream(uri, "w")
             ?: throw Told(R.string.jukebox_file_not_writable)
@@ -379,6 +432,38 @@ class JukeboxAudioModule : Module() {
         }
       }
       true
+    }
+
+    /**
+     * Lets the user choose the folder automatic backups go into and keeps the
+     * grant to it; answers its address and name, or null if they backed out.
+     * The grant to [previous], a folder chosen before, is let go of.
+     */
+    AsyncFunction("pickBackupFolderAsync") Coroutine { previous: String? ->
+      val launcher = backupFolderPick ?: return@Coroutine null
+      val picked = withContext(Dispatchers.Main) { launcher.launch(BackupFolderPick.Input()) }
+        ?: return@Coroutine null
+      withContext(Dispatchers.IO) {
+        val tree = Uri.parse(picked)
+        BackupFolder.keep(context, tree, previous?.let(Uri::parse))
+        mapOf("uri" to picked, "name" to BackupFolder.name(context, tree))
+      }
+    }
+
+    /** The name of the folder at [tree], or null where the app may no longer write there or it is gone. */
+    AsyncFunction("backupFolderNameAsync") Coroutine { tree: String ->
+      withContext(Dispatchers.IO) { BackupFolder.name(context, Uri.parse(tree)) }
+    }
+
+    /**
+     * Writes a backup into the folder at [tree] with no picker, as [name] or the
+     * next free name after it, and deletes the oldest backups there beyond
+     * [keep]. Answers the name it was written under.
+     */
+    AsyncFunction("writeBackupToFolderAsync") Coroutine { tree: String, name: String, document: String, pictures: List<String>, keep: Int ->
+      withContext(Dispatchers.IO) {
+        BackupFolder.write(context, Uri.parse(tree), name, document, backupPictures(pictures), keep)
+      }
     }
 
     /**
@@ -680,6 +765,13 @@ class JukeboxAudioModule : Module() {
       null
     }
 
+    /** The jumps of the books and shows given their own, by their keys: see [Tapes.jumpsFor]. */
+    Function("setTapeJumpsByKey") { json: String ->
+      val context = appContext.reactContext ?: return@Function null
+      Tapes.setJumpsByKey(context, json)
+      null
+    }
+
     /** Each tape's speed, by its key, and the music's if the app had put it aside: see [Tapes.applySpeed]. */
     Function("setTapeSpeeds") { json: String, musicSpeed: Double? ->
       val context = appContext.reactContext ?: return@Function null
@@ -816,6 +908,27 @@ class JukeboxAudioModule : Module() {
       withContext(Dispatchers.IO) { TextDocument.read(context, Uri.parse(picked)) }
     }
 
+    /**
+     * Lets the user choose the files another app exported a listening
+     * history in, as many as they like; answers each one's address and name,
+     * or none if they backed out. See [HistoryFiles].
+     */
+    AsyncFunction("pickHistoryFilesAsync") Coroutine { ->
+      val launcher = historyOpen ?: return@Coroutine emptyList<Map<String, Any?>>()
+      val picked = withContext(Dispatchers.Main) { launcher.launch(HistoryFilesOpen.Input()) }
+      withContext(Dispatchers.IO) { HistoryFiles.describe(context, picked) }
+    }
+
+    /** The parts of a picked file worth reading: the file itself, or the histories in a zip. */
+    AsyncFunction("historyPartsAsync") Coroutine { uri: String ->
+      withContext(Dispatchers.IO) { HistoryFiles.parts(context, uri) }
+    }
+
+    /** One part's text, or null when it is too large to be read. */
+    AsyncFunction("readHistoryPartAsync") Coroutine { uri: String, part: String ->
+      withContext(Dispatchers.IO) { HistoryFiles.read(context, uri, part) }
+    }
+
     // ---- transitions ----
 
     AsyncFunction("getTransitionsAsync") {
@@ -895,6 +1008,19 @@ class JukeboxAudioModule : Module() {
 
     AsyncFunction("getSleepTimerAsync") { promise: Promise ->
       SleepTimers.read { promise.resolve(it) }
+    }
+
+    /** Whether a shake in a sleep timer's last minutes adds ten more: see [ShakeToExtend]. */
+    Function("getShakeToExtend") {
+      val context = appContext.reactContext ?: return@Function true
+      ShakeToExtend.enabled(context)
+    }
+
+    Function("setShakeToExtend") { on: Boolean ->
+      val context = appContext.reactContext ?: return@Function null
+      ShakeToExtend.setEnabled(context, on)
+      SleepTimers.reshake()
+      null
     }
 
     AsyncFunction("setRepeatModeAsync") { mode: String ->

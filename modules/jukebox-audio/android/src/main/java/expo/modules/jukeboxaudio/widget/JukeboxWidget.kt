@@ -25,6 +25,8 @@ import androidx.core.content.ContextCompat
 import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.PlaybackService
 import expo.modules.jukeboxaudio.R
+import expo.modules.jukeboxaudio.TapeStore
+import expo.modules.jukeboxaudio.auto.TapeShelves
 import java.io.File
 
 /**
@@ -58,6 +60,7 @@ open class JukeboxWidget : AppWidgetProvider() {
     private const val ACTION_REPEAT = "expo.modules.jukeboxaudio.widget.REPEAT"
     private const val ACTION_JUMP = "expo.modules.jukeboxaudio.widget.JUMP"
     internal const val ACTION_SHELF = "expo.modules.jukeboxaudio.widget.SHELF"
+    private const val ACTION_TAPE = "expo.modules.jukeboxaudio.widget.TAPE"
 
     /**
      * Put on the intent that opens the app from the cover, asking it to open
@@ -308,9 +311,50 @@ open class JukeboxWidget : AppWidgetProvider() {
         ?.let { views.setOnClickPendingIntent(R.id.jukebox_widget_art, it) }
       if (!idle) views.setContentDescription(R.id.jukebox_widget_art, words.getString(R.string.jukebox_widget_open))
 
+      /*
+        With nothing playing, the tape last listened to, carried on with at a
+        press from where it was left. The card and the large widget have a
+        line of their own for it. The row has no room for one, and offers it
+        only where it has nothing else to show: in place of "Nothing
+        playing", on the play button, which would otherwise have nothing to
+        play.
+      */
+      val tape = continuable(context, state)
+      val carryOn = tape?.let { words.getString(R.string.jukebox_widget_continue, it.second) }
+      if (large) {
+        views.setViewVisibility(R.id.jukebox_widget_continue, if (tape == null) View.GONE else View.VISIBLE)
+        if (tape != null) {
+          views.setTextViewText(R.id.jukebox_widget_continue, carryOn)
+          views.setContentDescription(R.id.jukebox_widget_continue, carryOn)
+          views.setOnClickPendingIntent(R.id.jukebox_widget_continue, continueTape(context, tape.first))
+        }
+      } else if (idle && tape != null) {
+        views.setTextViewText(R.id.jukebox_widget_title, carryOn)
+        views.setContentDescription(R.id.jukebox_widget_toggle, carryOn)
+        views.setOnClickPendingIntent(R.id.jukebox_widget_toggle, continueTape(context, tape.first))
+      }
+
       if (large) drawModes(context, views, state, words)
-      if (shape.kind == WidgetKind.LARGE) drawQueue(context, views, state, shape.rows, words)
+      // A row of the queue fewer under the line for a tape, which takes about the height of one.
+      if (shape.kind == WidgetKind.LARGE) {
+        drawQueue(context, views, state, if (tape == null) shape.rows else (shape.rows - 1).coerceAtLeast(1), words)
+      }
       return views
+    }
+
+    /**
+     * The tape the widget offers to carry on with, as its id and its title:
+     * the one last listened to, while nothing plays and it is part way
+     * through. Not while it is what the widget is showing, whose own play
+     * button carries it on.
+     */
+    private fun continuable(context: Context, state: NowPlaying): Pair<String, String>? {
+      if (state.playing) return null
+      val id = state.tapeId ?: return null
+      if (id == state.trackId && !state.title.isNullOrBlank()) return null
+      val title = state.tapeTitle?.takeIf { it.isNotBlank() } ?: return null
+      val place = runCatching { TapeStore.get(context, id) }.getOrNull() ?: return null
+      return if (TapeShelves.begun(place)) id to title else null
     }
 
     /** Shuffle and repeat, which only the card and the large widget have room for. */
@@ -476,6 +520,16 @@ open class JukeboxWidget : AppWidgetProvider() {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
+    /** A press of the offer to carry on with the tape [id]. */
+    private fun continueTape(context: Context, id: String): PendingIntent =
+      PendingIntent.getBroadcast(
+        context,
+        ACTION_TAPE.hashCode(),
+        Intent(context, JukeboxWidget::class.java).setAction(ACTION_TAPE)
+          .putExtra(WidgetCommands.EXTRA_ID, id),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+      )
+
     /** A press of one half of the shortcut tile, which plays the car's shelf [shelf]. */
     internal fun shelf(context: Context, shelf: String): PendingIntent =
       PendingIntent.getBroadcast(
@@ -555,6 +609,10 @@ open class JukeboxWidget : AppWidgetProvider() {
         context,
         Intent(WidgetCommands.SHELF)
           .putExtra(WidgetCommands.EXTRA_SHELF, intent.getStringExtra(WidgetCommands.EXTRA_SHELF))
+      )
+      ACTION_TAPE -> return command(
+        context,
+        Intent(WidgetCommands.TAPE).putExtra(WidgetCommands.EXTRA_ID, intent.getStringExtra(WidgetCommands.EXTRA_ID))
       )
     }
 

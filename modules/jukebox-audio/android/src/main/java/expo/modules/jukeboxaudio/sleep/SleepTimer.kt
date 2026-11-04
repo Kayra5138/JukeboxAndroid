@@ -1,5 +1,6 @@
 package expo.modules.jukeboxaudio.sleep
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -51,13 +52,19 @@ import expo.modules.jukeboxaudio.transitions.WindDown
  * pausing at the end of a track, not the fade -- there is nothing stale for a
  * new process to find.
  *
+ * **A shake** in the last few minutes of a duration adds ten more (see
+ * [ShakeToExtend]), for somebody who hears the music begin to go and is not
+ * yet asleep. The accelerometer is listened to only then, and only while the
+ * music plays.
+ *
  * Everything here runs on the main thread, which is the player's.
  */
 @OptIn(UnstableApi::class)
 class SleepTimer(
   private val main: ExoPlayer,
   private val crossfader: Crossfader,
-  private val windDown: WindDown
+  private val windDown: WindDown,
+  private val context: Context? = null
 ) : Player.Listener {
   private enum class Kind(val id: String) {
     OFF("off"),
@@ -69,6 +76,8 @@ class SleepTimer(
   private val handler = Handler(Looper.getMainLooper())
   private val due = Runnable { expire() }
   private val watch = Runnable { watchChapter() }
+  private val listen = Runnable { updateShake() }
+  private val shake = context?.let { ShakeToExtend(it) { shaken() } }
 
   private var kind = Kind.OFF
 
@@ -105,6 +114,7 @@ class SleepTimer(
         windDown.over(from, silentAt)
       }
       handler.postDelayed(due, length)
+      bookShake(now)
     }
     announce()
   }
@@ -169,10 +179,70 @@ class SleepTimer(
   fun release() {
     handler.removeCallbacks(due)
     handler.removeCallbacks(watch)
+    handler.removeCallbacks(listen)
+    shake?.stop()
     windDown.clear()
     kind = Kind.OFF
     finishing = false
     stoppingAtEnd = false
+    announce()
+  }
+
+  // ---- a shake for more ----
+
+  /**
+   * The shake setting turned in the app: in force on a timer already in its
+   * last minutes, which may be the very moment somebody thinks to change it.
+   */
+  fun reshake() = updateShake()
+
+  /** A message for when the last minutes of the timer begin, to start listening then. */
+  private fun bookShake(now: Long) {
+    handler.removeCallbacks(listen)
+    updateShake()
+    val wait = shakeListenIn(deadline, now)
+    if (wait > 0) handler.postDelayed(listen, wait)
+  }
+
+  /**
+   * Listening exactly while it is wanted: a duration in its last minutes, or
+   * run out and letting the track finish, with the music playing and the
+   * setting on. Asked again whenever any of those may have changed.
+   */
+  private fun updateShake() {
+    val shake = shake ?: return
+    val wanted = kind == Kind.DURATION && main.isPlaying &&
+      SystemClock.elapsedRealtime() >= deadline - SHAKE_WINDOW_MS &&
+      context?.let { ShakeToExtend.enabled(it) } == true
+    if (wanted) shake.start() else shake.stop()
+  }
+
+  /**
+   * Ten minutes more, felt as a buzz. The fade, if it had begun, comes back
+   * up over a moment rather than at once, and is booked again before the new
+   * end; a timer that had run out and was letting the track finish counts
+   * again from now, and the track is no longer stopped at its end.
+   */
+  private fun shaken() {
+    if (kind != Kind.DURATION) return
+    val now = SystemClock.elapsedRealtime()
+    deadline = extendedDeadline(deadline, now)
+    if (finishing) {
+      finishing = false
+      stopAtTrackEnd(false)
+    }
+    windDown.lift(LIFT_MS)
+    fadeWindow(now, deadline, fade, finishTrack)?.let { (from, silentAt) -> windDown.over(from, silentAt) }
+    handler.removeCallbacks(due)
+    handler.postDelayed(due, deadline - now)
+    bookShake(now)
+    shake?.buzz()
+    // Said on the screen as well as felt, over whatever is on it: the app need not be in front for a shake to count.
+    context?.let { here ->
+      runCatching {
+        android.widget.Toast.makeText(here, expo.modules.jukeboxaudio.Localised.text(here, expo.modules.jukeboxaudio.R.string.jukebox_sleep_extended), android.widget.Toast.LENGTH_SHORT).show()
+      }
+    }
     announce()
   }
 
@@ -254,6 +324,8 @@ class SleepTimer(
   private fun reset() {
     handler.removeCallbacks(due)
     handler.removeCallbacks(watch)
+    handler.removeCallbacks(listen)
+    shake?.stop()
     chapterItem = -1
     chapterEndMs = 0L
     val turnedDown = windDown.begun()
@@ -287,6 +359,11 @@ class SleepTimer(
   }
 
   private fun announce() = SleepTimers.changed(state())
+
+  private companion object {
+    /** How long the fade takes to come back up after a shake. */
+    const val LIFT_MS = 2_000L
+  }
 
   // ---- keeping up with the player ----
 
@@ -325,6 +402,8 @@ class SleepTimer(
     if (isPlaying && kind == Kind.DURATION && !finishing) {
       if (SystemClock.elapsedRealtime() >= deadline) expire()
     }
+    // A shake is listened for only while there is music to keep going.
+    updateShake()
   }
 
   override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -414,6 +493,11 @@ object SleepTimers {
   fun cancel(answer: (Map<String, Any?>) -> Unit) = withTimer(answer) { it.cancel() }
 
   fun read(answer: (Map<String, Any?>) -> Unit) = withTimer(answer) {}
+
+  /** The shake setting changed: see [SleepTimer.reshake]. */
+  fun reshake() {
+    Handler(Looper.getMainLooper()).post { live?.reshake() }
+  }
 
   internal fun changed(state: Map<String, Any?>) {
     listener?.invoke(state)

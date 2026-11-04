@@ -38,7 +38,14 @@ data class NowPlaying(
    */
   val repeatMode: Int = 0,
   /** The next few songs, for the large widget to list; see [Upcoming]. */
-  val upcoming: List<Upcoming> = emptyList()
+  val upcoming: List<Upcoming> = emptyList(),
+  /**
+   * The tape last listened to and its title, kept through whatever is
+   * played after it: what the widget offers to carry on with while nothing
+   * plays (see `JukeboxWidget.continuable`).
+   */
+  val tapeId: String? = null,
+  val tapeTitle: String? = null
 ) {
   /**
    * A song further down the queue, as the large widget lists it.
@@ -61,6 +68,8 @@ data class NowPlaying(
     private const val BOOTED_AT = "bootedAt"
     private const val REPEAT = "repeatMode"
     private const val UPCOMING = "upcoming"
+    private const val TAPE_ID = "tapeId"
+    private const val TAPE_TITLE = "tapeTitle"
 
     /** The computed boot moment drifts by a few milliseconds between reads. */
     private const val BOOT_SLACK_MS = 5_000L
@@ -104,7 +113,9 @@ data class NowPlaying(
         positionMs = saved.getLong("positionMs", 0),
         durationMs = saved.getLong("durationMs", 0),
         repeatMode = saved.getInt(REPEAT, 0),
-        upcoming = upcomingFrom(saved.getString(UPCOMING, null))
+        upcoming = upcomingFrom(saved.getString(UPCOMING, null)),
+        tapeId = saved.getString(TAPE_ID, null),
+        tapeTitle = saved.getString(TAPE_TITLE, null)
       )
     }
 
@@ -149,6 +160,8 @@ data class NowPlaying(
         .putLong("durationMs", state.durationMs)
         .putInt(REPEAT, state.repeatMode)
         .putString(UPCOMING, upcomingTo(state.upcoming))
+        .putString(TAPE_ID, state.tapeId)
+        .putString(TAPE_TITLE, state.tapeTitle)
         .putLong(WRITTEN_AT, SystemClock.elapsedRealtime())
         .putLong(BOOTED_AT, System.currentTimeMillis() - SystemClock.elapsedRealtime())
         .apply()

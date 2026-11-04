@@ -127,29 +127,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Bu parçanın sözlerini, parça çalınırken yapıldığı gibi arar ve bulursa kayıtlı olanın yerine koyar.',
-    nothingMatched: 'Bu parçayla eşleşen bir şey bulunamadı. Aşağıdaki arama hiçbir sonucu elemez.',
-    foundAndSaved: 'Bulundu ve kaydedildi.',
     nothingCameBack: 'Bu arama için sonuç gelmedi.',
     cleared: 'Temizlendi. Sonraki otomatik arama yeniden arayacak.',
     notSeconds: 'Bu bir saniye değeri değil.',
 
-    stored: 'Kayıtlı olan',
     none: 'Henüz yok',
     kept: (timed, byHand, lines) =>
       `${timed ? 'Zamanlı' : 'Düz metin'}, ${byHand ? 'elle seçildi' : 'LRCLIB’den'}` +
       (lines > 0 ? ` · ${format.number(lines)} satır` : ''),
     forget: 'Bunu unut ve yeniden ara',
-    saveChanges: 'Değişiklikleri kaydet',
     timedHint:
       'Her satırın önünde kendi zamanı durur. Sözleri değiştir, köşeli parantezlere dokunma; yoksa satır yerini kaybeder.',
-    plainHint:
-      'İstediğini değiştir. Kaydedilen sözler sana ait sayılır ve hiçbir arama onların yerine başkasını koymaz.',
 
     timing: 'Zamanlama',
     timingHint:
-      'Bütün satırları birlikte kaydırır. Sözler doğru ama erken ya da geç geliyorsa kullan — oynatıcıyı açıp sözler yerine oturana kadar kaydır ya da değere dokunup yaz. Artı değer sözleri geciktirir.',
+      'Bütün satırları birlikte kaydırır; sözler doğru ama erken ya da geç geliyorsa kullan. Yazmak için değere dokun. Artı değer sözleri geciktirir.',
     earlier: (seconds) => `−${format.decimal(seconds, 2)} sn`,
     later: (seconds) => `+${format.decimal(seconds, 2)} sn`,
     shiftedEarlier: (written) => `−${written} sn`,
@@ -161,16 +153,24 @@ export const details: Strings['details'] = {
     typeOffset: 'Kesin kaydırmayı yaz',
     wordsField: 'Şarkı sözleri',
 
-    byHand: 'Elle ara',
-    byHandHint:
-      'Otomatik aramanın tersine burada hiçbir sonuç elenmez. Otomatik arama, süresi tutmayan her sonucu reddeder; bazı parçaların sözlerinin hiç bulunamamasının nedeni de budur.',
     queryPlaceholder: 'Sanatçı ve başlık',
     candidateTimed: 'zamanlı',
     candidatePlain: 'düz',
 
-    paste: 'Yapıştır',
-    pasteHint: 'LRC dosyası ya da düz metin kabul eder. Zaman damgaları varsa sözler zamanlı olur.',
-    savePasted: 'Yapıştırılanı kaydet',
+    find: 'Söz ara',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)} sonuç`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'Şarkının kendi dosyasında', lrc: 'Şarkının yanındaki .lrc dosyasında' },
+    sameLength: 'aynı süre',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Sözleri buraya yapıştır ya da yaz. [00:12.34] gibi zamanlı satırlar şarkıyı takip eder.',
+    clearBox: 'Kutuyu temizle',
+    undo: 'Geri al',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Sözleri kaldır',
+    removed: 'Sözler kaldırıldı. Otomatik arama geri getirmez.',
+    removedByHand: 'Elle kaldırıldı',
   },
 
   library: {
@@ -216,6 +216,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'Liste',
+    quickEdit: 'Düzenle',
+    quickLookUp: 'Bilgi bul',
     more: 'Daha fazla…',
     moreHint: 'Seçili parçalarla yapılabilecek her şey',
     heading: (count) => `${format.number(count)} parça seçili`,
@@ -245,6 +248,8 @@ export const details: Strings['details'] = {
         hint: 'Kütüphanede görünen bilgileri dosyaların kendisine yazar. Android önce sorar.',
       },
       addToList: { label: 'Listeye ekle', hint: 'Listelerinden birine koyar' },
+      share: { label: 'Paylaş', hint: 'Dosyaları başka bir uygulamaya gönderir: bir sohbete, bir e-postaya, yakındaki bir telefona' },
+      shareFile: { label: 'Dosya olarak paylaş', hint: 'Dosyanın kendisi olarak gider: sohbet onu belge olarak tutar' },
       reset: {
         label: 'Sıfırla',
         hint: 'Aramaların bu parçalar için bulduklarını unutur. Senin düzenlemelerin kalır.',

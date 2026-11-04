@@ -1,7 +1,11 @@
 package expo.modules.jukeboxaudio.transitions
 
+import androidx.annotation.OptIn
+import androidx.media3.common.FlagSet
 import androidx.media3.common.ForwardingPlayer
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import expo.modules.jukeboxaudio.CallQuiet
 
 /**
@@ -25,7 +29,44 @@ class FadingPlayer(
   private val tapeJump: (forward: Boolean) -> Boolean = { false },
   /** Whether a tape is playing: its previous and next are always there to press, being jumps, at its first part and its last. */
   private val tapeNow: () -> Boolean = { false },
+  /** The chapter of the tape playing, said in place of its artist: see [expo.modules.jukeboxaudio.ChapterLine]. */
+  private val chapter: () -> String? = { null },
 ) : ForwardingPlayer(player) {
+
+  /** Everything listening to this player, for telling of a chapter as of any other change to what is playing. */
+  private val listeners = java.util.concurrent.CopyOnWriteArraySet<Player.Listener>()
+
+  override fun addListener(listener: Player.Listener) {
+    super.addListener(listener)
+    listeners.add(listener)
+  }
+
+  override fun removeListener(listener: Player.Listener) {
+    super.removeListener(listener)
+    listeners.remove(listener)
+  }
+
+  /** What is playing, with the chapter of a tape that has one where its artist would be. */
+  override fun getMediaMetadata(): MediaMetadata {
+    val own = super.getMediaMetadata()
+    val now = chapter() ?: return own
+    return own.buildUpon().setArtist(now).build()
+  }
+
+  /**
+   * The chapter has changed: told as a change to what is playing, which is
+   * what has the session draw it again. On the player's own thread, as the
+   * player's own news is.
+   */
+  @OptIn(UnstableApi::class)
+  fun chapterChanged() {
+    val metadata = mediaMetadata
+    val events = Player.Events(FlagSet.Builder().add(Player.EVENT_MEDIA_METADATA_CHANGED).build())
+    for (listener in listeners) {
+      listener.onMediaMetadataChanged(metadata)
+      listener.onEvents(this, events)
+    }
+  }
 
   override fun getAvailableCommands(): Player.Commands {
     val commands = super.getAvailableCommands()

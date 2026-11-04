@@ -124,6 +124,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: 'Brani ascoltati e non tenuti', note: 'Eliminati dopo questi giorni dal download, a meno che non li tieni: con il cuore, in una lista o dal loro menu.', days: (days) => oneOrMany(days, '1 giorno', `${format.number(days)} giorni`)  },
     note: 'Cosa si sta scaricando, cosa è in attesa e cosa è finito.',
     button: {
       title: 'Pulsante mobile dei download',
@@ -203,6 +204,30 @@ export const settings: Strings['settings'] = {
     note:
       'Cronologia degli ascolti, liste, tag, testi e impostazioni, i podcast che segui e dove sei arrivato in ogni cassetta con i segni messi, in un unico file da salvare dove vuoi. Non la musica.',
     failed: 'Impossibile salvare il backup.',
+  },
+  autoBackup: {
+    title: 'Backup automatico',
+    off: 'Lo stesso file di «Esporta tutto», salvato da solo ogni giorno o ogni settimana in una cartella che scegli tu.',
+    folder: 'Cartella',
+    folderUnnamed: 'Cartella scelta',
+    chooseOther: 'Scegli un’altra cartella',
+    lost: 'Jukebox non riesce più a raggiungere questa cartella: è stata spostata o eliminata, oppure il permesso è stato revocato. Sceglila di nuovo per continuare i backup.',
+    chooseAgain: 'Scegli di nuovo la cartella',
+    every: 'Ogni quanto',
+    daily: 'Ogni giorno',
+    weekly: 'Ogni settimana',
+    keep: 'Backup conservati',
+    keepNote: (count) =>
+      oneOrMany(
+        count,
+        'Nella cartella resta solo il più recente e i precedenti vengono eliminati. Nient’altro nella cartella viene toccato.',
+        `Nella cartella restano i ${format.number(count)} più recenti e i precedenti vengono eliminati. Nient’altro nella cartella viene toccato.`
+      ),
+    last: (when) => `Ultimo backup: ${when}.`,
+    never: 'Ancora nessun backup.',
+    failed: 'Non è stato possibile fare l’ultimo backup. Si riproverà la prossima volta.',
+    now: 'Fai il backup ora',
+    made: 'Backup fatto.',
   },
   importBackup: {
     title: 'Importa',

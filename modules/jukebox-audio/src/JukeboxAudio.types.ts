@@ -196,6 +196,8 @@ export type JukeboxAudioEvents = {
    * `takeOpenPlayer` instead, since nothing is listening yet when it arrives.
    */
   onOpenPlayer: () => void;
+  /** Sound files opened with the app, or shared to it, while it was running; one started by that is asked with `takeOpenedAudio`. */
+  onOpenAudio: (event: { uris: string[] }) => void;
 };
 
 

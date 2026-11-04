@@ -383,6 +383,32 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     return add(video, format, destination, discoverKey)
   }
 
+  /**
+   * A video to listen to without keeping it: fetched first of everything
+   * waiting, into the app's own files rather than the library, as a song of
+   * Discover's is (`DiscoverFiles`), and kept only when somebody keeps it.
+   * It is given a key of its own, as Discover's are, which is what tells all
+   * that reads the queue that its file is not the library's; and the video
+   * says `listen`, which tells it from Discover's. One already fetched, or on
+   * its way, is answered with the job it has, put first if it is waiting.
+   */
+  fun listen(video: JSONObject, format: String, folder: String, exists: (JSONObject) -> Boolean): String {
+    val id = video.getString("id")
+    YouTubeData.urlOf(video)
+    video.remove("find")
+    video.put("listen", true)
+    val existing = jobs.lastOrNull { !it.toFind && it.video.optString("id") == id && it.video.optBoolean("listen") &&
+      (it.status in activeStates || it.status == "done") && it.status != "cancelling" }
+    if (existing != null && (existing.status != "done" || exists(existing))) {
+      if (existing.status != "done") first(existing)
+      return existing.getString("id")
+    }
+    val key = UUID.randomUUID().toString()
+    val added = add(video, format, checked(format, folder, key), key)
+    first(find(added) ?: return added)
+    return added
+  }
+
   /** All of [videos] or none of them: a list that does not fit leaves the queue as it was. */
   fun enqueueBatch(videos: List<JSONObject>, format: String, folder: String, exists: (JSONObject) -> Boolean): List<String> {
     if (videos.size !in 1..LIMIT) throw YouTubeTrouble(Failure.BATCH)

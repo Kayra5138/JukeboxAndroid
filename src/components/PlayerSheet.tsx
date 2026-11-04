@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { SleepCountdown } from './SleepCountdown';
 import { HeartButton } from './Heart';
 import { ShuffleButton } from './Shuffle';
 import { optionsFit, transportFit } from '../lib/player/optionsFit';
@@ -49,6 +50,7 @@ import { barsLaidOver, topGlass } from './UnderBars';
 import { CoverPage } from './CoverPage';
 import { glassOf, glassPage } from '../lib/theme/Veil';
 import { PlayerDiscoverSide, PlayerDiscoverUndo } from './discover/PlayingActions';
+import { PlayerListenSide } from './listen/PlayerListenSide';
 import { isDiscoverTrack } from './discover/show';
 import { useFavoritesShown } from '../lib/playlists/favorites';
 import { useTrackMenu } from './useTrackMenu';
@@ -57,7 +59,7 @@ import { albumKey } from '../lib/media/albums';
 import { foldForMatch } from '../lib/metadata/text';
 import { useLyrics } from '../lib/lyrics/useLyrics';
 import { jumpTo, stepFrom } from '../lib/player/jump';
-import { tapeJumps } from '../lib/tapes/settings';
+import { setOwnTapeJump, tapeJumpsFor } from '../lib/tapes/settings';
 import JukeboxAudio from '../../modules/jukebox-audio/index';
 import { addMark, useMarks } from '../lib/tapes/marks';
 import { chapterAt, readTranscript, useChapters, useTapeVideo, useTranscript, type Chapter } from '../lib/tapes/extras';
@@ -258,7 +260,10 @@ function Scrubber({
   remaining = false,
   marks,
   chapters,
+  middle,
 }: {
+  /** Between the two times: the sleep timer counting down, where one is set. */
+  middle?: ReactNode;
   positionSec: number;
   durationSec: number;
   /** Places marked in it, in seconds, shown as ticks on the bar: a tape's. */
@@ -470,9 +475,10 @@ function Scrubber({
         ) : null}
       </View>
       {/* Said by the bar itself to a screen reader; see above. */}
-      <View style={styles.times} importantForAccessibility="no-hide-descendants">
-        <Text style={styles.time}>{formatTime(scrubbed ?? positionSec)}</Text>
-        <Text style={styles.time}>
+      <View style={styles.times}>
+        <Text style={styles.time} importantForAccessibility="no">{formatTime(scrubbed ?? positionSec)}</Text>
+        {middle}
+        <Text style={styles.time} importantForAccessibility="no">
           {remaining ? `−${formatTime(Math.max(0, durationSec - (scrubbed ?? positionSec)))}` : formatTime(durationSec)}
         </Text>
       </View>
@@ -497,8 +503,10 @@ function LiveScrubber({
   remaining,
   marks,
   chapters,
+  middle,
 }: {
   live: boolean;
+  middle?: ReactNode;
   remaining?: boolean;
   marks?: readonly number[];
   chapters?: readonly number[];
@@ -517,6 +525,7 @@ function LiveScrubber({
       remaining={remaining}
       marks={marks}
       chapters={chapters}
+      middle={middle}
     />
   );
 }
@@ -1058,8 +1067,14 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
     open instead of this one.
   */
   const [step] = useState(() => stepFrom(readSetting(SETTINGS.jumpSeconds)));
-  // A tape's own, from the tape settings: see `tapes/settings.ts`.
-  const [tapeStep] = useState(tapeJumps);
+  /*
+    A tape's own: its book's or show's, where it was given them in the sheet
+    behind the gear, or else the tape settings' (`tapes/settings.ts`). Read
+    again when the tape playing is of another book, and when changed here.
+  */
+  const stepKey = current != null && isTape(current) ? tapeKeyOf(current) : null;
+  const [tapeStep, setTapeStep] = useState(() => ({ key: stepKey, ...tapeJumpsFor(stepKey) }));
+  if (tapeStep.key !== stepKey) setTapeStep({ key: stepKey, ...tapeJumpsFor(stepKey) });
   const jump = useCallback(
     (by: number) => {
       // Asked for at the press, since nothing here follows the position:
@@ -1253,6 +1268,13 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
 
   const settings = (
     <PlayerSettings visible={playbackOpen} tape={current != null && isTape(current)} speed={speed} pitch={pitch}
+      jumps={tapeKey ? tapeStep : undefined}
+      onJump={(which, seconds) => {
+        // Kept for the book or show, as its speed is, and handed to the player for presses from outside the app.
+        if (!tapeKey) return;
+        setOwnTapeJump(tapeKey, which, seconds);
+        setTapeStep({ key: tapeKey, ...tapeJumpsFor(tapeKey) });
+      }}
       onSpeed={(value) => {
         // A tape's speed is its own, kept for it as the speed button keeps it.
         if (tapeKey) setTapeSpeed(tapeKey, value);
@@ -1423,6 +1445,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
         */}
         <Animated.View collapsable={false} style={[styles.titleRow, { transform: titleThrown }]}>
         <PlayerDiscoverSide trackId={current.id} side="keep" small={landscape} />
+        <PlayerListenSide trackId={current.id} side="keep" small={landscape} />
         <View style={styles.titles}>
           {waving ? (
             <WaveTitle text={current.title} wave={wave} style={[styles.title, landscape && styles.titleWide]} />
@@ -1487,6 +1510,7 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           )}
         </View>
         <PlayerDiscoverSide trackId={current.id} side="exclude" small={landscape} />
+        <PlayerListenSide trackId={current.id} side="drop" small={landscape} />
         </Animated.View>
 
         {error ? <Text style={styles.error}>{error.message}</Text> : null}
@@ -1502,6 +1526,8 @@ export function PlayerSheet({ onClose }: { onClose: () => void }) {
           remaining={tape}
           marks={tape ? markTimes : undefined}
           chapters={tape ? chapterStarts : undefined}
+          // The sleep timer counting down, between the two times; pressed, its sheet.
+          middle={<SleepCountdown tape={tape} onPress={() => (tape ? setSleepOpen(true) : setPlaybackOpen(true))} />}
         />
         {tape && parts.length > 1 && partAt >= 0 ? <TapeWhole live={!covered} parts={parts} at={partAt} /> : null}
 
@@ -2008,7 +2034,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   chapterText: { flex: 1, color: c.textSecondary, fontSize: 13 },
   chapterChevron: { color: c.textMuted, fontSize: 18 },
   mark: { position: 'absolute', width: 3, height: 11, marginLeft: -1.5, borderRadius: 1.5, backgroundColor: c.accent },
-  times: { flexDirection: 'row', justifyContent: 'space-between' },
+  times: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
   time: { color: c.textFaint, fontSize: 11, fontVariant: ['tabular-nums'] },
   // How far into the whole of a tape in parts, under its bar.
   tapeWhole: { color: c.textMuted, fontSize: 12, textAlign: 'center', marginTop: 6 },

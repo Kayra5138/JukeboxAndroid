@@ -223,6 +223,8 @@ async function readTrack(effect: Extract<Effect, { kind: 'track' }>): Promise<vo
  */
 function stored(song: { id: string; key: string; track: Track }): void {
   if (!song?.track || !song.key || !song.id) return;
+  // A song listened to from the Search tab is stored the same way and is not Discover's.
+  if (song.track.id.startsWith('listen:')) return;
   // Heard from the phone, where a throw has nowhere to go but the app: the long way still brings the song.
   let item: ReturnType<typeof itemOf>;
   try {

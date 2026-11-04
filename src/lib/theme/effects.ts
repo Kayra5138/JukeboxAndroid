@@ -97,7 +97,35 @@ export function effectsOf(c: Palette): Effects | null {
   return EFFECTS.get(c) ?? null;
 }
 
-type Page = { backgroundColor: string; experimental_backgroundImage?: string };
+/** Each side's border, said outright: see `edgesAt`. */
+export type Edges = { borderTopWidth: number; borderRightWidth: number; borderBottomWidth: number; borderLeftWidth: number };
+
+const EDGES = new Map<number, Edges>();
+
+/**
+ * The width of each of the four sides of a view's border, said outright, to
+ * go beside a gradient behind it.
+ *
+ * React Native 0.86 keeps a side whose width a style stopped giving as "not a
+ * number" rather than as no width, and works out where a gradient behind the
+ * view goes from what is inside the border: from "not a number", and Android
+ * refuses such a gradient by closing the app. A view comes to have such a
+ * side whenever a style that gave one is taken away, which is also what
+ * happens to every view put aside to be used again for something else: a row
+ * of the lyrics' search results, with a line under it, put aside and used for
+ * a card of glass, closed the app (fixed in React Native after 0.87). With
+ * every side given wherever a gradient is, none is ever left like that.
+ */
+export function edgesAt(width: number): Edges {
+  let made = EDGES.get(width);
+  if (!made) {
+    made = Object.freeze({ borderTopWidth: width, borderRightWidth: width, borderBottomWidth: width, borderLeftWidth: width });
+    EDGES.set(width, made);
+  }
+  return made;
+}
+
+type Page = { backgroundColor: string; experimental_backgroundImage?: string } & Partial<Edges>;
 
 const PAGES = new WeakMap<Palette, Page>();
 
@@ -123,7 +151,7 @@ export function page(c: Palette): Page {
     const backdrop = effectsOf(c)?.backdrop;
     made =
       backdrop && backdrop.length > 0
-        ? { backgroundColor: c.bg, experimental_backgroundImage: backdrop.join(', ') }
+        ? { backgroundColor: c.bg, experimental_backgroundImage: backdrop.join(', '), ...edgesAt(0) }
         : { backgroundColor: c.bg };
     PAGES.set(c, made);
   }
@@ -131,6 +159,26 @@ export function page(c: Palette): Page {
 }
 
 const CLEAR = { backgroundColor: 'transparent' } as const;
+
+const BACKDROPS = new WeakMap<Palette, ({ experimental_backgroundImage: string } & Edges) | null>();
+
+/**
+ * The backdrop alone, for a view of its own behind the page's contents: null
+ * in a theme without one. With the page under the view that draws it, as
+ * `page` has it, the backdrop was worked out again with every frame of a
+ * list scrolling over it, gradient by gradient, which on a phone with a
+ * modest graphics chip was most of why a theme of glass stuttered. On a view
+ * of its own it can be kept as a picture: see the root layout.
+ */
+export function backdropOf(c: Palette): ({ experimental_backgroundImage: string } & Edges) | null {
+  let made = BACKDROPS.get(c);
+  if (made === undefined) {
+    const backdrop = effectsOf(c)?.backdrop;
+    made = backdrop && backdrop.length > 0 ? { experimental_backgroundImage: backdrop.join(', '), ...edgesAt(0) } : null;
+    BACKDROPS.set(c, made);
+  }
+  return made;
+}
 
 /**
  * What a screen draws behind itself, in the style of its outermost view:
@@ -152,13 +200,18 @@ export function scene(c: Palette): { backgroundColor: string } {
 
 /**
  * The finish of a surface, for `outlined` to add to the edge it gives:
- * nothing at all in a theme without effects.
+ * nothing at all in a theme without effects. [border] is the width of that
+ * edge, given again side by side wherever the finish has a gradient: see
+ * `edgesAt`.
  */
-export function finishOf(c: Palette): { experimental_backgroundImage?: string; boxShadow?: string } | null {
+export function finishOf(
+  c: Palette,
+  border: number
+): ({ experimental_backgroundImage?: string; boxShadow?: string } & Partial<Edges>) | null {
   const effects = effectsOf(c);
   if (!effects || (!effects.sheen && !effects.shadow)) return null;
   return {
-    ...(effects.sheen ? { experimental_backgroundImage: effects.sheen } : null),
+    ...(effects.sheen ? { experimental_backgroundImage: effects.sheen, ...edgesAt(border) } : null),
     ...(effects.shadow ? { boxShadow: effects.shadow } : null),
   };
 }

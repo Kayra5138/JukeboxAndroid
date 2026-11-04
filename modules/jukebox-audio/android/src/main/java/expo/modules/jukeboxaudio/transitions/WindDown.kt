@@ -28,7 +28,11 @@ import android.os.SystemClock
 class WindDown(private val clock: () -> Long = SystemClock::elapsedRealtime) {
   private class Ramp(val fromMs: Long, val toMs: Long)
 
+  /** The way back up from [fromGain] at [atMs] to full volume at [toMs]: see [lift]. */
+  private class Rise(val fromGain: Float, val atMs: Long, val toMs: Long)
+
   @Volatile private var ramp: Ramp? = null
+  @Volatile private var rise: Rise? = null
 
   /**
    * Full volume until [fromMs], silence from [toMs], both on this clock.
@@ -42,12 +46,32 @@ class WindDown(private val clock: () -> Long = SystemClock::elapsedRealtime) {
 
   fun clear() {
     ramp = null
+    rise = null
+  }
+
+  /**
+   * Back up to full volume over [overMs] from wherever the ramp has got to,
+   * rather than all at once: the timer given more time part way down, by
+   * somebody who may have been nearly asleep, and a jump from a whisper to
+   * full volume would wake them the rest of the way. The ramp itself is left
+   * for whoever lifts to book again, further off; until then the lower of the
+   * two is what is heard.
+   */
+  fun lift(overMs: Long) {
+    val now = clock()
+    val from = gain()
+    rise = if (from < 1f && overMs > 0) Rise(from, now, now + overMs) else null
   }
 
   /** Whether any sound has been turned down yet. */
-  fun begun(): Boolean = ramp?.let { clock() >= it.fromMs } ?: false
+  fun begun(): Boolean = (ramp?.let { clock() >= it.fromMs } ?: false) || (rise?.let { clock() < it.toMs } ?: false)
 
-  fun gain(): Float = ramp?.let { windDownGain(it.fromMs, it.toMs, clock()) } ?: 1f
+  fun gain(): Float {
+    val now = clock()
+    val down = ramp?.let { windDownGain(it.fromMs, it.toMs, now) } ?: 1f
+    val up = rise?.let { liftGain(it.fromGain, it.atMs, it.toMs, now) } ?: 1f
+    return minOf(down, up)
+  }
 
   companion object {
     /**
@@ -76,4 +100,14 @@ fun windDownGain(fromMs: Long, toMs: Long, nowMs: Long): Float = when {
   nowMs >= toMs + WindDown.ABANDONED_AFTER_MS -> 1f
   nowMs >= toMs -> 0f
   else -> (toMs - nowMs).toFloat() / (toMs - fromMs).toFloat()
+}
+
+/**
+ * How loud the way back up from [fromGain] at [atMs] to full at [toMs] leaves
+ * things at [nowMs]. A straight line, as the way down is.
+ */
+fun liftGain(fromGain: Float, atMs: Long, toMs: Long, nowMs: Long): Float = when {
+  nowMs >= toMs -> 1f
+  nowMs <= atMs -> fromGain
+  else -> fromGain + (1f - fromGain) * (nowMs - atMs).toFloat() / (toMs - atMs).toFloat()
 }

@@ -754,6 +754,31 @@ const EPISODE_EXTRAS = `
   ALTER TABLE podcast_episodes ADD COLUMN transcript_type TEXT;
 `;
 
+/**
+ * The rules of a smart list (`lists/smart.ts`), as JSON, on a list whose kind
+ * is `smart`; null on every other. Its songs are worked out from these each
+ * time it is opened, and nothing is written to `playlist_tracks` for it.
+ */
+const SMART_LISTS = `
+  ALTER TABLE playlists ADD COLUMN rules TEXT;
+`;
+
+/**
+ * Where a listen was heard, for one brought in from another app's history:
+ * `lastfm`, `spotify` or `listenbrainz`. Null is a listen heard in Jukebox,
+ * which is every listen there was before this.
+ *
+ * On the listen itself rather than in a table beside it, unlike what
+ * ListenBrainz has been sent, because it is a fact about the listen that has
+ * to last as long as the listen does: through a backup and back, and through
+ * signing out of ListenBrainz and in again, which empties that table. A
+ * listen heard somewhere else is never offered to ListenBrainz, and the one
+ * thing that says so has to outlive both.
+ */
+const PLAYS_FROM_ELSEWHERE = `
+  ALTER TABLE plays ADD COLUMN source TEXT;
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -790,6 +815,8 @@ export const MIGRATIONS: string[] = [
   NEXT_COUNT,
   PODCAST_FOLDER,
   EPISODE_EXTRAS,
+  SMART_LISTS,
+  PLAYS_FROM_ELSEWHERE,
 ];
 
 /**

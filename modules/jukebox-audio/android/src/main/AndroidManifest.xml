@@ -23,6 +23,10 @@
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+  <!-- The short buzz that says a shake added time to the sleep timer. A normal
+       permission, granted at install. -->
+  <uses-permission android:name="android.permission.VIBRATE" />
+
   <application>
     <!--
       Tells Android Auto this app is worth offering in a car, and what kind of

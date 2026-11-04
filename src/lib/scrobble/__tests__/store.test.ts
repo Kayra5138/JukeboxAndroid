@@ -227,6 +227,20 @@ describe('the queue', () => {
     assert.deepEqual(store.counts(), { queued: 0, past: 2, sent: 1, skipped: 0, untouched: 0 });
   });
 
+  it('leaves out listens brought in from another app, before and after signing in again', () => {
+    const { store, play, raw } = connected();
+    const here = play('1', 100);
+    const elsewhere = play('2', 200);
+    raw.prepare(`UPDATE plays SET source = 'lastfm' WHERE id = ?`).run(elsewhere);
+    assert.equal(store.counts().untouched, 1);
+    store.queuePast(300);
+    assert.deepEqual(store.waiting(10).map((row) => row.id), [here]);
+    store.disconnect();
+    store.connect('secret', 'kayra');
+    store.queuePast(400);
+    assert.deepEqual(store.waiting(10).map((row) => row.id), [here]);
+  });
+
   it('sends what was just heard ahead of the history', () => {
     const { store, play } = connected();
     play('1', 100);

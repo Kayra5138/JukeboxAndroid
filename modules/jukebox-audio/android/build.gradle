@@ -78,6 +78,111 @@ if (!bergamotReady.isFile()) {
   bergamotReady.text = "${bergamotCommit}\n"
 }
 
+/*
+  youtubedl-android's library, with less in it.
+
+  It brings yt-dlp's runtime as one zip per architecture, unpacked on the
+  phone the first time a song is fetched: CPython with its standard library,
+  OpenSSL, QuickJS, and things yt-dlp has no use for here, which were about a
+  third of it. Taken out:
+    - QuickJS's static library, `libquickjs.a`, left over from building the
+      `qjs` program that sits beside the zip and is what yt-dlp runs;
+    - PyCryptodome, which yt-dlp uses for AES where a site encrypts, and has
+      its own slower AES for when it is missing; YouTube does not;
+    - mutagen, which it embeds thumbnails with, and the app does not ask it to;
+    - SQLite and Python's module for it, which it reads browsers' cookies with;
+    - ncurses, readline and the Python modules over them, for a terminal;
+    - Python's own test modules, lib2to3, venv and __phello__.
+  Nothing left needs any of them: only the modules taken out with them were
+  linked against those libraries. The wrapper's own old yt-dlp, never run (see
+  YouTubeEngine.Place), is emptied as well.
+
+  The library is the one on Maven Central, refused unless it hashes to what is
+  written here, and rewritten during configuration, as the translation
+  engine's source is unpacked: the dependency above has to be a file by then.
+  The zip inside it is copied entry by entry as it was, byte for byte, but for
+  those left out: it holds symbolic links between its libraries, which
+  java.util.zip would write back as files holding the links' targets.
+*/
+def youtubedlCoordinates = 'io.github.deniscerri.youtubedl-android:library:0.19.0@aar'
+def youtubedlSha256 = 'c5fdca03d5b82e838fa846783e57eb0a48d3a930070f2ade50402b6c37cad61c'
+def youtubedlLeftOut = [
+  ~/usr\/lib\/quickjs\/.*/,
+  ~/usr\/lib\/python3\.12\/site-packages\/(Cryptodome|mutagen)\/.*/,
+  ~/usr\/lib\/libsqlite3\.so.*/,
+  ~/usr\/lib\/python3\.12\/sqlite3\/.*/,
+  ~/usr\/lib\/lib(n?cursesw?|tinfo|tic|panelw?|menuw?|formw?|termcap|readline|history)\.so.*/,
+  ~/usr\/lib\/python3\.12\/curses\/.*/,
+  ~/usr\/etc\/inputrc/,
+  ~/usr\/lib\/python3\.12\/lib-dynload\/(_sqlite3|_curses|_curses_panel|readline|_ctypes_test|_test[a-z]*|xxlimited(_35)?|xxsubtype|_xxtestfuzz)\.cpython-312\.so/,
+  ~/usr\/lib\/python3\.12\/(lib2to3|venv|__phello__)\/.*/,
+  ~/usr\/lib\/python3\.12\/tempfile\.py\.orig/,
+]
+// Named for what is left out, so that changing the list makes a new one rather than keeping the old.
+def youtubedlSlim = layout.buildDirectory.file("youtubedl/library-0.19.0-slim-" +
+  java.security.MessageDigest.getInstance('SHA-256').digest(youtubedlLeftOut*.pattern().join('\n').getBytes('UTF-8')).encodeHex().toString().take(12) + '.aar').get().asFile
+if (!youtubedlSlim.isFile()) {
+  def original = configurations.detachedConfiguration(dependencies.create(youtubedlCoordinates)).singleFile
+  def hash = java.security.MessageDigest.getInstance('SHA-256').digest(original.bytes).encodeHex().toString()
+  if (hash != youtubedlSha256) throw new GradleException('youtubedl-android library checksum mismatch')
+
+  // The zip [bytes] without the entries [leftOut] matches, the rest as they were.
+  def without = { byte[] bytes, Closure<Boolean> leftOut ->
+    // Little-endian numbers, read from the zip and written into a copy of a part of it.
+    def number = { at, length -> (0..<length).inject(0L) { value, i -> value | ((bytes[at + i] & 0xffL) << (8 * i)) } }
+    def put = { into, at, value, length -> (0..<length).each { i -> into[at + i] = (byte) (((value as long) >> (8 * i)) & 0xff) } }
+    int end = ((bytes.length - 22)..Math.max(0, bytes.length - 65557)).find { number(it, 4) == 0x06054b50L } ?: -1
+    if (end < 0) throw new GradleException('youtubedl-android: not a zip')
+    int count = number(end + 10, 2) as int
+    int directory = number(end + 16, 4) as int
+    def entries = []
+    int at = directory
+    count.times {
+      int length = (46 + number(at + 28, 2) + number(at + 30, 2) + number(at + 32, 2)) as int
+      entries << [record: at, length: length, local: number(at + 42, 4) as int, name: new String(bytes, at + 46, (int) number(at + 28, 2), 'UTF-8')]
+      at += length
+    }
+    // Each entry runs to the next one, data descriptor and all; the last to the directory.
+    def starts = (entries*.local + [directory]).sort()
+    def out = new ByteArrayOutputStream(bytes.length)
+    def records = new ByteArrayOutputStream()
+    int kept = 0
+    entries.each { entry ->
+      if (leftOut(entry.name)) return
+      int span = (starts.find { it > entry.local } - entry.local) as int
+      byte[] record = Arrays.copyOfRange(bytes, entry.record, entry.record + entry.length)
+      put(record, 42, out.size(), 4)
+      out.write(bytes, entry.local as int, span)
+      records.write(record)
+      kept++
+    }
+    byte[] tail = Arrays.copyOfRange(bytes, end, bytes.length)
+    put(tail, 8, kept, 2)
+    put(tail, 10, kept, 2)
+    put(tail, 12, records.size(), 4)
+    put(tail, 16, out.size(), 4)
+    records.writeTo(out)
+    out.write(tail)
+    out.toByteArray()
+  }
+
+  youtubedlSlim.parentFile.mkdirs()
+  def part = new File(youtubedlSlim.path + '.part')
+  new java.util.zip.ZipFile(original).withCloseable { aar ->
+    new java.util.zip.ZipOutputStream(part.newOutputStream()).withCloseable { out ->
+      aar.entries().each { entry ->
+        byte[] bytes = aar.getInputStream(entry).bytes
+        if (entry.name ==~ /jni\/[^\/]+\/libpython\.zip\.so/) bytes = without(bytes) { name -> youtubedlLeftOut.any { name ==~ it } }
+        else if (entry.name == 'res/raw/ytdlp') bytes = '# Not used: see YouTubeEngine.Place.\n'.getBytes('UTF-8')
+        out.putNextEntry(new java.util.zip.ZipEntry(entry.name))
+        out.write(bytes)
+        out.closeEntry()
+      }
+    }
+  }
+  part.renameTo(youtubedlSlim)
+}
+
 android {
   namespace "expo.modules.jukeboxaudio"
   defaultConfig {
@@ -198,9 +303,14 @@ tasks.withType(Test).configureEach {
 }
 
 dependencies {
-  // Android runtime, including Python and QuickJS, plus audio conversion.
-  implementation 'io.github.deniscerri.youtubedl-android:library:0.19.0'
-  implementation 'io.github.deniscerri.youtubedl-android:ffmpeg:0.19.0'
+  // yt-dlp's runtime, Python and QuickJS, with the Python cut down: see `youtubedlSlim`.
+  // Its FFmpeg is not taken either: see `buildFfmpeg`.
+  implementation files(youtubedlSlim)
+  // What its Maven description asked for, which a file of it does not carry.
+  implementation 'io.github.deniscerri.youtubedl-android:common:0.19.0'
+  implementation 'com.fasterxml.jackson.core:jackson-databind:2.11.1'
+  implementation 'com.fasterxml.jackson.core:jackson-annotations:2.11.1'
+  implementation 'commons-io:commons-io:2.5'
   testImplementation 'junit:junit:4.13.2'
   testImplementation 'org.json:json:20240303'
   // The three Media3 artifacts share internals across the session/player
@@ -258,6 +368,35 @@ def prepareYoutubeExtractor = tasks.register('prepareYoutubeExtractor') {
 }
 android.sourceSets.main.assets.srcDir(extractorAssets)
 tasks.named('preBuild').configure { dependsOn(prepareYoutubeExtractor) }
+
+/*
+  FFmpeg, for what yt-dlp does to a song once it has it: the sound taken out as
+  it is, or made into an MP3, and the tags and a tape's chapters put in.
+
+  youtubedl-android's own was a general build with video, pictures, network
+  and some forty libraries besides, 36 MB of the app; this has what the
+  downloads ask of it and nothing more, and comes to about 6 MB before the APK
+  packs it. FFmpeg and LAME, the MP3 encoder, are fetched at one release each
+  and refused unless they hash to what ffmpeg/build.sh says, and compiled with
+  the NDK for each architecture the app is being built for: see that script.
+  LGPL-2.1, FFmpeg as configured and LAME both.
+*/
+def ffmpegScript = file('ffmpeg/build.sh')
+def ffmpegLibs = layout.buildDirectory.dir('generated/ffmpegJniLibs')
+def ffmpegAbis = ((findProperty('reactNativeArchitectures') ?: 'arm64-v8a').toString().split(',')*.trim())
+  .findAll { it in ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86'] }
+def buildFfmpeg = tasks.register('buildFfmpeg')
+ffmpegAbis.each { abi ->
+  def task = tasks.register("buildFfmpeg-${abi}", Exec) {
+    inputs.file(ffmpegScript)
+    outputs.dir(ffmpegLibs.map { it.dir(abi) })
+    commandLine 'bash', ffmpegScript.absolutePath, android.ndkDirectory.absolutePath, abi,
+      layout.buildDirectory.dir('ffmpeg').get().asFile.absolutePath, ffmpegLibs.get().asFile.absolutePath
+  }
+  buildFfmpeg.configure { dependsOn(task) }
+}
+android.sourceSets.main.jniLibs.srcDir(ffmpegLibs)
+tasks.named('preBuild').configure { dependsOn(buildFfmpeg) }
 
 /*
   An MP3 decoder that runs inside the app, for the chart maker.

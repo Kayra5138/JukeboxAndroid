@@ -138,6 +138,10 @@ export const search: Strings['search'] = {
   downloadLabel: (title) => `Baixar ${title}`,
   download: { mp3: 'Baixar MP3', original: 'Baixar áudio' },
   adding: 'Adicionando…',
+  listen: 'Ouvir',
+  listenLabel: (title) => `Ouvir ${title} sem guardar`,
+  readying: 'Preparando…',
+  listenDrop: 'Não guardar',
 
   addingPlaylist: 'Adicionando a playlist…',
   downloadListed: {
@@ -165,6 +169,7 @@ export const search: Strings['search'] = {
     cancelled: 'Cancelado',
     failed: 'Falha no download',
     done: 'Na biblioteca',
+    listened: 'Pronta, não guardada',
     missing: 'Arquivo removido',
   },
 

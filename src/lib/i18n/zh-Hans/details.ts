@@ -120,26 +120,20 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint: '像播放时一样搜索这首歌的歌词，找到后会替换已保存的歌词。',
-    nothingMatched: '没有与这首歌匹配的歌词。下方的手动搜索不设任何筛选。',
-    foundAndSaved: '已找到并保存。',
     nothingCameBack: '没有搜索结果。',
     cleared: '已清除。下次查询时会重新搜索。',
     notSeconds: '这不是有效的秒数。',
 
-    stored: '已保存的歌词',
     none: '暂无',
     kept: (timed, byHand, lines) =>
       `${timed ? '同步歌词' : '纯文本'}，${byHand ? '手动选择' : '来自 LRCLIB'}` +
       (lines > 0 ? ` · ${format.number(lines)} 行` : ''),
     forget: '清除并重新查询',
-    saveChanges: '保存更改',
     timedHint: '每行前面都带有时间。修改歌词时请保留方括号，否则该行会失去时间位置。',
-    plainHint: '可以随意修改。保存的歌词会被视为你的编辑，任何查询都不会替换它。',
 
     timing: '时间偏移',
     timingHint:
-      '一次性平移所有歌词行。适用于歌词正确但出现得太早或太晚的情况——打开播放器微调直到对齐，或点按数值直接输入。正值会让歌词出现得更晚。',
+      '歌词正确但偏早或偏晚时，可整体移动所有行。点按数值可直接输入。正值会让歌词延后。',
     earlier: (seconds) => `−${seconds} 秒`,
     later: (seconds) => `+${seconds} 秒`,
     shiftedEarlier: (written) => `−${written} 秒`,
@@ -151,15 +145,24 @@ export const details: Strings['details'] = {
     typeOffset: '输入精确的偏移量',
     wordsField: '歌词',
 
-    byHand: '手动搜索',
-    byHandHint: '这里不排除任何结果，与自动搜索不同——自动搜索会拒绝时长不符的歌词，这也是有些歌曲始终找不到歌词的原因。',
     queryPlaceholder: '艺人和歌名',
     candidateTimed: '同步',
     candidatePlain: '纯文本',
 
-    paste: '粘贴',
-    pasteHint: '支持 LRC 文件或纯文本歌词。带时间戳的会作为同步歌词保存。',
-    savePasted: '保存粘贴的歌词',
+    find: '搜索歌词',
+    /** How many there are to choose from. */
+    results: (count) => `找到 ${format.number(count)} 条`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: '在歌曲文件内', lrc: '在歌曲旁的 .lrc 文件中' },
+    sameLength: '时长相同',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: '在此粘贴或输入歌词。带时间的行（如 [00:12.34]）会跟随歌曲。',
+    clearBox: '清空文本框',
+    undo: '撤销',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: '移除歌词',
+    removed: '歌词已移除，自动查找不会再找回。',
+    removedByHand: '已手动移除',
   },
 
   library: {
@@ -205,6 +208,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: '列表',
+    quickEdit: '编辑',
+    quickLookUp: '查找',
     more: '更多…',
     moreHint: '可对所选歌曲执行的所有操作',
     heading: (count) => `已选择 ${format.number(count)} 首歌曲`,
@@ -234,6 +240,8 @@ export const details: Strings['details'] = {
         hint: '将音乐库中显示的信息写入文件本身。Android 会先征求你的同意。',
       },
       addToList: { label: '添加到歌单', hint: '放入你的某个歌单' },
+      share: { label: '分享', hint: '把这些文件发送到其他应用：聊天、邮件或附近的手机' },
+      shareFile: { label: '以文件分享', hint: '以文件本身发送：聊天中作为文档保存' },
       reset: {
         label: '重置',
         hint: '忘掉在线查询为它们找到的信息。你自己编辑的内容会保留。',

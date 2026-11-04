@@ -4,6 +4,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { MoreButton } from './MoreButton';
 import { Pressable } from './Pressable';
 
+import { useIsCurrent } from '../lib/player/current';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import type { EnrichedTrack } from '../lib/media/merge';
@@ -54,7 +55,7 @@ function formatDuration(seconds: number): string {
  */
 export const TrackRow = memo(function TrackRow({
   track,
-  playing,
+  playing: told,
   onPress,
   onLongPress,
   onPlayNext,
@@ -64,7 +65,8 @@ export const TrackRow = memo(function TrackRow({
   shared = false,
 }: {
   track: EnrichedTrack;
-  playing: boolean;
+  /** Whether it is the track in the player; left out, the row asks the player itself (`useIsCurrent`). */
+  playing?: boolean;
   onPress: (track: EnrichedTrack) => void;
   onLongPress?: (track: EnrichedTrack) => void;
   /**
@@ -79,6 +81,8 @@ export const TrackRow = memo(function TrackRow({
   /** True when the row is one of several across, and must share the width. */
   shared?: boolean;
 }) {
+  const current = useIsCurrent(track.id);
+  const playing = told ?? current;
   const artwork = useTrackArtwork(track);
   const t = useT();
   const styles = useStyles();

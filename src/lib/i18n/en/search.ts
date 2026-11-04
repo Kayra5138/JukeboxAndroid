@@ -151,6 +151,12 @@ export const search = {
   downloadLabel: (title: string) => `Download ${title}`,
   download: { mp3: 'Download MP3', original: 'Download audio' },
   adding: 'Adding…',
+  /** Listening without keeping: a result played at once, fetched into the app's own files, kept only when kept. See `lib/listen`. */
+  listen: 'Listen',
+  listenLabel: (title: string) => `Listen to ${title} without keeping it`,
+  readying: 'Getting it ready…',
+  /** The minus beside a song listened to in the player: out of the queue, its file let go. */
+  listenDrop: 'Don\'t keep it',
 
   /** A whole playlist at once. */
   addingPlaylist: 'Adding playlist…',
@@ -182,6 +188,8 @@ export const search = {
     cancelled: 'Cancelled',
     failed: 'Download failed',
     done: 'In library',
+    /** A song listened to that came in, in place of `done`: it is not in the library until it is kept. */
+    listened: 'Ready to play, not kept',
     missing: 'File removed',
   },
 

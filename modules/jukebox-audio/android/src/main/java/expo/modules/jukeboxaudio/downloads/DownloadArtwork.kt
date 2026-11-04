@@ -56,9 +56,7 @@ object DownloadArtwork {
       }
     }
     if (cancelled.get()) return null
-    val fallback = "https://i.ytimg.com/vi/${video.getString("id")}/hqdefault.jpg"
-    val thumbnails = listOfNotNull(video.optString("thumbnail").takeIf { it.startsWith("https://") }, fallback).distinct()
-    for (thumbnail in thumbnails) {
+    for (thumbnail in thumbnails(video)) {
       if (cancelled.get()) return null
       runCatching { AlbumArtwork.download(context, thumbnail) }.getOrNull()?.let { return it }
     }
@@ -120,14 +118,39 @@ object DownloadArtwork {
       runCatching { archived(context, cover, cancelled) }.getOrNull()?.let { return it }
     }
     if (cancelled.get()) return null
-    val fallback = "https://i.ytimg.com/vi/${video.getString("id")}/hqdefault.jpg"
-    val thumbnails = listOfNotNull(video.optString("thumbnail").takeIf { it.startsWith("https://") }, fallback).distinct()
-    for (thumbnail in thumbnails) {
+    for (thumbnail in thumbnails(video)) {
       if (cancelled.get()) return null
       runCatching { AlbumArtwork.download(context, thumbnail) }.getOrNull()?.let { return it }
     }
     return null
   }
+
+  /** The video's own pictures, the one it was found with first. */
+  private fun thumbnails(video: JSONObject): List<String> {
+    val fallback = "https://i.ytimg.com/vi/${video.getString("id")}/hqdefault.jpg"
+    return listOfNotNull(video.optString("thumbnail").takeIf { it.startsWith("https://") }, fallback).distinct()
+  }
+
+  /**
+   * The video's own picture, for a song listened to from the Search tab,
+   * fetched the moment it is asked for: it has no sleeve of a catalogue's,
+   * and the seconds of its download are time enough to have the video's as
+   * a file when the song is stored ([thumbnailKept]). As [ahead], by
+   * nobody's leave and one at a time.
+   */
+  fun thumbnailAhead(context: Context, video: JSONObject) {
+    val app = context.applicationContext
+    val known = runCatching { thumbnails(video) }.getOrNull() ?: return
+    if (known.any { AlbumArtwork.kept(app, it) != null } || !wanted.add(known.first())) return
+    aheadOf.execute {
+      for (thumbnail in known) if (runCatching { AlbumArtwork.download(app, thumbnail) }.isSuccess) break
+      wanted.remove(known.first())
+    }
+  }
+
+  /** The video's own picture where [thumbnailAhead] or [carried] has already made it a file; null where not. */
+  fun thumbnailKept(context: Context, video: JSONObject): String? =
+    runCatching { thumbnails(video) }.getOrNull()?.firstNotNullOfOrNull { AlbumArtwork.kept(context, it) }
 
   private fun archived(context: Context, source: String, cancelled: AtomicBoolean): String? {
     val directory = java.io.File(context.filesDir, "album-artwork").apply { mkdirs() }

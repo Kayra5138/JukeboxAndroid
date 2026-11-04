@@ -62,6 +62,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'Bandas, graves e loudness' },
     crossfade: { note: 'Como uma faixa dá lugar à próxima' },
     allEffects: { title: 'Todos os efeitos', note: 'Largura, crossfeed, rotação e nível' },
+    jumps: {
+      heading: 'Saltos para este livro ou programa',
+      general: 'Geral',
+      backToGeneral: 'Voltar aos saltos de todas as fitas',
+      back: 'Voltar',
+      forward: 'Avançar',
+      note: 'Em segundos, só para este livro ou programa, e também para o fone, a notificação e o carro. As outras fitas mantêm os saltos dos ajustes das fitas.',
+    },
   },
   sleepTimer: {
     title: 'Timer para dormir',
@@ -77,6 +85,11 @@ export const player: Strings['player'] = {
       title: 'Deixar a faixa atual terminar',
       note: 'Quando o tempo acabar, espera a música terminar em vez de abaixar o volume até sumir.',
       label: 'Deixar a faixa atual terminar quando o timer acabar',
+    },
+    shake: {
+      title: 'Agite para mais dez minutos',
+      note: 'Nos últimos três minutos, agite o celular para somar dez minutos, mesmo com a tela apagada. Uma vibração curta confirma.',
+      label: 'Agite o celular nos últimos três minutos para somar dez minutos ao timer para dormir',
     },
     refused: (most) => `Um número inteiro de minutos, de 1 a ${most}`,
     howMany: 'Pausar depois de quantos minutos?',

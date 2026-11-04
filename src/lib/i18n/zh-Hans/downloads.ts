@@ -31,6 +31,7 @@ export const downloads: Strings['downloads'] = {
 
   source: {
     discover: '发现',
+    listen: '已收听',
     search: '搜索',
     album: (name) => `专辑：${name}`,
     playlist: (name) => `播放列表：${name}`,

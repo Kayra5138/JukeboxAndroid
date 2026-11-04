@@ -208,6 +208,20 @@ export default function LibrarySettingsScreen() {
             </Link>
           </>
         ) : null}
+        {/*
+          Always there, unlike the rows above it that come and go: what could go to make room
+          is worth a look whether or not anything is here twice.
+        */}
+        <View style={styles.rule} />
+        <Link href="/free-space" asChild>
+          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
+            <View style={styles.line}>
+              <Text style={styles.title}>{t.space.title}</Text>
+              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+            </View>
+            <Text style={styles.muted}>{t.space.rowNote}</Text>
+          </Pressable>
+        </Link>
       </View>
 
       {/*

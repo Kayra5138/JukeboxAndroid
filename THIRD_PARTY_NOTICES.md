@@ -8,10 +8,11 @@ The short version:
 
 - Everything here is free software and compatible with GPL-3.0.
 - Nothing proprietary is in the build.
-- The translation engine, the MP3 decoder and the tag writer are built from
-  source at pinned commits, checked by SHA-256.
-- The YouTube engine is the exception: FFmpeg, Python and QuickJS arrive
-  prebuilt inside the wrapper's Maven artifacts, pinned by version only.
+- The translation engine, the MP3 decoder, the tag writer and the YouTube
+  engine's FFmpeg are built from source at pinned releases, checked by SHA-256.
+- The YouTube engine's Python and QuickJS are the exception: they arrive
+  prebuilt inside the wrapper's Maven artifact, which is checked by SHA-256 but
+  was compiled upstream.
 
 ## YouTube engine
 
@@ -19,12 +20,10 @@ Already GPL-3.0, so there is nothing to reconcile.
 
 | Project | Version | Licence |
 | --- | --- | --- |
-| youtubedl-android (deniscerri fork), library and FFmpeg artifacts | 0.19.0 | [GPL-3.0](https://github.com/deniscerri/youtubedl-android/blob/master/LICENSE) |
+| youtubedl-android (deniscerri fork), library artifact | 0.19.0 | [GPL-3.0](https://github.com/deniscerri/youtubedl-android/blob/master/LICENSE) |
 | yt-dlp, official executable | 2026.10.26 | [Unlicense, with bundled components](https://github.com/yt-dlp/yt-dlp#license) |
-| FFmpeg, prebuilt in the `ffmpeg` artifact (`--enable-gpl --enable-version3`) | as packaged in 0.19.0 | [GPL-3.0-or-later as configured](https://ffmpeg.org/legal.html) |
-| Libraries packed with that FFmpeg, built by Termux: x264, x265, Xvid, libvidstab, Rubber Band, FFTW | as packaged | GPL-2.0-or-later |
-| GnuTLS, Nettle, GMP, LAME, mpg123, libopenmpt, libass, libbluray, SoXR, libsamplerate, glib, libiconv, libunistring, libidn2, opencore-amr, vo-amrwbenc, zimg, libssh, ZeroMQ, v4l-utils and others in the same archive | as packaged | LGPL, BSD, MIT, MPL-2.0 or Apache-2.0, each under its own terms |
-| AV1, VP8/9, Opus, Vorbis, Theora, Ogg, WebP, libpng, FreeType, HarfBuzz, Fontconfig, libxml2, zlib, bzip2, xz, Brotli, libsodium, SRT | as packaged | BSD, MIT and similar permissive terms |
+| [FFmpeg](https://ffmpeg.org/), built here with only what the downloads use | 9.0.2, commit `946fcce0` | [LGPL-2.1-or-later as configured](https://ffmpeg.org/legal.html) |
+| [LAME](https://lame.sourceforge.io/), the MP3 encoder FFmpeg is built with | 3.100 | [LGPL-2.0-or-later](https://sourceforge.net/p/lame/svn/HEAD/tree/trunk/lame/COPYING) |
 | CPython and its standard library, prebuilt in the `library` artifact | as packaged in 0.19.0 | [PSF-2.0](https://docs.python.org/3/license.html) |
 | [QuickJS](https://bellard.org/quickjs/), prebuilt in the `library` artifact | as packaged in 0.19.0 | MIT |
 | Jackson (databind, annotations, core) and Apache Commons IO, which the wrapper depends on | as resolved | Apache-2.0 |
@@ -32,22 +31,33 @@ Already GPL-3.0, so there is nothing to reconcile.
 Source and build instructions:
 
 - https://github.com/deniscerri/youtubedl-android
-- https://github.com/deniscerri/youtubedl-android/blob/master/BUILD_FFMPEG.md
+- https://github.com/FFmpeg/FFmpeg/tree/946fcce07b6dcd0331c8cc609192aeff5e1924f8
+- https://sourceforge.net/projects/lame/files/lame/3.100/
 - https://github.com/deniscerri/youtubedl-android/blob/master/BUILD_PYTHON.md
 - https://github.com/yt-dlp/yt-dlp/tree/2026.10.26
 
 Notes:
 
-- **These arrive as binaries.** The wrapper's two artifacts carry about 35 MB
-  of FFmpeg and its libraries and about 14 MB of Python per architecture, plus
-  QuickJS, all compiled upstream. The build here takes them from Maven Central
-  at version 0.19.0 and does not check them against a hash of its own. Their
-  source is the upstream repositories and build instructions linked above, and
-  the Termux packages those instructions build from.
-- FFmpeg is built with `--enable-gpl --enable-version3`, without `libfdk-aac`
-  or anything else marked non-free. Saving as MP3 goes through LAME.
-- The wrapper also carries an older yt-dlp of its own. It is not run: the
-  official executable named above is written over it on first use.
+- **Python and QuickJS arrive as binaries.** The wrapper's artifact carries
+  Python and its libraries per architecture, plus QuickJS, all compiled
+  upstream. The build here takes it from Maven Central at version 0.19.0 and
+  refuses it unless its SHA-256 matches. Its source is the upstream repository
+  and build instructions linked above, and the Termux packages those
+  instructions build from.
+- Some of what that Python archive holds is left out of the app, unchanged
+  otherwise: QuickJS's static library, PyCryptodome, mutagen, SQLite, ncurses
+  and readline, and Python's test modules, lib2to3 and venv
+  (`modules/jukebox-audio/android/build.gradle`, `youtubedlLeftOut`). Their
+  notices are not needed for what is shipped.
+- FFmpeg and LAME do not arrive as binaries. The build fetches FFmpeg as
+  GitHub's archive of the commit tagged n9.0.2, and LAME as SourceForge's 3.100
+  release, refuses either unless its SHA-256 matches, and compiles both with
+  the NDK (`modules/jukebox-audio/android/ffmpeg/build.sh`). FFmpeg is
+  configured without `--enable-gpl` or anything non-free, and with only the
+  formats, codecs and filters the downloads need: no network, no video. Saving
+  as MP3 goes through LAME. The wrapper's own FFmpeg artifact is not used.
+- The wrapper also carries an older yt-dlp of its own. It is emptied out of
+  the app: the official executable named above is the one put in its place.
 - The yt-dlp executable includes EJS and other third-party code, described in
   its upstream notices.
 - yt-dlp is fetched by the build at that version and rejected if its SHA-256
@@ -70,7 +80,6 @@ Notes:
 | [React Native](https://github.com/facebook/react-native) | 0.86.2 | MIT |
 | [Expo](https://github.com/expo/expo) | SDK 57 | MIT |
 | [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) | 1.8.1 | Apache-2.0 |
-| [BlurView](https://github.com/Dimezis/BlurView), through `expo-blur`, for what scrolls under a bar of glass | 3.1.0 | [Apache-2.0](https://github.com/Dimezis/BlurView/blob/master/LICENSE) |
 | [minimp3](https://github.com/lieff/minimp3), the MP3 decoder used by the game's chart maker | commit `ea99364f` | [CC0-1.0](https://github.com/lieff/minimp3/blob/master/LICENSE) |
 
 Notes:

@@ -284,7 +284,13 @@ export const library = {
 
   /** `TrackMenu`: everything that can be done to one track. */
   menu: {
+    /** What three of these go by across the top of the sheet, where there is a quarter of the width. */
+    quickNext: 'Next',
+    quickQueue: 'Queue',
+    quickList: 'List',
     playNext: { label: 'Play next', hint: 'Straight after the current track' },
+    /** A song listened to from the Search tab and not kept: kept. */
+    keepListened: { label: 'Keep in library', hint: 'Copied into your library, its history with it' },
     addToQueue: { label: common.addToQueue, hint: 'At the end' },
     playSimilar: { label: 'Play with similar songs', hint: 'This one, then a batch of songs like it' },
     playOnly: { label: 'Play only this', hint: 'The queue is this one song' },
@@ -292,6 +298,8 @@ export const library = {
     series: { label: 'Open the show', hint: 'Its episodes, and how new ones are fetched' },
     tapeFolder: { label: 'Open its folder', hint: 'Everything else in the folder it is in' },
     tapeDetails: { label: 'View details', hint: 'How far in, where it came from, and the file' },
+    share: { label: 'Share', hint: 'Sent as a sound: a chat plays it where it is' },
+    shareFile: { label: 'Share as a file', hint: 'Sent as the file itself: a chat keeps it as a document' },
     album: { label: 'Go to album', hint: 'The rest of the record, in order' },
     addToPlaylist: { label: 'Add to a list', hint: 'One of your lists, or a new one' },
     favoriteAdd: { label: "Add to Favorites", hint: "The list the heart fills, newest first" },

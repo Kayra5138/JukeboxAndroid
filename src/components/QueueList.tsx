@@ -33,6 +33,7 @@ import { dividerAt, queueIndex, queueMove, shownIndex } from '../lib/player/auto
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
 import { laid, makeStyles, outlined, useColours, withAlpha } from '../lib/theme/index';
 import { glassOf } from '../lib/theme/Veil';
+import { PressRing, type PressRingFor } from './PressMenu';
 import { announce } from '../lib/ui/announce';
 import { haptic } from '../lib/ui/haptics';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
@@ -223,6 +224,9 @@ const QueueRow = memo(function QueueRow({
 /** How long a hold has to last before it lifts a row. Shorter than a menu's. */
 const LIFT_AFTER_MS = 220;
 
+/** How much of a row's right-hand end is its handle's, the mark and the room round it a finger has: left out of the ring. */
+const GRIP_ZONE = 52;
+
 /** Out to the row's own edges, and no further left than the cross's own reach. */
 const GRIP_SLOP = { top: 18, bottom: 18, left: 2, right: 16 };
 
@@ -344,6 +348,7 @@ export function QueueList({
   onMove,
   onRemove,
   onLongPress,
+  ring,
   header,
   footer,
   plate = false,
@@ -363,6 +368,8 @@ export function QueueList({
    * a row is lifted by its handle and not by its body.
    */
   onLongPress?: (index: number) => void;
+  /** The ring a row opens when held and slid from (`PressMenu.tsx`); left off, a hold opens the menu as it always did. */
+  ring?: PressRingFor<Track>;
   header?: ReactNode;
   footer?: ReactNode;
   /** Stand the rows on a plate, where screens are glass: see `PlateContext`. Nothing in any other theme. */
@@ -874,13 +881,21 @@ export function QueueList({
                 onRemove={onRemove ? remove : undefined}
               />
             );
+            const held = ring ? (
+              // Clear of the handle, where there is one: a hold there lifts the row to move it.
+              <PressRing ring={ring} item={item} clearOfRight={onMove && onLongPress ? GRIP_ZONE : 0}>
+                {row}
+              </PressRing>
+            ) : (
+              row
+            );
             return scatter ? (
               // Always there where the list can be scattered, so that no row is ever wrapped and unwrapped in place.
               <Animated.View collapsable={false} style={{ transform: thrown(scatter, index) }}>
-                {row}
+                {held}
               </Animated.View>
             ) : (
-              row
+              held
             );
           }}
         />

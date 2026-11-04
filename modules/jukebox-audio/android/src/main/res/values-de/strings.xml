@@ -29,6 +29,7 @@
   <string name="jukebox_widget_up_next">Als Nächstes</string>
   <string name="jukebox_widget_up_next_empty">Als Nächstes kommt nichts</string>
   <string name="jukebox_widget_open">Öffnet den Player</string>
+  <string name="jukebox_widget_continue">Weiterhören: %1$s</string>
 
   <string name="jukebox_playback_channel">Aktuelle Wiedergabe</string>
 
@@ -70,6 +71,27 @@
   <plurals name="jukebox_count_songs">
     <item quantity="one">%d Song</item>
     <item quantity="other">%d Songs</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">Kassetten</string>
+  <string name="jukebox_auto_following">Gefolgt</string>
+  <string name="jukebox_auto_books">Bücher</string>
+  <string name="jukebox_auto_tape_left">noch %1$d Min.</string>
+  <string name="jukebox_auto_tape_played">Gehört</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="one">%d Folge</item>
+    <item quantity="other">%d Folgen</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="one">%d Teil</item>
+    <item quantity="other">%d Teile</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="one">%d Sekunde zurück</item>
+    <item quantity="other">%d Sekunden zurück</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="one">%d Sekunde vor</item>
+    <item quantity="other">%d Sekunden vor</item>
   </plurals>
 
   <string name="jukebox_unknown_title">Unbekannt</string>
@@ -195,4 +217,5 @@
   <!-- %1$s ist, was das System als Fehler meldet, ohne Punkt. -->
   <string name="jukebox_tags_untouched_after">%1$s. Die Datei wurde nicht angetastet.</string>
   <string name="jukebox_under_a_call">Ein Anruf läuft. Die Musik spielt leise.</string>
+  <string name="jukebox_sleep_extended">Sleep-Timer: 10 Minuten mehr</string>
 </resources>

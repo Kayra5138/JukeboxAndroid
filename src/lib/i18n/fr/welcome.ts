@@ -75,7 +75,7 @@ export const welcome: Strings['welcome'] = {
 
   tips: {
     library:
-      'Appuie longuement sur un morceau pour ouvrir son menu : l’ajouter à une liste, modifier ses infos ou le jouer en piano tiles. Fais glisser un morceau vers la droite pour le lire ensuite, ou vers la gauche pour l’ajouter à la file d’attente.',
+      'Appuie longuement sur un morceau et un anneau s’ouvre sous ton doigt : glisse sur une part et relâche. Relâche sans bouger pour le menu complet, piano tiles compris. Fais glisser un morceau vers la droite pour le lire ensuite, ou vers la gauche pour l’ajouter à la file d’attente.',
     player:
       'Sous les commandes, le bouton des paroles les affiche au fil du morceau, et une fois qu’elles sont affichées, le bouton qui apparaît à côté les traduit. La roue dentée regroupe la vitesse et la tonalité, les effets et le minuteur de veille.',
     discover:

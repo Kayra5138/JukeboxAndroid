@@ -23,10 +23,13 @@ object WidgetCommands {
   /** Replaces the queue with what the car's shelf [EXTRA_SHELF] would play, and plays it. */
   const val SHELF = "expo.modules.jukeboxaudio.widget.command.SHELF"
 
+  /** Carries on with the tape [EXTRA_ID] from where it was left, with the rest of its show or book after it. */
+  const val TAPE = "expo.modules.jukeboxaudio.widget.command.TAPE"
+
   const val EXTRA_MODE = "mode"
   const val EXTRA_INDEX = "index"
   const val EXTRA_ID = "id"
   const val EXTRA_SHELF = "shelf"
 
-  val ALL = setOf(SHUFFLE_QUEUE, REPEAT, JUMP, SHELF)
+  val ALL = setOf(SHUFFLE_QUEUE, REPEAT, JUMP, SHELF, TAPE)
 }

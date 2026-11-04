@@ -242,7 +242,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: 'A seguir',
+    quickQueue: 'Fila',
+    quickList: 'Lista',
     playNext: { label: 'Tocar a seguir', hint: 'Logo depois da faixa atual' },
+    keepListened: { label: 'Guardar na biblioteca', hint: 'Copiada para a sua biblioteca, com o histórico' },
     addToQueue: { label: common.addToQueue, hint: 'No fim' },
     playSimilar: { label: 'Tocar com músicas parecidas', hint: 'Esta, depois um grupo de músicas parecidas' },
     playOnly: { label: 'Tocar só esta', hint: 'A fila fica só com esta música' },
@@ -250,6 +254,8 @@ export const library: Strings['library'] = {
     series: { label: 'Abrir o programa', hint: 'Os episódios e como os novos são baixados' },
     tapeFolder: { label: 'Abrir a pasta', hint: 'Todo o resto da pasta dele' },
     tapeDetails: { label: 'Ver detalhes', hint: 'Até onde você ouviu, de onde veio e o arquivo' },
+    share: { label: 'Compartilhar', hint: 'Enviado como áudio: a conversa toca ali mesmo' },
+    shareFile: { label: 'Compartilhar como arquivo', hint: 'Enviado como o próprio arquivo: a conversa guarda como documento' },
     album: { label: 'Ir para o álbum', hint: 'O resto do álbum, em ordem' },
     addToPlaylist: { label: 'Adicionar a uma lista', hint: 'Uma das suas listas ou uma nova' },
     favoriteAdd: { label: "Adicionar às Favoritas", hint: "A lista que o coração enche, as mais novas no topo" },

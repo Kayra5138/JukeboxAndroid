@@ -14,7 +14,9 @@ import { nav } from './nav.ts';
 import { player } from './player.ts';
 import { search } from './search.ts';
 import { settings } from './settings.ts';
+import { smart } from './smart.ts';
 import { sound } from './sound.ts';
+import { space } from './space.ts';
 import { stats } from './stats.ts';
 import { support } from './support.ts';
 import { themes } from './themes.ts';
@@ -105,6 +107,7 @@ export const de: Strings = {
   player,
   library,
   lists,
+  smart,
   search,
   downloads,
   stats,
@@ -117,4 +120,5 @@ export const de: Strings = {
   listenbrainz,
   welcome,
   support,
+  space,
 };

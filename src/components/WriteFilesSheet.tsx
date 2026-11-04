@@ -10,6 +10,7 @@ import {
   type Outcome,
 } from '../lib/filetags';
 import { useT } from '../lib/i18n/index';
+import { useCurrentId } from '../lib/player/current';
 import type { EnrichedTrack } from '../lib/media/enriched';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
@@ -40,14 +41,11 @@ type Stage =
 export function WriteFilesSheet({
   visible,
   tracks,
-  playingId,
   onClose,
 }: {
   visible: boolean;
   /** As the library shows them, which is what is written. */
   tracks: EnrichedTrack[];
-  /** The track now playing, which is left alone. */
-  playingId: string | null;
   /** Told whether any file was actually changed, so the list behind can read again. */
   onClose: (wroteAny: boolean) => void;
 }) {
@@ -60,6 +58,8 @@ export function WriteFilesSheet({
   const pressed = usePressed();
   useWindowVeil(visible);
   const said = t.details.write;
+  // The track now playing, which is left alone.
+  const playingId = useCurrentId();
 
   // Reset as it opens rather than as it closes, so the first frame is the
   // question and not the last run's results.

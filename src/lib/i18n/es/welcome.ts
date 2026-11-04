@@ -74,7 +74,7 @@ export const welcome: Strings['welcome'] = {
 
   tips: {
     library:
-      'Mantén pulsada una canción para ver su menú: añadirla a una lista, editar sus detalles o jugar con ella a piano tiles. Desliza una canción a la derecha para que suene a continuación, o a la izquierda para añadirla a la cola.',
+      'Mantén pulsada una canción y se abre un anillo bajo tu dedo: desliza hasta una porción y suelta. Si sueltas sin moverte, se abre el menú completo, piano tiles incluido. Desliza una canción a la derecha para que suene a continuación, o a la izquierda para añadirla a la cola.',
     player:
       'Bajo los controles, el botón de la letra la muestra mientras suena la canción, y cuando está a la vista, el botón que aparece a su lado la traduce. El engranaje reúne la velocidad y el tono, los efectos y el temporizador de apagado.',
     discover:

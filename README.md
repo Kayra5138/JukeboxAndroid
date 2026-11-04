@@ -9,15 +9,21 @@ it comes with a rhythm game built out of your own songs, because why not.
 
 <p>
   <img src="docs/screenshots/player.jpg" width="16%" alt="The player, with what is up next under it">
-  <img src="docs/screenshots/library.jpg" width="16%" alt="The library, in the Night glass theme">
-  <img src="docs/screenshots/discover.jpg" width="16%" alt="Discover: songs you do not have, each with the reason it is there">
-  <img src="docs/screenshots/stats.jpg" width="16%" alt="Stats for last week, with the week before beside each figure">
-  <img src="docs/screenshots/themes.jpg" width="16%" alt="The themes: light, dark, and glass">
-  <img src="docs/screenshots/tiles.jpg" width="16%" alt="Piano tiles, played to one of your own songs">
+  <img src="docs/screenshots/library.jpg" width="16%" alt="The library's tracks, in a theme of glass">
+  <img src="docs/screenshots/tapes.jpg" width="16%" alt="Tapes: shows followed, books and other recordings, each carried on from where it was left">
+  <img src="docs/screenshots/lists.jpg" width="16%" alt="Lists: Favorites, your own lists and the ones made from your listening">
+  <img src="docs/screenshots/stats.jpg" width="16%" alt="Stats for the last seven days, with the time before beside each figure">
+  <img src="docs/screenshots/themes.jpg" width="16%" alt="Some of the themes: light, dark, and glass">
 </p>
 <p>
-  <img src="docs/screenshots/rack.jpg" width="49%" alt="Albums as a rack of records, with the phone on its side">
-  <img src="docs/screenshots/lyrics.jpg" width="49%" alt="The player on its side, with the lyrics following the song">
+  <img src="docs/screenshots/lyrics.jpg" width="19%" alt="The lyrics following the song in the player">
+  <img src="docs/screenshots/artist.jpg" width="19%" alt="An artist's page, with their albums">
+  <img src="docs/screenshots/recap.jpg" width="19%" alt="A recap card of the last seven days, to save or share">
+  <img src="docs/screenshots/discover.jpg" width="19%" alt="Discover: songs you do not have, each with the reason it is there">
+  <img src="docs/screenshots/tiles.gif" width="19%" alt="Piano tiles, played to one of your own songs">
+</p>
+<p>
+  <img src="docs/screenshots/rack.jpg" width="66%" alt="Albums as a rack of records, with the phone on its side">
 </p>
 
 ## Install
@@ -103,6 +109,19 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
   suggested (most listens first), moves each copy's history to it, and
   deletes the rest with one confirmation from Android. Search results and
   playlist imports know a song is in the library by the same rule.
+- **Free up space**, in Settings → Library, lists songs that could go, in
+  groups with the room each would free: copies of the same song, songs
+  skipped early on far more than heard (a skip in the first seconds, or once
+  most of the song was heard, is not counted against it), songs never played
+  in six months on the phone, songs not played for six months, and the
+  largest files. Each says why it is there and which lists it is in. Tick
+  some and delete them with one confirmation from Android; a copy's history
+  moves to the copy kept first. Tapes are never listed.
+- **Delete unplayed downloads**, on the same screen and off unless turned on,
+  deletes songs the app downloaded itself once nobody has listened to them
+  for the months you choose, looking once a day. Never the song playing, a
+  tape, or a file that came any other way, and songs in Favorites or other
+  lists only if you say so.
 - Search finds the tracks no artist was named for by "Unknown artist", to
   select and fix them at once.
 - At the foot of a library search, **Search YouTube** takes the same words to
@@ -134,7 +153,10 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
 - A sleep timer: 15 to 90 minutes or a number you type, or "at the end of
   this track". It can let the current track finish, the last half minute
   fades out, and it runs in the playback service, so it works with the app
-  closed and the screen off.
+  closed and the screen off. Still awake as it ends? Shake the phone in the
+  last three minutes for ten more, screen off or not; a short buzz says it
+  worked (can be switched off; the motion sensor is only read in those three
+  minutes, while music plays).
 - Deleting a track goes through Android's own confirmation, and so does
   writing details into a file, so the app never needs standing write access to
   your storage.
@@ -191,10 +213,11 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
   instead, line against line.
 - Translations are into English unless Settings says another language. Any
   other goes through English and needs a second model.
-- Fix things by hand: nudge the timing in quarter-second steps, search the
-  catalogue yourself, or paste your own lyrics.
-- The stored lyrics are editable where they stand. Fix one wrong line without
-  pasting the whole song again.
+- Fix things by hand on the Lyrics tab. One search looks in the song's file,
+  a `.lrc` beside it and the catalogue, with results as long as the song
+  first. One box holds the words: fix a line where it stands, or empty it with
+  the cross and paste your own. Saved empty, the lyrics stay gone until you
+  ask for them back. Timing moves in quarter-second steps.
 
 ### Tags and metadata
 
@@ -279,13 +302,21 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
 
 - **Favorites**, a list that is always there, newest first. The heart on the
   player puts the song playing in it and takes it out again, and so does
-  *Add to Favorites* in every song's menu. It can be renamed and emptied but
+  the heart beside the song's name in its menu; songs chosen together go in
+  from *Add to list*, where it comes first. It can be renamed and emptied but
   not deleted. One switch in Settings → Player hides the list, the heart and
-  the menu entry together; what is in it waits.
+  the heart in the menu together; what is in it waits.
 - Lists ordered by hand, with a cover of your choice: a grid of four, one
   track's cover, or a picture from your phone.
 - Make a list from a tag in two ways. A *following* list always mirrors the
   tag. A *copy* is yours to rearrange.
+- **Smart lists** are made of rules: tag, artist, album artist, album, genre,
+  title, year, when a song was added, how often it was played or skipped,
+  when it was last played, and how long it is. A song has to meet every rule,
+  or any one of them, and a list can keep only so many songs, in random order
+  or by plays, by date added or by title. Its songs are worked out each time
+  it is opened, so it follows the library and your listening; the editor
+  counts the matches as you write the rules.
 - **M3U in and out.** Bring in playlists from another player or a computer
   (`.m3u`, `.m3u8`; Windows paths, `file://` addresses and old Turkish,
   Western and Cyrillic encodings included), matched to your files by path, by
@@ -398,6 +429,12 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
 ### Downloads
 
 - The Search tab finds songs on YouTube by name, by link or by playlist.
+- **Listen without keeping.** *Listen* on a result fetches it ahead of
+  everything else into the app's own files, not your library, and plays it the
+  moment it is in. Heart it, put it in a list or choose *Keep in library* from
+  its menu and it is copied into the library, its history with it; otherwise it
+  is deleted a week after it was fetched (Settings → Downloads & Discover sets
+  how long), unless it is still in the queue.
 - Save as MP3 or keep the original audio.
 - A playlist becomes a local list with the same name, in the same order and
   without duplicates.
@@ -434,7 +471,10 @@ of their own in the library, switched on in the setup or under Look & feel,
 for anything in the **Tapes** folder of your library folder.
 
 - **They play on from where you left them**, each one, kept by the player
-  itself, so the car, the widget and a headset keep the place too. Played
+  itself, so the car, the widget and a headset keep the place too. While one
+  plays, the notification, the lock screen and the car show buttons that go
+  back and forward by its jumps in place of previous and next, and the line
+  under its title is the chapter it is in. Played
   again after a while, a tape goes back a few seconds to the start of the
   sentence; that can be switched off.
 - **Out of the music.** Tapes are not in tracks, albums or artists, shuffle
@@ -458,12 +498,15 @@ for anything in the **Tapes** folder of your library folder.
     Internet Archive, by title or author, in one language or any.
   - **Phone**: sound files already on the phone, copied into a folder of your
     Tapes in the order their names count.
-- **In the player**, a tape has its own buttons: how far the jumps go, a speed
-  of its own for each book or show, a sleep timer that can stop at the end of
+- **In the player**, a tape has its own buttons: how far the jumps go (for
+  every tape, or for one book or show of its own, which a headset, the
+  notification and the car use too), a speed of its own for each book or show,
+  a sleep timer that can stop at the end of
   the chapter, marks with a note at any place (shown on the bar and listed
   together on a screen of their own), its chapters, and, for a video or a
   podcast that has one, a transcript that follows along as lyrics do.
-- **Listening**: silences passed over, a clearer voice, and the parts of a
+- **Listening**: silences passed over and a clearer voice, both experimental
+  and off unless turned on, and the parts of a
   YouTube video that SponsorBlock's users marked as a sponsor's message,
   the channel's own advertising or a request to subscribe passed over (on unless
   switched off; asked by a short prefix of a hash of the video's id, never the
@@ -546,15 +589,17 @@ from the song itself.
   glass and a high-contrast one.
 - **Glass both ways.** In the glass themes a screen opens over the one it
   came from, which shows through out of focus, and lists scroll under the top
-  bar, the tab bar and the mini player and show through them, out of focus on
-  Android 12 and newer; the bars are dense enough that their words stay
-  readable whatever passes under.
+  bar, the tab bar and the mini player and show through them, out of focus;
+  the bars are dense enough that their words stay readable whatever passes
+  under. It is the same on every phone the app runs on, Android 10 and 11
+  included, and costs little: a bar blurs only what is under it, and nothing
+  is drawn while nothing moves.
 - **Glass and gloss.** Night glass and Frosted glass are panes over a slow
   sky, by night and by day; Aero is the polished look of an old desktop, sky
   over grass with a band of gloss on everything; Cover glass is the night
   glass over a sky made from the record that is playing. Cards let the page
   through, what is behind a sheet or a dialog goes out of focus while it is
-  open (Android 12 and newer; a thicker dim before that), and the player
+  open, and the player
   wears its cover, blurred, as its page.
 - **Custom** is a theme of your own from two or three colours: the page, the
   accent, and the cards if you want to choose them. Everything else is
@@ -582,9 +627,19 @@ from the song itself.
   - **Shuffle** (2×1): Shuffle all and Shuffle recent in one tap.
 
   The now-playing ones change layout as they are resized, and the cover opens
-  the player.
-- Three dots at the end of every row of tracks open its menu, as a long press
+  the player. With nothing playing, they offer to carry on with the tape you
+  last listened to, from where you left it, in one tap.
+- **Hold a song and slide.** Held for a moment, a song on any list opens a
+  ring of eight slices under the finger: play next, similar songs, add to the
+  queue, details, add to a list, the album, Favorites and share. Slide onto
+  one and let go, without lifting the finger in between; let go in the middle
+  to call it off, or without moving to get the whole menu instead. A tape has
+  eight of its own. Near the edge of the screen the ring moves in, and is
+  measured from its own middle.
+- Three dots at the end of every row of tracks open its menu, as holding one
   does; Settings → Look & feel can take them away.
+- **Share** in a song's menu, or for songs chosen together, sends the files
+  to another app with Android's share sheet: a chat, a mail, a phone nearby.
 - Pause, then swipe the notification away to close the music.
 - Playback keeps going with the app closed.
 - A landscape layout: tabs move to a rail on the left, the player to a panel on
@@ -599,11 +654,22 @@ from the song itself.
 ### Android Auto
 
 - Four tabs: Home, Tracks, Albums, Lists. Everything is cover tiles.
-- Home starts with Continue, Shuffle recent and Shuffle all, then the three
-  tapes you are part way through, then what you played lately.
+- Home starts with Continue, Shuffle recent and Shuffle all, then a Tapes
+  tile and the three tapes you are part way through, then what you played
+  lately.
+- Tapes holds the shows you follow and your books, each a tile, then other
+  folders of tapes and tapes on their own. A show or a book lists what you are
+  part way through first, then a show's newest episodes or a book's parts in
+  order, each saying how many minutes are left or that it was played. A tape
+  plays with the rest of its show or book after it, from where you left it.
+  It is a tile on Home rather than a fifth tab because a car shows four.
+- While a tape plays, the car's buttons go back and forward by the tape's
+  jumps, and the line under its title is the chapter it is in, where it has
+  chapters.
 - Each shelf has a Sort tile at its head: by name, artist, recently added,
   most played or recently played.
-- Search works typed or spoken.
+- Search works typed or spoken, and finds tapes by their own name or their
+  show's or book's.
 - Names and covers are the ones the phone shows, corrections included.
 
 ### Your data
@@ -614,6 +680,13 @@ from the song itself.
   your marks and the tape settings.
 - Not in it: the music itself, the download history, the library folder and
   anything about a ListenBrainz connection, its token least of all.
+- **Back up automatically**, off until turned on, saves that same zip by itself
+  every day or every week, with the app open or closed, into a folder you pick
+  once with Android's folder picker. The newest five are kept unless you choose
+  another number; only files named `Jukebox-backup-…zip` are ever deleted.
+- Your data shows the folder, when the last backup was made and a **Back up
+  now** button, and says so if the folder was moved, deleted or its permission
+  taken back. The folder and the switch stay on this phone, out of the backup.
 - **Import** reads that zip on any phone. Songs are found again by file name,
   then by title, artist and length, because a song's id differs between phones.
 - Before anything is written you see what is in the backup and how many of its
@@ -626,6 +699,21 @@ from the song itself.
   lyrics and places in lists. Where size and length agree it is followed
   without a word; where it is less sure, **Same song?** appears in Settings
   and asks.
+- **Import listening history** brings in what you played elsewhere, from the
+  files the services let you download: Last.fm scrobbles as a CSV export,
+  Spotify's `StreamingHistory_music_*.json` or extended
+  `Streaming_History_Audio_*.json`, and a ListenBrainz export. Pick one file
+  or several, or the zip they came in; only the history files are read out
+  of a zip, never the rest of what Spotify puts in it.
+- Each listen is matched to a song in your library by artist and title,
+  ignoring case, accents, punctuation, guests and "Remastered" notes. Songs
+  you do not have are kept under their names and still count in Stats.
+- Before anything is written you see how many listens there are, the dates
+  they span and how many are of songs in your library. Plays under 30 seconds
+  are left out, and so is anything already in your history, so importing the
+  same file twice adds nothing.
+- Imported listens are never sent to ListenBrainz, not even by **Send past
+  listens**. They travel in a backup like any other. Nothing leaves the phone.
 
 ## What touches the network
 
@@ -688,7 +776,8 @@ Good to know:
   fresh checkout, and again whenever `app.json` or a config plugin changes.
 - The first build compiles the translation engine from source: about 20 MB of
   C++ to fetch and roughly a minute to build. After that it is cached. TagLib
-  is fetched and built the same way and adds a few seconds.
+  is fetched and built the same way and adds a few seconds, and FFmpeg with
+  LAME about half a minute; they need `bash`, `curl` and `make`.
 - `./gradlew :jukebox-audio:checkTagWriter` builds the tag writer for your
   computer and runs it over files made up for the purpose. It needs a desktop
   C++ compiler and zlib's headers, and no build depends on it.
@@ -719,7 +808,7 @@ Good to know:
 | `MODIFY_AUDIO_SETTINGS` | Attaching the bass boost, surround and loudness |
 | `WAKE_LOCK` | Keeping the phone awake while music plays, a download runs or a lookup goes on |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | Lookups, lyrics, downloads, and telling "offline" from "failed" |
-| `VIBRATE` | Haptics on swipes and in the game |
+| `VIBRATE` | Haptics on swipes and in the game, and the buzz when a shake adds time to the sleep timer |
 | `RECEIVE_BOOT_COMPLETED` | Keeping the work done with the app closed scheduled after the phone restarts: the followed podcasts' check for new episodes, and Discover's songs kept ready |
 
 There is no permission to write to storage. Deleting a track, and writing
@@ -810,10 +899,12 @@ scripts/        icons, genre vocabulary refresh, release signing, Android Auto h
 - **A backup is a zip** with one JSON document and the cover files. Merging is
   a pure function over two sets of tables, tested against a real SQLite, and
   the result goes in under a single transaction.
-- **The translation engine, the MP3 decoder and the tag writer are built from
-  source.** Bergamot, minimp3 and TagLib are fetched at pinned commits and
-  rejected if their SHA-256 does not match. The downloader's FFmpeg and Python are the
-  exception: they come prebuilt with its wrapper, pinned by version.
+- **The translation engine, the MP3 decoder, the tag writer and the
+  downloader's FFmpeg are built from source.** Bergamot, minimp3, TagLib,
+  FFmpeg and LAME are fetched at pinned releases and rejected if their SHA-256
+  does not match; FFmpeg holds only what the downloads use. The downloader's
+  Python is the exception: it comes prebuilt with its wrapper, checked by
+  SHA-256, with what yt-dlp has no use for left out.
 
 ## Development
 

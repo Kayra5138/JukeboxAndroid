@@ -104,7 +104,8 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
       try {
         const every = await downloads.getJobsAsync(checkFiles);
         const state = await downloads.queueStateAsync?.();
-        const next = every.filter(job => !job.discoverKey);
+        // Discover's own are Discover's; a song listened to from the Search tab has a key too, and is the screens'.
+        const next = every.filter(job => !job.discoverKey || job.video.listen === true);
         // Whatever has failed since last time, for the report screen; Discover's own included.
         noteFailedDownloads(every);
         // The phone hands them over newest first, which is the order the
@@ -244,7 +245,8 @@ export function DownloadsProvider({ children }: { children: ReactNode }) {
   const descriptionId = nextDescription?.id;
   const trackId = nextDescription?.trackId;
   // A tape is not a song, and is not looked up as one: its names are the video's and its list's. See `lib/tapes`.
-  const describeIt = nextDescription?.video.tape == null;
+  // Nor is a song listened to and not kept, whose file is not the library's: it is looked up once kept, as any song is.
+  const describeIt = nextDescription?.video.tape == null && nextDescription?.video.listen !== true;
   useEffect(() => {
     if (!descriptionId || !trackId || !downloads) return;
     const controller = new AbortController();

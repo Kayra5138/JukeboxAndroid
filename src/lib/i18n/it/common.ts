@@ -56,6 +56,8 @@ export const common: Strings['common'] = {
   hours: (count) => `${format.number(count)} h`,
 
   fileUnreadable: 'Impossibile leggere il file.',
+  shareWith: 'Condividi con',
+  shareFailed: 'Impossibile condividere.',
   pictureFailed: 'Impossibile caricare l’immagine.',
 
   drawFailed: 'Si è verificato un problema nel mostrare questa schermata.',

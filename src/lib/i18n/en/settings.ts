@@ -153,6 +153,8 @@ export const settings = {
     },
   },
   downloads: {
+    /** How long a song listened to from the Search tab and not kept stays: see `lib/listen`. */
+    listen: { title: 'Songs listened to and not kept', note: 'Deleted this many days after they were fetched, unless you keep them: heart one, put it in a list, or keep it from its menu.', days: (days: number) => oneOrMany(days, '1 day', `${format.number(days)} days`)  },
     note: 'What is being downloaded, what is waiting and what has finished.',
     button: {
       title: 'Floating downloads button',
@@ -238,6 +240,33 @@ export const settings = {
     note:
       'Your listening history, lists, tags, lyrics and settings, the podcasts you follow, and where you are in each tape and what you marked in it, in one file you choose a place for. Not the music itself.',
     failed: 'The backup could not be saved.',
+  },
+  /** Backups made by themselves into a folder chosen once: see `backup/auto.ts`. */
+  autoBackup: {
+    title: 'Back up automatically',
+    off: 'The same file as Export everything, saved by itself every day or every week into a folder you choose.',
+    folder: 'Folder',
+    /** For a folder whose name its app does not say. */
+    folderUnnamed: 'Chosen folder',
+    chooseOther: 'Choose another folder',
+    lost: 'Jukebox can no longer reach this folder: it was moved or deleted, or the permission was taken back. Choose it again to go on backing up.',
+    chooseAgain: 'Choose the folder again',
+    every: 'How often',
+    daily: 'Every day',
+    weekly: 'Every week',
+    keep: 'Backups kept',
+    keepNote: (count: number) =>
+      oneOrMany(
+        count,
+        'Only the newest is kept in the folder and older ones are deleted. Nothing else in the folder is touched.',
+        `The newest ${format.number(count)} are kept in the folder and older ones are deleted. Nothing else in the folder is touched.`
+      ),
+    /** [when] is a date and time. */
+    last: (when: string) => `Last backup: ${when}.`,
+    never: 'No backup made yet.',
+    failed: 'The last backup could not be made. It is tried again next time.',
+    now: 'Back up now',
+    made: 'Backed up.',
   },
   importBackup: {
     title: 'Import',

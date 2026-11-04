@@ -136,28 +136,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Busca la letra de esta pista igual que al reproducirla, y sustituye la guardada si la encuentra.',
-    nothingMatched: 'Nada coincide con esta pista. La búsqueda de abajo no descarta nada.',
-    foundAndSaved: 'Encontrada y guardada.',
     nothingCameBack: 'No ha salido nada con eso.',
     cleared: 'Borrada. La próxima búsqueda volverá a buscarla.',
     notSeconds: 'Eso no es un número de segundos.',
 
-    stored: 'Lo guardado',
     none: 'Nada todavía',
     kept: (timed, byHand, lines) =>
       `${timed ? 'Sincronizada' : 'Texto sin sincronizar'}, ${byHand ? 'elegida a mano' : 'de LRCLIB'}` +
       (lines > 0 ? ` · ${oneOrMany(lines, '1 línea', `${format.number(lines)} líneas`)}` : ''),
     forget: 'Olvidar esta y volver a buscar',
-    saveChanges: 'Guardar cambios',
     timedHint:
       'Cada línea lleva delante su tiempo. Cambia las palabras y deja los corchetes, o la línea pierde su sitio.',
-    plainHint: 'Cambia lo que quieras. La letra guardada se considera tuya y ninguna búsqueda la sustituye.',
 
     timing: 'Sincronización',
     timingHint:
-      'Desplaza todas las líneas a la vez. Úsalo cuando la letra es correcta pero llega antes o después de tiempo: abre el reproductor y ajústalo hasta que encaje, o toca la cifra y escríbela. Un desplazamiento positivo hace que la letra llegue más tarde.',
+      'Mueve todas las líneas a la vez, para una letra correcta que llega pronto o tarde. Toca la cifra para escribirla. Un valor positivo la retrasa.',
     earlier: (seconds) => `−${seconds}s`,
     later: (seconds) => `+${seconds}s`,
     shiftedEarlier: (written) => `−${written}s`,
@@ -169,16 +162,24 @@ export const details: Strings['details'] = {
     typeOffset: 'Escribir un desplazamiento exacto',
     wordsField: 'Letra',
 
-    byHand: 'Buscar a mano',
-    byHandHint:
-      'Aquí no se descarta nada, a diferencia de la búsqueda automática, que rechaza todo lo que no coincide en duración; por eso algunas pistas nunca encuentran su letra.',
     queryPlaceholder: 'Artista y título',
     candidateTimed: 'sincronizada',
     candidatePlain: 'sin sincronizar',
 
-    paste: 'Pegar',
-    pasteHint: 'Acepta un archivo LRC o texto sin más. Con marcas de tiempo, queda sincronizada.',
-    savePasted: 'Guardar lo pegado',
+    find: 'Buscar letra',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)} encontradas`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'En el propio archivo de la canción', lrc: 'En un archivo .lrc junto a la canción' },
+    sameLength: 'misma duración',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Pega o escribe la letra aquí. Las líneas con tiempo como [00:12.34] siguen la canción.',
+    clearBox: 'Vaciar el cuadro',
+    undo: 'Deshacer',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Quitar la letra',
+    removed: 'Letra quitada. Ninguna búsqueda la traerá de vuelta.',
+    removedByHand: 'Quitada a mano',
   },
 
   library: {
@@ -226,6 +227,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'Lista',
+    quickEdit: 'Editar',
+    quickLookUp: 'Buscar',
     more: 'Más…',
     moreHint: 'Todo lo que se puede hacer con las pistas seleccionadas',
     heading: (count) =>
@@ -256,6 +260,8 @@ export const details: Strings['details'] = {
         hint: 'Escribe en los propios archivos los datos que muestra la biblioteca. Android pregunta antes.',
       },
       addToList: { label: 'Añadir a una lista', hint: 'Las pone en una de tus listas' },
+      share: { label: 'Compartir', hint: 'Envía los archivos a otra app: un chat, un correo, un móvil cercano' },
+      shareFile: { label: 'Compartir como archivo', hint: 'Se envía el archivo tal cual: un chat lo guarda como documento' },
       reset: {
         label: 'Restablecer',
         hint: 'Olvida lo que las búsquedas encontraron para ellas. Tus propios cambios se quedan.',

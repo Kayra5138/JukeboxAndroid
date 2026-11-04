@@ -29,6 +29,7 @@
   <string name="jukebox_widget_up_next">In coda</string>
   <string name="jukebox_widget_up_next_empty">Nient’altro in coda</string>
   <string name="jukebox_widget_open">Apre il lettore</string>
+  <string name="jukebox_widget_continue">Continua: %1$s</string>
 
   <!-- The media notification. -->
   <string name="jukebox_playback_channel">In riproduzione</string>
@@ -73,6 +74,27 @@
   <plurals name="jukebox_count_songs">
     <item quantity="one">%d canzone</item>
     <item quantity="other">%d canzoni</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">Cassette</string>
+  <string name="jukebox_auto_following">Seguiti</string>
+  <string name="jukebox_auto_books">Libri</string>
+  <string name="jukebox_auto_tape_left">%1$d min rimasti</string>
+  <string name="jukebox_auto_tape_played">Ascoltato</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="one">%d episodio</item>
+    <item quantity="other">%d episodi</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="one">%d parte</item>
+    <item quantity="other">%d parti</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="one">Indietro di %d secondo</item>
+    <item quantity="other">Indietro di %d secondi</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="one">Avanti di %d secondo</item>
+    <item quantity="other">Avanti di %d secondi</item>
   </plurals>
 
   <string name="jukebox_unknown_title">Sconosciuto</string>
@@ -203,4 +225,5 @@
   <string name="jukebox_tags_untouched_after">%1$s. Il file non è stato toccato.</string>
   <!-- A toast, when play is pressed during a call and the music is played quietly under it. -->
   <string name="jukebox_under_a_call">Chiamata in corso. Riproduzione a volume basso.</string>
+  <string name="jukebox_sleep_extended">Timer di spegnimento: altri 10 minuti</string>
 </resources>

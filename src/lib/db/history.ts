@@ -182,6 +182,18 @@ export function lastPlayedAt(): Map<string, number> {
   return latest;
 }
 
+/**
+ * How often each track has been skipped, by the skips the player wrote down
+ * (`recordSkip`). One query for the whole library, as {@link playCounts} is;
+ * a track never skipped is absent.
+ */
+export function skipCounts(): Map<string, number> {
+  const rows = db().getAllSync<{ track_id: string; skips: number }>(
+    `SELECT track_id, COUNT(*) AS skips FROM skips GROUP BY track_id`
+  );
+  return new Map(rows.map((row) => [row.track_id, row.skips]));
+}
+
 /** When the history starts, which is how wide a chart of all of it has to be. */
 export function firstPlayAt(): number | null {
   const row = db().getFirstSync<{ first: number | null }>(

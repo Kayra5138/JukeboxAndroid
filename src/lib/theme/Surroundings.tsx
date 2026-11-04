@@ -8,6 +8,7 @@ import { useThemeNeeds } from './index';
 import { artworkFor } from '../media/artwork';
 import { artworkRevision, subscribeArtwork } from '../media/artworkEvents';
 import { usePlayerState } from '../player/PlayerProvider';
+import { whenStill } from '../ui/moving.ts';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 
@@ -33,6 +34,9 @@ import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
  * played through changes nothing. Where the player has got to is not in its
  * state, so the ticking of a song never arrives here.
  */
+/** How long a new record's colours wait after they are known, for the tap that started it to have become a scroll or not. */
+const SKY_WAITS_MS = 600;
+
 export function ThemeSurroundings() {
   const wantsCover = useThemeNeeds().includes('cover');
   const trackId = usePlayerState().current?.id ?? null;
@@ -42,6 +46,8 @@ export function ThemeSurroundings() {
   useEffect(() => {
     if (!wantsCover) return;
     let alive = true;
+    let pause: ReturnType<typeof setTimeout> | undefined;
+    let letGo: (() => void) | undefined;
     /*
       The colours in hand are left alone until the new ones arrive. Clearing
       them first would take the app from one record's colour to the default
@@ -54,7 +60,19 @@ export function ThemeSurroundings() {
       const cover = colouredStops(read);
       const held = themeSurroundings.get();
       if ((held.cover?.join() ?? null) === (cover?.join() ?? null)) return;
-      themeSurroundings.set({ ...held, cover });
+      /*
+        These colours are every row of every screen drawn again, all in one
+        go, and a song starts just when somebody is likely to be scrolling:
+        a moment after they tapped a row. So not until the moment has passed,
+        and no list is moving; a sky a second late is not seen to be, and a
+        list that catches under the finger is.
+      */
+      pause = setTimeout(() => {
+        letGo = whenStill(() => {
+          const now = themeSurroundings.get();
+          themeSurroundings.set({ ...now, cover });
+        });
+      }, SKY_WAITS_MS);
     };
     if (!trackId) {
       settle(null);
@@ -74,6 +92,8 @@ export function ThemeSurroundings() {
       .catch(() => settle(null));
     return () => {
       alive = false;
+      clearTimeout(pause);
+      letGo?.();
     };
   }, [wantsCover, trackId, revision]);
 

@@ -1,6 +1,6 @@
-import { BlurTargetView, BlurView } from 'expo-blur';
+import { requireNativeViewManager } from 'expo-modules-core';
 import { createContext, use, useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { findNodeHandle, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { luminance } from '../lib/theme/colour';
 import { frostedWashOf } from '../lib/theme/effects';
@@ -21,9 +21,11 @@ import { barsLaidOver } from './UnderBars';
  *
  * Android can, from version 12: a view can be recorded as it draws and that
  * record drawn again elsewhere through a blur, on the graphics processor,
- * without drawing the list a second time. `expo-blur` does it with two
- * views: a target, which is the list, and a blur, which is laid under the
- * bar and draws the part of the target behind it. So:
+ * without drawing the list a second time. Two views of the app's own do it
+ * (`FrostTargetView.kt`, `FrostView.kt`): a target, which is the list, and a
+ * blur, which is laid under the bar and draws only the strip of the target
+ * behind it, small, through the blur. It was `expo-blur` once, which blurred
+ * the whole of the list for every bar on every frame. So:
  *
  *  - a list that runs under bars is a {@link BlurArea};
  *  - a bar over it draws {@link Frost} under its contents, the blur and the
@@ -40,7 +42,7 @@ import { barsLaidOver } from './UnderBars';
  */
 
 /** Whether this phone blurs what is behind a view. As the veil decides it. */
-const CAN_FROST = Platform.OS === 'android' && Number(Platform.Version) >= 31;
+const CAN_FROST = Platform.OS === 'android' && Number(Platform.Version) >= 29;
 
 type Target = RefObject<View | null>;
 
@@ -98,9 +100,9 @@ export function BlurArea({
   if (!CAN_FROST) return <View collapsable={false} style={style}>{children}</View>;
   return (
     <InsideContext value={[...inside, ref]}>
-      <BlurTargetView ref={ref} style={style}>
+      <NativeFrostTarget ref={ref} collapsable={false} style={style}>
         {children}
-      </BlurTargetView>
+      </NativeFrostTarget>
     </InsideContext>
   );
 }
@@ -111,17 +113,30 @@ export function useSceneTarget(): Target | null {
 }
 
 /**
- * How far behind a bar is blurred: `expo-blur` takes an intensity, divides it
- * by its reduction for the radius, and lays a tint over the blur as dense as
- * the intensity is high. The tint is wanted thin and the radius wide, since
- * the bar's own wash goes over the blur and is what keeps its writing
- * readable; so the intensity is small and the reduction smaller. Five
- * pixels: at twenty-four what passed under was a smear nobody could make
+ * How far behind a bar is blurred, in pixels on the screen, and the tint over
+ * it: what `expo-blur` made of an intensity of four, a reduction of 0.8 and
+ * its own scale of four, kept as they were when the blur came to be drawn
+ * here instead (`FrostView`). The tint is wanted thin and the radius wide,
+ * since the bar's own wash goes over the blur and is what keeps its writing
+ * readable: at twenty-four what passed under was a smear nobody could make
  * out, and at eight still too little of it, where the point of glass is
  * seeing what does.
  */
-const INTENSITY = 4;
-const REDUCTION = 0.8;
+const RADIUS = 20;
+const TINT_DARK = (7 << 24) + (25 << 16) + (25 << 8) + 25;
+const TINT_LIGHT = (7 << 24) + (249 << 16) + (249 << 8) + 249;
+
+/** What scrolls under the bars, kept as a record for them to blur: see `FrostTargetView.kt`. */
+const NativeFrostTarget = requireNativeViewManager<{ children?: ReactNode; collapsable?: boolean; style?: StyleProp<ViewStyle>; ref?: Target }>(
+  'JukeboxAudio',
+  'FrostTargetView'
+);
+
+/** A bar's glass, drawn on the phone itself: see `FrostView.kt`. */
+const NativeFrost = requireNativeViewManager<{ targetId?: number; radius: number; overlay: number; style?: StyleProp<ViewStyle> }>(
+  'JukeboxAudio',
+  'FrostView'
+);
 
 /**
  * Whether a bar over [target] is drawn blurred, which is whether it should
@@ -148,19 +163,16 @@ export function useFrosted(target: Target | null): boolean {
  */
 export function Frost({ target, edge }: { target: Target; edge?: 'top' | 'bottom' }) {
   const c = useColours();
+  // The list, by the number the phone knows its view by, once it is there to be found.
+  const [targetId, setTargetId] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    setTargetId(findNodeHandle(target.current) ?? undefined);
+  }, [target]);
   const line = Math.max(StyleSheet.hairlineWidth, outlineWidth(c));
   const reach = edge === 'top' ? { top: -line } : edge === 'bottom' ? { bottom: -line } : null;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, reach]}>
-      {/* Made only once the target is there: it looks for it when it is made, and not again. */}
-      <BlurView
-        blurTarget={target}
-        blurMethod="dimezisBlurViewSdk31Plus"
-        intensity={INTENSITY}
-        blurReductionFactor={REDUCTION}
-        tint={tintOf(c)}
-        style={StyleSheet.absoluteFill}
-      />
+      <NativeFrost targetId={targetId} radius={RADIUS} overlay={tintOf(c) === 'dark' ? TINT_DARK : TINT_LIGHT} style={StyleSheet.absoluteFill} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: frostedWashOf(c) }]} />
       {edge ? <View style={[styles.edge, edge === 'top' ? styles.atTop : styles.atBottom, { height: line, backgroundColor: c.border }]} /> : null}
     </View>

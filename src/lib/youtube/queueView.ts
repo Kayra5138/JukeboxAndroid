@@ -78,12 +78,15 @@ export function historyOf(all: readonly DownloadJob[]): DownloadJob[] {
 /** Where a download was asked for from. */
 export type Source =
   | { kind: 'discover' }
+  | { kind: 'listen' }
   | { kind: 'album'; name: string }
   | { kind: 'playlist'; name: string }
   | { kind: 'tape'; name: string }
   | { kind: 'search' };
 
 export function sourceOf(job: DownloadJob): Source {
+  // Listened to from the Search tab: it has a key as Discover's songs do, and is not one of them.
+  if (job.video.listen === true) return { kind: 'listen' };
   if (job.discoverKey != null) return { kind: 'discover' };
   // Read by hand and not through `placementOf`: only the record's name is
   // wanted, and this has been through the phone's storage and back.

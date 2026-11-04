@@ -131,28 +131,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Busca a letra desta faixa do mesmo jeito que é feito ao tocá-la, e substitui a que está guardada se encontrar.',
-    nothingMatched: 'Nada correspondeu a esta faixa. A busca abaixo não descarta nada.',
-    foundAndSaved: 'Encontrada e salva.',
     nothingCameBack: 'Nada foi encontrado para isso.',
     cleared: 'Apagada. A próxima consulta vai buscar de novo.',
     notSeconds: 'Isso não é um número de segundos.',
 
-    stored: 'O que está guardado',
     none: 'Nada ainda',
     kept: (timed, byHand, lines) =>
       `${timed ? 'Sincronizada' : 'Texto simples'}, ${byHand ? 'escolhida manualmente' : 'do LRCLIB'}` +
       (lines > 0 ? ` · ${oneOrMany(lines, '1 linha', `${format.number(lines)} linhas`)}` : ''),
     forget: 'Esquecer esta e buscar de novo',
-    saveChanges: 'Salvar alterações',
     timedHint:
       'Cada linha tem a marcação de tempo no início. Mude as palavras e mantenha os colchetes, ou a linha perde o lugar.',
-    plainHint: 'Mude o que quiser. A letra salva fica como sua, e nenhuma consulta a substitui.',
 
     timing: 'Sincronia',
     timingHint:
-      'Desloca todas as linhas de uma vez. Use quando a letra estiver certa mas chegar adiantada ou atrasada — abra o player e ajuste até coincidir, ou toque no número e digite. Um deslocamento positivo faz a letra chegar mais tarde.',
+      'Move todas as linhas de uma vez, para uma letra certa que chega cedo ou tarde. Toque no número para digitar. Um valor positivo atrasa.',
     /* [seconds] is a step such as 0.25, written with a decimal comma. */
     earlier: (seconds) => `−${format.decimal(seconds, 2)}s`,
     later: (seconds) => `+${format.decimal(seconds, 2)}s`,
@@ -165,16 +158,24 @@ export const details: Strings['details'] = {
     typeOffset: 'Digitar um deslocamento exato',
     wordsField: 'Letra',
 
-    byHand: 'Buscar manualmente',
-    byHandHint:
-      'Aqui nada é descartado, ao contrário da busca automática — que recusa qualquer resultado com duração diferente, e é por isso que algumas faixas nunca encontram a letra.',
     queryPlaceholder: 'Artista e título',
     candidateTimed: 'sincronizada',
     candidatePlain: 'simples',
 
-    paste: 'Colar',
-    pasteHint: 'Aceita um arquivo LRC ou texto simples. Com marcações de tempo, vira uma letra sincronizada.',
-    savePasted: 'Salvar o texto colado',
+    find: 'Buscar letra',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)} encontradas`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'No próprio arquivo da música', lrc: 'Em um arquivo .lrc ao lado da música' },
+    sameLength: 'mesma duração',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Cole ou escreva a letra aqui. Linhas com tempo como [00:12.34] acompanham a música.',
+    clearBox: 'Limpar a caixa',
+    undo: 'Desfazer',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Remover a letra',
+    removed: 'Letra removida. Nenhuma busca vai trazê-la de volta.',
+    removedByHand: 'Removida à mão',
   },
 
   library: {
@@ -222,6 +223,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'Lista',
+    quickEdit: 'Editar',
+    quickLookUp: 'Buscar',
     more: 'Mais…',
     moreHint: 'Tudo o que dá para fazer com as faixas selecionadas',
     heading: (count) =>
@@ -252,6 +256,8 @@ export const details: Strings['details'] = {
         hint: 'Grava nos próprios arquivos os detalhes que a biblioteca mostra. O Android pergunta antes.',
       },
       addToList: { label: 'Adicionar à lista', hint: 'Coloca as faixas em uma das suas listas' },
+      share: { label: 'Compartilhar', hint: 'Envia os arquivos para outro app: um chat, um e-mail, um celular por perto' },
+      shareFile: { label: 'Compartilhar como arquivo', hint: 'Enviado como o próprio arquivo: a conversa guarda como documento' },
       reset: {
         label: 'Redefinir',
         hint: 'Esquece o que as consultas encontraram para elas. Suas próprias edições ficam.',

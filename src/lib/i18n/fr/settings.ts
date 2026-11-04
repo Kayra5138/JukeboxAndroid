@@ -124,6 +124,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: 'Morceaux écoutés et non gardés', note: 'Supprimés ce nombre de jours après leur téléchargement, sauf si tu les gardes : un cœur, une liste ou leur menu.', days: (days) => `${format.number(days)} ${one(days, 'jour', 'jours')}`  },
     note: 'Ce qui se télécharge, ce qui attend et ce qui est terminé.',
     button: {
       title: 'Bouton flottant des téléchargements',
@@ -201,6 +202,30 @@ export const settings: Strings['settings'] = {
     note:
       'Ton historique d’écoute, tes listes, tes tags, tes paroles et tes réglages, les podcasts que tu suis, et où tu en es dans chaque cassette avec ce que tu y as marqué, dans un seul fichier dont tu choisis l’emplacement. Pas la musique elle-même.',
     failed: 'Impossible d’enregistrer la sauvegarde.',
+  },
+  autoBackup: {
+    title: 'Sauvegarde automatique',
+    off: 'Le même fichier qu’avec « Tout exporter », enregistré tout seul chaque jour ou chaque semaine dans un dossier que tu choisis.',
+    folder: 'Dossier',
+    folderUnnamed: 'Dossier choisi',
+    chooseOther: 'Choisir un autre dossier',
+    lost: 'Jukebox ne peut plus accéder à ce dossier : il a été déplacé ou supprimé, ou l’autorisation a été retirée. Choisis-le à nouveau pour continuer les sauvegardes.',
+    chooseAgain: 'Choisir à nouveau le dossier',
+    every: 'Fréquence',
+    daily: 'Chaque jour',
+    weekly: 'Chaque semaine',
+    keep: 'Sauvegardes gardées',
+    keepNote: (count) =>
+      one(
+        count,
+        'Seule la plus récente est gardée dans le dossier, les plus anciennes sont supprimées. Rien d’autre dans le dossier n’est touché.',
+        `Les ${format.number(count)} plus récentes sont gardées dans le dossier, les plus anciennes sont supprimées. Rien d’autre dans le dossier n’est touché.`
+      ),
+    last: (when) => `Dernière sauvegarde : ${when}.`,
+    never: 'Aucune sauvegarde pour l’instant.',
+    failed: 'La dernière sauvegarde n’a pas pu être faite. Elle sera retentée la prochaine fois.',
+    now: 'Sauvegarder maintenant',
+    made: 'Sauvegardé.',
   },
   importBackup: {
     title: 'Importer',

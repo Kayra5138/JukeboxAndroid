@@ -61,6 +61,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'Bandas, graves y realce de volumen' },
     crossfade: { note: 'Cómo una pista da paso a la siguiente' },
     allEffects: { title: 'Todos los efectos', note: 'Amplitud, crossfeed, rotación y nivel' },
+    jumps: {
+      heading: 'Saltos para este libro o programa',
+      general: 'General',
+      backToGeneral: 'Volver a los saltos de todos los casetes',
+      back: 'Saltar atrás',
+      forward: 'Saltar adelante',
+      note: 'En segundos, solo para este libro o programa, y también para los auriculares, la notificación y el coche. Los demás casetes mantienen los saltos de los ajustes de casetes.',
+    },
   },
   sleepTimer: {
     title: 'Temporizador de apagado',
@@ -76,6 +84,11 @@ export const player: Strings['player'] = {
       title: 'Dejar que termine la pista',
       note: 'Cuando se acabe el tiempo, esperar a que acabe la canción en lugar de bajar el volumen hasta cortarla.',
       label: 'Dejar que termine la pista actual cuando se acabe el temporizador',
+    },
+    shake: {
+      title: 'Agitar para diez minutos más',
+      note: 'En los últimos tres minutos, agita el teléfono para añadir diez minutos, incluso con la pantalla apagada. Una vibración corta lo confirma.',
+      label: 'Agita el teléfono en los últimos tres minutos para añadir diez minutos al temporizador de apagado',
     },
     refused: (most) => `Un número entero de minutos, de 1 a ${most}`,
     howMany: '¿Pausar dentro de cuántos minutos?',

@@ -20,14 +20,14 @@ export function orderTapes<T extends { id: string }>(tapes: readonly T[], places
   return [...begun.sort(latest), ...fresh, ...heard.sort(latest)];
 }
 
-type Part = { id: string; album: string | null; artist: string | null; discNumber?: number | null; trackNumber: number | null; filename: string | null };
+export type TapePart = { id: string; album: string | null; artist: string | null; discNumber?: number | null; trackNumber: number | null; filename: string | null };
 
 /**
  * What a tape is played with: the other tapes of the same record — the parts
  * of a book, the episodes of a show as they were filed — in their order, so
  * that one runs on into the next; or the tape alone, where it has no record.
  */
-export function partsOf<T extends Part>(tape: T, tapes: readonly T[]): { tracks: T[]; index: number } {
+export function partsOf<T extends TapePart>(tape: T, tapes: readonly T[]): { tracks: T[]; index: number } {
   if (!tape.album) return { tracks: [tape], index: 0 };
   const parts = tapes.filter((other) => other.album === tape.album && (other.artist ?? '') === (tape.artist ?? '')).sort(byPart);
   const index = parts.findIndex((part) => part.id === tape.id);
@@ -35,7 +35,7 @@ export function partsOf<T extends Part>(tape: T, tapes: readonly T[]): { tracks:
 }
 
 /** One part before another of the same record: by disc, by number, then by name, which for a show is the day it came out. */
-function byPart(a: Part, b: Part): number {
+function byPart(a: TapePart, b: TapePart): number {
   return (
     (a.discNumber ?? 0) - (b.discNumber ?? 0) ||
     (a.trackNumber ?? 0) - (b.trackNumber ?? 0) ||
@@ -57,7 +57,7 @@ export function inSeriesOrder<T extends { filename: string | null }>(tapes: read
  * Tapes chosen together, in the order they are played: each record's parts
  * together and in their order, the records one after another by name.
  */
-export function inRecordOrder<T extends Part>(tapes: readonly T[]): T[] {
+export function inRecordOrder<T extends TapePart>(tapes: readonly T[]): T[] {
   return [...tapes].sort(
     (a, b) =>
       (a.artist ?? '').localeCompare(b.artist ?? '') ||

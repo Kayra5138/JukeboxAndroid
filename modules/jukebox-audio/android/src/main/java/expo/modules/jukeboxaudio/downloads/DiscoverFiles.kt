@@ -38,8 +38,9 @@ object DiscoverFiles {
    * only if it will not move. Its length is the one the video was chosen for
    * having, where that is known, and is only read out of the file where it
    * is not: opening the file to measure it costs more than moving it did.
-   * The sleeve is whatever has arrived by now ([DownloadArtwork.kept]); one
-   * that has not is added when it does, by [picture].
+   * The sleeve is whatever has arrived by now ([DownloadArtwork.kept], and
+   * for a song listened to the video's own, [DownloadArtwork.thumbnailKept]);
+   * one that has not is added when it does, by [picture].
    */
   @Synchronized fun store(context: Context, id: String, audio: File, info: JSONObject, video: JSONObject): JSONObject {
     val dir = directory(context, id).apply { mkdirs() }
@@ -53,7 +54,9 @@ object DiscoverFiles {
       finally { reader.release() }
     }.getOrDefault(0.0)
     val sleeve = info.optString("artworkUri").takeIf { it.startsWith("file://") } ?: DownloadArtwork.kept(context, video.text("discoverCover"))
-    val row = JSONObject().put("id", "discover:$id").put("uri", Uri.fromFile(file).toString())
+      ?: if (video.optBoolean("listen")) DownloadArtwork.thumbnailKept(context, video) else null
+    // A song listened to without keeping it is known as that, and one of Discover's as Discover's.
+    val row = JSONObject().put("id", "${if (video.optBoolean("listen")) "listen" else "discover"}:$id").put("uri", Uri.fromFile(file).toString())
       .put("title", video.optString("discoveryTitle", info.optString("title")))
       .put("artist", video.optString("discoveryArtist", info.optString("artist")))
       .put("album", info.optString("album").takeIf { it.isNotBlank() } ?: JSONObject.NULL)
@@ -129,7 +132,7 @@ object DiscoverFiles {
       .toSet()
     val removed = synchronized(this) {
       ids.filter { id ->
-        if ("discover:$id" in keep || id in active) false
+        if ("discover:$id" in keep || "listen:$id" in keep || id in active) false
         else directory(context, id).let { !it.exists() || it.deleteRecursively() }
       }
     }

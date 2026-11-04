@@ -66,6 +66,9 @@ internal object Tapes {
     return under.substringBefore('/') in FOLDERS
   }
 
+  /** Whether a folder called [name] is a tapes folder itself, and not one of the folders in it. */
+  fun isTapesFolderName(name: String): Boolean = name.lowercase() in FOLDERS
+
   /**
    * The track a queue item is, by the id the app knows it by. The car's rows
    * carry where they were found ahead of it, `…|id`, and a tape's place has
@@ -115,6 +118,38 @@ internal object Tapes {
   fun setJumps(context: Context, backSec: Int, forwardSec: Int) {
     context.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE).edit()
       .putInt(JUMP_BACK, backSec.coerceIn(1, 600)).putInt(JUMP_FORWARD, forwardSec.coerceIn(1, 600)).apply()
+    jumpsChanged?.invoke()
+  }
+
+  /** Told when the jumps change, by the service, whose buttons for a tape show them: see [TapeButtons]. */
+  @Volatile var jumpsChanged: (() -> Unit)? = null
+
+  /**
+   * The jumps of the books and shows given their own, by their keys, as the
+   * app keeps them (`tapes/jumps.ts`): `{key: {back, forward}}` in seconds,
+   * either left out where it is the general one. Handed over as the speeds
+   * are, so a headset's press on a book is that book's jump.
+   */
+  fun setJumpsByKey(context: Context, json: String) {
+    context.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE).edit().putString(JUMPS_BY_KEY, json).apply()
+  }
+
+  /** [jumpsMs], or what the book or show under [key] was given of its own in their place. */
+  fun jumpsMsFor(context: Context, key: String): Pair<Long, Long> =
+    jumpsFor(context.getSharedPreferences(SETTINGS_FILE, Context.MODE_PRIVATE).getString(JUMPS_BY_KEY, null), key, jumpsMs(context))
+
+  /**
+   * The jumps back and on for [key] in [json], in milliseconds, each falling
+   * back to [general]'s where it has none of its own or one that makes no
+   * sense: unreadable, nought, or past ten minutes.
+   */
+  fun jumpsFor(json: String?, key: String, general: Pair<Long, Long>): Pair<Long, Long> {
+    val own = json?.let { runCatching { JSONObject(it).optJSONObject(key) }.getOrNull() } ?: return general
+    fun of(name: String, otherwise: Long): Long {
+      val seconds = own.optInt(name, 0)
+      return if (seconds in 1..600) seconds * 1000L else otherwise
+    }
+    return of("back", general.first) to of("forward", general.second)
   }
 
   /**
@@ -123,8 +158,9 @@ internal object Tapes {
    * is not a tape, and the press is the player's to do as it always did.
    */
   fun jump(context: Context, player: Player, forward: Boolean): Boolean {
-    if (!isTape(context, player.currentMediaItem)) return false
-    val (back, on) = jumpsMs(context)
+    val item = player.currentMediaItem
+    if (item == null || !isTape(context, item)) return false
+    val (back, on) = jumpsMsFor(context, keyOf(item))
     val duration = player.duration.takeIf { it != C.TIME_UNSET && it > 0 }
     val to = player.currentPosition + if (forward) on else -back
     player.seekTo(to.coerceAtLeast(0).let { if (duration != null) it.coerceAtMost(duration - 1_000) else it }.coerceAtLeast(0))
@@ -319,6 +355,7 @@ internal object Tapes {
   private const val MUSIC_SPEED = "musicSpeed"
   private const val JUMP_BACK = "jumpBack"
   private const val JUMP_FORWARD = "jumpForward"
+  private const val JUMPS_BY_KEY = "jumpsByKey"
   private const val SMART_REWIND = "smartRewind"
   private const val ROOT_FRESH_MS = 30_000L
 }

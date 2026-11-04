@@ -125,28 +125,21 @@ export const details: Strings['details'] = {
   },
 
   lyrics: {
-    lookUpHint:
-      '再生時と同じ方法でこの曲の歌詞を検索し、見つかれば保存済みの歌詞と置き換えます。',
-    nothingMatched: 'この曲に一致する歌詞はありませんでした。下の検索では候補を絞り込みません。',
-    foundAndSaved: '歌詞が見つかり、保存しました。',
     nothingCameBack: '該当する結果はありませんでした。',
     cleared: 'クリアしました。次回の自動取得で再検索します。',
     notSeconds: '有効な秒数ではありません。',
 
-    stored: '保存済みの歌詞',
     none: 'まだありません',
     kept: (timed, byHand, lines) =>
       `${timed ? '同期歌詞' : 'テキストのみ'}、${byHand ? '手動で選択' : 'LRCLIBから取得'}` +
       (lines > 0 ? ` · ${format.number(lines)}行` : ''),
     forget: 'この歌詞を破棄して再検索',
-    saveChanges: '変更を保存',
     timedHint:
       '各行の先頭に時刻が付いています。歌詞は変更してもかまいませんが、角かっこは残してください。消すとその行の表示タイミングが失われます。',
-    plainHint: '自由に変更できます。保存した歌詞は手動編集として扱われ、自動取得で置き換わることはありません。',
 
     timing: 'タイミング',
     timingHint:
-      'すべての行をまとめてずらします。歌詞は正しいのに表示が早すぎる、または遅すぎるときに使います。プレーヤーを開いて合うまで少しずつ調整するか、数値をタップして入力してください。プラスにすると歌詞の表示が遅くなります。',
+      '歌詞は正しいのに早い・遅いときに、全行をまとめてずらします。数値をタップすると入力できます。プラスにすると遅くなります。',
     earlier: (seconds) => `−${seconds}秒`,
     later: (seconds) => `+${seconds}秒`,
     shiftedEarlier: (written) => `−${written}秒`,
@@ -158,16 +151,24 @@ export const details: Strings['details'] = {
     typeOffset: 'ずれの秒数を入力',
     wordsField: '歌詞',
 
-    byHand: '手動で検索',
-    byHandHint:
-      '自動検索と違い、ここでは候補を絞り込みません。自動検索は曲の長さが合わない結果をすべて除外するため、歌詞が見つからない曲があります。',
     queryPlaceholder: 'アーティストとタイトル',
     candidateTimed: '同期',
     candidatePlain: 'テキスト',
 
-    paste: '貼り付け',
-    pasteHint: 'LRCファイルまたはテキストの歌詞を貼り付けられます。タイムスタンプがあれば同期歌詞になります。',
-    savePasted: '貼り付けた歌詞を保存',
+    find: '歌詞を検索',
+    /** How many there are to choose from. */
+    results: (count) => `${format.number(count)}件`,
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: '曲のファイル内', lrc: '曲の横の .lrc ファイル' },
+    sameLength: '同じ長さ',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'ここに歌詞を貼り付けるか入力します。[00:12.34] のように時刻のある行は曲に合わせて表示されます。',
+    clearBox: '入力欄を空にする',
+    undo: '元に戻す',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: '歌詞を削除',
+    removed: '歌詞を削除しました。自動検索で戻ることはありません。',
+    removedByHand: '手動で削除',
   },
 
   library: {
@@ -214,6 +215,9 @@ export const details: Strings['details'] = {
   },
 
   selection: {
+    quickList: 'リスト',
+    quickEdit: '編集',
+    quickLookUp: '調べる',
     more: 'その他…',
     moreHint: '選択した曲に対してできる操作をすべて表示します',
     heading: (count) => `${format.number(count)}曲を選択中`,
@@ -243,6 +247,8 @@ export const details: Strings['details'] = {
         hint: 'ライブラリに表示されている情報をファイル自体に書き込みます。先にAndroidが確認を求めます。',
       },
       addToList: { label: 'リストに追加', hint: '自分のリストのどれかに追加します' },
+      share: { label: '共有', hint: 'ファイルを別のアプリに送ります（チャット、メール、近くのスマホなど）' },
+      shareFile: { label: 'ファイルとして共有', hint: 'ファイルそのものとして送信：チャットではドキュメントとして残ります' },
       reset: {
         label: 'リセット',
         hint: '自動取得で見つかった情報を破棄します。自分で編集した内容は残ります。',

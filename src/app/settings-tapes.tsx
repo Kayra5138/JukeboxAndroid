@@ -121,10 +121,6 @@ export default function TapeSettingsScreen() {
           <Text style={styles.muted}>{said.smartRewind.note}</Text>
         </View>
         <View style={styles.rule} />
-        {flagRow('skipSilence')}
-        <View style={styles.rule} />
-        {flagRow('voiceClarity')}
-        <View style={styles.rule} />
         {flagRow('skipSponsors')}
         <View style={styles.rule} />
         {jumpRow('back')}
@@ -204,6 +200,13 @@ export default function TapeSettingsScreen() {
           <Text accessibilityRole={opml.bad ? 'alert' : undefined} style={opml.bad ? styles.noteBad : styles.aside}>{opml.line}</Text>
         </View>
       ) : null}
+      {/* Still being worked on, so at the foot of the page and off until turned on (`FLAG_DEFAULTS`). */}
+      <Text accessibilityRole="header" style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.experimental)}</Text>
+      <View style={styles.card}>
+        {flagRow('skipSilence')}
+        <View style={styles.rule} />
+        {flagRow('voiceClarity')}
+      </View>
     </SettingsPage>
   );
 }

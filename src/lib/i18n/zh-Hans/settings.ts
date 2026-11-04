@@ -121,6 +121,7 @@ export const settings: Strings['settings'] = {
     },
   },
   downloads: {
+    listen: { title: '收听过但未保存的歌曲', note: '除非你保存（点心、加入列表或从菜单保存），下载后这么多天会被删除。', days: (days) => `${format.number(days)} 天`  },
     note: '正在下载、等待中和已完成的内容。',
     button: {
       title: '下载悬浮按钮',
@@ -194,6 +195,25 @@ export const settings: Strings['settings'] = {
     title: '导出全部内容',
     note: '你的收听记录、歌单、标签、歌词和设置、关注的播客，以及每盘磁带听到的位置和做的标记，保存为一个文件，位置由你选择。不包括音乐文件本身。',
     failed: '无法保存备份。',
+  },
+  autoBackup: {
+    title: '自动备份',
+    off: '与“导出全部内容”相同的文件，每天或每周自动保存到你选择的文件夹。',
+    folder: '文件夹',
+    folderUnnamed: '已选文件夹',
+    chooseOther: '选择其他文件夹',
+    lost: 'Jukebox 无法再访问此文件夹：它可能已被移动或删除，或权限已被收回。请重新选择文件夹以继续备份。',
+    chooseAgain: '重新选择文件夹',
+    every: '频率',
+    daily: '每天',
+    weekly: '每周',
+    keep: '保留份数',
+    keepNote: (count) => `文件夹中保留最新的 ${format.number(count)} 份备份，更早的会被删除。文件夹中的其他文件不会被改动。`,
+    last: (when) => `上次备份：${when}`,
+    never: '尚未备份。',
+    failed: '上次备份未能完成，下次会再试。',
+    now: '立即备份',
+    made: '已备份。',
   },
   importBackup: {
     title: '导入',

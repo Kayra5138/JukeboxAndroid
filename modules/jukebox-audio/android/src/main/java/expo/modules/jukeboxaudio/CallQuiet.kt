@@ -3,6 +3,7 @@ package expo.modules.jukeboxaudio
 import android.content.Context
 import android.media.AudioManager
 import android.os.Build
+import androidx.annotation.RequiresApi
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -39,7 +40,13 @@ class CallQuiet(private val context: Context, private val player: ExoPlayer) {
   private val handler = Handler(Looper.getMainLooper())
   private var under = false
 
-  private val modeChanged = AudioManager.OnModeChangedListener { handler.post { settle() } }
+  /*
+    Told of the mode changing, on Android 12 and newer, which is where the
+    listener exists. Made there and held as anything: a field of its type,
+    made with the rest of this, had Android 10 and 11 look for a class they do
+    not have as the player's service started, and the app closed on opening.
+  */
+  private var modeChanged: Any? = null
   /** For a phone that does not say when its mode changes: asked, while under a call and only then. */
   private val asked = object : Runnable {
     override fun run() {
@@ -64,7 +71,7 @@ class CallQuiet(private val context: Context, private val player: ExoPlayer) {
     player.setAudioAttributes(MUSIC, /* handleAudioFocus = */ false)
     player.volume = UNDER_A_CALL
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      runCatching { audio?.addOnModeChangedListener(context.mainExecutor, modeChanged) }
+      runCatching { ModeWatch.start(audio, context, { handler.post { settle() } }).also { modeChanged = it } }
     } else {
       handler.postDelayed(asked, ASK_MS)
     }
@@ -87,7 +94,8 @@ class CallQuiet(private val context: Context, private val player: ExoPlayer) {
   private fun stopListening() {
     handler.removeCallbacks(asked)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-      runCatching { audio?.removeOnModeChangedListener(modeChanged) }
+      runCatching { ModeWatch.stop(audio, modeChanged) }
+      modeChanged = null
     }
   }
 
@@ -114,5 +122,19 @@ class CallQuiet(private val context: Context, private val player: ExoPlayer) {
      */
     @Volatile var level: Float = 1f
       private set
+  }
+}
+
+/** What only Android 12 and newer have, kept apart so that nothing older ever loads it. */
+@RequiresApi(Build.VERSION_CODES.S)
+private object ModeWatch {
+  fun start(audio: AudioManager?, context: Context, changed: () -> Unit): Any? {
+    val listener = AudioManager.OnModeChangedListener { changed() }
+    audio?.addOnModeChangedListener(context.mainExecutor, listener) ?: return null
+    return listener
+  }
+
+  fun stop(audio: AudioManager?, listener: Any?) {
+    (listener as? AudioManager.OnModeChangedListener)?.let { audio?.removeOnModeChangedListener(it) }
   }
 }

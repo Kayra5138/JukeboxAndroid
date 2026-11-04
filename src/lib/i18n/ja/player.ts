@@ -62,6 +62,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'バンド、低音、ラウドネス' },
     crossfade: { note: '曲から次の曲へのつなぎ方' },
     allEffects: { title: 'すべてのエフェクト', note: '広がり、クロスフィード、回転、レベル' },
+    jumps: {
+      heading: 'この本・番組の移動秒数',
+      general: '共通',
+      backToGeneral: 'すべてのカセット共通の秒数に戻す',
+      back: '戻る秒数',
+      forward: '進む秒数',
+      note: 'この本・番組だけの秒数で、ヘッドセット、通知、車からの操作にも使われます。ほかのカセットはカセットの設定の秒数のままです。',
+    },
   },
   sleepTimer: {
     title: 'スリープタイマー',
@@ -77,6 +85,11 @@ export const player: Strings['player'] = {
       title: '再生中の曲を最後まで再生',
       note: '時間になったら、フェードアウトせずに曲が終わるまで待ちます。',
       label: 'スリープタイマー終了時に再生中の曲を最後まで再生',
+    },
+    shake: {
+      title: '振って10分延長',
+      note: '残り3分になったら、スマホを振ると10分延長します。画面が消えていても使えます。短い振動で知らせます。',
+      label: '残り3分のあいだにスマホを振ると、スリープタイマーを10分延長します',
     },
     refused: (most) => `1〜${most}の整数（分）を入力してください`,
     howMany: '何分後に一時停止しますか？',

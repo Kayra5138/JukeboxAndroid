@@ -107,7 +107,7 @@ export const welcome = {
   /** The tips, each shown once, on the screen it is about. See `ui/tips.ts`. */
   tips: {
     library:
-      'Hold a song for its menu: add it to a list, edit its details, or play it as piano tiles. Pull a song right to play it next, or left to add it to the queue.',
+      'Hold a song and a ring opens under your finger: slide onto a slice and let go. Let go without moving for the whole menu, piano tiles included. Pull a song right to play it next, or left to add it to the queue.',
     player:
       'Under the controls, the lyrics button shows the words as the song plays, and once they are up the button that appears beside it translates them. The gear holds speed and pitch, effects and the sleep timer.',
     discover:

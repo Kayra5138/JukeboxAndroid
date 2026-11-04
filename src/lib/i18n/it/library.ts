@@ -238,7 +238,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: 'Dopo',
+    quickQueue: 'Coda',
+    quickList: 'Lista',
     playNext: { label: 'Riproduci dopo', hint: 'Subito dopo il brano in corso' },
+    keepListened: { label: 'Tieni nella libreria', hint: 'Copiato nella tua libreria, con la sua cronologia' },
     addToQueue: { label: common.addToQueue, hint: 'In fondo' },
     playSimilar: { label: 'Riproduci con brani simili', hint: 'Questo, poi un gruppo di brani simili' },
     playOnly: { label: 'Riproduci solo questo', hint: 'La coda è solo questo brano' },
@@ -246,6 +250,8 @@ export const library: Strings['library'] = {
     series: { label: 'Apri il programma', hint: 'I suoi episodi e come vengono scaricati i nuovi' },
     tapeFolder: { label: 'Apri la sua cartella', hint: 'Tutto il resto della sua cartella' },
     tapeDetails: { label: 'Vedi dettagli', hint: 'A che punto sei, da dove viene e il file' },
+    share: { label: 'Condividi', hint: 'Inviato come audio: una chat lo riproduce lì' },
+    shareFile: { label: 'Condividi come file', hint: 'Inviato come file: una chat lo tiene come documento' },
     album: { label: 'Vai all’album', hint: 'Il resto del disco, in ordine' },
     addToPlaylist: { label: 'Aggiungi a una lista', hint: 'Una delle tue liste, o una nuova' },
     favoriteAdd: { label: "Aggiungi ai Preferiti", hint: "La lista che riempie il cuore, i più recenti in alto" },

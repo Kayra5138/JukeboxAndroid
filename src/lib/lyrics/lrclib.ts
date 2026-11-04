@@ -294,3 +294,24 @@ export async function findLyricsCandidates(
     }];
   });
 }
+
+/**
+ * [found] as a person is shown them: those as long as the song first, since
+ * those are the same recording (see {@link DURATION_TOLERANCE_SEC}), and of
+ * either kind the timed before the plain. Nothing is left out, and those level
+ * stay in the database's order.
+ */
+export function rankCandidates(found: readonly LyricsCandidate[], durationSec: number | null): LyricsCandidate[] {
+  const worth = (candidate: LyricsCandidate) => (sameLength(candidate, durationSec) ? 0 : 2) + (candidate.synced ? 0 : 1);
+  return [...found].sort((a, b) => worth(a) - worth(b));
+}
+
+/** Whether [candidate] is as long as a song of [durationSec]; no, where either length is not known. */
+export function sameLength(candidate: LyricsCandidate, durationSec: number | null): boolean {
+  return (
+    durationSec != null &&
+    durationSec > 0 &&
+    candidate.durationSec != null &&
+    Math.abs(candidate.durationSec - durationSec) <= DURATION_TOLERANCE_SEC
+  );
+}

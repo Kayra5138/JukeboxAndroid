@@ -1,17 +1,21 @@
 import { DiscoverProvider } from '../lib/discover/DiscoverProvider';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, View } from 'react-native';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider, useRootNavigationState } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as SystemUI from 'expo-system-ui';
 
 import { DownloadsButton } from '../components/DownloadsButton';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { BlurArea, GlassScene } from '../components/Frosted';
 import { GlassHeader } from '../components/GlassHeader';
+import { PressMenuHost } from '../components/PressMenu';
 import { BarsOver } from '../components/UnderBars';
 import { Setup } from '../components/welcome/Setup';
+import { keepBackingUp } from '../lib/backup/auto';
+import { scheduleBackups } from '../lib/backup/background';
 import { keepCarCopy } from '../lib/db/carCopy';
 import { keepSpreadingCovers } from '../lib/media/coverSpread';
 import { loadLanguage, useT } from '../lib/i18n/index';
@@ -19,9 +23,13 @@ import { loadLyricsTarget } from '../lib/lyrics/useTarget';
 import { keepLookupsGoing } from '../lib/metadata/background';
 import { keepPodcastsChecked } from '../lib/podcasts/refresh';
 import { schedulePodcasts } from '../lib/podcasts/background';
+import { keepSpaceFreed } from '../lib/space/auto';
 import { syncTapeJumps } from '../lib/tapes/settings';
 import { syncTapeSpeeds } from '../lib/tapes/speed';
 import { fetchNextAfter } from '../lib/podcasts/next';
+import { LateLink } from '../lib/links/LateLink';
+import { Listening } from '../lib/listen/Listening';
+import { OpenedAudio } from '../lib/player/OpenedAudio';
 import { prepareTape } from '../lib/tapes/extras';
 import { sweepMarksOnce } from '../lib/tapes/marks';
 import { isTape } from '../lib/tapes/tape';
@@ -31,8 +39,8 @@ import { PlayerProvider, usePlayerState } from '../lib/player/PlayerProvider';
 import { keepScrobbling } from '../lib/scrobble/index';
 import { watchErrors } from '../lib/support/errorLogStore';
 import { keepCheckingForUpdates } from '../lib/support/updateStore';
-import { loadTheme, makeStyles, page, useColours, useTheme } from '../lib/theme/index';
-import { glassOf, glassPage, setBack, WindowBehind } from '../lib/theme/Veil';
+import { backdropOf, loadTheme, makeStyles, page, useColours, useTheme } from '../lib/theme/index';
+import { glassOf, glassPage, setBack, Veiled, WindowBehind } from '../lib/theme/Veil';
 import { ThemeSurroundings } from '../lib/theme/Surroundings';
 import { useWelcomeShown } from '../lib/ui/welcomeStore';
 import { HEADER_BAR } from '../lib/ui/bars';
@@ -54,6 +62,13 @@ loadLyricsTarget();
   went before.
 */
 watchErrors();
+
+/*
+  The tabs under every page, however the app was opened: a page a link opened
+  it on — a podcast's, from a notification or another app — has the library
+  under it, and Back goes there rather than out of the app.
+*/
+export const unstable_settings = { anchor: '(tabs)' };
 
 export default function RootLayout() {
   const theme = useTheme();
@@ -93,9 +108,22 @@ export default function RootLayout() {
 
   // The podcasts somebody follows, read again now and then, and their new episodes fetched: see `podcasts/refresh.ts`.
   useEffect(() => keepPodcastsChecked(), []);
+  /*
+    Songs the app downloaded itself and nobody has listened to for months,
+    deleted once a day, for somebody who has turned that on: see `space/auto.ts`.
+  */
+  useEffect(() => keepSpaceFreed(), []);
   // And with the app closed: see `podcasts/background.ts`.
+  /*
+    A backup into the folder chosen for them, when one is due, a little after
+    the app opens and as it comes back to the front: see `backup/auto.ts`.
+    With automatic backup off, which is where it starts, this reads a setting.
+  */
+  useEffect(() => keepBackingUp(), []);
   useEffect(() => {
     void schedulePodcasts();
+    // And with the app closed: see `backup/background.ts`.
+    void scheduleBackups();
     // The tape's jumps, for presses from outside the app: see `tapes/settings.ts`.
     syncTapeJumps();
     syncTapeSpeeds();
@@ -147,6 +175,8 @@ export default function RootLayout() {
       player is asked what it is doing and the app takes its word, the same as
       after a reload.
     */
+    // Round everything, so that a row anywhere can be held for its ring: see `PressMenu.tsx`.
+    <GestureHandlerRootView style={rootStyles.app}>
     <ErrorBoundary>
     <ThemeProvider value={navigation}>
     <PlayerProvider>
@@ -220,6 +250,7 @@ export default function RootLayout() {
             <Stack.Screen name="samesongs" options={{ title: t.nav.sameSong, ...over }} />
             <Stack.Screen name="duplicates" options={{ title: t.library.copies.title, ...over }} />
             <Stack.Screen name="wrong-downloads" options={{ title: t.library.wrong.title, ...over }} />
+            <Stack.Screen name="free-space" options={{ title: t.space.title, ...over }} />
             <Stack.Screen name="equalizer" options={{ title: t.nav.equalizer, ...over }} />
             <Stack.Screen name="transitions" options={{ title: t.nav.crossfade, ...over }} />
             <Stack.Screen name="effects" options={{ title: t.nav.effects, ...over }} />
@@ -228,6 +259,8 @@ export default function RootLayout() {
             <Stack.Screen name="tiles" options={{ headerShown: false }} />
             {/* Titled by the list itself, which the screen draws. */}
             <Stack.Screen name="playlist" options={{ headerShown: false, ...over }} />
+            {/* A smart list's rules; the screen says whether it is making one or changing one. */}
+            <Stack.Screen name="smart-list" options={{ title: t.smart.editor.newTitle, ...over }} />
             <Stack.Screen name="details" options={{ title: t.nav.details, ...over }} />
             {/* Until the screen knows the album's name and says that instead. */}
             <Stack.Screen name="album-rest" options={{ title: t.nav.albumRest, ...over }} />
@@ -249,8 +282,16 @@ export default function RootLayout() {
             of its own.
           */}
           <DownloadsButton />
+          {/* Sound files opened with the app from another, played: inside the host, whose player it opens. */}
+          <OpenedAudio />
+          {/* A song listened to from the Search tab, played when it is in: see `lib/listen`. */}
+          <Listening />
+          {/* A link that opened the app while it was awake behind the screen, taken where it says: see `lib/links`. */}
+          <LateLink />
         </NowPlayingHost>
         </View>
+        {/* The menu under a finger held on a row, over the bars as well: see `lib/ui/pressMenu.ts`. */}
+        <PressMenuHost />
         {/*
           Over everything, the player included, and not a route: it has to be
           in front of whatever the app was showing when Settings asked for it,
@@ -263,6 +304,7 @@ export default function RootLayout() {
     </PlayerProvider>
     </ThemeProvider>
     </ErrorBoundary>
+    </GestureHandlerRootView>
   );
 }
 
@@ -279,19 +321,35 @@ const NEVER_GLASS = new Set(['(tabs)', 'tiles']);
 
 type Routes = { index: number; routes: readonly { key: string; name: string; state?: unknown }[] };
 
+/** What a screen is told of the navigator it is in: enough to know where in it the screen stands, and to hear when that changes. */
+type Navigator = {
+  canGoBack: () => boolean;
+  goBack: () => void;
+  getState: () => unknown;
+  addListener: (event: 'state', listener: (event: { data: { state: unknown } }) => void) => () => void;
+};
+
 /**
- * The navigator a screen is in, out of the whole account of what is open:
- * the one whose screens include it. Looked for and not assumed to be the
- * outermost, since what the router keeps outermost is its own business.
+ * The navigator [navigation] belongs to, as it is now, kept up to date.
+ *
+ * Asked of the navigator and listened to, not read off the root's account as
+ * the screen is drawn: a link that opens the app on a page puts the library
+ * under it from the start, and the account the first drawing reads is then
+ * one with no keys in it yet, and nothing draws the screen again to read the
+ * finished one. The library would never know it was under the page.
  */
-function stackOf(state: Routes | undefined, key: string): Routes | null {
-  if (!state || !Array.isArray(state.routes)) return null;
-  if (state.routes.some((route) => route.key === key)) return state;
-  for (const route of state.routes) {
-    const found = stackOf(route.state as Routes | undefined, key);
-    if (found) return found;
-  }
-  return null;
+function useStack(navigation: Navigator): Routes | null {
+  const [stack, setStack] = useState(() => routesOf(navigation.getState()));
+  useEffect(() => {
+    setStack(routesOf(navigation.getState()));
+    return navigation.addListener('state', (event) => setStack(routesOf(event.data.state)));
+  }, [navigation]);
+  return stack;
+}
+
+function routesOf(state: unknown): Routes | null {
+  const routes = state as Routes | undefined;
+  return routes && Array.isArray(routes.routes) ? routes : null;
 }
 
 /**
@@ -310,23 +368,34 @@ function Paged({
   name,
   routeKey,
   title,
-  onBack,
+  navigation,
 }: {
   children: ReactNode;
   name: string;
   routeKey: string;
   title: string;
-  onBack: (() => void) | null;
+  navigation: Navigator;
 }) {
   const c = useColours();
   const styles = usePage();
   const insets = useSafeAreaInsets();
-  // The navigator's own account of what is open, which every screen is told of when it changes: an
-  // address would not do, since a screen can be opened over another of the same address.
-  const stack = stackOf(useRootNavigationState() as Routes | undefined, routeKey);
+  // The navigator's own account of what is open: an address would not do, since a screen can be opened over
+  // another of the same address.
+  const stack = useStack(navigation);
+  const onBack = navigation.canGoBack() ? navigation.goBack : null;
   const glass = glassOf(c);
   const mine = !NEVER_GLASS.has(name);
-  if (glass <= 0) return <View collapsable={false} style={styles.page}>{children}</View>;
+  const backdrop = backdropOf(c);
+  // The backdrop on a view of its own, kept as a picture by the graphics chip: see `backdropOf`.
+  const sky = backdrop ? <View pointerEvents="none" renderToHardwareTextureAndroid style={[StyleSheet.absoluteFill, backdrop]} /> : null;
+  if (glass <= 0) {
+    return (
+      <View collapsable={false} style={styles.page}>
+        {sky}
+        {children}
+      </View>
+    );
+  }
 
   const { index, routes } = stack ?? { index: 0, routes: [] };
   // Not found, it is taken to be on top: drawn as itself, which is never wrong for long.
@@ -341,17 +410,11 @@ function Paged({
   const beneath = barred && SCROLLS_UNDER.has(name);
   // Never folded away, for the reason `Behind` is not: see there.
   return (
-    <View
-      collapsable={false}
-      style={
-        under === 0
-          ? ground
-          : !seenThrough
-            ? ground
-            : under === 1
-              ? [ground, setBack(c)]
-              : [ground, styles.unseen]
-      }>
+    <Veiled
+      {...(under === 1 && seenThrough ? setBack(c) : null)}
+      style={under === 0 ? ground : !seenThrough ? ground : under === 1 ? ground : [ground, styles.unseen]}>
+      {/* It does not move, and drawn by the page under everything it was worked out again on every frame of a scroll. */}
+      {ground === styles.page ? sky : null}
       {beneath ? (
         // The bar blurs what scrolls under it: see `Frosted`.
         <GlassScene>
@@ -368,7 +431,7 @@ function Paged({
       ) : (
         children
       )}
-    </View>
+    </Veiled>
   );
 }
 
@@ -381,14 +444,10 @@ const paged = ({
 }: {
   children: ReactNode;
   route: { key: string; name: string };
-  navigation: { canGoBack: () => boolean; goBack: () => void };
+  navigation: Navigator;
   options: { title?: string };
 }) => (
-  <Paged
-    name={route.name}
-    routeKey={route.key}
-    title={options.title ?? ''}
-    onBack={navigation.canGoBack() ? navigation.goBack : null}>
+  <Paged name={route.name} routeKey={route.key} title={options.title ?? ''} navigation={navigation}>
     {children}
   </Paged>
 );
@@ -446,7 +505,8 @@ const overGlass = {
 
 const usePage = makeStyles((c) =>
   StyleSheet.create({
-    page: { flex: 1, ...page(c) },
+    // The colour alone: the backdrop over it is a view of its own, in `Paged`.
+    page: { flex: 1, backgroundColor: c.bg },
     over: { flex: 1, ...glassPage(c) },
     unseen: { opacity: 0 },
     below: { flex: 1 },

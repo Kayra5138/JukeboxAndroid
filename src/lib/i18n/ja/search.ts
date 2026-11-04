@@ -136,6 +136,10 @@ export const search: Strings['search'] = {
   downloadLabel: (title) => `${title}をダウンロード`,
   download: { mp3: 'MP3をダウンロード', original: '音声をダウンロード' },
   adding: '追加中…',
+  listen: '聴く',
+  listenLabel: (title) => `${title} を保存せずに聴く`,
+  readying: '準備中…',
+  listenDrop: '保存しない',
 
   addingPlaylist: 'プレイリストを追加中…',
   downloadListed: {
@@ -162,6 +166,7 @@ export const search: Strings['search'] = {
     cancelled: 'キャンセル済み',
     failed: 'ダウンロード失敗',
     done: 'ライブラリに追加済み',
+    listened: '再生可能・未保存',
     missing: 'ファイル削除済み',
   },
 

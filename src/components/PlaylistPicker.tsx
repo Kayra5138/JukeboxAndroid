@@ -14,6 +14,7 @@ import {
   type Playlist,
 } from '../lib/db/playlists';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
+import { favorites, favoritesShown } from '../lib/playlists/favorites';
 import { byRecent, recentFrom, usedNow } from '../lib/playlists/recent';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
@@ -35,11 +36,14 @@ export function PlaylistPicker({
   trackIds,
   onClose,
   onAdded,
+  withFavorites = false,
 }: {
   visible: boolean;
   trackIds: string[];
   onClose: () => void;
   onAdded: (message: string) => void;
+  /** Favorites offered too, first: for a selection, which has no heart to press. */
+  withFavorites?: boolean;
 }) {
   const insets = useSafeAreaInsets();
   /*
@@ -70,8 +74,16 @@ export function PlaylistPicker({
       Lists tab orders them.
     */
     const recent = recentFrom(readSetting(SETTINGS.listsRecent));
-    // Nor Favorites, which has a button of its own, the heart, and an entry of its own in the menu.
-    setLists(byRecent(playlists().filter((list) => list.tag == null && list.kind !== 'favorites'), recent));
+    /*
+      Nor a smart list, whose rules say what is in it. Nor Favorites, for one
+      song, which has a button of its own, the heart, and an entry of its own
+      in the menu; for a selection, which has neither, Favorites comes first,
+      where Favorites is on at all.
+    */
+    const pinned = withFavorites && favoritesShown() ? favorites() : null;
+    const all = playlists();
+    const first = all.filter((list) => list.id === pinned);
+    setLists([...first, ...byRecent(all.filter((list) => list.tag == null && list.kind !== 'favorites' && list.kind !== 'smart'), recent)]);
     const wanted = new Set(trackIds);
     const counts = new Map<number, number>();
     for (const [id, members] of playlistMembers()) {
@@ -79,7 +91,7 @@ export function PlaylistPicker({
       if (count > 0) counts.set(id, count);
     }
     setHeld(counts);
-  }, [visible, trackIds]);
+  }, [visible, trackIds, withFavorites]);
 
   const put = useCallback(
     (id: number, name: string) => {

@@ -40,4 +40,21 @@ export const backup: Strings['backup'] = {
   newer: 'Bu yedek daha yeni bir Jukebox ile alınmış. Okuyabilmek için uygulamayı güncelle.',
   needsBuildToExport: 'Dışa aktarmak için güncel sürümü yükle.',
   needsBuildToImport: 'İçe aktarmak için güncel sürümü yükle.',
+
+  history: {
+    title: 'Dinleme geçmişini içe aktar',
+    note: 'Last.fm, Spotify ya da ListenBrainz’deki dinlemelerin, oradan indirebildiğin dosyalardan. Ne bulunduğunu görürsün; bir şey değişmeden önce sana sorulur.',
+    question: 'Bu dinlemeler içe aktarılsın mı?',
+    range: (from, to) => (from === to ? `Hepsi ${from} tarihinde.` : `${from} ile ${to} arasında.`),
+    matched: (matched, total) =>
+      `${format.number(total)} dinlemeden ${format.number(matched)} tanesi kütüphanendeki şarkılara ait. Kalanlar kendi adlarıyla saklanır ve istatistiklerinde yine sayılır.`,
+    short: (count) => `Yarım dakikadan kısa ${format.number(count)} dinleme dışarıda bırakılır.`,
+    already: (count) => `Geçmişinde zaten olan ${format.number(count)} dinleme dışarıda bırakılır.`,
+    nothing: 'İçlerindeki tüm dinlemeler ya zaten geçmişinde ya da sayılamayacak kadar kısa.',
+    added: (count) => `Geçmişine ${format.number(count)} dinleme eklendi.`,
+    notHistory:
+      'Bu, Jukebox’ın okuyabildiği bir dinleme geçmişi değil. Last.fm, Spotify ya da ListenBrainz’in sana verdiği dosyaları seç: CSV ya da JSON veya geldikleri zip.',
+    tooBig: 'Bu dosya okunamayacak kadar büyük.',
+    failed: 'Dinlemeler içe aktarılamadı. Hiçbir şey değişmedi.',
+  },
 };

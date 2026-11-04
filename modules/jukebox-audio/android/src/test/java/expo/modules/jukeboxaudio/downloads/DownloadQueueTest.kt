@@ -384,6 +384,19 @@ class DownloadQueueTest {
     assertEquals(episode, (queue.next(mobile) as Next.Take).job.getString("id"))
   }
 
+  @Test fun aVideoListenedToGoesFirstAsOneOfItsOwnAndIsOneJobIfAskedAgain() {
+    val waiting = download(1)
+    val listened = queue.listen(video(2), "original", "Music") { true }
+    assertEquals(listOf(listened, waiting), order())
+    val job = job(listened)
+    assertTrue(job.getJSONObject("video").getBoolean("listen"))
+    // A key of its own, as Discover's have: what says its file is not the library's.
+    assertTrue(job.getString("discoverKey").matches(Regex("[a-f0-9-]{36}")))
+    assertEquals(listened, queue.listen(video(2), "original", "Music") { true })
+    // Downloaded for the library, the same video is a job of its own.
+    assertTrue(queue.enqueue(video(2), "original", "Music", null, here) != listened)
+  }
+
   @Test fun askedForNextOneOfDiscoversOwnIsNoLongerItsOwn() {
     val asked = download(1); val mine = own(2, wifiOnly = true)
     queue.prioritizeDiscovery(mine)

@@ -63,6 +63,9 @@ export const common = {
   hours: (count: number) => `${format.number(count)} h`,
 
   fileUnreadable: 'That file could not be read.',
+  /** The heading of the system's list of apps a song can be sent to. */
+  shareWith: 'Share with',
+  shareFailed: 'That could not be shared.',
   pictureFailed: 'That picture would not load.',
 
   /** What the screen that catches a failed draw says; see `ErrorBoundary`. */

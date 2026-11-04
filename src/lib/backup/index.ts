@@ -289,6 +289,25 @@ export async function exportBackup(): Promise<boolean> {
   );
 }
 
+/**
+ * Saves everything into the folder at [tree] with no picker, the same file
+ * as above, and has the oldest backups there beyond [keep] deleted. For
+ * automatic backup: see `auto.ts`. Answers the name it was saved under, and
+ * throws where it could not be.
+ */
+export async function writeBackupToFolder(tree: string, keep: number): Promise<string> {
+  if (!JukeboxAudio.writeBackupToFolderAsync) throw new Error(strings().backup.needsBuildToExport);
+
+  const backup = await gather();
+  return JukeboxAudio.writeBackupToFolderAsync(
+    tree,
+    fileName(new Date(backup.exportedAt)),
+    JSON.stringify(backup),
+    referencedArtwork(backup.tables),
+    keep
+  );
+}
+
 /** A backup that has been read and looked at, and not yet acted on. */
 export type Opened = {
   backup: Backup;

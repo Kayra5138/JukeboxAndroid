@@ -31,6 +31,7 @@
   <string name="jukebox_widget_up_next">A seguir</string>
   <string name="jukebox_widget_up_next_empty">Nada a seguir</string>
   <string name="jukebox_widget_open">Abre o player</string>
+  <string name="jukebox_widget_continue">Continuar: %1$s</string>
 
   <string name="jukebox_playback_channel">Tocando agora</string>
 
@@ -74,6 +75,31 @@
     <item quantity="one">%d música</item>
     <item quantity="many">%d músicas</item>
     <item quantity="other">%d músicas</item>
+  </plurals>
+  <string name="jukebox_auto_tapes">Fitas</string>
+  <string name="jukebox_auto_following">Seguindo</string>
+  <string name="jukebox_auto_books">Livros</string>
+  <string name="jukebox_auto_tape_left">faltam %1$d min</string>
+  <string name="jukebox_auto_tape_played">Ouvido</string>
+  <plurals name="jukebox_count_episodes">
+    <item quantity="one">%d episódio</item>
+    <item quantity="many">%d de episódios</item>
+    <item quantity="other">%d episódios</item>
+  </plurals>
+  <plurals name="jukebox_count_parts">
+    <item quantity="one">%d parte</item>
+    <item quantity="many">%d de partes</item>
+    <item quantity="other">%d partes</item>
+  </plurals>
+  <plurals name="jukebox_tape_back">
+    <item quantity="one">Voltar %d segundo</item>
+    <item quantity="many">Voltar %d de segundos</item>
+    <item quantity="other">Voltar %d segundos</item>
+  </plurals>
+  <plurals name="jukebox_tape_forward">
+    <item quantity="one">Avançar %d segundo</item>
+    <item quantity="many">Avançar %d de segundos</item>
+    <item quantity="other">Avançar %d segundos</item>
   </plurals>
 
   <string name="jukebox_unknown_title">Desconhecido</string>
@@ -198,4 +224,5 @@
   <!-- %1$s é o que o sistema disse que deu errado, sem ponto final. -->
   <string name="jukebox_tags_untouched_after">%1$s. O arquivo não foi alterado.</string>
   <string name="jukebox_under_a_call">Há uma chamada em andamento. Tocando baixinho.</string>
+  <string name="jukebox_sleep_extended">Timer de sono: mais 10 minutos</string>
 </resources>

@@ -252,6 +252,7 @@ describe('migrate', () => {
         started_at: 1700,
         seconds_played: 210.5,
         completed: 1,
+        source: null,
       },
     ]);
   });
@@ -381,6 +382,7 @@ describe('every shape that has ever shipped', () => {
             started_at: 1700,
             seconds_played: 210.5,
             completed: 1,
+            source: null,
           },
         ]);
       }
@@ -555,6 +557,8 @@ describe('one spelling per tag', () => {
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN chapters_url');
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_url');
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_type');
+    database.exec('ALTER TABLE playlists DROP COLUMN rules');
+    database.exec('ALTER TABLE plays DROP COLUMN source');
     return database;
   }
 
@@ -640,6 +644,8 @@ describe('dating what was put away from Discover', () => {
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN chapters_url');
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_url');
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_type');
+    database.exec('ALTER TABLE playlists DROP COLUMN rules');
+    database.exec('ALTER TABLE plays DROP COLUMN source');
     database.exec(`PRAGMA user_version = ${dated}`);
     database.exec(`INSERT INTO discover_exclusions (id, song_key, title, artist, reason, until_at)
       VALUES ('old', 'artist|song', 'Song', 'Artist', 'blocked', NULL)`);
@@ -676,6 +682,8 @@ describe('album artists, covers taken off, and covers shared by a record', () =>
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN chapters_url');
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_url');
     database.exec('ALTER TABLE podcast_episodes DROP COLUMN transcript_type');
+    database.exec('ALTER TABLE playlists DROP COLUMN rules');
+    database.exec('ALTER TABLE plays DROP COLUMN source');
     database.exec(`PRAGMA user_version = ${shared}`);
     database.exec(`INSERT INTO track_metadata (track_id, status, artwork_url, fetched_at) VALUES
       ('missed', 'not_found', 'file:///covers/a.jpg', 5),

@@ -230,7 +230,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: '次に再生',
+    quickQueue: 'キュー',
+    quickList: 'リスト',
     playNext: { label: '次に再生', hint: '再生中の曲の直後に再生' },
+    keepListened: { label: 'ライブラリに保存', hint: '再生履歴ごとライブラリにコピーします' },
     addToQueue: { label: common.addToQueue, hint: 'キューの最後に追加' },
     playSimilar: { label: '似た曲と一緒に再生', hint: 'この曲のあと、似た曲をまとめて追加' },
     playOnly: { label: 'この曲だけ再生', hint: 'キューはこの1曲だけになります' },
@@ -238,6 +242,8 @@ export const library: Strings['library'] = {
     series: { label: '番組を開く', hint: 'エピソードと新しいエピソードのダウンロード方法' },
     tapeFolder: { label: 'フォルダを開く', hint: '同じフォルダにあるほかのもの' },
     tapeDetails: { label: '詳細を見る', hint: '聴いた位置、入手元、ファイル' },
+    share: { label: '共有', hint: '音声として送信：チャットでそのまま再生できます' },
+    shareFile: { label: 'ファイルとして共有', hint: 'ファイルそのものとして送信：チャットではドキュメントとして残ります' },
     album: { label: 'アルバムへ移動', hint: 'アルバムの曲を収録順に表示' },
     addToPlaylist: { label: 'リストに追加', hint: '既存のリストか新しいリストに追加' },
     favoriteAdd: { label: "お気に入りに追加", hint: "ハートで追加されるリスト、新しい順" },

@@ -33,16 +33,25 @@ object AlbumArtwork {
     return ImagePicker.adopt(context, Uri.fromFile(file).toString())
   }
 
+  /** Where the picture at [source] is kept once [download] has fetched it. */
+  private fun fileFor(context: Context, source: String): File {
+    val directory = File(context.filesDir, "album-artwork").apply { mkdirs() }
+    val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray())
+      .joinToString("") { "%02x".format(it) }
+    return File(directory, "$digest.jpg")
+  }
+
+  /** The picture at [source], where [download] has already fetched it; null where it has not. Asks nothing but the disk. */
+  fun kept(context: Context, source: String): String? =
+    runCatching { fileFor(context, source).takeIf { it.isFile && it.length() > 0 }?.let { Uri.fromFile(it).toString() } }.getOrNull()
+
   /**
    * [anyHost] for a podcast's own picture, which is wherever its publisher
    * keeps it, put in the feed to be shown by whatever plays the podcast. Every
    * other picture comes from one of the places named below.
    */
   fun download(context: Context, source: String, anyHost: Boolean = false): String {
-    val directory = File(context.filesDir, "album-artwork").apply { mkdirs() }
-    val digest = MessageDigest.getInstance("SHA-256").digest(source.toByteArray())
-      .joinToString("") { "%02x".format(it) }
-    val target = File(directory, "$digest.jpg")
+    val target = fileFor(context, source)
     if (target.isFile && target.length() > 0) return Uri.fromFile(target).toString()
     var url = URL(source)
     repeat(6) {
@@ -70,7 +79,7 @@ object AlbumArtwork {
           url = URL(url, location)
         } else {
           if (connection.responseCode !in 200..299) throw Told(R.string.jukebox_cover_unavailable)
-          val temporary = File.createTempFile("cover-", ".tmp", directory)
+          val temporary = File.createTempFile("cover-", ".tmp", target.parentFile)
           try {
             connection.inputStream.use { input -> temporary.outputStream().use { output ->
               val bytes = ByteArray(16 * 1024)

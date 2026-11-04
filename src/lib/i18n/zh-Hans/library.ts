@@ -224,7 +224,11 @@ export const library: Strings['library'] = {
   },
 
   menu: {
+    quickNext: '下一首',
+    quickQueue: '队列',
+    quickList: '列表',
     playNext: { label: '下一首播放', hint: '在当前歌曲之后立即播放' },
+    keepListened: { label: '保存到资料库', hint: '连同播放记录复制到你的资料库' },
     addToQueue: { label: common.addToQueue, hint: '添加到末尾' },
     playSimilar: { label: '播放并接相似歌曲', hint: '先播这首，然后加入一批相似歌曲' },
     playOnly: { label: '只播放这首', hint: '播放队列里只有这一首' },
@@ -232,6 +236,8 @@ export const library: Strings['library'] = {
     series: { label: '打开节目', hint: '它的单集，以及新单集如何下载' },
     tapeFolder: { label: '打开所在文件夹', hint: '同一文件夹里的其他内容' },
     tapeDetails: { label: '查看详情', hint: '听到哪里、来源和文件' },
+    share: { label: '分享', hint: '以音频发送：聊天中可直接播放' },
+    shareFile: { label: '以文件分享', hint: '以文件本身发送：聊天中作为文档保存' },
     album: { label: '前往专辑', hint: '按顺序查看这张专辑的其余歌曲' },
     addToPlaylist: { label: '添加到歌单', hint: '你的某个歌单，或新建一个' },
     favoriteAdd: { label: "加入收藏", hint: "爱心填充的列表，最新的在最上面" },

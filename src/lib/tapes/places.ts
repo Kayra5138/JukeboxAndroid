@@ -40,6 +40,11 @@ export function refreshTapePlaces(): void {
 }
 
 /** Every place, by the track's id. */
+/** Where [id] was left, as last read: for a press, which is not drawn. */
+export function tapePlaceNow(id: string): TapePlace | null {
+  return places.get().get(id) ?? null;
+}
+
 export function useTapePlaces(): ReadonlyMap<string, TapePlace> {
   return useSyncExternalStore(places.subscribe, places.get);
 }

@@ -35,6 +35,7 @@ import {
   type Session,
 } from './session.ts';
 import { afterMoving, afterRemoving, pendingFrom, placeQueued } from './autoplay/section.ts';
+import { currentTrack, playingTrack, queueNow } from './current.ts';
 import { readTail, restoreTail, tailOf, writeTail } from './autoplay/tail.ts';
 import { artistKey, spreadShuffle } from '../media/shuffle.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
@@ -1327,6 +1328,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     ]
   );
 
+  // What is in the player, for what should not be drawn again with all of it: see `current.ts`.
+  const currentId = current?.id ?? null;
+  useEffect(() => {
+    currentTrack.set(currentId);
+    playingTrack.set(playWhenReady ? currentId : null);
+  }, [currentId, playWhenReady]);
+  useEffect(() => {
+    queueNow.set(queue);
+  }, [queue]);
+  // A new song is at its start from the moment it is one, not from the next reading of where it is.
+  // On the song alone: a length learnt part way through it is no new start.
+  const currentLength = useRef(0);
+  currentLength.current = current?.durationSec ?? 0;
+  useEffect(() => {
+    positionStarted(currentLength.current);
+  }, [currentId]);
+
   const state = useMemo<PlayerState>(
     () => ({
       current,
@@ -1428,6 +1446,18 @@ function watchPosition(told: () => void): () => void {
       polling = null;
     }
   };
+}
+
+/**
+ * The position taken back to the start, for a track that has just become the
+ * current one. Up to a reading behind otherwise, in which time whatever shows
+ * the position would be showing the last song's against this one: its words
+ * scrolled to where the last song had got to, and left there.
+ */
+function positionStarted(durationSec: number): void {
+  if (position.positionSec === 0 && position.durationSec === durationSec) return;
+  position = { positionSec: 0, durationSec };
+  for (const told of [...watching]) told();
 }
 
 const watchNothing = () => () => {};

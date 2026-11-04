@@ -50,6 +50,9 @@ export const TABLES = {
     started_at: 'I!',
     seconds_played: 'R!',
     completed: 'I!',
+    // Where a listen brought in from another app was heard. Absent from a
+    // backup made before there could be such listens: every one heard here.
+    source: 'T',
   },
   skips: {
     track_id: 'T!',
@@ -111,6 +114,8 @@ export const TABLES = {
     cover_uri: 'T',
     tag: 'T',
     kind: 'T',
+    /** A smart list's rules, which name tags and artists rather than songs, and so travel as they are. */
+    rules: 'T',
   },
   playlist_tracks: { playlist_id: 'I!', track_id: 'T!', position: 'I!', added_at: 'I!' },
   // Both later than the rest, and absent from a backup made before them.
@@ -179,7 +184,7 @@ export function carried(key: string): boolean {
 
 /**
  * `SETTINGS.errorLog`, `SETTINGS.updateKnown`, `SETTINGS.lyricsFolders`,
- * `SETTINGS.autoplayQueued` and `SETTINGS.setupSeen`, spelt out — the third
+ * `SETTINGS.autoplayQueued` and `SETTINGS.setupSeen`, and the rest below, spelt out — the third
  * being folders this phone granted, the fourth a note about this phone's
  * queue, and the fifth which screens of the first start this phone has shown,
  * all meaningless on another (a phone a backup is brought to has shown its own
@@ -195,6 +200,14 @@ const PHONE_SUPPORT_KEYS: readonly string[] = [
   // Keyed by this phone's file and job ids, which mean nothing on another.
   'library:rightDownloads',
   'discover:wrongMended',
+  // Automatic backup's folder is a grant this phone was given, and the switch
+  // without it would arrive on another as one that is on and writes nowhere;
+  // when the last was made, and how it went, are this phone's own record.
+  // How often and how many to keep are preferences, and travel.
+  'backup:auto',
+  'backup:folder',
+  'backup:last',
+  'backup:trouble',
 ];
 
 /**

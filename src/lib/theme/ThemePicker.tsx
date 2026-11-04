@@ -139,7 +139,7 @@ export function ThemePicker({
 function Sample({ colours }: { colours: Palette }) {
   return (
     <View style={[sample.page, page(colours)]}>
-      <View style={[sample.card, { backgroundColor: colours.surface, borderColor: colours.border }, finishOf(colours)]}>
+      <View style={[sample.card, { backgroundColor: colours.surface, borderColor: colours.border }, finishOf(colours, StyleSheet.hairlineWidth)]}>
         <View style={sample.lines}>
           <View style={[sample.line, { backgroundColor: colours.text }]} />
           <View style={[sample.lineShort, { backgroundColor: colours.textMuted }]} />

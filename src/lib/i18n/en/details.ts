@@ -138,29 +138,22 @@ export const details = {
   },
 
   lyrics: {
-    lookUpHint:
-      'Searches for this track\'s words the way playing it does, and replaces what is stored if it finds them.',
-    nothingMatched: 'Nothing matched this track. The search below rules nothing out.',
-    foundAndSaved: 'Found and saved.',
     nothingCameBack: 'Nothing came back for that.',
     cleared: 'Cleared. The next lookup will search again.',
     notSeconds: 'That is not a number of seconds.',
 
-    stored: 'What is stored',
     none: 'None yet',
     /** What kind of words are kept and where they came from, with the count of timed lines if any. */
     kept: (timed: boolean, byHand: boolean, lines: number) =>
       `${timed ? 'Timed' : 'Plain text'}, ${byHand ? 'chosen by hand' : 'from LRCLIB'}` +
       (lines > 0 ? ` · ${oneOrMany(lines, '1 line', `${format.number(lines)} lines`)}` : ''),
     forget: 'Forget this and look again',
-    saveChanges: 'Save changes',
     timedHint:
       'Each line keeps the time in front of it. Change the words and leave the brackets, or the line loses its place.',
-    plainHint: 'Change anything. Saved words are kept as yours and no lookup replaces them.',
 
     timing: 'Timing',
     timingHint:
-      'Shifts every line at once. Use it when the words are right but arrive early or late — open the player and nudge until they land, or tap the figure and type it. A positive shift makes the words arrive later.',
+      'Moves every line at once, for words that are right but arrive early or late. Tap the figure to type it. A positive shift makes them later.',
     earlier: (seconds: number) => `−${seconds}s`,
     later: (seconds: number) => `+${seconds}s`,
     /** How far the words have been moved; [written] is the seconds as this language writes them. */
@@ -175,16 +168,24 @@ export const details = {
     /** What a screen reader calls the box the stored words are edited in. */
     wordsField: 'Lyrics',
 
-    byHand: 'Search by hand',
-    byHandHint:
-      'Nothing is ruled out here, unlike the automatic search — which refuses anything whose length disagrees, and is why some tracks never find their words.',
     queryPlaceholder: 'Artist and title',
     candidateTimed: 'timed',
     candidatePlain: 'plain',
 
-    paste: 'Paste',
-    pasteHint: 'Takes an LRC file or plain words. Timestamps make it a timed set.',
-    savePasted: 'Save pasted',
+    find: 'Search for lyrics',
+    /** How many there are to choose from. */
+    results: (count: number) => oneOrMany(count, '1 found', `${format.number(count)} found`),
+    /** Where words on the phone itself were found, in the place of a result's name. */
+    onPhone: { file: 'In the song’s own file', lrc: 'In a .lrc file beside the song' },
+    sameLength: 'same length',
+    /** In the box of words while it is empty. */
+    wordsPlaceholder: 'Paste or write the words here. Lines timed like [00:12.34] follow the song.',
+    clearBox: 'Clear the box',
+    undo: 'Undo',
+    /** On the save button while the box is empty, which is what saving it then does. */
+    removeWords: 'Remove lyrics',
+    removed: 'Lyrics removed. No lookup brings them back.',
+    removedByHand: 'Removed by hand',
   },
 
   /** The screen that looks the whole library up, a run of tracks at a time. */
@@ -245,6 +246,10 @@ export const details = {
    * screen, and from the library's selection. One sheet in both places.
    */
   selection: {
+    /** What three entries go by across the top of the sheet, where there is a quarter of the width. */
+    quickList: 'List',
+    quickEdit: 'Edit',
+    quickLookUp: 'Look up',
     more: 'More…',
     /** For a screen reader, on the button that opens the sheet. */
     moreHint: 'Everything that can be done to the selected tracks',
@@ -277,6 +282,8 @@ export const details = {
         hint: 'Puts the details the library shows into the files themselves. Android asks first.',
       },
       addToList: { label: 'Add to a list', hint: 'Puts them in one of your lists' },
+      share: { label: 'Share', hint: 'Sends the files to another app: a chat, a mail, a phone nearby' },
+      shareFile: { label: 'Share as a file', hint: 'Sent as the file itself: a chat keeps it as a document' },
       reset: {
         label: 'Reset',
         hint: 'Forgets what lookups found for them. Your own edits stay.',

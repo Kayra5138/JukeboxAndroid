@@ -62,6 +62,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'Bänder, Bass und Lautheit' },
     crossfade: { note: 'Wie ein Titel in den nächsten übergeht' },
     allEffects: { title: 'Alle Effekte', note: 'Breite, Crossfeed, Rotation und Pegel' },
+    jumps: {
+      heading: 'Sprünge für dieses Buch oder diese Sendung',
+      general: 'Allgemein',
+      backToGeneral: 'Zurück zu den Sprüngen aller Kassetten',
+      back: 'Zurückspringen',
+      forward: 'Vorspringen',
+      note: 'In Sekunden, nur für dieses Buch oder diese Sendung, auch für Kopfhörer, Benachrichtigung und Auto. Alle anderen Kassetten behalten die Sprünge aus den Kassetten-Einstellungen.',
+    },
   },
   sleepTimer: {
     title: 'Sleep-Timer',
@@ -78,6 +86,11 @@ export const player: Strings['player'] = {
       title: 'Aktuellen Titel zu Ende spielen',
       note: 'Wenn die Zeit um ist, bis zum Ende des Songs warten, statt ihn auszublenden.',
       label: 'Aktuellen Titel zu Ende spielen, wenn der Sleep-Timer abläuft',
+    },
+    shake: {
+      title: 'Schütteln für zehn Minuten mehr',
+      note: 'In den letzten drei Minuten das Handy schütteln, um zehn Minuten hinzuzufügen, auch bei ausgeschaltetem Bildschirm. Ein kurzes Vibrieren bestätigt es.',
+      label: 'Das Handy in den letzten drei Minuten schütteln, um dem Sleep-Timer zehn Minuten hinzuzufügen',
     },
     refused: (most) => `Eine ganze Zahl von Minuten, von 1 bis ${most}`,
     howMany: 'Nach wie vielen Minuten pausieren?',

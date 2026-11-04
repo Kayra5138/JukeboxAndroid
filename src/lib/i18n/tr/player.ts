@@ -60,6 +60,14 @@ export const player: Strings['player'] = {
     equalizer: { note: 'Bantlar, bas ve ses yüksekliği' },
     crossfade: { note: 'Bir parçanın yerini sonrakine nasıl bıraktığı' },
     allEffects: { title: 'Tüm efektler', note: 'Genişlik, crossfeed, döndürme ve seviye' },
+    jumps: {
+      heading: 'Bu kitap ya da program için atlama',
+      general: 'Genel',
+      backToGeneral: 'Tüm kasetlerin atlamalarına dön',
+      back: 'Geri atla',
+      forward: 'İleri atla',
+      note: 'Saniye olarak, yalnızca bu kitap ya da program için; kulaklık, bildirim ve araba için de geçerli. Diğer kasetler Kaset ayarları’ndaki atlamaları kullanır.',
+    },
   },
   sleepTimer: {
     title: 'Uyku zamanlayıcısı',
@@ -75,6 +83,11 @@ export const player: Strings['player'] = {
       title: 'Çalan parça bitsin',
       note: 'Süre dolduğunda ses kısılarak kesilmez, şarkının bitmesi beklenir.',
       label: 'Uyku zamanlayıcısı dolduğunda çalan parça bitsin',
+    },
+    shake: {
+      title: 'Salla, on dakika daha',
+      note: 'Son üç dakikada telefonu sallarsan on dakika eklenir, ekran kapalıyken bile. Kısa bir titreşim işe yaradığını söyler.',
+      label: 'Son üç dakikada telefonu sallayarak uyku zamanlayıcısına on dakika ekle',
     },
     refused: (most) => `1 ile ${most} arasında bir tam sayı gir`,
     howMany: 'Kaç dakika sonra duraklatılsın?',
