@@ -1,5 +1,6 @@
 package expo.modules.jukeboxaudio.transitions
 
+import expo.modules.jukeboxaudio.Buffering
 import expo.modules.jukeboxaudio.CallQuiet
 import android.content.Context
 import android.os.Handler
@@ -343,6 +344,7 @@ class Crossfader(
             DefaultExtractorsFactory().setMp3ExtractorFlags(Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING)
           )
         )
+        .setLoadControl(Buffering.loadControl())
         .setAudioAttributes(
           AudioAttributes.Builder()
             .setUsage(C.USAGE_MEDIA)

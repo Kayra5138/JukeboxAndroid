@@ -556,6 +556,7 @@ class PlaybackService : MediaLibraryService() {
     val fade = FadeGainProvider(windDown)
 
     val player = ExoPlayer.Builder(this, FadingRenderersFactory(this, fade))
+      .setLoadControl(Buffering.loadControl())
       .setAudioAttributes(
         CallQuiet.MUSIC,
         // Let ExoPlayer request audio focus so playback ducks for navigation
