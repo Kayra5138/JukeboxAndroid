@@ -1,0 +1,5 @@
+Country,Track Identifier,Media type,Date Played,Hours,Play Duration Milliseconds,End Reason Type,Source Type,Play Count,Skip Count,Ignore For Recommendations,Track Reference,Track Description
+Turkey,100000001,N/A,20240305,"18, 19",1664000,MANUALLY_SELECTED_PLAYBACK_OF_A_DIFF_ITEM,IPHONE,7,4,,N/A,Apple Music 1
+Turkey,100000002,AUDIO,20240305,9,1532000,NATURAL_END_OF_TRACK,IPHONE,4,1,,100000002,Radiohead - Paranoid Android
+Turkey,100000003,AUDIO,20240306,"21, 7",370000,NATURAL_END_OF_TRACK,IPHONE,1,0,,100000003,Daft Punk - Get Lucky (feat. Pharrell Williams & Nile Rodgers)
+Turkey,100000004,AUDIO,20240306,22,0,FAILED_TO_LOAD,IPHONE,0,0,,100000004,Nobody - Never Played

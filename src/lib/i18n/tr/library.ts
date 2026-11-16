@@ -94,13 +94,18 @@ export const library: Strings['library'] = {
       tapes: 'Kaset, dizi ve yazar ara',
     },
     sort: 'Sıralama',
-    sortShort: { name: 'A–Z', added: 'Eklenme', played: 'Dinlenme' },
+    sortShort: { name: 'A–Z', added: 'Eklenme', played: 'Dinlenme', colour: 'Renk' },
     sortedBy: {
       name: 'Ada göre sıralı',
       added: 'Eklenme zamanına göre sıralı',
       played: 'Son dinlenme zamanına göre sıralı',
+      colour: 'Kapak rengine göre sıralı',
     },
     sortHint: 'Kütüphanenin sıralamasını değiştirir',
+    lookSwitch: 'Bu görünümün diğer düzenine geçer',
+    view: 'Görünüm',
+    looks: { list: 'Liste', shelves: 'Raflar', rack: 'Raf', map: 'Harita' },
+    artistMap: { drawing: 'Harita çiziliyor…', shuffle: 'Şarkılarını karışık çal', open: 'Aç', with: 'Birlikte', lasso: 'Sanatçıları çevirip karışık çal', lassoHint: 'Karıştırmak istediğin sanatçıların etrafını çiz', lassoChosen: 'Çevrilenler', putBackAll: 'Elle taşınan sanatçıları yerine koy', movedByHand: 'Elle taşınanlar', putBack: 'Yerine koy' },
     groupSortShort: { name: 'A–Z', tracks: 'Parça', played: 'Dinlenme', added: 'Yeni' },
     groupSortedBy: {
       name: 'Ada göre sıralı',
@@ -158,6 +163,8 @@ export const library: Strings['library'] = {
       label: 'Albüm kapağı seç',
       hint: 'Galeriden bir resim, albümdeki her parça için',
     },
+    setAside: { label: 'Kenara ayır', hint: 'Şarkıları Parçalar’dan ve hepsini karıştırmadan çıkar' },
+    bringBack: { label: 'Geri getir', hint: 'Şarkıları yeniden Parçalar’da ve karıştırmada' },
   },
 
   albumTools: {
@@ -246,6 +253,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'Dosya olarak paylaş', hint: 'Dosyanın kendisi olarak gider: sohbet onu belge olarak tutar' },
     album: { label: 'Albüme git', hint: 'Albümün geri kalanı, sırasıyla' },
     addToPlaylist: { label: 'Listeye ekle', hint: 'Listelerinden biri ya da yeni bir liste' },
+    setAside: { label: 'Kenara ayır', hint: 'Parçalar’dan ve hepsini karıştırmadan çıkar' },
+    bringBack: { label: 'Geri getir', hint: 'Yeniden Parçalar’da ve karıştırmada' },
+    asideWith: { label: 'Başkalarıyla kenarda', hint: 'Albümü, sanatçısı, klasörü ya da bir etiketiyle: Kenara ayrılanlar’dan geri getirilir' },
     favoriteAdd: { label: "Favorilere ekle", hint: "Kalbin doldurduğu liste, en yeni en üstte" },
     favoriteRemove: { label: "Favorilerden çıkar", hint: "Kalbin doldurduğu listeden çıkar" },
     tiles: { label: 'Piyano karoları oyna', hint: 'Bu parçanın ritmiyle düşen tuşlar' },
@@ -272,6 +282,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}, ${format.number(count)} parça`,
     hint: 'Açıksa klasör kütüphanede, kapalıysa dışarıda',
     empty: (root) => `${root} klasöründe müzik içeren bir alt klasör yok.`,
+  },
+
+  setAside: {
+    title: 'Kenara ayrılanlar',
+    none: 'Hiçbiri. Parçalar’da ve karıştırmada istemediğin bir albümü, sanatçıyı ya da şarkıyı kenara ayırabilirsin.',
+    some: (count) => `${format.number(count)} şarkı kenarda`,
+    note: 'Kenara ayrılan bir şarkı Parçalar’da görünmez, hepsini karıştırmaya ve müzik sürsün diye seçilen şarkılara girmez. Albümünde, sanatçısında ve klasöründe, listelerinde ve aramada yerinde durur; bunlardan biri çalınınca çalar. Hiçbir şey silinmez.',
+    empty: 'Kenara ayrılan bir şey yok. Kenara ayırmak için bir albüme ya da şarkıya basılı tut, ya da bir sanatçıyı veya klasörü aç.',
+    kinds: { album: 'Albümler', artist: 'Sanatçılar', list: 'Listeler', folder: 'Klasörler', tag: 'Etiketler', track: 'Şarkılar' },
+    songs: (count) => `${format.number(count)} şarkı`,
+    bringBack: 'Geri getir',
+    bringBackSpoken: (name) => `${name} geri getir`,
+    addTag: 'Bir etiketi kenara ayır',
+    noTags: 'Kenara ayrılacak başka etiket yok.',
+    album: { set: 'Bu albümü kenara ayır', back: 'Bu albümü geri getir' },
+    artist: { set: 'Bu sanatçıyı kenara ayır', back: 'Bu sanatçıyı geri getir' },
+    list: { set: 'Bu listeyi kenara ayır', back: 'Bu listeyi geri getir' },
+    folder: { set: 'Bu klasörü kenara ayır', back: 'Bu klasörü geri getir' },
   },
 
   shortFiles: {
@@ -348,5 +376,18 @@ export const library: Strings['library'] = {
     notDeleted: 'Dosya silinmedi.',
     keptRight: 'Olduğu gibi kaldı. Bir daha sorulmayacak.',
     failed: (error) => `Bu yapılamadı. ${error}`,
+  },
+
+  shuffle: {
+    menu: 'Karıştır',
+    everything: 'Tüm şarkılar',
+    change: 'Düğmenin çaldığını değiştir…',
+    heading: 'Karıştır düğmesi şunu çalar',
+    note: 'Bir kereliğine başka bir şeyi karıştırmak için düğmeye basılı tut. Widget ve araba da aynısını çalar.',
+    labelHeading: 'Karıştır düğmesinde yazan',
+    label: { name: 'Çaldığı şeyin adı', words: 'Kendi yazdığın', icon: 'Hiçbir şey, yalnızca simgesi' },
+    wordsHeading: 'Karıştır düğmesindeki yazı',
+    wordsPlaceholder: 'Karıştır',
+    spoken: (name) => `Karıştır: ${name}`,
   },
 };

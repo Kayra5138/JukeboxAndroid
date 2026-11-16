@@ -106,8 +106,17 @@ export const lists: Strings['lists'] = {
     exportAll: 'すべてのリストをエクスポート…',
     export: 'エクスポート…',
     untitled: 'インポートしたリスト',
+    liked: 'お気に入りの曲',
     reading: 'M3Uファイルを読み込んでいます…',
 
+    choose: {
+      heading: 'どのプレイリストを取り込みますか？',
+      hint: 'チェックしたものがリストとして取り込まれます。ライブラリに1曲もないものはチェックを外してあります。',
+      found: (found, total) => `${format.number(total)}曲中${format.number(found)}曲がライブラリにあります`,
+      all: 'すべて',
+      none: 'なし',
+      bring: (count) => `${format.number(count)}件のプレイリストを取り込む`,
+    },
     conflict: {
       heading: (name) => `「${name}」というリストはすでにあります`,
       hint: 'カバー画像はそのままでリストの中身をファイルの内容に置き換えるか、別のリストとして追加できます。',

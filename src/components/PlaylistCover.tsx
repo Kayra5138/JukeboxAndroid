@@ -103,6 +103,7 @@ function Tile({
       source={{ uri }}
       style={{ width: size, height: size, borderRadius: radius }}
       contentFit="cover"
+      drawnAt={size}
     />
   );
 }

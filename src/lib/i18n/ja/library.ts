@@ -94,13 +94,18 @@ export const library: Strings['library'] = {
       tapes: 'カセット・番組・作者を検索',
     },
     sort: '並べ替え',
-    sortShort: { name: 'A–Z', added: '追加日', played: '再生日' },
+    sortShort: { name: 'A–Z', added: '追加日', played: '再生日', colour: '色' },
     sortedBy: {
       name: '名前順',
       added: '追加日順',
       played: '最終再生日順',
+      colour: 'ジャケットの色順',
     },
     sortHint: 'ライブラリの並び順を変更します',
+    lookSwitch: 'この表示をもう一方の見た目に切り替えます',
+    view: '表示',
+    looks: { list: 'リスト', shelves: '棚', rack: 'ラック', map: 'マップ' },
+    artistMap: { drawing: 'マップを描画中…', shuffle: '曲をシャッフル再生', open: '開く', with: '共演', lasso: 'アーティストを囲んでシャッフル', lassoHint: 'シャッフルしたいアーティストを囲む', lassoChosen: '囲んだアーティスト', putBackAll: '手動で動かしたアーティストを元に戻す', movedByHand: '手動で移動', putBack: '元に戻す' },
     groupSortShort: { name: 'A–Z', tracks: '曲数', played: '再生数', added: '新着' },
     groupSortedBy: {
       name: '名前順',
@@ -158,6 +163,8 @@ export const library: Strings['library'] = {
       label: 'アルバムのジャケットを選択',
       hint: 'ギャラリーの画像を、このアルバムのすべての曲に使います',
     },
+    setAside: { label: '保留', hint: '収録曲を「曲」とすべてのシャッフルから外す' },
+    bringBack: { label: '戻す', hint: '収録曲を「曲」とシャッフルに戻す' },
   },
 
   albumTools: {
@@ -246,6 +253,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'ファイルとして共有', hint: 'ファイルそのものとして送信：チャットではドキュメントとして残ります' },
     album: { label: 'アルバムへ移動', hint: 'アルバムの曲を収録順に表示' },
     addToPlaylist: { label: 'リストに追加', hint: '既存のリストか新しいリストに追加' },
+    setAside: { label: '保留', hint: '「曲」とすべてのシャッフルから外す' },
+    bringBack: { label: '戻す', hint: '「曲」とシャッフルに戻す' },
+    asideWith: { label: 'ほかと一緒に保留中', hint: 'アルバム・アーティスト・フォルダ・タグごと保留中。「保留中」から戻せます' },
     favoriteAdd: { label: "お気に入りに追加", hint: "ハートで追加されるリスト、新しい順" },
     favoriteRemove: { label: "お気に入りから削除", hint: "ハートで追加されるリストから外す" },
     tiles: { label: 'ピアノタイルで遊ぶ', hint: 'この曲に合わせてタイルが落ちてきます' },
@@ -272,6 +282,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}、${format.number(count)}曲`,
     hint: 'オンでライブラリに含め、オフで除外します',
     empty: (root) => `${root}の中に、音楽が入ったフォルダはありません。`,
+  },
+
+  setAside: {
+    title: '保留中',
+    none: 'なし。「曲」やシャッフルに入れたくないアルバム・アーティスト・曲を保留できます。',
+    some: (count) => `${format.number(count)}曲を保留中`,
+    note: '保留した曲は「曲」、すべてのシャッフル、再生を続けるために選ばれる曲から外れます。アルバム、アーティスト、フォルダ、リスト、検索にはそのまま残り、それらを再生すれば流れます。何も削除されません。',
+    empty: '保留中のものはありません。アルバムや曲を長押しするか、アーティストやフォルダを開いて保留できます。',
+    kinds: { album: 'アルバム', artist: 'アーティスト', list: 'リスト', folder: 'フォルダ', tag: 'タグ', track: '曲' },
+    songs: (count) => `${format.number(count)}曲`,
+    bringBack: '戻す',
+    bringBackSpoken: (name) => `${name}を戻す`,
+    addTag: 'タグを保留',
+    noTags: '保留できるタグはもうありません。',
+    album: { set: 'このアルバムを保留', back: 'このアルバムを戻す' },
+    artist: { set: 'このアーティストを保留', back: 'このアーティストを戻す' },
+    list: { set: 'このリストを保留', back: 'このリストを戻す' },
+    folder: { set: 'このフォルダを保留', back: 'このフォルダを戻す' },
   },
 
   shortFiles: {
@@ -348,5 +376,18 @@ export const library: Strings['library'] = {
     notDeleted: 'ファイルは削除されませんでした。',
     keptRight: 'このままにします。今後は確認しません。',
     failed: (error) => `できませんでした。${error}`,
+  },
+
+  shuffle: {
+    menu: 'シャッフル',
+    everything: 'すべての曲',
+    change: 'ボタンで再生するものを変更…',
+    heading: 'シャッフルボタンで再生するもの',
+    note: 'ボタンを長押しすると、1回だけ別のものをシャッフルできます。ウィジェットと車でも同じものが再生されます。',
+    labelHeading: 'シャッフルボタンの表示',
+    label: { name: '再生するものの名前', words: '自分で入力した文字', icon: 'なし（アイコンのみ）' },
+    wordsHeading: 'シャッフルボタンの文字',
+    wordsPlaceholder: 'シャッフル',
+    spoken: (name) => `シャッフル：${name}`,
   },
 };

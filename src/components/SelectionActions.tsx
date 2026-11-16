@@ -4,6 +4,8 @@ import { Pressable } from './Pressable';
 import JukeboxAudio from '../../modules/jukebox-audio/index';
 
 import {
+  AsideIcon,
+  BroughtBackIcon,
   FileIcon,
   FileWriteIcon,
   ListAddIcon,
@@ -34,6 +36,7 @@ import { addTagToTracks, allTags, removeTagFromTracks, tagsAmong, type TagCount 
 import { canWriteFiles } from '../lib/filetags';
 import { useT } from '../lib/i18n/index';
 import { refreshLibrary } from '../lib/library/index';
+import { setAsideMany } from '../lib/library/setAside';
 import { artworkChanged } from '../lib/media/artworkEvents';
 import { spreadCovers } from '../lib/media/coverSpread';
 import type { EnrichedTrack } from '../lib/media/enriched';
@@ -98,6 +101,9 @@ export type SelectionAction =
   | 'share'
   | 'shareFile'
   | 'reset'
+  // Kept out of Tracks and of shuffling everything, or back: see `library/setAside.ts`.
+  | 'setAside'
+  | 'bringBack'
   | 'delete';
 
 
@@ -355,6 +361,12 @@ export function useSelectionActions({
           });
       }
       else if (action === 'reset') setResetting(true);
+      else if (action === 'setAside' || action === 'bringBack') {
+        // Each by itself; one set aside with its record is brought back with the record (`app/set-aside.tsx`).
+        setAsideMany('track', ids, action === 'setAside');
+        haptic('results', action === 'setAside' ? 'confirm' : 'toggleOff');
+        onChanged('cleared');
+      }
       else {
         // Android asks first. Backing out of that leaves the choice as it was.
         void erase(ids).then((gone) => {
@@ -429,7 +441,7 @@ export function useSelectionActions({
 const QUICK: readonly SelectionAction[] = ['addToList', 'share', 'edit', 'lookUp'];
 
 /** The rest, in the order of finding things out, changing them, and the others, the one that erases last. */
-const LISTED: readonly SelectionAction[] = ['covers', 'lyrics', 'addTag', 'removeTag', 'cover', 'write', 'shareFile', 'reset', 'delete'];
+const LISTED: readonly SelectionAction[] = ['covers', 'lyrics', 'addTag', 'removeTag', 'cover', 'write', 'shareFile', 'reset', 'setAside', 'bringBack', 'delete'];
 
 const ICONS: Record<SelectionAction, MenuIcon> = {
   lookUp: SearchIcon,
@@ -444,6 +456,8 @@ const ICONS: Record<SelectionAction, MenuIcon> = {
   share: ShareIcon,
   shareFile: FileIcon,
   reset: RefreshIcon,
+  setAside: AsideIcon,
+  bringBack: BroughtBackIcon,
   delete: TrashIcon,
 };
 

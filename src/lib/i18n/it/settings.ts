@@ -18,7 +18,7 @@ export const settings: Strings['settings'] = {
     experimental: 'Sperimentale',
   },
   categories: {
-    look: 'Il tema, gli album come scaffale, le animazioni, la vibrazione e quali viste offre la libreria.',
+    look: 'Il tema, le animazioni, la vibrazione e quali viste offre la libreria.',
     sound: 'Equalizzatore ed effetti, volume uniforme, dissolvenza incrociata, velocità e tonalità.',
     player: 'La durata dei salti avanti e indietro, cosa suona quando finisce la coda e la lingua in cui vengono tradotti i testi.',
     tapes: 'Riavvolgimento intelligente, la durata dei salti di una cassetta e i podcast scaricati solo con il Wi‑Fi.',
@@ -79,11 +79,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: 'Informazioni sui brani e copertine degli album' },
-  rack: {
-    title: 'Album come scaffale',
-    note:
-      'Tenendo il telefono in orizzontale, sfoglia le copertine invece di leggere un elenco. Tocca quella davanti per aprirla.',
-  },
   favoritesShown: { title: "Preferiti", note: "Una lista sempre presente, i più recenti in alto, riempita da un cuore nel lettore e da Aggiungi ai Preferiti nel menu di un brano. Disattivati, i tre sono nascosti e il contenuto resta." },
   listButton: {
     title: 'Pulsante Aggiungi a una lista',
@@ -136,6 +131,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'Quanto è lunga la lista, ogni quanto viene rifatta e cosa è stato scartato.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Aspetto del lettore', open: 'Cosa appare al posto della copertina e cosa si muove con la musica.' },
+  coverLook: {
+    songs: 'Brani',
+    tapes: 'Cassette',
+    cover: 'Copertina',
+    record: 'Vinile',
+    cassette: 'Cassetta',
+    note: 'Cosa appare nel lettore al posto della copertina. Un vinile gira mentre suona; una cassetta avvolge il nastro da una bobina all’altra man mano che la parte va avanti. Con «Riduci le animazioni» entrambi restano fermi.',
+    tonearm: 'Braccio',
+    tonearmNote: 'Un braccio sopra il vinile, la cui puntina va dal bordo all’etichetta man mano che il brano avanza.',
+    motion: 'Con la musica',
+    none: 'Niente',
+    spectrum: 'Spettro',
+    ripple: 'Onde',
+    breathe: 'Respiro',
+    scope: 'Oscilloscopio',
+    motionNote: 'Cosa si muove con la musica intorno, insieme a ciò che senti, anche in cuffia. Solo mentre suona e il lettore è aperto.',
+    punch: 'Battito',
+    spectrogram: 'Spettrogramma',
+    sparks: 'Scintille',
+    aurora: 'Aurora',
+    notes: {
+      spectrum: 'Barre di quanto è forte ogni altezza; raggi intorno a un vinile.',
+      ripple: 'Anelli che partono dal bordo a ogni battito.',
+      breathe: 'Cresce un po’ con la musica, con un bagliore dietro.',
+      punch: 'Si ingrandisce un po’ a ogni battito e torna al suo posto.',
+      scope: 'La linea del suono stesso.',
+      spectrogram: 'Gli ultimi secondi di ogni altezza, che scorrono.',
+      sparks: 'Scintille lanciate dal bordo a ogni battito, per tutto il lettore.',
+      aurora: 'Nuvole dei colori della copertina dietro tutto il lettore, ognuna cresce con una parte del suono.',
+    },
+    beats: 'Vibra a ritmo',
+    beatsNote: 'Un leggero colpo a ogni battito mentre il lettore è aperto e la musica suona. Leggero quanto le tue impostazioni di vibrazione.',
+  },
   still: {
     title: 'Riduci le animazioni',
     note:
@@ -175,6 +206,8 @@ export const settings: Strings['settings'] = {
     title: 'Schede',
     searchNote: 'Scopri e i download da YouTube sono in questa scheda e spariscono con lei.',
     aside: 'Libreria e Impostazioni ci sono sempre.',
+    names: 'Nomi sotto le icone',
+    namesNote: 'Se disattivato, la barra mostra solo le icone ed è un po’ più bassa. In orizzontale è sempre così.',
   },
 
   views: {

@@ -13,8 +13,7 @@ import {
   QueueIcon,
   ShareIcon,
   SparkleIcon,
-  TickIcon,
-} from './Icons';
+  TickIcon, AsideIcon, BroughtBackIcon } from './Icons';
 import type { PressIcon, PressRingFor } from './PressMenu';
 import { offered, type TrackAction } from './TrackMenu';
 import { useT } from '../lib/i18n/index';
@@ -68,6 +67,10 @@ const ICONS: Record<Exclude<Slice, 'favorite'>, (props: { size: number; color: s
   tapeFolder: LibraryIcon,
   tapeDetails: InfoIcon,
   markTape: TickIcon,
+  // Not in the ring, which has no room for them; the sheet has them.
+  setAside: AsideIcon,
+  bringBack: BroughtBackIcon,
+  asideWith: AsideIcon,
 };
 
 const drawn =

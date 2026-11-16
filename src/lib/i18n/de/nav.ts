@@ -15,6 +15,7 @@ export const nav: Strings['nav'] = {
   effects: 'Effekte',
   details: 'Details bearbeiten',
   themes: 'Design',
+  playerLook: 'Player-Aussehen',
   albumRest: 'Rest des Albums',
   customTheme: 'Eigenes Design',
   downloads: 'Downloads',

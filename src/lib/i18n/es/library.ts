@@ -96,13 +96,18 @@ export const library: Strings['library'] = {
     },
     /* The order has to fit a button 56 points wide: eight letters at most. */
     sort: 'Orden',
-    sortShort: { name: 'A–Z', added: 'Añadido', played: 'Escucha' },
+    sortShort: { name: 'A–Z', added: 'Añadido', played: 'Escucha', colour: 'Color' },
     sortedBy: {
       name: 'Ordenado por nombre',
       added: 'Ordenado por cuándo se añadió',
       played: 'Ordenado por última escucha',
+      colour: 'Ordenado por el color de la portada',
     },
     sortHint: 'Cambia el orden de la biblioteca',
+    lookSwitch: 'Cambia esta vista a su otro aspecto',
+    view: 'Vista',
+    looks: { list: 'Lista', shelves: 'Estantes', rack: 'Estante', map: 'Mapa' },
+    artistMap: { drawing: 'Dibujando el mapa…', shuffle: 'Reproducir sus canciones al azar', open: 'Abrir', with: 'Con', lasso: 'Rodear artistas para mezclarlos', lassoHint: 'Rodea a los artistas que quieres mezclar', lassoChosen: 'Rodeados', putBackAll: 'Devolver a su sitio los artistas movidos a mano', movedByHand: 'Movidos a mano', putBack: 'Devolver' },
     groupSortShort: { name: 'A–Z', tracks: 'Pistas', played: 'Escuchas', added: 'Nuevo' },
     groupSortedBy: {
       name: 'Ordenado por nombre',
@@ -162,6 +167,8 @@ export const library: Strings['library'] = {
       label: 'Elegir portada del álbum',
       hint: 'Una imagen de tu galería, para todas sus pistas',
     },
+    setAside: { label: 'Apartar', hint: 'Sus canciones fuera de Pistas y del aleatorio de todo' },
+    bringBack: { label: 'Recuperar', hint: 'Sus canciones de nuevo en Pistas y en el aleatorio' },
   },
 
   albumTools: {
@@ -255,6 +262,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'Compartir como archivo', hint: 'Se envía el archivo tal cual: un chat lo guarda como documento' },
     album: { label: 'Ir al álbum', hint: 'El resto del disco, en orden' },
     addToPlaylist: { label: 'Añadir a una lista', hint: 'Una de tus listas, o una nueva' },
+    setAside: { label: 'Apartar', hint: 'Fuera de Pistas y del aleatorio de todo' },
+    bringBack: { label: 'Recuperar', hint: 'De nuevo en Pistas y en el aleatorio' },
+    asideWith: { label: 'Apartada con otras', hint: 'Con su álbum, artista, carpeta o una etiqueta: se recupera en Apartadas' },
     favoriteAdd: { label: "Añadir a Favoritos", hint: "La lista que llena el corazón, lo más nuevo arriba" },
     favoriteRemove: { label: "Quitar de Favoritos", hint: "Fuera de la lista que llena el corazón" },
     tiles: { label: 'Jugar a piano tiles', hint: 'Teclas que caen al ritmo de esta grabación' },
@@ -282,6 +292,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}, ${format.number(count)} ${oneOrMany(count, 'pista', 'pistas')}`,
     hint: 'Activada, la carpeta está en la biblioteca; desactivada, se queda fuera',
     empty: (root) => `No hay carpetas con música dentro de ${root}.`,
+  },
+
+  setAside: {
+    title: 'Apartadas',
+    none: 'Nada. Aparta un álbum, un artista o una canción que no quieras en Pistas ni en el aleatorio.',
+    some: (count) => `${format.number(count)} ${oneOrMany(count, 'canción apartada', 'canciones apartadas')}`,
+    note: 'Una canción apartada queda fuera de Pistas, de reproducir todo en aleatorio y de las canciones elegidas para que la música siga. Sigue en su álbum, con su artista y en su carpeta, en tus listas y en la búsqueda, y suena cuando se reproduce cualquiera de ellos. No se borra nada.',
+    empty: 'No hay nada apartado. Mantén pulsado un álbum o una canción, o abre un artista o una carpeta, para apartarlo.',
+    kinds: { album: 'Álbumes', artist: 'Artistas', list: 'Listas', folder: 'Carpetas', tag: 'Etiquetas', track: 'Canciones' },
+    songs: (count) => `${format.number(count)} ${oneOrMany(count, 'canción', 'canciones')}`,
+    bringBack: 'Recuperar',
+    bringBackSpoken: (name) => `Recuperar ${name}`,
+    addTag: 'Apartar una etiqueta',
+    noTags: 'No quedan más etiquetas para apartar.',
+    album: { set: 'Apartar este álbum', back: 'Recuperar este álbum' },
+    artist: { set: 'Apartar este artista', back: 'Recuperar este artista' },
+    list: { set: 'Apartar esta lista', back: 'Recuperar esta lista' },
+    folder: { set: 'Apartar esta carpeta', back: 'Recuperar esta carpeta' },
   },
 
   shortFiles: {
@@ -362,5 +390,18 @@ export const library: Strings['library'] = {
     notDeleted: 'El archivo no se ha eliminado.',
     keptRight: 'Se queda como está. No se volverá a preguntar.',
     failed: (error) => `No se ha podido hacer. ${error}`,
+  },
+
+  shuffle: {
+    menu: 'Aleatorio',
+    everything: 'Todas las canciones',
+    change: 'Cambiar lo que reproduce el botón…',
+    heading: 'El botón aleatorio reproduce',
+    note: 'Mantén pulsado el botón para mezclar otra cosa solo una vez. El widget y el coche reproducen lo mismo.',
+    labelHeading: 'El botón aleatorio dice',
+    label: { name: 'El nombre de lo que reproduce', words: 'Un texto tuyo', icon: 'Nada, solo el icono' },
+    wordsHeading: 'Texto del botón aleatorio',
+    wordsPlaceholder: 'Aleatorio',
+    spoken: (name) => `Aleatorio: ${name}`,
   },
 };

@@ -111,13 +111,20 @@ export const library = {
     },
     /** The small word over the order; the order itself has to fit a button 56 points wide. */
     sort: 'Sort',
-    sortShort: { name: 'A–Z', added: 'Added', played: 'Played' },
+    sortShort: { name: 'A–Z', added: 'Added', played: 'Played', colour: 'Colour' },
     sortedBy: {
       name: 'Sorted by name',
       added: 'Sorted by when it was added',
       played: 'Sorted by when it was last played',
+      colour: 'Sorted by the colour of the cover',
     },
     sortHint: 'Changes the order of the library',
+    lookSwitch: 'Switches this view to its other look',
+    /** Over the picture of the view's look on the button beside the switch, as `sort` is over the order. */
+    view: 'View',
+    looks: { list: 'List', shelves: 'Shelves', rack: 'Rack', map: 'Map' },
+    /** The artists' map: while it is first laid out, the button that shuffles the chosen artist, the one to their page, and before the artists they share songs with. */
+    artistMap: { drawing: 'Drawing the map…', shuffle: 'Shuffle their songs', open: 'Open', with: 'With', lasso: 'Draw round artists to shuffle them', lassoHint: 'Draw round the artists to shuffle', lassoChosen: 'Drawn round', putBackAll: 'Put back the artists moved by hand', movedByHand: 'Moved by hand', putBack: 'Put back' },
     /**
      * The same button over artists and folders, which are asked other things:
      * how much of them there is, and (artists only) how much it is listened to.
@@ -194,6 +201,8 @@ export const library = {
       label: 'Choose album cover',
       hint: 'A picture from your gallery, for every track on it',
     },
+    setAside: { label: 'Set aside', hint: 'Its songs kept out of Tracks and of shuffling everything' },
+    bringBack: { label: 'Bring back', hint: 'Its songs into Tracks and the shuffle again' },
   },
 
   /** What the album's own page says about looking it up and giving it a cover. */
@@ -302,6 +311,10 @@ export const library = {
     shareFile: { label: 'Share as a file', hint: 'Sent as the file itself: a chat keeps it as a document' },
     album: { label: 'Go to album', hint: 'The rest of the record, in order' },
     addToPlaylist: { label: 'Add to a list', hint: 'One of your lists, or a new one' },
+    setAside: { label: 'Set aside', hint: 'Kept out of Tracks and of shuffling everything' },
+    bringBack: { label: 'Bring back', hint: 'Into Tracks and the shuffle again' },
+    /** A song set aside with its album, artist, folder or tag, not by itself: opens the screen that brings those back. */
+    asideWith: { label: 'Set aside with others', hint: 'With its album, artist, folder or a tag: brought back from Set aside' },
     favoriteAdd: { label: "Add to Favorites", hint: "The list the heart fills, newest first" },
     favoriteRemove: { label: "Remove from Favorites", hint: "Out of the list the heart fills" },
     tiles: { label: 'Play piano tiles', hint: 'Keys falling in time with this record' },
@@ -352,6 +365,41 @@ export const library = {
     hint: 'On, the folder is in the library; off, it is left out',
     /** In place of the list, where the library folder holds no folders with music in them. */
     empty: (root: string) => `There are no folders with music in them inside ${root}.`,
+  },
+
+  /**
+   * Songs set aside: kept out of Tracks, out of shuffling everything and out of
+   * the songs picked to keep the music going, and nowhere else. See
+   * `library/setAside.ts`.
+   */
+  setAside: {
+    /** The screen's title in the bar, and the row's name on Settings → Library. One short line. */
+    title: 'Set aside',
+    /** Under the row's name on Settings → Library, while nothing is set aside. Room for two lines. */
+    none: 'Nothing. Set aside an album, an artist or a song you want kept out of Tracks and the shuffle.',
+    /** The same while some songs are; [count] is never nought. One line. */
+    some: (count: number) => `${format.number(count)} ${oneOrMany(count, 'song', 'songs')} set aside`,
+    /** At the top of the screen, as much room as it needs. */
+    note: 'A song set aside is kept out of Tracks, out of shuffling everything and out of the songs picked to keep the music going. It stays on its album, under its artist and its folder, in your lists and in search, and plays when any of those is played. Nothing is deleted.',
+    /** In place of the lists, while nothing is set aside. */
+    empty: 'Nothing is set aside. Hold an album or a song, or open an artist or a folder, to set it aside.',
+    /** Over each kind's rows. A word or two each. */
+    kinds: { album: 'Albums', artist: 'Artists', list: 'Lists', folder: 'Folders', tag: 'Tags', track: 'Songs' },
+    /** Under a row: how many songs of the library it sets aside. One line. */
+    songs: (count: number) => `${format.number(count)} ${oneOrMany(count, 'song', 'songs')}`,
+    /** The button on each row. One or two words. */
+    bringBack: 'Bring back',
+    /** What a screen reader says for that button: [name] is the row's. */
+    bringBackSpoken: (name: string) => `Bring back ${name}`,
+    /** The button at the foot that sets a tag aside, and the title of the list of tags it opens. */
+    addTag: 'Set a tag aside',
+    /** In that list, where every tag is set aside already or there are none. */
+    noTags: 'There are no more tags to set aside.',
+    /** On an album's, an artist's and a folder's own page, among the links under the buttons. A few words each. */
+    album: { set: 'Set this album aside', back: 'Bring this album back' },
+    artist: { set: 'Set this artist aside', back: 'Bring this artist back' },
+    list: { set: 'Set this list aside', back: 'Bring this list back' },
+    folder: { set: 'Set this folder aside', back: 'Bring this folder back' },
   },
 
   /** The choice on Settings → Library of leaving out files too short to be music. */
@@ -482,5 +530,27 @@ export const library = {
     notDeleted: 'The file was not deleted.',
     keptRight: 'Kept as it is. It will not be asked about again.',
     failed: (error: string) => `That could not be done. ${error}`,
+  },
+
+  /**
+   * The shuffle button over the tracks: what it plays, chosen for good here
+   * and under Settings › Library, or for once from the list it opens when held.
+   */
+  shuffle: {
+    /** Over that list. */
+    menu: 'Shuffle',
+    /** The whole library, as one of the things it can play. */
+    everything: 'All songs',
+    /** At the foot of the list: what the button plays from now on. */
+    change: 'Change what the button plays…',
+    heading: 'The shuffle button plays',
+    note: 'Hold the button to shuffle something else just once. The widget and the car play the same.',
+    /** What the button says. */
+    labelHeading: 'The shuffle button says',
+    label: { name: 'The name of what it plays', words: 'Words of your own', icon: 'Nothing, only its icon' },
+    wordsHeading: 'Words on the shuffle button',
+    wordsPlaceholder: 'Shuffle',
+    /** For a screen reader, and on a button that shows only its icon. */
+    spoken: (name: string) => `Shuffle ${name}`,
   },
 };

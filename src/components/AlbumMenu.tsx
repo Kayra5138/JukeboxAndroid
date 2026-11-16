@@ -1,6 +1,7 @@
 import { Modal, ScrollView, StyleSheet } from 'react-native';
-import { DiscIcon, PictureIcon, SearchIcon, SelectIcon } from './Icons';
+import { AsideIcon, BroughtBackIcon, DiscIcon, PictureIcon, SearchIcon, SelectIcon } from './Icons';
 import { MenuEntry, MenuHeader, type MenuIcon } from './MenuSheet';
+import { ArtistLinks, LeaveFirst } from './NameLinks';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
@@ -9,10 +10,14 @@ import type { Track } from '../lib/types';
 import { makeStyles, outlined } from '../lib/theme/index';
 import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
-export type AlbumAction = 'select' | 'rest' | 'lookUp' | 'cover';
+export type AlbumAction = 'select' | 'rest' | 'lookUp' | 'cover' | 'setAside' | 'bringBack';
 
-/** In the order the sheet shows them; `library.albumActions` says what each is. */
-const ACTIONS: readonly AlbumAction[] = ['select', 'rest', 'lookUp', 'cover'];
+/**
+ * In the order the sheet shows them; `library.albumActions` says what each is.
+ * Of setting it aside and bringing it back, the screen shows the one that
+ * applies (`library/setAside.ts`).
+ */
+const ACTIONS: readonly AlbumAction[] = ['select', 'rest', 'lookUp', 'cover', 'setAside', 'bringBack'];
 
 /** For the rack, which has no boxes to tick and so nothing for "Select" to start. */
 export const WITHOUT_SELECT: readonly AlbumAction[] = ['select'];
@@ -34,6 +39,8 @@ const ICONS: Record<AlbumAction, MenuIcon> = {
   rest: DiscIcon,
   lookUp: SearchIcon,
   cover: PictureIcon,
+  setAside: AsideIcon,
+  bringBack: BroughtBackIcon,
 };
 
 export function AlbumMenu({
@@ -43,7 +50,7 @@ export function AlbumMenu({
   onClose,
 }: {
   /** [covers] are what its one cover is found among, as the rack and the list of albums find it. */
-  album: { name: string; detail: string; covers?: readonly Track[] } | null;
+  album: { name: string; by?: string | null; detail: string; covers?: readonly Track[] } | null;
   hidden?: readonly AlbumAction[];
   onSelect: (action: AlbumAction) => void;
   onClose: () => void;
@@ -59,7 +66,23 @@ export function AlbumMenu({
       <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
         {album ? (
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
-            <MenuHeader title={album.name} detail={album.detail} picture={cover} />
+            {/* Whoever it is by leads to them, the menu put away first. */}
+            <LeaveFirst value={onClose}>
+              <MenuHeader
+                title={album.name}
+                detail={
+                  album.by ? (
+                    <>
+                      <ArtistLinks credit={album.by} />
+                      {album.detail ? ` · ${album.detail}` : ''}
+                    </>
+                  ) : (
+                    album.detail
+                  )
+                }
+                picture={cover}
+              />
+            </LeaveFirst>
             {ACTIONS.filter((action) => !hidden?.includes(action)).map((action) => (
               <MenuEntry
                 key={action}

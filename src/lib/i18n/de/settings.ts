@@ -18,7 +18,7 @@ export const settings: Strings['settings'] = {
     experimental: 'Experimentell',
   },
   categories: {
-    look: 'Design, Alben als Regal, Bewegung, Vibration und welche Ansichten die Bibliothek bietet.',
+    look: 'Design, Bewegung, Vibration und welche Ansichten die Bibliothek bietet.',
     sound: 'Equalizer und Effekte, Lautstärkeangleichung, Überblenden sowie Tempo und Tonhöhe.',
     player: 'Wie weit die Sprungtasten springen, was nach dem Ende der Warteschlange läuft und in welche Sprache Songtexte übersetzt werden.',
     tapes: 'Intelligentes Zurückspulen, wie weit die Sprungtasten einer Kassette springen, und Podcasts nur über WLAN laden.',
@@ -79,11 +79,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: 'Titelinfos und Albumcover' },
-  rack: {
-    title: 'Alben als Regal',
-    note:
-      'Halte das Gerät quer und blättere durch Plattenhüllen statt durch eine Liste. Tippe auf die vorderste, um sie zu öffnen.',
-  },
   favoritesShown: { title: "Favoriten", note: "Eine Liste, die immer da ist, Neueste zuerst, gefüllt vom Herz im Player und von Zu Favoriten hinzufügen im Menü eines Titels. Aus sind alle drei verborgen, der Inhalt bleibt." },
   listButton: {
     title: 'Taste „Zur Liste“',
@@ -136,6 +131,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'Wie lang die Liste ist, wie oft sie neu erstellt wird und was abgelehnt wurde.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Player-Aussehen', open: 'Was anstelle des Covers steht und was sich zur Musik bewegt.' },
+  coverLook: {
+    songs: 'Songs',
+    tapes: 'Tapes',
+    cover: 'Cover',
+    record: 'Schallplatte',
+    cassette: 'Kassette',
+    note: 'Was im Player anstelle des Covers steht. Eine Schallplatte dreht sich beim Abspielen; eine Kassette spult ihr Band im Lauf des Teils von einer Spule auf die andere. Mit „Weniger Bewegung“ stehen beide still.',
+    tonearm: 'Tonarm',
+    tonearmNote: 'Ein Tonarm über der Platte, dessen Nadel im Lauf des Songs vom Rand zum Etikett wandert.',
+    motion: 'Zur Musik',
+    none: 'Nichts',
+    spectrum: 'Spektrum',
+    ripple: 'Wellen',
+    breathe: 'Atmen',
+    scope: 'Oszilloskop',
+    motionNote: 'Was sich darum zur Musik bewegt, im Takt mit dem, was du hörst, auch über Kopfhörer. Nur während der Wiedergabe und bei geöffnetem Player.',
+    punch: 'Puls',
+    spectrogram: 'Spektrogramm',
+    sparks: 'Funken',
+    aurora: 'Polarlicht',
+    notes: {
+      spectrum: 'Balken, wie laut jede Tonhöhe ist; Strahlen um eine Schallplatte.',
+      ripple: 'Ringe, die bei jedem Schlag vom Rand ausgehen.',
+      breathe: 'Wächst ein wenig mit der Musik, ein Leuchten dahinter.',
+      punch: 'Springt bei jedem Schlag etwas größer und setzt sich wieder.',
+      scope: 'Die Linie des Klangs selbst.',
+      spectrogram: 'Die letzten Sekunden jeder Tonhöhe, vorbeiziehend.',
+      sparks: 'Funken, die bei jedem Schlag von seinem Rand über den Player fliegen.',
+      aurora: 'Wolken in den Farben des Covers hinter dem ganzen Player, jede wächst mit einem Teil des Klangs.',
+    },
+    beats: 'Im Takt vibrieren',
+    beatsNote: 'Ein leichtes Klopfen bei jedem Schlag, solange der Player offen ist und Musik läuft. So leise, wie deine Vibrationseinstellungen es machen.',
+  },
   still: {
     title: 'Weniger Bewegung',
     note:
@@ -175,6 +206,8 @@ export const settings: Strings['settings'] = {
     title: 'Tabs',
     searchNote: 'Entdecken und YouTube-Downloads sind auf diesem Tab und verschwinden mit ihm.',
     aside: 'Bibliothek und Einstellungen sind immer da.',
+    names: 'Namen unter den Symbolen',
+    namesNote: 'Aus zeigt die Leiste nur ihre Symbole und ist etwas niedriger. Im Querformat immer.',
   },
 
   views: {

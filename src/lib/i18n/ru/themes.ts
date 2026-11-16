@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'Светлые',
   darkGroup: 'Тёмные',
   effectsGroup: 'Стекло и блеск',
+  effectsNote: 'Живое размытие: больше работы, чем у плоских тем.',
   specialGroup: 'Особые',
 };

@@ -111,8 +111,17 @@ export const lists: Strings['lists'] = {
     exportAll: 'Tüm listeleri dışa aktar…',
     export: 'Dışa aktar…',
     untitled: 'İçe aktarılan liste',
+    liked: 'Beğenilen Şarkılar',
     reading: 'Çalma listeleri okunuyor…',
 
+    choose: {
+      heading: 'Hangi listeler?',
+      hint: 'İşaretli olanlar liste olarak gelir. Şarkılarından hiçbiri kütüphanede olmayanlar işaretsiz bırakıldı.',
+      found: (found, total) => `${format.number(total)} şarkının ${format.number(found)} tanesi kütüphanede`,
+      all: 'Tümü',
+      none: 'Hiçbiri',
+      bring: (count) => `${format.number(count)} listeyi içe aktar`,
+    },
     conflict: {
       heading: (name) => `“${name}” adında bir liste zaten var`,
       hint: 'Çalma listesi, var olan listenin kapağını koruyarak onun yerine geçebilir ya da ayrı bir liste olarak eklenebilir.',

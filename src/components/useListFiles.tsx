@@ -35,10 +35,12 @@ import { useAnnounce } from '../lib/ui/announce';
  * three and puts `element` somewhere in its tree.
  *
  * Bringing in is a short conversation. The files are picked and read against
- * the library all at once; then each goes in, in the order picked, stopping
- * only to ask about one that has the name of a list already there; and at
- * the end one sheet says what came of all of them, with the entries that were
- * not found there to be looked through.
+ * the library all at once; where that comes to more than one playlist -- a
+ * zip of Spotify's holds every playlist of the account -- the ones wanted are
+ * ticked first; then each goes in, in the order picked, stopping only to ask
+ * about one that has the name of a list already there; and at the end one
+ * sheet says what came of all of them, with the entries that were not found
+ * there to be looked through.
  */
 
 type Ready = Extract<Prepared, { kind: 'ready' }>;
@@ -52,7 +54,13 @@ type Outcome =
 /** A file whose list name is taken, and what is left to do after it. */
 type Asking = { prepared: Ready; existing: { id: number; name: string }; rest: Prepared[]; done: Outcome[] };
 
+/** Several playlists read, and which of them are ticked to come in, by place. */
+type Choosing = { files: Prepared[]; ticked: boolean[] };
+
 type Exporting = { kind: 'one'; source: ListSource } | { kind: 'all' };
+
+/** How many of a playlist's entries were found in the library. */
+const foundIn = (prepared: Ready) => prepared.results.filter((result) => result.trackId != null).length;
 
 /** A failure in words, whatever was thrown. */
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -82,14 +90,14 @@ function goOn(rest: Prepared[], done: Outcome[]): { done: Outcome[]; asking: Ask
  * where it would be left showing behind it for somebody who backed out.
  */
 async function picked(
-  untitled: string,
+  names: { untitled: string; liked: string },
   onReading: (reading: boolean) => void
 ): Promise<{ files: Prepared[] } | { failure: string }> {
   try {
     const chosen = await chooseListFiles();
     if (chosen.length === 0) return { files: [] };
     onReading(true);
-    return { files: await prepareListFiles(chosen, untitled) };
+    return { files: await prepareListFiles(chosen, names) };
   } catch (error) {
     return { failure: reason(error) };
   } finally {
@@ -142,6 +150,7 @@ export function useListFiles({
   const said = t.lists.files;
   const [reading, setReading] = useState(false);
   const [asking, setAsking] = useState<Asking | null>(null);
+  const [choosing, setChoosing] = useState<Choosing | null>(null);
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null);
   const [exporting, setExporting] = useState<Exporting | null>(null);
   const [style, setStyle] = useState<PathStyle>('phone');
@@ -157,14 +166,28 @@ export function useListFiles({
 
   const importFiles = () => {
     void (async () => {
-      const result = await picked(said.untitled, setReading);
+      const result = await picked({ untitled: said.untitled, liked: said.liked }, setReading);
       if ('failure' in result) {
         setMessage([said.failed(result.failure)]);
         return;
       }
       if (result.files.length === 0) return;
-      settle(goOn(result.files, []));
+      const { files } = result;
+      if (files.filter((file) => file.kind === 'ready').length > 1) {
+        // Ticked to begin with where there is something of it to bring.
+        setChoosing({ files, ticked: files.map((file) => file.kind === 'ready' && foundIn(file) > 0) });
+        return;
+      }
+      settle(goOn(files, []));
     })();
+  };
+
+  /** The ticked playlists in, and what could not be read said as before. */
+  const bring = () => {
+    if (!choosing) return;
+    const { files, ticked } = choosing;
+    setChoosing(null);
+    settle(goOn(files.filter((file, at) => file.kind === 'problem' || ticked[at]), []));
   };
 
   const answer = (choice: 'replace' | 'keepBoth' | 'skip') => {
@@ -202,6 +225,17 @@ export function useListFiles({
   const element = (
     <>
       <Reading visible={reading} />
+      <Choose
+        choosing={choosing}
+        onTick={(at) =>
+          setChoosing((now) => (now ? { ...now, ticked: now.ticked.map((on, each) => (each === at ? !on : on)) } : now))
+        }
+        onAll={(on) =>
+          setChoosing((now) => (now ? { ...now, ticked: now.files.map((file) => on && file.kind === 'ready') } : now))
+        }
+        onBring={bring}
+        onClose={() => setChoosing(null)}
+      />
       <Conflict asking={asking} onAnswer={answer} />
       <Outcomes
         outcomes={outcomes}
@@ -261,6 +295,74 @@ function Reading({ visible }: { visible: boolean }) {
       <View style={styles.reading}>
         <ActivityIndicator color={c.text} />
         <Text style={styles.body}>{t.lists.files.reading}</Text>
+      </View>
+    </Card>
+  );
+}
+
+function Choose({
+  choosing,
+  onTick,
+  onAll,
+  onBring,
+  onClose,
+}: {
+  choosing: Choosing | null;
+  onTick: (at: number) => void;
+  onAll: (on: boolean) => void;
+  onBring: () => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const styles = useStyles();
+  const pressed = usePressed();
+  const said = t.lists.files.choose;
+  const ticked = choosing ? choosing.ticked.filter(Boolean).length : 0;
+  const every = choosing ? choosing.files.every((file, at) => file.kind !== 'ready' || choosing.ticked[at]) : false;
+  return (
+    <Card visible={choosing != null} onClose={onClose}>
+      <View style={styles.chooseHead}>
+        <Text accessibilityRole="header" style={[styles.heading, styles.chooseHeading]}>{said.heading}</Text>
+        <Pressable accessibilityRole="button" style={styles.linkHit} onPress={() => onAll(!every)}>
+          <Text style={styles.link}>{every ? said.none : said.all}</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.hint}>{said.hint}</Text>
+      <ScrollView style={styles.scroll}>
+        {(choosing?.files ?? []).map((file, at) => {
+          if (file.kind !== 'ready') return null;
+          const on = choosing!.ticked[at] === true;
+          return (
+            <Pressable
+              key={at}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              android_ripple={pressed}
+              style={styles.chosen}
+              onPress={() => onTick(at)}>
+              <View style={styles.chosenText}>
+                <Text style={styles.body} numberOfLines={2}>{file.name}</Text>
+                <Text style={styles.hint}>{said.found(foundIn(file), file.results.length)}</Text>
+              </View>
+              {/* The tick box the track picker has. */}
+              <View style={[styles.tick, on && styles.tickOn]}>{on ? <View style={styles.dot} /> : null}</View>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      <View style={styles.actions}>
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
+          <Text style={styles.quiet}>{t.common.cancel}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: ticked === 0 }}
+          disabled={ticked === 0}
+          android_ripple={pressed}
+          style={styles.button}
+          onPress={onBring}>
+          <Text style={ticked === 0 ? styles.quiet : styles.link}>{said.bring(ticked)}</Text>
+        </Pressable>
       </View>
     </Card>
   );
@@ -366,7 +468,13 @@ function Outcomes({
                     <View key={result.entry.line} style={styles.missing}>
                       <Text style={styles.missingName} numberOfLines={2}>{entryName(result)}</Text>
                       <Text style={styles.hint} numberOfLines={1} ellipsizeMode="middle">
-                        {`${result.how === 'web' || result.how === 'ambiguous' ? said.reasons[result.how] : said.reasons.notFound} · ${result.entry.location}`}
+                        {[
+                          result.how === 'web' || result.how === 'ambiguous' ? said.reasons[result.how] : said.reasons.notFound,
+                          // Another app's playlist names its songs and gives no file to show.
+                          result.entry.location || null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </Text>
                     </View>
                   ))
@@ -488,6 +596,22 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     gap: 2,
   },
   missingName: { color: c.text, fontSize: 13.5 },
+
+  chooseHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  chooseHeading: { flex: 1 },
+  chosen: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56, paddingVertical: 8 },
+  chosenText: { flex: 1, minWidth: 0, gap: 2 },
+  tick: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: c.borderStrong,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tickOn: { backgroundColor: c.accent, borderColor: c.accent },
+  dot: { width: 9, height: 9, borderRadius: 2, backgroundColor: c.onAccent },
 
   // On the card, which is the surface a tray is elsewhere: the page's colour is the step off it here.
   options: { backgroundColor: c.bg, marginTop: 4 },

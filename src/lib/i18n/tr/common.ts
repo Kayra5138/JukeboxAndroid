@@ -60,4 +60,10 @@ export const common: Strings['common'] = {
   pictureFailed: 'Bu resim yüklenemedi.',
 
   drawFailed: 'Bu ekran görüntülenirken bir sorun oluştu.',
+
+  drawFailedCopy: 'Ayrıntıları kopyala',
+
+  drawFailedCopied: 'Kopyalandı. Bakabilecek birine gönder.',
+
+  drawFailedNotCopied: 'Kopyalanamadı.',
 };

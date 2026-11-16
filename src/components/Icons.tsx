@@ -192,6 +192,26 @@ export function DiscIcon({ size = 20, color: asked }: { size?: number; color?: s
   return <VectorIcon source={require('../../assets/icons/disc.svg')} size={size} color={color} />;
 }
 
+/** How a view of the library is drawn, shown beside its name in the switch: its rows, its shelves of covers, the rack of records, or the map. */
+export function LookIcon({ look, size = 14, color: asked }: { look: 'list' | 'shelves' | 'rack' | 'map'; size?: number; color?: string }) {
+  const color = useInk(asked);
+  const source =
+    look === 'shelves'
+      ? require('../../assets/icons/look-shelves.svg')
+      : look === 'rack'
+        ? require('../../assets/icons/look-rack.svg')
+        : look === 'map'
+          ? require('../../assets/icons/look-map.svg')
+          : require('../../assets/icons/look-list.svg');
+  return <VectorIcon source={source} size={size} color={color} />;
+}
+
+/** A lasso: some of a map drawn round, to be taken together. */
+export function LassoIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/lasso.svg')} size={size} color={color} />;
+}
+
 /** A pencil: its details, to be changed. */
 export function PencilIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
   const color = useInk(asked);
@@ -591,6 +611,30 @@ export function PlusIcon({ size = 20, color: asked }: { size?: number; color?: s
       <Bar length={size * 0.72} thickness={stroke} color={color} angle={90} />
     </Strokes>
   );
+}
+
+/**
+ * Set aside, or back from there: a tray, open at the top, and a song as a
+ * line, laid in it or lifted out above its rim.
+ */
+export function AsideIcon({ size = 20, color: asked, lifted = false }: { size?: number; color?: string; lifted?: boolean }) {
+  const color = useInk(asked);
+  const stroke = strokeOf(size);
+  return (
+    <Strokes size={size}>
+      {/* The tray: its floor and its two sides. */}
+      <Bar length={size * 0.76} thickness={stroke} color={color} y={size * 0.3} />
+      <Bar length={size * 0.34} thickness={stroke} color={color} angle={90} x={-size * 0.34} y={size * 0.15} />
+      <Bar length={size * 0.34} thickness={stroke} color={color} angle={90} x={size * 0.34} y={size * 0.15} />
+      {/* The song: in it, or out of it and above. */}
+      <Bar length={size * 0.42} thickness={stroke} color={color} y={lifted ? -size * 0.3 : size * 0.08} />
+    </Strokes>
+  );
+}
+
+/** Back from being set aside: the song lifted out of the tray. */
+export function BroughtBackIcon({ size = 20, color }: { size?: number; color?: string }) {
+  return <AsideIcon size={size} color={color} lifted />;
 }
 
 /** Take this away. */

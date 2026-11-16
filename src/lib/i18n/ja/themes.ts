@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'ライト',
   darkGroup: 'ダーク',
   effectsGroup: 'グラスと光沢',
+  effectsNote: 'リアルタイムのぼかし：フラットなテーマより負荷がかかります。',
   specialGroup: 'スペシャル',
 };

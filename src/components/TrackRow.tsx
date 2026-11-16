@@ -12,6 +12,7 @@ import { progressOf, useTapePlace } from '../lib/tapes/places';
 import { isTape } from '../lib/tapes/tape';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { haptic } from '../lib/ui/haptics';
+import { ArtistLinks } from './NameLinks';
 
 /**
  * How tall a row is: 68 at the phone's ordinary size of writing, and taller as
@@ -88,7 +89,8 @@ export const TrackRow = memo(function TrackRow({
   const styles = useStyles();
   const pressed = usePressed();
   const height = useTrackRowHeight();
-  const subtitle = [track.artist ?? t.common.unknownArtist, ...track.tags.slice(0, 2)].join(' · ');
+  // Who it is by, each leading to their page (not while rows are being chosen), and its first two tags.
+  const tagged = track.tags.slice(0, 2).join(' · ');
   // A tape says how far in it is, under its cover, and how long is left, where a song says how long it is.
   const place = useTapePlace(track.id);
   const tape = place != null && isTape(track) ? place : null;
@@ -146,7 +148,7 @@ export const TrackRow = memo(function TrackRow({
       {/* A real view always, so that a bar coming and going under the cover never hands the cover to another parent. */}
       <View collapsable={false}>
         {artwork ? (
-          <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" transition={120} />
+          <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" transition={120} drawnAt={46} />
         ) : (
           <View style={[styles.art, styles.artEmpty]} />
         )}
@@ -162,7 +164,9 @@ export const TrackRow = memo(function TrackRow({
           {track.title}
         </Text>
         <Text style={styles.subtitle} numberOfLines={1}>
-          {subtitle}
+          {/* Words only: a touch on a song's row is for the song, and a name that led elsewhere took it there by mistake. */}
+          <ArtistLinks credit={track.artist} off />
+          {tagged ? ` · ${tagged}` : ''}
         </Text>
       </View>
 

@@ -11,7 +11,7 @@ import { search } from '../lib/media/search';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { makeStyles, outlined, usePressed } from '../lib/theme/index';
 import { scrimOf } from '../lib/theme/Veil';
-import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { CLIP_SUBVIEWS, LIST_WINDOW } from '../lib/ui/lists';
 
 /**
  * Picking tracks out of the library to put somewhere.
@@ -92,6 +92,7 @@ export function TrackPicker({
 
         <FlatList
                   removeClippedSubviews={CLIP_SUBVIEWS}
+                  windowSize={LIST_WINDOW}
           style={styles.list}
           data={results}
           keyExtractor={(track) => track.id}

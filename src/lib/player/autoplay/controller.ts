@@ -16,6 +16,9 @@ import { drawBatch, scoreLibrary, seedsOf, type Candidate } from './library';
 import { apart, batchFor, BRIDGE, interleave, isFreshId, LOW_WATER, PREPARE_AHEAD, topUp, type AutoplayMode } from './plan';
 import { autoplayMode, autoplaySizes, setAutoplayNote, watchAutoplayMode, type AutoplayNote } from './setting';
 import { tapChoice, watchTapChoice } from '../tapSetting';
+import { setAsideIdsIn, setAsideRules, withoutSetAside } from '../../library/setAside';
+import type { SetAside } from '../../library/setAsideRule';
+import { listsVersion } from '../../playlists/listEvents';
 
 /**
  * Keeping the music going when the queue runs out, done.
@@ -360,9 +363,15 @@ async function warm(v: PlayerView, mode: Exclude<AutoplayMode, 'off'>): Promise<
  * the same list for the same reading of the library, so that what is made of
  * it once is not made again.
  */
-let music: { of: readonly EnrichedTrack[]; tracks: EnrichedTrack[] } | null = null;
+let music: { of: readonly EnrichedTrack[]; rules: SetAside; lists: number; tracks: EnrichedTrack[] } | null = null;
 function musicOf(tracks: readonly EnrichedTrack[]): EnrichedTrack[] {
-  if (music?.of !== tracks) music = { of: tracks, tracks: tracks.filter((track) => !isTape(track)) };
+  // Never what has been set aside, which is kept out of what keeps the music going (`library/setAside.ts`).
+  const rules = setAsideRules();
+  const lists = rules.list.size > 0 ? listsVersion() : 0;
+  if (music?.of !== tracks || music.rules !== rules || music.lists !== lists) {
+    const songs = tracks.filter((track) => !isTape(track));
+    music = { of: tracks, rules, lists, tracks: withoutSetAside(songs, setAsideIdsIn(songs, rules, lists)) };
+  }
   return music.tracks;
 }
 

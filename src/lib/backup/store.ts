@@ -44,6 +44,7 @@ const ORDER: Record<TableName, string> = {
   playlist_tracks: 'playlist_id, position',
   podcasts: 'subscribed_at, feed_url',
   tape_marks: 'track_id, position_sec, id',
+  set_aside: 'kind, key',
 };
 
 const columns = (name: TableName) => Object.keys(TABLES[name]);

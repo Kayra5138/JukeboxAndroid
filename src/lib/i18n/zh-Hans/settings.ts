@@ -17,7 +17,7 @@ export const settings: Strings['settings'] = {
     experimental: '实验性功能',
   },
   categories: {
-    look: '主题、专辑唱片架、动效、振动，以及音乐库提供哪些视图。',
+    look: '主题、动效、振动，以及音乐库提供哪些视图。',
     sound: '均衡器和音效、音量均衡、交叉淡化，以及速度和音调。',
     player: '跳转按钮的步长、播放队列结束后播放什么，以及歌词翻译的目标语言。',
     tapes: '智能回退、磁带跳转按钮的步长，以及仅在 Wi‑Fi 下获取播客。',
@@ -77,10 +77,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: '歌曲信息和专辑封面' },
-  rack: {
-    title: '专辑唱片架',
-    note: '横握手机时，像翻唱片一样浏览专辑封面，而不是看列表。点按最前面的一张即可打开。',
-  },
   favoritesShown: { title: "收藏", note: "一个始终存在的列表，最新的在最上面，由播放器上的爱心和歌曲菜单中的“加入收藏”填充。关闭后三者都会隐藏，内容保留。" },
   listButton: {
     title: '添加到歌单按钮',
@@ -133,6 +129,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: '列表的长度、多久重新生成一次，以及已排除的内容。' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: '播放器外观', open: '代替封面显示的内容，以及随音乐而动的效果。' },
+  coverLook: {
+    songs: '歌曲',
+    tapes: '磁带',
+    cover: '封面',
+    record: '唱片',
+    cassette: '磁带',
+    note: '播放器中代替封面显示的内容。唱片在播放时旋转；磁带随着这一段的播放把磁带从一个卷轴绕到另一个。开启“减少装饰动效”时两者都不动。',
+    tonearm: '唱臂',
+    tonearmNote: '唱片上方的唱臂，随着歌曲播放，唱针从边缘移向标签。',
+    motion: '随音乐而动',
+    none: '无',
+    spectrum: '频谱',
+    ripple: '涟漪',
+    breathe: '呼吸',
+    scope: '示波器',
+    motionNote: '在其周围随音乐而动的内容，与你听到的声音同步，耳机中也一样。仅在播放且播放器打开时。',
+    punch: '律动',
+    spectrogram: '声谱图',
+    sparks: '火花',
+    aurora: '极光',
+    notes: {
+      spectrum: '显示每个音高响度的柱条；唱片周围则是光线。',
+      ripple: '每个节拍从边缘向外扩散的圆环。',
+      breathe: '随音乐微微放大，背后有光晕。',
+      punch: '每个节拍微微放大，然后回落。',
+      scope: '声音本身的波形。',
+      spectrogram: '最近几秒所有音高的流动。',
+      sparks: '每个节拍从边缘飞向整个播放器的火花。',
+      aurora: '整个播放器后方的封面颜色云团，各自随声音的一部分膨胀。',
+    },
+    beats: '随节拍振动',
+    beatsNote: '播放器打开且正在播放时，每个节拍轻轻振动一下。强度取决于你的振动设置。',
+  },
   still: {
     title: '减少装饰动效',
     note: '适合容易掉帧的手机。播放器会直接出现而不是向上滑出，游戏中获得或失去生命时也不再闪光。琴键仍会落下——那是游戏本身，不是装饰。',
@@ -171,6 +203,8 @@ export const settings: Strings['settings'] = {
     title: '标签页',
     searchNote: '“发现”和 YouTube 下载都在这个标签页中，会随之隐藏。',
     aside: '音乐库和设置始终显示。',
+    names: '图标下方显示名称',
+    namesNote: '关闭后，底栏只显示图标，并会矮一些。横屏时始终如此。',
   },
 
   views: {

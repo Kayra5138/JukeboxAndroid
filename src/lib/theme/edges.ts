@@ -1,4 +1,4 @@
-import { finishOf, type Edges } from './effects.ts';
+import { edgesAt, finishOf, type Edges } from './effects.ts';
 import type { Palette } from './tokens.ts';
 
 /**
@@ -77,6 +77,20 @@ function finished(c: Palette, edge: Edge): Edge {
   if (edge.borderColor === 'transparent') return edge;
   const finish = finishOf(c, edge.borderWidth ?? 0);
   return finish ? { ...edge, ...finish } : edge;
+}
+
+/**
+ * The ring round a button that is on, in [colour], or with `transparent` the
+ * same room kept round it while it is off: each side given its width either
+ * way. A button goes between the two; were a side given in one and left out of
+ * the other, React Native 0.86 would keep the side it was no longer given as
+ * "not a number", and what is inside the button is cut to a box of no size.
+ * The lyrics button lost its icon that way each time the words were closed.
+ */
+export function ringed(c: Palette, colour: string): Edge {
+  const width = outlineWidth(c);
+  if (width === 0) return NO_EDGE;
+  return { ...outlined(c, colour), ...edgesAt(width) };
 }
 
 /** A border that is there and takes no room, as opposed to no border at all. */

@@ -48,7 +48,7 @@ class JukeboxListsModule : Module() {
       val launcher = opener ?: return@Coroutine emptyList<Map<String, Any?>>()
       // Launching raises a system screen, which is a main-thread affair.
       val picked = withContext(Dispatchers.Main) { launcher.launch(ListFilesOpen.Input()) }
-      withContext(Dispatchers.IO) { picked.map { ListFiles.read(context, it) } }
+      withContext(Dispatchers.IO) { picked.flatMap { ListFiles.read(context, it) } }
     }
 
     /** The whole path of each track under [rootFolder], by id; see [ListFiles.trackPaths]. */

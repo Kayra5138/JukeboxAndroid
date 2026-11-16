@@ -167,6 +167,20 @@ export function remapTables(
   // A followed show is nobody's song: it comes as it is.
   out.podcasts = tables.podcasts.map((row) => ({ ...row }));
 
+  // What is set aside: a record, an artist, a folder or a tag as it is, and a song under its id here, if it is here.
+  for (const row of tables.set_aside) {
+    if (row.kind !== 'track') {
+      out.set_aside.push({ ...row });
+      continue;
+    }
+    const id = to.get(row.key as string);
+    if (!id) {
+      dropped++;
+      continue;
+    }
+    out.set_aside.push({ ...row, key: id });
+  }
+
   for (const name of ['track_metadata', 'track_tags', 'track_lyrics', 'lyric_translations', 'tape_marks'] as const) {
     for (const row of tables[name]) {
       const id = to.get(row.track_id as string);
@@ -357,6 +371,8 @@ function mergeKeyed(here: Tables, there: Tables): Omit<Tables, 'playlists' | 'pl
     ),
     // A show followed here keeps how it is fetched here.
     podcasts: oneOfEach(here.podcasts, there.podcasts, (row) => row.feed_url as string, (mine) => mine),
+    // Set aside on either side is set aside: the same thing on both is one row, from whenever it was here.
+    set_aside: oneOfEach(here.set_aside, there.set_aside, (row) => `${row.kind}\u0000${row.key}`, (mine) => mine),
     // A mark is one place in one tape: the same place on both, to the millisecond, is one mark, its note the one here.
     // Two marks a moment apart are two, each with its own note.
     tape_marks: oneOfEach(
@@ -452,8 +468,15 @@ export function mergeTables(here: Tables, there: Tables): Tables {
     playlist_id: becomes.get(row.playlist_id!) ?? null,
   }));
 
+  // A list set aside there is set aside here under the number it has here, or not at all where it has none.
+  const asideThere = there.set_aside.flatMap((row) => {
+    if (row.kind !== 'list') return [row];
+    const to = becomes.get(Number(row.key)) ?? becomes.get(row.key as Cell);
+    return to == null ? [] : [{ ...row, key: String(to) }];
+  });
+
   return {
-    ...mergeKeyed(here, there),
+    ...mergeKeyed(here, { ...there, set_aside: asideThere }),
     playlists: lists,
     playlist_tracks: everyEntry(
       here.playlist_tracks,

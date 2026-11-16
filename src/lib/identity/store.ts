@@ -296,6 +296,27 @@ export function readdress(database: BackupDb, moves: Pair[], stays: (id: string)
       database.run(`DELETE FROM playlist_tracks WHERE track_id = ?`, between(from));
     }
   }
+  // A song set aside stays set aside under its new id, the same two steps; set
+  // aside under both, it is one row.
+  const asideMoving: string[] = [];
+  for (const batch of batches(froms)) {
+    for (const row of database.all<{ id: string }>(
+      `SELECT key AS id FROM set_aside WHERE kind = 'track' AND key IN (${marks(batch.length)})`,
+      ...batch
+    )) {
+      asideMoving.push(row.id);
+    }
+  }
+  if (asideMoving.length > 0) {
+    for (const batch of batches(asideMoving)) {
+      database.run(`UPDATE set_aside SET key = 'moving:' || key WHERE kind = 'track' AND key IN (${marks(batch.length)})`, ...batch);
+    }
+    for (const from of asideMoving) {
+      database.run(`UPDATE OR IGNORE set_aside SET key = ? WHERE kind = 'track' AND key = ?`, to.get(from)!, between(from));
+      database.run(`DELETE FROM set_aside WHERE kind = 'track' AND key = ?`, between(from));
+    }
+  }
+
   // An entry dropped from a list that had both leaves a gap, and the lists are
   // kept numbered from nought without one.
   for (const list of lists) {

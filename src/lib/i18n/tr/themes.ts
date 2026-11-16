@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'Açık',
   darkGroup: 'Koyu',
   effectsGroup: 'Cam ve parlaklık',
+  effectsNote: 'Canlı bulanıklık: düz temalardan daha fazla iş.',
   specialGroup: 'Özel',
 };

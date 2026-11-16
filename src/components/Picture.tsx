@@ -1,6 +1,8 @@
 import { Image as Plain, type ImageProps } from 'expo-image';
 import type { Ref } from 'react';
 
+import { useCoverAt } from '../lib/media/thumbs';
+
 import { useTheme } from '../lib/theme/index';
 
 /**
@@ -26,6 +28,16 @@ import { useTheme } from '../lib/theme/index';
  * a border; making every cover again each time a song ended would be the
  * flicker this is here to avoid.
  */
-export function Image(props: ImageProps & { ref?: Ref<Plain> }) {
-  return <Plain key={useTheme().id} {...props} />;
+/*
+  [drawnAt], where a picture is a cover drawn small and how big: drawn from
+  the small copy of it (see lib/media/thumbs), not read whole for a few
+  dozen points of screen.
+*/
+export function Image({ drawnAt, ...props }: ImageProps & { ref?: Ref<Plain>; drawnAt?: number }) {
+  const id = useTheme().id;
+  const given = typeof props.source === 'object' && props.source && !Array.isArray(props.source) && 'uri' in props.source ? props.source.uri : undefined;
+  const uri = useCoverAt(given, drawnAt);
+  if (drawnAt == null || given == null) return <Plain key={id} {...props} />;
+  // Its place kept, empty, while the copy is being made.
+  return <Plain key={id} {...props} source={uri ? { uri } : null} />;
 }

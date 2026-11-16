@@ -1,6 +1,6 @@
 import { usePageSides, WithNowPlaying } from '../components/NowPlayingBar';
 import { useUnderBars } from '../components/UnderBars';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from '../components/Pressable';
@@ -15,6 +15,7 @@ import { haptic } from '../lib/ui/haptics';
 import {
   firstPlayAt,
   listens,
+  playsMark,
   summarize,
   topArtists,
   topTracks,
@@ -49,6 +50,8 @@ import {
 import { buildReport, worthReporting } from '../lib/stats/report';
 import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
+import { useTopOnReselect } from '../lib/ui/tabReselect';
+import { ArtistLinks } from '../components/NameLinks';
 
 /** What the columns of the chart are measuring. */
 type Metric = 'time' | 'plays';
@@ -77,6 +80,9 @@ type Data = {
   /** Whether anything has ever been listened to, as against in this period. */
   everListened: boolean;
 };
+
+/** How long a reading of the history stands for, with nothing played since: the periods are told by the clock as well. */
+const STILL_FRESH_MS = 5 * 60 * 1000;
 
 export default function StatsScreen() {
   const [period, setPeriod] = useState<PeriodId>('week');
@@ -147,31 +153,57 @@ export default function StatsScreen() {
     frame.
   */
   const restored = useRef(false);
+  /*
+    What the last reading was of, and when: come back to with nothing played
+    or taken away since, a little while later, the screen is as it was, and
+    is not read again. Read again, it is read after the tab is on the screen
+    and not before it: the whole history at every visit was most of a fifth
+    of a second on a fast phone, with the tab waiting on it.
+  */
+  const lastRead = useRef<{ mark: string; at: number; of: string; by: typeof load } | null>(null);
+  const refresh = useCallback(() => {
+    if (!restored.current) {
+      restored.current = true;
+      const saved = readPeriod();
+      const reading = readWhich();
+      // Setting them asks again with the right ones, so there is still
+      // only ever the one read of the history.
+      if (saved !== period || reading !== which) {
+        setPeriod(saved);
+        setWhich(reading);
+        return;
+      }
+    }
+    const mark = playsMark();
+    const of = `${period}|${which}`;
+    const seen = lastRead.current;
+    if (seen && seen.mark === mark && seen.of === of && seen.by === load && Date.now() - seen.at < STILL_FRESH_MS) return;
+    load(period, which);
+    lastRead.current = { mark, at: Date.now(), of, by: load };
+  }, [load, period, which]);
+  /*
+    Read as soon as it is put up, which is while nobody is using the app,
+    before the tab is first opened (see `TabBar`), and again with another
+    period chosen; and looked at again each time the tab is opened.
+  */
+  useEffect(() => {
+    const later = setTimeout(refresh, 0);
+    return () => clearTimeout(later);
+  }, [refresh]);
   useFocusEffect(
     useCallback(() => {
-      if (!restored.current) {
-        restored.current = true;
-        const saved = readPeriod();
-        const reading = readWhich();
-        // Setting them re-runs this with the right ones, so there is still
-        // only ever the one read of the history.
-        if (saved !== period || reading !== which) {
-          setPeriod(saved);
-          setWhich(reading);
-          return;
-        }
-      }
-      load(period, which);
-    }, [load, period, which])
+      const later = setTimeout(refresh, 0);
+      return () => clearTimeout(later);
+    }, [refresh])
   );
 
   const choose = useCallback(
     (id: PeriodId) => {
+      // Read by `refresh`, as the period changes.
       setPeriod(id);
       writeSetting(SETTINGS.statsPeriod, id);
-      load(id, which);
     },
-    [load, which]
+    []
   );
 
   /*
@@ -184,15 +216,17 @@ export default function StatsScreen() {
     (reading: Which) => {
       setWhich(reading);
       writeSetting(SETTINGS.statsWhich, reading);
-      load(period, reading);
     },
-    [load, period]
+    []
   );
 
   const values = useMemo(
     () => (data ? data.totals.map((total) => (metric === 'time' ? total.seconds : total.plays)) : []),
     [data, metric]
   );
+
+  // Its tab pressed again: back to the top of it.
+  const backUp = useTopOnReselect();
 
   if (!data) return <View style={styles.screen} />;
 
@@ -251,6 +285,7 @@ export default function StatsScreen() {
   return (
     <WithNowPlaying style={styles.screen}>
     <ScrollView
+      {...backUp}
       contentContainerStyle={[
         styles.content,
         {
@@ -425,6 +460,7 @@ export default function StatsScreen() {
                   // tracks can share a title, and keying on that collided them.
                   key={`${list.of}:${entry.key}`}
                   rank={index + 1}
+                  of={list.of}
                   entry={entry}
                   share={entry.playCount / list.entries[0].playCount}
                 />
@@ -505,19 +541,20 @@ function Card({
  * a column of numbers into something that can be read at a glance: whether the
  * top track is a habit or merely first past the post.
  */
-function Row({ rank, entry, share }: { rank: number; entry: TopEntry; share: number }) {
+function Row({ rank, entry, share, of }: { rank: number; entry: TopEntry; share: number; of: 'tracks' | 'artists' | 'genres' }) {
   const styles = useStyles();
   return (
     <View style={styles.row}>
       <View style={[styles.rowFill, { width: `${Math.max(2, share * 100)}%` }]} />
       <Text style={styles.rank}>{rank}</Text>
       <View style={styles.rowText}>
+        {/* An artist leads to their page: the name of one at the top of the artists, and whoever a song at the top is by. */}
         <Text style={styles.rowLabel} numberOfLines={1}>
-          {entry.label}
+          {of === 'artists' ? <ArtistLinks credit={entry.label} whole /> : entry.label}
         </Text>
         {entry.detail ? (
           <Text style={styles.rowDetail} numberOfLines={1}>
-            {entry.detail}
+            {of === 'tracks' ? <ArtistLinks credit={entry.detail} /> : entry.detail}
           </Text>
         ) : null}
       </View>

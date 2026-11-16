@@ -1,9 +1,10 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   Easing,
   FlatList,
   Keyboard,
@@ -11,17 +12,20 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type LayoutChangeEvent,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 
-import { MarksIcon, PlayIcon, PlusIcon, SearchIcon, SettingsIcon, ShuffleIcon } from '../components/Icons';
+import { LookIcon, MarksIcon, PlayIcon, PlusIcon, SearchIcon, SettingsIcon, ShuffleIcon } from '../components/Icons';
 import { PressRing } from '../components/PressMenu';
 import { useTrackRing } from '../components/trackRing';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
-import { SearchField } from '../components/SearchField';
+import { SearchField, type SearchBox } from '../components/SearchField';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
 import { useT } from '../lib/i18n/index';
 import { makeStyles, outlined, outlinedClip, scene, useColours, usePressed } from '../lib/theme/index';
@@ -32,7 +36,8 @@ import { useHiddenTabs } from '../lib/ui/tabs';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
 import { haptic } from '../lib/ui/haptics';
-import { useBack } from '../lib/ui/back';
+import { useBackInFront } from '../lib/ui/back';
+import { useTabOpen } from '../lib/ui/tabOpen';
 import { useSelectionActions } from '../components/SelectionActions';
 import { LibraryWelcome } from '../components/welcome/LibraryWelcome';
 import { WrongDownloadsLine } from '../components/WrongDownloadsLine';
@@ -43,6 +48,17 @@ import { BrowseRow, useBrowseRowHeight } from '../components/BrowseRow';
 import { AlbumListing } from '../components/AlbumListing';
 import { AlbumMenu, WITHOUT_SELECT, type AlbumAction } from '../components/AlbumMenu';
 import { CoverFlow, type Rack, type Sleeve } from '../components/CoverFlow';
+import { FastScroller, useFastScroll, type FastScroll } from '../components/FastScroller';
+import { ZoomStack, type LevelApi, type StackApi } from '../components/looks/CoverGrid';
+import { Curtain } from '../components/Curtain';
+import { ArtistMap } from '../components/artists/ArtistMap';
+import { asTrackLook, asZoom, nextTrackLook, TrackCover, type TrackLook } from '../components/looks/shared';
+import { Shelves } from '../components/looks/Shelves';
+import { latest, letterLabel, monthLabel } from '../lib/ui/fastLabels';
+import { forgetAlbumColour, useAlbumColours } from '../lib/media/albumColours';
+import { byColour } from '../lib/media/colourOrder';
+import { RackFront } from '../components/RackFront';
+import { setAside, useSetAside, useSetAsideIds } from '../lib/library/setAside';
 import { albumsOf, findAlbum, nameOfKey, narrowAlbums, type Album } from '../lib/media/albums';
 import { chooseRecordCover, lookUpRecord } from '../lib/metadata/albumActions';
 import {
@@ -61,7 +77,7 @@ import {
   type FolderSort,
 } from '../lib/media/folders';
 import { holdsAll, markOf, tracksUnder, withGroupToggled } from '../lib/media/selection';
-import { creditReader } from '../lib/db/credits';
+import { currentCreditReader } from '../lib/db/credits';
 import { canWriteFiles } from '../lib/filetags';
 import { Segmented } from '../components/Segmented';
 import { SwipeRow } from '../components/SwipeRow';
@@ -72,7 +88,7 @@ import { useLibrary } from '../lib/library/useLibrary';
 import { ensureNotificationPermission, libraryRoot } from '../lib/media/library';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { search, searchNamed } from '../lib/media/search';
-import { viewShown, type LibraryView } from '../lib/media/views';
+import { LIBRARY_VIEWS, viewShown, type LibraryView } from '../lib/media/views';
 import {
   asSortOrder,
   nextSort,
@@ -82,14 +98,28 @@ import {
 } from '../lib/media/sort';
 import { lastPlayedAt, playCounts } from '../lib/db/history';
 import { artistKey, spreadShuffle } from '../lib/media/shuffle';
+import { PressList, type PressListFor } from '../components/PressList';
+import { useFavoritesShown } from '../lib/playlists/favorites';
+import { ShuffleSourceSheet, useShuffleNames, useShuffleWords } from '../components/ShuffleSettings';
+import {
+  setShuffleSource,
+  SHUFFLE_ALL,
+  shuffleChoices,
+  shuffleSource,
+  shuffleTracks,
+  sourceKey,
+  sourceOfKey,
+  type ShuffleSource,
+} from '../lib/lists/shuffleSource';
 import { usePlayTapped, type TapPlace } from '../lib/player/usePlayTapped';
 import { currentTrack, playingTrack } from '../lib/player/current';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { motionReduced } from '../lib/ui/motion';
-import { CLIP_SUBVIEWS } from '../lib/ui/lists';
+import { CLIP_SUBVIEWS, ROWS_KEPT } from '../lib/ui/lists';
 import { followsScrolling } from '../lib/ui/moving';
 import { useStartingOffset } from '../lib/ui/useStartingOffset';
+import { backToTop, useTabReselect } from '../lib/ui/tabReselect';
 import { useLibraryViews } from '../lib/ui/libraryViews';
 import { downloads } from '../lib/youtube/native';
 import { inRecordOrder, inSeriesOrder, orderTapes } from '../lib/tapes/order';
@@ -133,6 +163,8 @@ const NOTHING_SHOWN: ReadonlySet<string> = new Set();
 type Heading = {
   id: string;
   title: string;
+  /** Whoever a record is by, drawn before [detail] and leading to them. */
+  by?: string | null;
   detail: string;
   tracks: EnrichedTrack[];
   /** What the heading's one cover is found among: see `useAlbumArtwork`. */
@@ -144,8 +176,41 @@ const NO_HEADINGS: Heading[] = [];
 
 /** The views that are lists of headings rather than of tracks. */
 const GROUPED_VIEWS = ['albums', 'artists', 'folders'] as const;
+/** The orders of the rack: by the colours of the covers, which it starts in, and the library's. */
+const RACK_SORTS = ['colour', 'name', 'added', 'played'] as const;
+type RackSort = (typeof RACK_SORTS)[number];
+function asRackSort(value: string | null): RackSort {
+  return (RACK_SORTS as readonly string[]).includes(value ?? '') ? (value as RackSort) : 'colour';
+}
+/** The views that can be pinched out into a wall of covers. */
+type ZoomedView = 'tracks' | (typeof GROUPED_VIEWS)[number];
+
+/** A list as the tab pressed again moves it. */
+type Scrolls = { scrollToOffset: (to: { offset: number; animated: boolean }) => void };
+/** Where a scroll comes to rest, as a list says it. */
+type ScrollEnds = {
+  onScrollEndDrag: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onMomentumScrollEnd: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+};
 
 const NO_TRACKS: EnrichedTrack[] = [];
+/** Where a row's cover is in it, as `TrackRow` and `BrowseRow` draw it: so far in from the side, and so big. */
+const ROW_SIDE = 16;
+const ROW_COVER = 46;
+
+// What a wall of covers is told of a song and of a heading: see `CoverGrid`.
+const trackKey = (track: EnrichedTrack) => track.id;
+const trackTitle = (track: EnrichedTrack) => track.title;
+const trackArtist = (track: EnrichedTrack) => track.artist;
+const trackCover = (track: EnrichedTrack, size: number) => <TrackCover track={track} size={size} />;
+const sameTrack = (track: EnrichedTrack) => track;
+const headingKey = (heading: Heading) => heading.id;
+const headingTitle = (heading: Heading) => heading.title;
+const headingBy = (heading: Heading) => heading.by;
+const headingCover = (heading: Heading, size: number) => (
+  <PlaylistCover tracks={heading.tracks} chosen={null} sleeve={heading.cover} size={size} />
+);
+const headingSleeve = (heading: Heading) => heading.cover[0];
 
 /** A row of the tapes view: a heading over one of its two parts, a podcast followed, one of its episodes laid out under it, or a tape. */
 type TapeRow =
@@ -184,6 +249,34 @@ function tickedOf(episodes: readonly EnrichedTrack[], selected: ReadonlySet<stri
  * search box does not breathe in and out as the order changes.
  */
 const SORT_WIDTH = 56;
+/** How tall the switch, the box and the buttons over the library are, all alike. */
+const CONTROL_HEIGHT = 40;
+
+/**
+ * What the library is ordered and credited by, read again with the library:
+ * who each credit names, and when each track was last played and how often,
+ * so that a track played on another screen and then returned from has moved
+ * by the time the list is seen again. Null where it could not be read: the
+ * list is on screen either way, and it is asked for again on the next visit.
+ *
+ * Out here rather than in the screen, which the React Compiler does not take
+ * with a loop inside a `try`.
+ */
+function readListening(): { reader: NamesOn; latest: Map<string, number>; listens: Map<string, number> } | null {
+  try {
+    const reader = currentCreditReader();
+    const latest = lastPlayedAt();
+    const listens = new Map<string, number>();
+    for (const [id, count] of playCounts()) listens.set(id, count.plays);
+    return { reader, latest, listens };
+  } catch (error) {
+    console.warn('The listening history could not be read for the library.', error);
+    return null;
+  }
+}
+
+/** The tapes' view, by a name the React Compiler reads as it reads the others' (`listOf`). */
+const TAPES: LibraryView = 'tapes';
 
 export default function LibraryScreen() {
   const t = useT();
@@ -247,6 +340,24 @@ export default function LibraryScreen() {
   const [folderSort, setFolderSort] = useState<FolderSort>('name');
   // The tapes' own order: the ones being listened to first, by name, or by what came newest.
   const [tapeSort, setTapeSort] = useState<TapeSort>(() => asTapeSort(readSetting(SETTINGS.libraryTapeSort)));
+  /** The artists as a map rather than a list: see `ArtistMap`. */
+  const [artistMap, setArtistMap] = useState(() => readSetting(SETTINGS.artistLook) === 'map');
+  /** The rack's own order: see where the records are put in it. */
+  const [rackSort, setRackSort] = useState<RackSort>(() => asRackSort(readSetting(SETTINGS.rackSort)));
+  /** How the Tracks view is drawn: the list, or one of the looks being tried out. */
+  const [trackLook, setTrackLook] = useState<TrackLook>(() => asTrackLook(readSetting(SETTINGS.libraryTracksLook)));
+  /** How far each view is pinched out into a wall of covers; 0, its list. */
+  const [zooms, setZooms] = useState<Record<ZoomedView, number>>(() => ({
+    tracks: asZoom(readSetting(`${SETTINGS.listZoom}:tracks`)),
+    albums: asZoom(readSetting(`${SETTINGS.listZoom}:albums`)),
+    artists: asZoom(readSetting(`${SETTINGS.listZoom}:artists`)),
+    folders: asZoom(readSetting(`${SETTINGS.listZoom}:folders`)),
+  }));
+  // A view come to rest at another level, as a pinch leaves it: see `ZoomStack`.
+  const setZoom = (kind: ZoomedView, level: number) => {
+    setZooms((now) => ({ ...now, [kind]: level }));
+    writeSetting(`${SETTINGS.listZoom}:${kind}`, String(level));
+  };
   /**
    * When each track was last listened to, read alongside the library itself.
    *
@@ -267,7 +378,7 @@ export default function LibraryScreen() {
    * the header as well as over the rack, and outlives the rack if the phone is
    * turned upright while it is open.
    */
-  const [opened, setOpened] = useState<{ album: Album; sleeve: Sleeve } | null>(null);
+  const [opened, setOpened] = useState<{ album: Album; sleeve: Sleeve | null } | null>(null);
   const shelf = useRef<Rack>(null);
   const middle = useRef<View>(null);
   const landscape = useLandscape();
@@ -316,6 +427,26 @@ export default function LibraryScreen() {
    */
   const racked = albumView && rack && !selecting;
   /*
+    The record the rack last came to rest on, by its key: what it starts on
+    when it is made again -- the phone turned, the rack sideways made a rack
+    upright -- and, upright, whose tracks are under it.
+  */
+  const [rackKey, setRackKey] = useState<string | null>(null);
+  /*
+    The view a finger is on in the switch, not yet let go: made ready to be
+    shown, out of sight, while it is down (see `Curtain`), so that letting go
+    only shows it.
+  */
+  const [warmView, setWarmView] = useState<LibraryView | null>(null);
+  const coolViews = useCallback(() => setWarmView(null), []);
+  /*
+    Ready, too, from the finger lifted until the view chosen is drawn: that
+    comes a drawing later (see `view`), and left cold for the one between,
+    all that was made ready was let go again.
+  */
+  const warming = (candidate: LibraryView) => warmView === candidate || (chosenView === candidate && view !== candidate);
+  const screenSize = useWindowDimensions();
+  /*
     In a theme of glass the search, the switch and the order are laid over
     the list, which runs on under them and is seen through them, and the
     tabs and the bar of what is playing over its foot: see `UnderBars`. Not
@@ -323,12 +454,33 @@ export default function LibraryScreen() {
     begins under the top as it always has.
   */
   const top = useLaidOver();
-  const over = top.laid && !racked;
-  // The list out of focus behind the top, where it is laid over it: see `Frosted`.
+  /*
+    Laid over the rack too, the rack keeping clear of it itself (see where
+    it is drawn): the lists, standing under the rack, kept to the same room
+    whichever view is in front. Laid over the lists and not over the rack,
+    as it was, the room the lists had changed at every change to the rack
+    and back, and every list and wall of covers was laid out again.
+  */
+  const over = top.laid;
+  // The list out of focus behind the top, where it is laid over it: see `Frosted`. Over the rack, with the lists shut away, the glass is its tint alone (`FrostView`).
   const scene = useOwnScene();
   const target = scene.target;
   const frosted = useFrosted(over ? target : null);
-  const topRoom = over ? top.height : 0;
+  /*
+    The room over the lists: how tall the top is as it stands over them,
+    taken only from a laying out of it over them. Over the rack it is a line
+    shorter (it has no count of records), and the lists, shut under it, keep
+    the room they had; taken from the top as it was at each drawing, they
+    were laid out again for the rack's top on the way back from it, and
+    again for their own a moment later.
+  */
+  const laidTop = over ? top.height : 0;
+  const [listTop, setListTop] = useState(0);
+  const measureTop = (event: LayoutChangeEvent) => {
+    top.onLayout?.(event);
+    if (!racked) setListTop(Math.round(event.nativeEvent.layout.height * 10) / 10);
+  };
+  const topRoom = over ? listTop : 0;
   const under = useUnderBars({ player: true });
 
   // Written down for the same reason the view is: an order is chosen once and
@@ -354,6 +506,10 @@ export default function LibraryScreen() {
       const next = nextFolderSort(folderSort);
       setFolderSort(next);
       writeSetting(SETTINGS.libraryFolderSort, next);
+    } else if (racked) {
+      const next = RACK_SORTS[(RACK_SORTS.indexOf(rackSort) + 1) % RACK_SORTS.length] ?? 'colour';
+      setRackSort(next);
+      writeSetting(SETTINGS.rackSort, next);
     } else if (view === 'tapes') {
       const next = nextTapeSort(tapeSort);
       setTapeSort(next);
@@ -362,6 +518,33 @@ export default function LibraryScreen() {
       chooseSort(nextSort(sort));
     }
   };
+  /*
+    The button beside the switch: the records between their list and the
+    rack, held the way the phone is now; the artists between their list and
+    the map; the tracks through their looks. (Tried as the view's own name
+    pressed again, it was nowhere anybody would look for it.)
+  */
+  const lookable = (kind: LibraryView) => kind === 'albums' || kind === 'tracks' || kind === 'artists';
+  const stepLook = () => {
+    haptic('choices', 'tick');
+    if (view === 'albums') {
+      const next = !rack;
+      setRack(next);
+      if (landscape) writeSetting(SETTINGS.coverFlow, next ? 'true' : 'false');
+      else writeSetting(SETTINGS.coverFlowUpright, next ? 'true' : 'false');
+    } else if (view === 'artists') {
+      const next = !artistMap;
+      setArtistMap(next);
+      writeSetting(SETTINGS.artistLook, next ? 'map' : 'list');
+    } else {
+      const next = nextTrackLook(trackLook);
+      setTrackLook(next);
+      writeSetting(SETTINGS.libraryTracksLook, next);
+    }
+  };
+  /** Which look a view is in: the picture on the button, and the word it is read out with. */
+  const lookOf = (kind: LibraryView): 'list' | 'shelves' | 'rack' | 'map' =>
+    kind === 'albums' ? (rack ? 'rack' : 'list') : kind === 'artists' ? (artistMap ? 'map' : 'list') : trackLook === 'shelves' ? 'shelves' : 'list';
   /** What the button says, and what it is read out as, in this view. */
   const sortShown =
     view === 'artists'
@@ -374,22 +557,34 @@ export default function LibraryScreen() {
             short: t.library.screen.groupSortShort[folderSort],
             spoken: t.library.screen.groupSortedBy[folderSort],
           }
+        : racked
+          ? { short: t.library.screen.sortShort[rackSort], spoken: t.library.screen.sortedBy[rackSort] }
         : view === 'tapes'
           ? { short: t.library.screen.sortShort[tapeSort], spoken: t.library.screen.sortedBy[tapeSort] }
           : { short: t.library.screen.sortShort[sort], spoken: t.library.screen.sortedBy[sort] };
   const columns = useListColumns();
+  /*
+    How many to a row each view's list was last laid out with while it was
+    in front: a list standing shut behind another keeps that until it comes
+    to the front itself. Turned with the phone, every list standing behind
+    the one in sight was made afresh, rows and all, for a width nobody was
+    looking at, and the app took seconds to come round.
+  */
+  const [keptColumns, setKeptColumns] = useState<Partial<Record<LibraryView, number>>>({});
   const { playQueue, playNext, addToQueue, toggle } = usePlayerActions();
   // The same two functions for every row, which a remembered row needs.
   const playNextTrack = useCallback((track: EnrichedTrack) => void playNext(track), [playNext]);
   const queueTrack = useCallback((track: EnrichedTrack) => void addToQueue(track), [addToQueue]);
   /*
-    Everything there is, shuffled the way the player shuffles a queue: spread
-    so that an artist does not come up twice running, and not a plain draw.
+    What the shuffle button plays -- everything, or the list chosen for it
+    (`lists/shuffleSource.ts`) -- shuffled the way the player shuffles a
+    queue: spread so that an artist does not come up twice running, and not a
+    plain draw. A list chosen for good that is no more is everything again.
   */
-  const shuffleAll = () => {
-    if (music.length === 0) return;
-    void playQueue(spreadShuffle(music, artistKey), 0);
-  };
+  const shuffleNames = useShuffleNames();
+  const shuffleWords = useShuffleWords();
+  const favoritesOn = useFavoritesShown();
+  const [choosingShuffle, setChoosingShuffle] = useState(false);
   const router = useRouter();
 
   /*
@@ -400,7 +595,8 @@ export default function LibraryScreen() {
   */
   const searchTabShown = !useHiddenTabs().has('search');
   const wanted = query.trim();
-  const searchElsewhere =
+  // Kept the same from one drawing to the next, as it goes to every list and wall: see `wallOf`.
+  const searchElsewhere = useMemo(() =>
     wanted && searchTabShown && !selecting ? (
       <View style={styles.elsewhere}>
         <Pressable
@@ -416,7 +612,7 @@ export default function LibraryScreen() {
           </Text>
         </Pressable>
       </View>
-    ) : null;
+    ) : null, [c.onPrimary, pressed, router, searchTabShown, selecting, styles, t, wanted]);
 
   const library = screen.kind === 'library' ? screen.tracks : NOTHING;
   /*
@@ -426,7 +622,47 @@ export default function LibraryScreen() {
     the whole library, where the tapes folder is one folder among the rest.
   */
   const music = useMemo(() => library.filter((track) => !isTape(track)), [library]);
+  /*
+    The songs set aside (`library/setAside.ts`): kept out of the Tracks view
+    and out of shuffling everything, and in every other view as they were.
+  */
+  const asideIds = useSetAsideIds(music);
+  const asideRules = useSetAside();
+  const shuffleFrom = (wanted: ShuffleSource) => {
+    const { tracks, gone } = shuffleTracks(wanted, music, shuffleNames, asideIds);
+    if (gone && sourceKey(wanted) === sourceKey(shuffleSource())) setShuffleSource(SHUFFLE_ALL);
+    if (tracks.length === 0) return;
+    void playQueue(spreadShuffle(tracks, artistKey), 0);
+  };
+  const shuffleAll = () => shuffleFrom(shuffleSource());
+  // Held, the button offers everything it can play, for once, and at the foot a way to change what it plays.
+  const shuffleMenu: PressListFor = {
+    title: () => t.library.shuffle.menu,
+    rows: () => {
+      const chosen = sourceKey(shuffleSource());
+      return [
+        ...shuffleChoices(music, shuffleNames, favoritesOn, undefined, asideIds).map((choice) => ({
+          key: choice.key,
+          label: choice.name,
+          detail: t.common.tracks(choice.count),
+          checked: choice.key === chosen,
+        })),
+        { key: 'change', label: t.library.shuffle.change, apart: true },
+      ];
+    },
+    choose: (key) => {
+      if (key === 'change') setChoosingShuffle(true);
+      else shuffleFrom(sourceOfKey(key));
+    },
+  };
+  const asideCount = useMemo(() => (asideIds.size === 0 ? 0 : music.filter((track) => asideIds.has(track.id)).length), [asideIds, music]);
 
+  /*
+    The words looked for, a moment behind the box: typed quickly, the letters
+    on their way are not each looked for in turn and drawn as a list nobody
+    sees, and the box never waits on the list. See `useDeferredValue`.
+  */
+  const searched = useDeferredValue(query);
   /*
     Folding the whole library is not something to do on every render. `search`
     normalises every title, artist, album and tag it looks at, and unmemoised it
@@ -434,8 +670,8 @@ export default function LibraryScreen() {
   */
   const { tracks: found, matchedTags } = useMemo(
     // With the words a nameless artist is drawn with, so that they find those tracks too.
-    () => search(library, query, [t.common.unknownArtist, 'Unknown artist']),
-    [library, query, t]
+    () => search(library, searched, [t.common.unknownArtist, 'Unknown artist']),
+    [library, searched, t]
   );
 
   /*
@@ -450,6 +686,28 @@ export default function LibraryScreen() {
     () => sortTracks(found.filter((track) => !isTape(track)), sort, played),
     [found, played, sort]
   );
+  /*
+    What the Tracks view lists: the results less what is set aside. Only
+    there: the records, the artists and the folders are narrowed by the
+    results themselves, and keep every song they hold.
+  */
+  const listed = useMemo(
+    () => (asideIds.size === 0 ? results : results.filter((track) => !asideIds.has(track.id))),
+    [asideIds, results]
+  );
+  /** Where a track is filed in the order the tracks are in, for the fast scroller's bubble and the wall's headings. */
+  const months = t.format.monthsShort;
+  const sectionOf = useCallback(
+    (track: EnrichedTrack) =>
+      sort === 'added' ? monthLabel(track.addedAt, months) : sort === 'played' ? monthLabel(played.get(track.id), months) : letterLabel(track.title),
+    [months, played, sort]
+  );
+  // Each list's scroll bar to take hold of: see `FastScroller`.
+  const fastTracks = useFastScroll();
+  const fastAlbums = useFastScroll();
+  const fastArtists = useFastScroll();
+  const fastFolders = useFastScroll();
+  const fastOf: Record<'albums' | 'artists' | 'folders', FastScroll> = { albums: fastAlbums, artists: fastArtists, folders: fastFolders };
 
   /*
     The records the search results belong to.
@@ -460,7 +718,7 @@ export default function LibraryScreen() {
     built from the results: which record a track is on can take the rest of
     the library to know, and a record must keep its key while it is searched.
   */
-  const asked = query.trim().length > 0;
+  const asked = searched.trim().length > 0;
   /*
     Kept once worked out rather than thrown away when the view changes, so
     going back to the albums, or to the artists below, does not sort the whole
@@ -471,10 +729,27 @@ export default function LibraryScreen() {
   const seenAlbums = visited.has('albums');
   const wantRecords = seenAlbums || asked;
   const records = useMemo(() => (wantRecords ? albumsOf(music) : []), [music, wantRecords]);
-  const albums = useMemo(
-    () => (seenAlbums ? sortAlbums(narrowAlbums(records, results), sort, played) : []),
-    [seenAlbums, played, records, results, sort]
-  );
+  const narrowed = useMemo(() => (seenAlbums ? narrowAlbums(records, results) : []), [records, results, seenAlbums]);
+  /*
+    The rack keeps an order of its own, by the colours of the covers unless
+    another is chosen on it: a run of covers shading into one another is what
+    a rack is for. The list keeps the library's.
+  */
+  const byColours = rack && seenAlbums && rackSort === 'colour';
+  const albumColours = useAlbumColours(narrowed, byColours);
+  /*
+    The rack's records in the rack's order, kept whatever view is in front:
+    the rack stands, shut, while another is (see where it is drawn), and an
+    order that went with the view would have it put in order again, out of
+    sight, at every change.
+  */
+  const rackAlbums = useMemo(() => {
+    if (!seenAlbums || !rack) return [];
+    if (rackSort !== 'colour') return sortAlbums(narrowed, rackSort, played);
+    return byColour(sortAlbums(narrowed, 'name', played), (album) => albumColours.get(album.key));
+  }, [albumColours, narrowed, played, rack, rackSort, seenAlbums]);
+  // The list's, in the library's order: the list stands under the rack, and is not put in the rack's order and back with each change of view.
+  const albums = useMemo(() => (seenAlbums ? sortAlbums(narrowed, sort, played) : []), [narrowed, played, seenAlbums, sort]);
 
   /**
    * Records whose name the query matched, for jumping straight to one.
@@ -484,13 +759,13 @@ export default function LibraryScreen() {
    * library would qualify.
    */
   const matchedAlbums = useMemo(() => {
-    const needle = query.trim().toLowerCase();
+    const needle = searched.trim().toLowerCase();
     if (albumView || needle.length === 0) return [];
     return narrowAlbums(records, results)
       // By its name: the key carries its artist as well.
       .filter((entry) => nameOfKey(entry.key).includes(needle))
       .slice(0, 3);
-  }, [albumView, query, records, results]);
+  }, [albumView, records, results, searched]);
 
   /*
     The whole library under its artists, and under its folders.
@@ -545,9 +820,8 @@ export default function LibraryScreen() {
     return albums.map((album) => ({
       id: album.key,
       title: album.name,
-      detail: [album.artist, t.common.tracks(album.tracks.length), album.year]
-        .filter(Boolean)
-        .join(' · '),
+      by: album.artist,
+      detail: [t.common.tracks(album.tracks.length), album.year].filter(Boolean).join(' · '),
       tracks: album.tracks,
       // One cover, not four: a record has its own, found among its tracks.
       cover: album.tracks,
@@ -555,19 +829,19 @@ export default function LibraryScreen() {
   }, [albums, seenAlbums, t]);
   const artistHeadings = useMemo((): Heading[] => {
     if (!seenArtists) return NO_HEADINGS;
-    return searchNamed(orderedArtists, query, (artist) => artist.name).map((artist) => ({
+    return searchNamed(orderedArtists, searched, (artist) => artist.name).map((artist) => ({
       id: artist.key,
       title: artist.name,
       detail: `${t.common.tracks(artist.tracks.length)} · ${t.common.albums(artist.albums.length)}`,
       tracks: artist.tracks,
       cover: artist.sleeve,
     }));
-  }, [orderedArtists, query, seenArtists, t]);
+  }, [orderedArtists, searched, seenArtists, t]);
   const folderHeadings = useMemo((): Heading[] => {
     if (!seenFolders) return NO_HEADINGS;
     // The library folder itself has no path from itself, so it is looked for
     // by its name, which is what its row says.
-    return searchNamed(orderedFolders, query, (folder) => folder.path || folder.name).map((folder) => ({
+    return searchNamed(orderedFolders, searched, (folder) => folder.path || folder.name).map((folder) => ({
       id: folder.key,
       title: folder.name,
       // Where it is, for a folder that is not directly under the library's
@@ -581,13 +855,40 @@ export default function LibraryScreen() {
       // to say nothing more about a folder than one does.
       cover: folder.tracks,
     }));
-  }, [orderedFolders, query, seenFolders, t]);
-  const headingsOf: Record<(typeof GROUPED_VIEWS)[number], Heading[]> = {
-    albums: albumHeadings,
-    artists: artistHeadings,
-    folders: folderHeadings,
-  };
+  }, [orderedFolders, searched, seenFolders, t]);
+  const headingsOf: Record<(typeof GROUPED_VIEWS)[number], Heading[]> = useMemo(
+    () => ({ albums: albumHeadings, artists: artistHeadings, folders: folderHeadings }),
+    [albumHeadings, artistHeadings, folderHeadings]
+  );
   const shownHeadings = grouped ? headingsOf[view] : NO_HEADINGS;
+  /** What the fast scroller says of a heading, by the order its view is in. */
+  const headingLabel = useCallback(
+    (kind: (typeof GROUPED_VIEWS)[number], heading: Heading): string => {
+      const order = kind === 'albums' ? sort : kind === 'artists' ? artistSort : folderSort;
+      if (order === 'name') return letterLabel(heading.title);
+      if (order === 'tracks') return t.format.number(heading.tracks.length);
+      if (order === 'added') return monthLabel(latest(heading.tracks.map((track) => track.addedAt)), months);
+      if (kind === 'artists') return `${t.format.number(heading.tracks.reduce((sum, track) => sum + (counts.get(track.id) ?? 0), 0))}×`;
+      return monthLabel(latest(heading.tracks.map((track) => played.get(track.id))), months);
+    },
+    [artistSort, counts, folderSort, months, played, sort, t]
+  );
+  /** What a view of headings says where it has none, as a list and as a wall of covers alike. */
+  const emptyOf = useMemo(() => {
+    const of = (kind: (typeof GROUPED_VIEWS)[number]) =>
+      kind === 'albums' ? (
+        <Text style={styles.muted}>{t.library.noAlbums}</Text>
+      ) : (
+        <Text style={styles.empty}>
+          {query.trim()
+            ? t.library.nothingMatches(query)
+            : t.library.screen.noFolders}
+        </Text>
+      );
+    return { albums: of('albums'), artists: of('artists'), folders: of('folders') };
+  }, [query, styles, t]);
+  const tracksEmpty = useMemo(() => <Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>, [query, styles, t]);
+  const headingsEmpty = (kind: (typeof GROUPED_VIEWS)[number]) => emptyOf[kind];
 
   /*
     The tapes: the tracks the search left that are books, podcasts or long
@@ -611,11 +912,17 @@ export default function LibraryScreen() {
   const [followed, setFollowed] = useState<Subscription[]>([]);
   useFocusEffect(
     useCallback(() => {
-      try {
-        setFollowed(subscriptions());
-      } catch {
-        // No podcasts table yet: none followed.
-      }
+      // After the tab is on the screen: see `load` below.
+      const later = setTimeout(() => {
+        try {
+          // The same shows as before kept as they were: a new list of them is every row of the tapes laid out again.
+          const now = subscriptions();
+          setFollowed((before) => (JSON.stringify(before) === JSON.stringify(now) ? before : now));
+        } catch {
+          // No podcasts table yet: none followed.
+        }
+      }, 0);
+      return () => clearTimeout(later);
     }, [])
   );
   const marksMade = useAllMarks().length > 0;
@@ -633,7 +940,7 @@ export default function LibraryScreen() {
       if (!show) singles.push(track);
       else episodes.set(show.feedUrl, [...(episodes.get(show.feedUrl) ?? []), track]);
     }
-    const asked = query.trim().toLocaleLowerCase();
+    const asked = searched.trim().toLocaleLowerCase();
     const shows = followed.filter((show) => !asked || episodes.has(show.feedUrl) || show.title.toLocaleLowerCase().includes(asked));
     // When any of [tracks] was last listened to, and when the newest of them came: what the orders go by.
     const heardAt = (tracks: readonly EnrichedTrack[]) => tracks.reduce((latest, track) => Math.max(latest, places.get(track.id)?.at ?? 0), 0);
@@ -726,7 +1033,7 @@ export default function LibraryScreen() {
       ...part.units.flatMap((unit) => unit.rows),
     ]);
     return { rows, counts, shown };
-  }, [expanded, followed, places, query, seenTapes, t, tapeFilter, tapeResults, tapeSort]);
+  }, [expanded, followed, places, searched, seenTapes, t, tapeFilter, tapeResults, tapeSort]);
   const tapeRows = tapeView.rows;
   const chooseTapeFilter = useCallback((next: TapeFilter) => {
     haptic('choices', 'click');
@@ -765,15 +1072,23 @@ export default function LibraryScreen() {
       </ScrollView>
     ) : null;
   const allTapesRef = useRef(allTapes);
-  allTapesRef.current = allTapes;
 
   // Read at press time, as the results are below, so the handlers every row is
   // given stay the same functions across a search or a change of order.
   const headingsRef = useRef(shownHeadings);
-  headingsRef.current = shownHeadings;
   // And the view, for the same reason: the lists of every view opened are standing, and given the same handlers.
   const viewRef = useRef(view);
-  viewRef.current = view;
+  /*
+    Brought up to date as each drawing is put on the screen, before anything
+    on it can be pressed: written while drawing, as they were, they kept the
+    React Compiler off this whole screen, and every drawing of it drew every
+    part of it again.
+  */
+  useLayoutEffect(() => {
+    allTapesRef.current = allTapes;
+    headingsRef.current = shownHeadings;
+    viewRef.current = view;
+  });
 
   /*
     A tap opens the heading, and while tracks are being chosen it chooses the
@@ -784,6 +1099,17 @@ export default function LibraryScreen() {
   */
   const onHeadingPress = useCallback(
     (id: string) => {
+      /*
+        Sideways a record opens as it does from the rack, over the library and
+        beside the tabs, and not as a screen of its own over all of it: the
+        same record the same way, whichever way the albums are shown.
+      */
+      const record = !selecting && landscape && viewRef.current === 'albums' ? records.find((each) => each.key === id) : undefined;
+      if (record) {
+        Keyboard.dismiss();
+        setOpened({ album: record, sleeve: null });
+        return;
+      }
       if (!selecting) {
         router.push({
           pathname: '/playlist',
@@ -799,7 +1125,7 @@ export default function LibraryScreen() {
       const under = headingsRef.current.find((heading) => heading.id === id)?.tracks;
       if (under) setSelected((held) => withGroupToggled(held, under));
     },
-    [router, selecting]
+    [landscape, records, router, selecting]
   );
 
   const chooseUnder = useCallback((id: string) => {
@@ -818,6 +1144,7 @@ export default function LibraryScreen() {
   const [albumMenu, setAlbumMenu] = useState<{
     key: string;
     name: string;
+    by?: string | null;
     detail: string;
     covers: readonly EnrichedTrack[];
     /** Held in the rack, where there is nothing to choose with. */
@@ -832,7 +1159,7 @@ export default function LibraryScreen() {
       if (viewRef.current !== 'albums' || selecting) return chooseUnder(id);
       const heading = headingsRef.current.find((entry) => entry.id === id);
       if (heading) {
-        setAlbumMenu({ key: id, name: heading.title, detail: heading.detail, covers: heading.cover, racked: false });
+        setAlbumMenu({ key: id, name: heading.title, by: heading.by, detail: heading.detail, covers: heading.cover, racked: false });
       }
     },
     [chooseUnder, selecting]
@@ -843,7 +1170,8 @@ export default function LibraryScreen() {
       setAlbumMenu({
         key: album.key,
         name: album.name,
-        detail: [album.artist, t.common.tracks(album.tracks.length)].filter(Boolean).join(' · '),
+        by: album.artist,
+        detail: t.common.tracks(album.tracks.length),
         covers: album.tracks,
         racked: true,
       }),
@@ -861,6 +1189,10 @@ export default function LibraryScreen() {
     if (key == null) return;
     if (action === 'select') return chooseUnder(key);
     if (action === 'rest') return findRest(key);
+    if (action === 'setAside' || action === 'bringBack') {
+      haptic('results', action === 'setAside' ? 'confirm' : 'toggleOff');
+      return setAside('album', key, action === 'setAside');
+    }
 
     // The whole record, and not the part of it a search has narrowed the
     // list to: what is looked up or given a cover is the record.
@@ -875,7 +1207,10 @@ export default function LibraryScreen() {
     else {
       chooseRecordCover(record).then(
         (chosen) => {
-          if (chosen != null) say(t.library.albumTools.coverChosen(chosen));
+          if (chosen != null) {
+            forgetAlbumColour(record.key);
+            say(t.library.albumTools.coverChosen(chosen));
+          }
         },
         (error: unknown) => say(error instanceof Error ? error.message : t.common.pictureFailed)
       );
@@ -889,25 +1224,39 @@ export default function LibraryScreen() {
     row whose answer has not changed is not drawn again; one tick redraws the
     row ticked and any other row sharing a track with it.
   */
+  // And the one in front too, while the library's tab is not the one open.
+  const tabOpen = useTabOpen();
+  useEffect(() => {
+    if (tabOpen && keptColumns[view] !== columns) setKeptColumns((kept) => ({ ...kept, [view]: columns }));
+  }, [columns, keptColumns, tabOpen, view]);
+  // A view not yet brought to the front keeps what the screen was first drawn with.
+  const [firstColumns] = useState(columns);
+  const columnsOf = (kind: LibraryView) => (kind === view && tabOpen ? columns : (keptColumns[kind] ?? firstColumns));
+  const sharedAlbums = columnsOf('albums') > 1;
+  const sharedArtists = columnsOf('artists') > 1;
+  const sharedFolders = columnsOf('folders') > 1;
+  const tracksColumns = columnsOf('tracks');
+
   // One for each view's list, so that changing view gives none of them a new one to draw its rows again with.
   const renderHeadingOf = useMemo(() => {
-    const rowsOf = (records: boolean) =>
+    const rowsOf = (records: boolean, shared: boolean) =>
       ({ item }: { item: Heading }) => (
         <BrowseRow
           id={item.id}
           title={item.title}
+          by={item.by}
           detail={item.detail}
           tracks={item.tracks}
           cover={item.cover}
-          shared={columns > 1}
+          shared={shared}
           mark={selecting ? markOf(item.tracks, selected) : undefined}
           held={records ? t.library.albumMenu : undefined}
           onPress={onHeadingPress}
           onLongPress={onHeadingHeld}
         />
       );
-    return { albums: rowsOf(true), artists: rowsOf(false), folders: rowsOf(false) };
-  }, [columns, onHeadingHeld, onHeadingPress, selected, selecting, t]);
+    return { albums: rowsOf(true, sharedAlbums), artists: rowsOf(false, sharedArtists), folders: rowsOf(false, sharedFolders) };
+  }, [onHeadingHeld, onHeadingPress, selected, selecting, sharedAlbums, sharedArtists, sharedFolders, t]);
 
   /** Each matched tag with the tracks carrying it, gathered once per search. */
   const tagShuffles = useMemo(
@@ -921,8 +1270,10 @@ export default function LibraryScreen() {
 
   // Read at press time rather than closed over, so the row handlers below stay
   // the same functions across a search that changes what is on screen.
-  const resultsRef = useRef(results);
-  resultsRef.current = results;
+  const resultsRef = useRef(listed);
+  useLayoutEffect(() => {
+    resultsRef.current = listed;
+  });
 
   const start = useCallback(
     async (tracks: EnrichedTrack[], index: number) => {
@@ -958,6 +1309,21 @@ export default function LibraryScreen() {
     },
     []
   );
+
+  /*
+    The rack made again, at the record it was on, when its order changes --
+    another order chosen, or the colours of the covers come in: otherwise it
+    would stay where it was by number, in front of some other record.
+  */
+  const rackOrder = `${rackSort}:${byColours ? albumColours.size : 0}`;
+  const rackIndex = useMemo(() => Math.max(0, rackAlbums.findIndex((album) => album.key === rackKey)), [rackAlbums, rackKey]);
+  const settleRack = useCallback((index: number) => setRackKey(rackAlbums[index]?.key ?? null), [rackAlbums]);
+  /*
+    Upright the rack is as tall as it needs to be for sleeves the width
+    allows, and never more than some two fifths of the screen: what is under
+    it is the record's tracks.
+  */
+  const rackTall = Math.round(Math.min(screenSize.height * 0.42, screenSize.width * 0.74));
 
   const openAlbum = useCallback(
     (album: Album, where: Sleeve) =>
@@ -1063,10 +1429,9 @@ export default function LibraryScreen() {
     setSelected(new Set());
   }, []);
   // Back ends a selection, as the button that began it would, rather than leaving the app with it.
-  const focused = useIsFocused();
-  useBack(selecting && focused, stopSelecting);
+  useBackInFront(selecting, stopSelecting);
   // And empties a search typed into the list: the keyboard is closed by the first press, the words by the next.
-  useBack(query !== '' && focused, () => setQuery(''));
+  useBackInFront(query !== '', () => setQuery(''));
 
   /*
     Asks for the library to be looked at again, and reads what this screen
@@ -1076,28 +1441,16 @@ export default function LibraryScreen() {
   */
   const load = useCallback(async (force = false) => {
     await refreshLibrary(force);
-    try {
-      // With the library and not once: a lookup made on another screen may
-      // have settled whether a credit is one artist or two.
-      const reader = creditReader();
-      setNamesOn(() => reader);
-      // Re-read with the library rather than once, so a track played on another
-      // screen and then returned from has moved by the time the list is seen
-      // again — which is the whole point of ordering by it.
-      // Kept as the maps they were when they say what they said: the list is
-      // put in order again for a new one, and a visit on which nothing was
-      // played in between should cost no more than the asking.
-      const latest = lastPlayedAt();
-      setPlayed((before) => keepMap(before, latest));
-      const listens = new Map<string, number>();
-      for (const [id, count] of playCounts()) listens.set(id, count.plays);
-      setCounts((before) => keepMap(before, listens));
-    } catch (error) {
-      // The list is on screen either way. What could not be read is what it
-      // is ordered and credited by, and that is asked for again on the next
-      // visit.
-      console.warn('The listening history could not be read for the library.', error);
-    }
+    const read = readListening();
+    if (!read) return;
+    // With the library and not once: a lookup made on another screen may have
+    // settled whether a credit is one artist or two.
+    setNamesOn(() => read.reader);
+    // Kept as the maps they were when they say what they said: the list is put
+    // in order again for a new one, and a visit on which nothing was played in
+    // between should cost no more than the asking.
+    setPlayed((before) => keepMap(before, read.latest));
+    setCounts((before) => keepMap(before, read.listens));
   }, []);
 
   /*
@@ -1133,6 +1486,25 @@ export default function LibraryScreen() {
     (track: EnrichedTrack) => openMenu(track, WITHOUT_ALBUM),
     [openMenu]
   );
+  /*
+    What the walls of covers are handed, kept the same from one drawing of
+    this screen to the next. Made afresh each time, as they were, they had
+    every wall -- every size of every view, standing behind its list -- lay
+    out its rows again and draw each of them anew whenever anything here
+    changed, the view chosen with it: a change of view waited a third of a
+    second on walls nobody was looking at.
+  */
+  const wallOf = useMemo(() => {
+    const of = (kind: (typeof GROUPED_VIEWS)[number]) => ({
+      labelOf: (heading: Heading) => headingLabel(kind, heading),
+      onPress: (heading: Heading) => onHeadingPress(heading.id),
+      onLongPress: (heading: Heading) => onHeadingHeld(heading.id),
+    });
+    return { albums: of('albums'), artists: of('artists'), folders: of('folders') };
+  }, [headingLabel, onHeadingHeld, onHeadingPress]);
+  const wallTrackLongPress = useCallback((track: EnrichedTrack) => openMenu(track), [openMenu]);
+  // What a tap on the row plays, as chosen in Settings, not always the list from there.
+  const wallTrackPress = useCallback((_track: EnrichedTrack, index: number) => void tap(listed, index, 'tracks'), [listed, tap]);
   // A row held and slid from, with the finger never lifted: see `pressMenu.ts`. On a record's own page, without the way to it.
   const ring = useTrackRing({ open: openMenu, run: runMenu });
   const albumRing = useTrackRing({ open: openMenu, run: runMenu }, WITHOUT_ALBUM);
@@ -1194,7 +1566,7 @@ export default function LibraryScreen() {
     switch away — and rotating mid-search would otherwise strand it.
   */
   const aside = searching && !landscape;
-  const reveal = useRef(new Animated.Value(1)).current;
+  const [reveal] = useState(() => new Animated.Value(1));
   useEffect(() => {
     // Straight there where the decoration is to hold still.
     if (motionReduced()) {
@@ -1217,9 +1589,11 @@ export default function LibraryScreen() {
     measures. The gap to the search box is animated with it — left behind, it
     is ten points of nothing where the switch used to be.
   */
+  // The switch and, where any view has another look, the view button beside it, as wide as the sort and a gap away.
+  const slotWidth = viewsWidth + (offered.some(lookable) ? SORT_WIDTH + 6 : 0);
   const slot = viewsWidth
     ? {
-        width: reveal.interpolate({ inputRange: [0, 1], outputRange: [0, viewsWidth] }),
+        width: reveal.interpolate({ inputRange: [0, 1], outputRange: [0, slotWidth] }),
         marginRight: reveal.interpolate({ inputRange: [0, 1], outputRange: [0, 10] }),
         opacity: reveal,
       }
@@ -1253,7 +1627,7 @@ export default function LibraryScreen() {
   const renderItem = useCallback(
     ({ item }: { item: EnrichedTrack }) => (
       <SwipeRow
-        style={columns > 1 ? styles.swipeShared : undefined}
+        style={tracksColumns > 1 ? styles.swipeShared : undefined}
         enabled={!selecting}
         left={{
           label: t.library.screen.swipePlayNext,
@@ -1285,7 +1659,7 @@ export default function LibraryScreen() {
         </PressRing>
       </SwipeRow>
     ),
-    [addToQueue, c, columns, onRowPress, openMenu, playNext, playNextTrack, queueTrack, ring, selected, selecting, styles, t, toggleSelected]
+    [addToQueue, c, tracksColumns, onRowPress, openMenu, playNext, playNextTrack, queueTrack, ring, selected, selecting, styles, t, toggleSelected]
   );
 
   const expandSeries = useCallback((show: SeriesShow) => {
@@ -1385,16 +1759,117 @@ export default function LibraryScreen() {
     the whole library to record a number only the list itself reads back.
   */
   const restoreTo = useRef(0);
-  const tracksStart = useStartingOffset(columns, () => restoreTo.current);
+  const tracksStart = useStartingOffset(tracksColumns, () => restoreTo.current);
 
-  const drag = useDragSelect({
-    ids: useMemo(() => results.map((track) => track.id), [results]),
+  /*
+    Each view's list, and how far down the ones other than the tracks' were
+    when they last came to rest: for the tab pressed again, which takes the
+    one in front back to its top. Noted where a scroll ends rather than at
+    every step of it, as nothing else needs it.
+  */
+  const lists = useRef<Partial<Record<LibraryView, Scrolls | null>>>({});
+  const restedAt = useRef<Partial<Record<LibraryView, number>>>({});
+  // Each view's stack of list and walls, for a wall on screen to be taken back to its top.
+  const stacks = useRef<Partial<Record<ZoomedView, StackApi>>>({});
+  // The artists' map's step back toward the whole of it: see `ArtistMap`.
+  const mapBack = useRef<(() => boolean) | null>(null);
+  const registerMap = useCallback((back: () => boolean) => {
+    mapBack.current = back;
+  }, []);
+  const shuffleMap = useCallback((tracks: EnrichedTrack[]) => void start(spreadShuffle(tracks, artistKey), 0), [start]);
+  const searchBox = useRef<SearchBox>(null);
+  const tracksList = useCallback(
+    (list: Scrolls | null) => {
+      tracksStart.ref(list);
+      lists.current.tracks = list;
+    },
+    [tracksStart]
+  );
+  const listOf = useMemo(() => {
+    const refs: Partial<Record<LibraryView, (list: Scrolls | null) => void>> = {};
+    const ends: Partial<Record<LibraryView, Omit<typeof followsScrolling, keyof ScrollEnds> & ScrollEnds>> = {};
+    for (const kind of [...GROUPED_VIEWS, 'tapes'] as const) {
+      refs[kind] = (list) => {
+        lists.current[kind] = list;
+      };
+      const rest = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+        restedAt.current[kind] = event.nativeEvent.contentOffset.y;
+      };
+      ends[kind] = {
+        ...followsScrolling,
+        onScrollEndDrag: (event) => {
+          followsScrolling.onScrollEndDrag();
+          rest(event);
+        },
+        onMomentumScrollEnd: (event) => {
+          followsScrolling.onMomentumScrollEnd();
+          rest(event);
+        },
+      };
+    }
+    return { refs, ends };
+  }, []);
+
+  /*
+    The tab pressed again, a step back toward the start at each press: out of
+    choosing, the record taken out put back, the list in front to its top,
+    the search cleared, and then to the first of the views on offer -- the
+    tracks, unless they are switched off -- and from there on to each of the
+    others in turn and round again. Not into the search box, which it once
+    ended in: the keyboard coming up for a press of the tab was not what
+    anybody pressing it was after.
+  */
+  // The view a press of the tab last went to, so that the next goes on from it rather than back to the first.
+  const cycledTo = useRef<LibraryView | null>(null);
+  useTabReselect(() => {
+    if (selecting) return stopSelecting();
+    if (opened) return closeAlbum();
+    // Seen from further off, the rack is brought back near first.
+    if (racked && shelf.current?.nearer()) return;
+    // The wall of covers in front, where one is, rather than the list put away behind it.
+    const walled = view === 'tracks' ? trackLook !== 'shelves' && zooms.tracks > 0 : view !== 'tapes' && zooms[view] > 0;
+    if (racked) {
+      if (shelf.current?.toStart()) return;
+    } else if (view === 'artists' && artistMap) {
+      // The map as a whole again, and nobody chosen on it.
+      if (mapBack.current?.()) return;
+    } else if (walled) {
+      if (stacks.current[view as ZoomedView]?.toTop()) return;
+    } else {
+      const at = view === 'tracks' ? restoreTo.current : (restedAt.current[view] ?? 0);
+      if (backToTop(lists.current[view], at, Dimensions.get('window').height)) {
+        if (view === 'tracks') restoreTo.current = 0;
+        else restedAt.current[view] = 0;
+        return;
+      }
+    }
+    if (query) return setQuery('');
+    if (offered.length < 2) return;
+    const at = offered.indexOf(view);
+    const next = view !== offered[0] && cycledTo.current !== view ? offered[0] : offered[(at + 1) % offered.length];
+    if (!next) return;
+    cycledTo.current = next;
+    chooseView(next);
+  });
+
+  // Taken apart here, each by itself: read off the one object, everything on it was taken for a ref.
+  const { wrapperRef: dragWrapper, onWrapperLayout: onDragLayout, panHandlers: dragHandlers, onScroll: dragScroll, onWidth: dragWidth } = useDragSelect({
+    ids: useMemo(() => listed.map((track) => track.id), [listed]),
     rowHeight: trackRowHeight,
-    columns,
+    columns: tracksColumns,
     enabled: selecting,
     selected,
     onChange: setSelected,
     top: topRoom,
+  });
+  // What the tracks' list does at each step it scrolls besides moving its scroll bar: see `onScroll` on it.
+  useEffect(() => {
+    fastTracks.also((event) => {
+      const y = event.nativeEvent.contentOffset.y;
+      restoreTo.current = y;
+      dragScroll(y);
+    });
+    return () => fastTracks.also(null);
   });
 
 
@@ -1413,8 +1888,8 @@ export default function LibraryScreen() {
         ? NOTHING_SHOWN
         : grouped
           ? tracksUnder(shownHeadings)
-          : new Set((view === 'tapes' ? tapeResults : results).map((track) => track.id)),
-    [grouped, results, selecting, shownHeadings, tapeResults, view]
+          : new Set((view === 'tapes' ? tapeResults : listed).map((track) => track.id)),
+    [grouped, listed, selecting, shownHeadings, tapeResults, view]
   );
   const allChosen = useMemo(() => holdsAll(selected, shown), [selected, shown]);
   const selectAll = useCallback(() => setSelected(new Set(shown)), [shown]);
@@ -1474,10 +1949,16 @@ export default function LibraryScreen() {
     sayRuns: true,
   });
 
-  // Re-read on focus so metadata gathered on the other screen shows up here.
+  /*
+    Re-read on focus so metadata gathered on the other screen shows up here:
+    after the tab is on the screen rather than before. Asked in the same
+    stroke as the tab was opened, the phone held the tab back until the
+    asking was done.
+  */
   useFocusEffect(
     useCallback(() => {
-      void load();
+      const later = setTimeout(() => void load(), 0);
+      return () => clearTimeout(later);
     }, [load, downloadRevision])
   );
 
@@ -1524,6 +2005,54 @@ export default function LibraryScreen() {
     the lesser of the two — which it still is, and is only paid once there are
     more views on offer than fit beside the box; see `stacked`.
   */
+  // Over the tracks, in the look that has them, while nothing is searched or chosen.
+  /*
+    What the walls ask of the lists they pinch out of: which entry is at a
+    point of the list, and the list scrolled to put one there. Worked out
+    from the rows' fixed height, as the lists lay themselves out.
+  */
+  const trackListApi: LevelApi = {
+    entryAt: (x, y) => {
+      const row = Math.floor((fastTracks.offset.get() + y - topRoom - headerHeight) / trackRowHeight);
+      const column = tracksColumns > 1 ? Math.min(tracksColumns - 1, Math.floor(x / (screenSize.width / tracksColumns))) : 0;
+      return Math.max(0, Math.min(listed.length - 1, row * tracksColumns + column));
+    },
+    bring: (entry, y) => {
+      const offset = Math.max(0, topRoom + headerHeight + Math.floor(entry / tracksColumns) * trackRowHeight + trackRowHeight / 2 - y);
+      lists.current.tracks?.scrollToOffset({ offset, animated: false });
+      restoreTo.current = offset;
+      fastTracks.offset.set(offset);
+    },
+    // The row's cover, as `TrackRow` lays it out: its own size, at the row's left, in the middle of its height.
+    rectOf: (entry) => ({
+      x: (entry % tracksColumns) * (screenSize.width / tracksColumns) + ROW_SIDE,
+      y: topRoom + headerHeight + Math.floor(entry / tracksColumns) * trackRowHeight + (trackRowHeight - ROW_COVER) / 2 - fastTracks.offset.get(),
+      w: ROW_COVER,
+    }),
+  };
+  const headingListApi = (kind: (typeof GROUPED_VIEWS)[number]): LevelApi => ({
+    entryAt: (x, y) => {
+      const row = Math.floor((fastOf[kind].offset.get() + y - topRoom) / browseRowHeight);
+      const column = columnsOf(kind) > 1 ? Math.min(columnsOf(kind) - 1, Math.floor(x / (screenSize.width / columnsOf(kind)))) : 0;
+      return Math.max(0, Math.min(headingsOf[kind].length - 1, row * columnsOf(kind) + column));
+    },
+    bring: (entry, y) => {
+      const offset = Math.max(0, topRoom + Math.floor(entry / columnsOf(kind)) * browseRowHeight + browseRowHeight / 2 - y);
+      lists.current[kind]?.scrollToOffset({ offset, animated: false });
+      restedAt.current[kind] = offset;
+      fastOf[kind].offset.set(offset);
+    },
+    // As `BrowseRow` lays its picture out, the same as `TrackRow`'s.
+    rectOf: (entry) => ({
+      x: (entry % columnsOf(kind)) * (screenSize.width / columnsOf(kind)) + ROW_SIDE,
+      y: topRoom + Math.floor(entry / columnsOf(kind)) * browseRowHeight + (browseRowHeight - ROW_COVER) / 2 - fastOf[kind].offset.get(),
+      w: ROW_COVER,
+    }),
+  });
+  const shelves =
+    trackLook === 'shelves' && !asked && !selecting ? (
+      <Shelves tracks={listed} counts={counts} played={played} onPlay={playFrom} onHold={openMenu} />
+    ) : null;
   const views = (
     <Segmented
       role="tab"
@@ -1531,7 +2060,7 @@ export default function LibraryScreen() {
       accessibilityLabel={t.library.screen.viewSwitch}
       // On a row of its own, the views share the width evenly instead of each taking what its word needs.
       layout={stacked ? 'fill' : 'fit'}
-      style={!stacked && viewsWidth ? { width: viewsWidth } : null}
+      style={[styles.views, !stacked && viewsWidth ? { width: viewsWidth } : null]}
       optionStyle={!stacked && offered.length > 2 ? styles.viewTight : null}
       // Only beside the box is there a width worth knowing: on a row of its
       // own the switch is as wide as the screen and is never moved aside.
@@ -1539,10 +2068,33 @@ export default function LibraryScreen() {
       options={offered.map((candidate) => ({ value: candidate, label: t.library.views[candidate] }))}
       value={chosenView}
       onChange={chooseView}
+      onPressIn={setWarmView}
+      onPressOut={coolViews}
     />
   );
   // A switch with one position is not a choice, and is not drawn.
   const switchable = offered.length > 1;
+  /*
+    Beside the switch, how the view chosen is drawn: the word over it, as
+    the order has, and a picture of its look under it; pressed, its other
+    look. Standing, dimmed, over a view that has only the one, so that the
+    switch does not change width from one view to the next.
+  */
+  const canLook = lookable(view) && !selecting;
+  const lookButton = offered.some(lookable) ? (
+    <Pressable
+      android_ripple={canLook ? pressed : undefined}
+      accessibilityRole="button"
+      accessibilityLabel={canLook ? `${t.library.screen.view}: ${t.library.screen.looks[lookOf(view)]}` : t.library.screen.view}
+      accessibilityHint={canLook ? t.library.screen.lookSwitch : undefined}
+      accessibilityState={{ disabled: !canLook }}
+      disabled={!canLook}
+      style={[styles.sort, styles.lookButton, !canLook && styles.lookOff]}
+      onPress={stepLook}>
+      <Text style={styles.sortLabel}>{t.format.upper(t.library.screen.view)}</Text>
+      <LookIcon look={canLook ? lookOf(view) : 'list'} size={15} color={c.text} />
+    </Pressable>
+  ) : null;
 
   return (
     <SafeAreaView
@@ -1573,7 +2125,12 @@ export default function LibraryScreen() {
           // Asked where it is when a record opens, so it has to be a view of
           // its own to be found.
           collapsable={false}
-          style={styles.middle}>
+          /*
+            Sideways, kept to itself: put out of focus under an open record, it
+            spread past its own edge by as far as it was blurred, and a dark band
+            of it showed down the side of the panel of what is playing.
+          */
+          style={[styles.middle, landscape && styles.middleKept]}>
         {/*
           Everything a record opens over. While one is open none of it is
           there to be touched or read out: it is covered, and a screen reader
@@ -1597,9 +2154,14 @@ export default function LibraryScreen() {
           over && styles.headerOver,
           frosted && styles.headerClear,
         ]}
-        onLayout={top.onLayout}>
+        onLayout={over ? measureTop : undefined}>
         {frosted && target ? <Frost target={target} edge="bottom" /> : null}
-        {switchable && stacked ? views : null}
+        {switchable && stacked ? (
+          <View style={styles.viewsRow}>
+            <View style={styles.viewsGrow}>{views}</View>
+            {lookButton}
+          </View>
+        ) : null}
         <View style={styles.headerRow}>
         {/*
           Pulled aside while the box is being typed in, and put back when it is
@@ -1609,16 +2171,23 @@ export default function LibraryScreen() {
           not about to be pressed.
         */}
         {switchable && !stacked ? (
-          <Animated.View style={[styles.viewsSlot, slot]}>{views}</Animated.View>
+          <Animated.View style={[styles.viewsSlot, slot]}>
+            <View style={styles.viewsRow}>
+              {views}
+              {lookButton}
+            </View>
+          </Animated.View>
         ) : null}
         <View style={[styles.searchRow, styles.searchGrow]}>
           <View style={styles.searchGrow}>
             <SearchField
+              ref={searchBox}
               value={query}
               onChangeText={setQuery}
               onFocus={() => setSearching(true)}
               onBlur={() => setSearching(false)}
               placeholder={t.library.screen.searchHints[view]}
+              height={CONTROL_HEIGHT}
             />
           </View>
           {/*
@@ -1814,7 +2383,7 @@ export default function LibraryScreen() {
                     ? `${libraryRoot()} · ${t.library.screen.folders(shownHeadings.length)}`
                     : view === 'tapes'
                       ? t.library.tapes.count(tapeResults.length)
-                      : `${libraryRoot()} · ${t.common.tracks(music.length)}`)}
+                      : `${libraryRoot()} · ${t.common.tracks(music.length - asideCount)}`)}
           </Text>
           {/*
             The whole library, in a new order, from the line that says how
@@ -1823,15 +2392,28 @@ export default function LibraryScreen() {
             something else, and this is not what a tap there would mean.
           */}
           {view === 'tracks' && note == null && !selecting && music.length > 1 ? (
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              hitSlop={8}
-              style={styles.shuffleAll}
-              onPress={shuffleAll}>
-              <ShuffleIcon size={15} color={c.accent} />
-              <Text style={styles.shuffleAllLabel}>{t.library.screen.shuffleAll}</Text>
-            </Pressable>
+            <PressList menu={shuffleMenu}>
+              <Pressable
+                android_ripple={pressed}
+                accessibilityRole="button"
+                accessibilityLabel={shuffleWords.spoken}
+                accessibilityHint={t.library.shuffle.note}
+                hitSlop={8}
+                style={styles.shuffleAll}
+                onPress={shuffleAll}>
+                <ShuffleIcon size={15} color={c.accent} />
+                {shuffleWords.shown ? (
+                  <Text style={[styles.shuffleAllLabel, styles.shuffleNamed]} numberOfLines={1}>
+                    {shuffleWords.shown}
+                  </Text>
+                ) : (
+                  // As tall as with words, so that the line it is on does not move when they go.
+                  <Text style={[styles.shuffleAllLabel, styles.shuffleStrut]} importantForAccessibility="no">
+                    {' '}
+                  </Text>
+                )}
+              </Pressable>
+            </PressList>
           ) : view === 'tapes' && note == null && !selecting ? (
             <View style={styles.tapeActions}>
               {/* Every place marked in a tape, once there is one. */}
@@ -1886,11 +2468,19 @@ export default function LibraryScreen() {
         {selecting ? null : <WrongDownloadsLine confirmed={screen.confirmed} />}
       </View>
 
-      {/* What scrolls under the search and the bar of what is playing, which blur it: see `Frosted`. */}
+      {/*
+        What scrolls under the search and the bar of what is playing, which blur
+        it: see `Frosted`. Not the rack, which goes under neither, and which
+        kept for them was drawn twice over with every frame it moved.
+      */}
+      <View style={styles.listArea}>
+      {/*
+        The views' lists left standing under the rack, shut, rather than taken
+        down: put up again whole each time the albums were left, they made
+        every change of view to and from the rack a hitch.
+      */}
+      <Curtain shut={racked} warm={LIBRARY_VIEWS.some((candidate) => candidate !== 'albums' && warming(candidate))} style={styles.pane}>
       <BlurArea style={styles.listArea}>
-      {racked ? (
-        <CoverFlow ref={shelf} albums={albums} onOpen={openAlbum} onHold={onSleeveHeld} />
-      ) : (
         <>
           {/*
             Every view opened so far, standing, the one chosen on top and the
@@ -1900,29 +2490,56 @@ export default function LibraryScreen() {
             library the more. Each keeps its place, too.
           */}
           {GROUPED_VIEWS.filter((kind) => visited.has(kind)).map((kind) => (
-            <View
-              key={kind}
-              // Kept a real view: its style, touch and reading change with the view, and a view flattened away while
-              // they do is the "addViewAt" crash Fabric has had here before.
-              collapsable={false}
-              style={kind === view ? styles.paneShown : styles.paneHidden}
-              pointerEvents={kind === view ? 'auto' : 'none'}
-              importantForAccessibility={kind === view ? 'auto' : 'no-hide-descendants'}>
-              <FlatList
+            <Curtain key={kind} shut={kind !== view || (kind === 'albums' && racked)} warm={warming(kind)} style={styles.pane}>
+              {kind === 'artists' && artistMap && !selecting ? (
+                <ArtistMap
+                  register={registerMap}
+                  artists={artists}
+                  query={query}
+                  top={topRoom}
+                  bottom={under.bottom}
+                  onOpen={onHeadingPress}
+                  onShuffle={shuffleMap}
+                />
+              ) : (
+              /*
+                The list and the wall of covers it pinches out into, one over
+                the other and pinched between as a gallery is: see `ZoomStack`.
+              */
+              <ZoomStack
+                zoom={selecting ? 0 : zooms[kind]}
+                onZoom={(level) => setZoom(kind, level)}
+                enabled={!selecting}
+                listApi={headingListApi(kind)}
+                register={(api) => {
+                  stacks.current[kind] = api;
+                }}
+                list={
+              <View collapsable={false} style={styles.paneShown}>
+              <Animated.FlatList
                         removeClippedSubviews={CLIP_SUBVIEWS}
+                {...ROWS_KEPT}
                 data={headingsOf[kind]}
-                {...followsScrolling}
+                {...listOf.ends[kind]}
+                ref={listOf.refs[kind]}
+                // Where the scroll bar stands is followed from here natively: see `FastScroll`.
+                onScroll={fastOf[kind].onScrollEvent}
+                // The scroll bar beside it is the one: the list's own as well was two, never quite together.
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onLayout={fastOf[kind].onLayout}
+                onContentSizeChange={fastOf[kind].onContentSizeChange}
                 // Remounted when the columns change, which React Native will not alter on a list that is up.
-                key={columns}
-                numColumns={columns}
-                columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
+                key={columnsOf(kind)}
+                numColumns={columnsOf(kind)}
+                columnWrapperStyle={columnsOf(kind) > 1 ? styles.columnRow : undefined}
                 keyExtractor={(heading) => heading.id}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
                 // Exact with one column and left to be measured with two, for the
                 // reason given at length on the track list below.
                 getItemLayout={
-                  columns > 1
+                  columnsOf(kind) > 1
                     ? undefined
                     : (_data, index) => ({
                         length: browseRowHeight,
@@ -1930,61 +2547,102 @@ export default function LibraryScreen() {
                         index,
                       })
                 }
-                initialNumToRender={12 * columns}
+                initialNumToRender={12 * columnsOf(kind)}
                 windowSize={7}
                 renderItem={renderHeadingOf[kind]}
                 ListFooterComponent={searchElsewhere}
-                ListEmptyComponent={
-                  kind === 'albums' ? (
-                    <Text style={styles.muted}>{t.library.noAlbums}</Text>
-                  ) : (
-                    <Text style={styles.empty}>
-                      {query.trim()
-                        ? t.library.nothingMatches(query)
-                        : t.library.screen.noFolders}
-                    </Text>
-                  )
-                }
+                ListEmptyComponent={headingsEmpty(kind)}
               />
-            </View>
+              <FastScroller
+                fast={fastOf[kind]}
+                count={Math.ceil(headingsOf[kind].length / columnsOf(kind))}
+                labelAt={(index) => {
+                  const heading = headingsOf[kind][index * columnsOf(kind)];
+                  return heading ? headingLabel(kind, heading) : '';
+                }}
+                coverAt={(index) => headingsOf[kind][index * columnsOf(kind)]?.cover[0]}
+                // Noted as where the list rests, as a scroll by the finger is when it ends: the tab pressed again goes back to the top from there.
+                scrollTo={(offset) => {
+                  restedAt.current[kind] = offset;
+                  lists.current[kind]?.scrollToOffset({ offset, animated: false });
+                }}
+                indexAt={(offset) => offset / browseRowHeight}
+                top={topRoom}
+                bottom={under.bottom}
+              />
+              </View>
+                }
+                items={headingsOf[kind]}
+                keyOf={headingKey}
+                titleOf={headingTitle}
+                detailOf={kind === 'albums' ? headingBy : undefined}
+                labelOf={wallOf[kind].labelOf}
+                renderCover={headingCover}
+                sleeveOf={headingSleeve}
+                footer={searchElsewhere}
+                empty={headingsEmpty(kind)}
+                top={topRoom}
+                bottom={under.bottom}
+                onPress={wallOf[kind].onPress}
+                onLongPress={wallOf[kind].onLongPress}
+              />
+              )}
+            </Curtain>
           ))}
           {visited.has('tracks') ? (
-            <View
-              collapsable={false}
-              style={view !== 'tracks' ? styles.paneHidden : styles.paneShown}
-              pointerEvents={view !== 'tracks' ? 'none' : 'auto'}
-              importantForAccessibility={view !== 'tracks' ? 'no-hide-descendants' : 'auto'}>
+            <Curtain shut={view !== 'tracks'} warm={warming('tracks')} style={styles.pane}>
+              {/*
+                The list and its wall of covers, pinched between as a gallery
+                is, as for the records, the artists and the folders above;
+                not under the shelves, which are covers enough, and where a
+                wall over them was more muddle than help.
+              */}
+              <ZoomStack
+                zoom={selecting || trackLook === 'shelves' ? 0 : zooms.tracks}
+                onZoom={(level) => setZoom('tracks', level)}
+                enabled={!selecting && trackLook !== 'shelves'}
+                listApi={trackListApi}
+                register={(api) => {
+                  stacks.current.tracks = api;
+                }}
+                list={
+              <View collapsable={false} style={styles.paneShown}>
               <View
                 style={styles.listWrapper}
-                ref={drag.wrapperRef}
+                ref={dragWrapper}
                 // Page coordinates are what a gesture reports, so where the list sits
                 // in the window is needed to turn one into a row and a column.
-                onLayout={drag.onWrapperLayout}
-                {...drag.panHandlers}>
-              <FlatList
+                onLayout={onDragLayout}
+                {...dragHandlers}>
+              <Animated.FlatList
                       removeClippedSubviews={CLIP_SUBVIEWS}
-                data={results}
+                {...ROWS_KEPT}
+                data={listed}
                 {...followsScrolling}
-                onLayout={(event) => drag.onWidth(event.nativeEvent.layout.width)}
+                // The scroll bar beside it is the one: the list's own as well was two, never quite together.
+                showsVerticalScrollIndicator={false}
+                onLayout={(event) => {
+                  dragWidth(event.nativeEvent.layout.width);
+                  fastTracks.onLayout(event);
+                }}
+                onContentSizeChange={fastTracks.onContentSizeChange}
                 /*
                   Remounts the list when the count changes. React Native refuses to
                   alter numColumns on an existing list, and turning the phone is exactly
                   when it changes.
                 */
-                key={columns}
-                numColumns={columns}
-                columnWrapperStyle={columns > 1 ? styles.columnRow : undefined}
+                key={tracksColumns}
+                numColumns={tracksColumns}
+                columnWrapperStyle={tracksColumns > 1 ? styles.columnRow : undefined}
                 keyExtractor={(track) => track.id}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
-                onScroll={(event) => {
-                  restoreTo.current = event.nativeEvent.contentOffset.y;
-                  drag.onScroll(event.nativeEvent.contentOffset.y);
-                }}
+                // Where the scroll bar stands is followed from here natively, and the rest told as well: see `tracksScrolled`.
+                onScroll={fastTracks.onScrollEvent}
                 scrollEventThrottle={16}
                 // Covers the case the guard above cannot: the list being torn down while the screen
                 // around it lives on. What it is given stays put while the list does: see `startingOffset`.
-                ref={tracksStart.ref}
+                ref={tracksList}
                 contentOffset={tracksStart.contentOffset}
                 /*
                   Measured rather than calculated once there is more than one column.
@@ -2003,7 +2661,7 @@ export default function LibraryScreen() {
                   which is independent of this.
                 */
                 getItemLayout={
-                  columns > 1
+                  tracksColumns > 1
                     ? undefined
                     : (_data, index) => ({
                         length: trackRowHeight,
@@ -2012,14 +2670,14 @@ export default function LibraryScreen() {
                       })
                 }
                 // Covers are read out of the files, so keep that to what is on screen.
-                initialNumToRender={12 * columns}
+                initialNumToRender={12 * tracksColumns}
                 windowSize={7}
                 // Left to the list to measure, clipping guesses at what is off screen
                 // from the same frames, and guesses wrong in the same way.
                 ListHeaderComponent={
-                  <View
-                    style={tagShuffles.length > 0 || matchedAlbums.length > 0 ? styles.tagActions : null}
-                    onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+                  <View onLayout={(event) => setHeaderHeight(event.nativeEvent.layout.height)}>
+                  {shelves}
+                  <View style={tagShuffles.length > 0 || matchedAlbums.length > 0 ? styles.tagActions : null}>
                     {matchedAlbums.map((entry) => (
                       <Pressable
                         accessibilityRole="button"
@@ -2055,24 +2713,52 @@ export default function LibraryScreen() {
                       </Pressable>
                     ))}
                   </View>
+                  </View>
                 }
-                ListEmptyComponent={<Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>}
+                ListEmptyComponent={tracksEmpty}
                 ListFooterComponent={searchElsewhere}
                 renderItem={renderItem}
               />
               </View>
-            </View>
+              <FastScroller
+                fast={fastTracks}
+                count={Math.ceil(listed.length / tracksColumns)}
+                labelAt={(index) => {
+                  const track = listed[index * tracksColumns];
+                  return track ? sectionOf(track) : '';
+                }}
+                coverAt={(index) => listed[index * tracksColumns]}
+                scrollTo={(offset) => lists.current.tracks?.scrollToOffset({ offset, animated: false })}
+                indexAt={(offset) => Math.max(0, offset - headerHeight) / trackRowHeight}
+                top={topRoom}
+                bottom={under.bottom}
+              />
+              </View>
+                }
+                items={listed}
+                keyOf={trackKey}
+                titleOf={trackTitle}
+                detailOf={trackArtist}
+                sectionOf={sectionOf}
+                renderCover={trackCover}
+                sleeveOf={sameTrack}
+                footer={searchElsewhere}
+                empty={tracksEmpty}
+                top={topRoom}
+                bottom={under.bottom}
+                onPress={wallTrackPress}
+                onLongPress={wallTrackLongPress}
+              />
+            </Curtain>
           ) : null}
           {seenTapes ? (
-            <View
-              collapsable={false}
-              style={view === 'tapes' ? styles.paneShown : styles.paneHidden}
-              pointerEvents={view === 'tapes' ? 'auto' : 'none'}
-              importantForAccessibility={view === 'tapes' ? 'auto' : 'no-hide-descendants'}>
+            <Curtain shut={view !== 'tapes'} warm={warming('tapes')} style={styles.pane}>
               <FlatList
                 removeClippedSubviews={CLIP_SUBVIEWS}
+                {...ROWS_KEPT}
                 data={tapeRows}
-                {...followsScrolling}
+                {...listOf.ends[TAPES]}
+                ref={listOf.refs[TAPES]}
                 keyExtractor={(row) => row.id}
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
@@ -2084,11 +2770,52 @@ export default function LibraryScreen() {
                   <Text style={styles.empty}>{query.trim() ? t.library.nothingMatches(query) : t.library.tapes.empty(`${libraryRoot()}/Tapes`)}</Text>
                 }
               />
-            </View>
+            </Curtain>
           ) : null}
         </>
-      )}
       </BlurArea>
+      </Curtain>
+      {/*
+        The rack, once the records have been seen with it on: made once and
+        left standing, shut while another view is in front, as the lists are.
+        Made afresh each time, it made going to the records a long wait.
+      */}
+      {rack && seenAlbums ? (
+        <Curtain shut={!racked} warm={warming('albums')} style={[styles.pane, { paddingTop: laidTop }]}>
+          {/* Two fingers draw the rack further off, to see more of it, and back near: see `CoverFlow`. */}
+            {landscape ? (
+              <CoverFlow key={rackOrder} ref={shelf} albums={rackAlbums} onOpen={openAlbum} onHold={onSleeveHeld} initial={rackIndex} onSettle={settleRack} />
+            ) : (
+              /*
+                Upright, the same rack across the top, its name said under it
+                rather than in it, and the tracks of the record it has come to
+                rest on under that.
+              */
+              <>
+                <View style={{ height: rackTall }}>
+                  <CoverFlow
+                    key={rackOrder}
+                    ref={shelf}
+                    albums={rackAlbums}
+                    onOpen={openAlbum}
+                    onHold={onSleeveHeld}
+                    initial={rackIndex}
+                    onSettle={settleRack}
+                  />
+                </View>
+                <RackFront
+                  album={rackAlbums[rackIndex] ?? null}
+                  bottom={under.bottom}
+                  onPlay={playFrom}
+                  onTap={tapInAlbum}
+                  onLongPress={openMenu}
+                  ring={ring}
+                />
+              </>
+            )}
+        </Curtain>
+      ) : null}
+      </View>
         </Veiled>
 
         {/*
@@ -2110,6 +2837,7 @@ export default function LibraryScreen() {
             // the safe area around the screen already has.
             top={landscape ? insets.top : 0}
             bottom={under.bottom}
+            side={landscape}
             onPlay={playFrom}
             onTap={tapInAlbum}
             ring={albumRing}
@@ -2131,10 +2859,13 @@ export default function LibraryScreen() {
       {menuElement}
       <AlbumMenu
         album={albumMenu}
-        hidden={albumMenu?.racked ? WITHOUT_SELECT : undefined}
+        // Setting it aside or bringing it back, whichever applies; and in the rack, which has no boxes to tick, no Select.
+        hidden={[...(albumMenu?.racked ? WITHOUT_SELECT : []), albumMenu && asideRules.album.has(albumMenu.key) ? 'setAside' : 'bringBack']}
         onSelect={runAlbumAction}
         onClose={closeAlbumMenu}
       />
+      {/* From the foot of the list the shuffle button opens when held. */}
+      <ShuffleSourceSheet visible={choosingShuffle} onClose={() => setChoosingShuffle(false)} />
     </SafeAreaView>
   );
 }
@@ -2148,6 +2879,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   upright: { flex: 1 },
   sideways: { flex: 1, flexDirection: 'row' },
   middle: { flex: 1, minWidth: 0 },
+  middleKept: { overflow: 'hidden' },
   centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
 
   header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, gap: 12 },
@@ -2164,8 +2896,16 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   /** Where the lists are: the room under the top, or all of it where the top is laid over them. */
   listArea: { flex: 1 },
   paneShown: { flex: 1 },
-  // Out of sight and out of reach, but standing: see where the views' lists are drawn.
-  paneHidden: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, opacity: 0 },
+  /*
+    Every view's the same room, one over another, the one in front open and
+    the rest out of sight and out of reach but standing, shut (see `Curtain`):
+    see where the views' lists are drawn. See-through, as they were, the map
+    and every list were drawn again unseen with each frame of the scroll of
+    the one in front, and the records' wall lost a frame in three; and the
+    one in front laid out apart from the rest, each was laid out anew, its
+    rows taken down and put up again, at every change of view.
+  */
+  pane: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   headerRow: { flexDirection: 'row', alignItems: 'center' },
   /*
     The slot clips; the switch inside is pinned to the width it measured.
@@ -2190,6 +2930,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   sortSlot: { overflow: 'hidden', flexShrink: 0 },
   sort: {
     width: SORT_WIDTH,
+    height: CONTROL_HEIGHT,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.surface,
@@ -2198,6 +2939,13 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     ...outlined(c),
   },
   sortLabel: { color: c.textFaint, fontSize: 8.5, letterSpacing: 1 },
+  // The switch and the button beside it, as tall as each other.
+  viewsRow: { flexDirection: 'row', alignItems: 'stretch', gap: 6 },
+  viewsGrow: { flex: 1, minWidth: 0 },
+  // No room of its own above and below: the switch beside it says how tall the two are.
+  lookButton: { gap: 1, paddingVertical: 0 },
+  views: { height: CONTROL_HEIGHT },
+  lookOff: { opacity: 0.35 },
   sortValue: { color: c.text, fontSize: 12.5, fontWeight: '600' },
   selectButton: { padding: 8 },
   bulkBar: { gap: 8, paddingTop: 4 },
@@ -2217,6 +2965,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   metaText: { color: c.textFaint, fontSize: 12, flexShrink: 1 },
   shuffleAll: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
   shuffleAllLabel: { color: c.accent, fontSize: 12.5 },
+  // A list's name can be long; the line it shares has the count of tracks to keep.
+  shuffleNamed: { flexShrink: 1, maxWidth: 160 },
+  shuffleStrut: { width: 0, marginLeft: -5 },
   tapeActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   tapeEpisode: { paddingLeft: 24 },
   tapeFiltersOut: { marginBottom: 4 },

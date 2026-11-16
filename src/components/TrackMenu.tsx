@@ -1,5 +1,7 @@
 import { Modal, ScrollView, StyleSheet } from 'react-native';
 import {
+  AsideIcon,
+  BroughtBackIcon,
   CrossIcon,
   DiscIcon,
   FileIcon,
@@ -34,9 +36,11 @@ import { setFavorite, useFavoritesShown, useIsFavorite } from '../lib/playlists/
 import { markTape, useTapePlace } from '../lib/tapes/places';
 import { isListened } from '../lib/listen/rules';
 import { isTape } from '../lib/tapes/tape';
+import { asideOf } from '../lib/library/setAside';
 import { seriesOf } from '../lib/podcasts/series';
 import { canShare } from '../lib/media/share';
 import { haptic } from '../lib/ui/haptics';
+import { ArtistLinks, LeaveFirst } from './NameLinks';
 
 export type TrackAction =
   | 'playNext'
@@ -51,6 +55,10 @@ export type TrackAction =
   | 'share'
   | 'shareFile'
   | 'delete'
+  // Kept out of Tracks and of shuffling everything, or back: see `library/setAside.ts`.
+  | 'setAside'
+  | 'bringBack'
+  | 'asideWith'
   // A song listened to from the Search tab and not kept: see `lib/listen`.
   | 'keepListened'
   // A tape's own: see `TAPE_ACTIONS`.
@@ -82,6 +90,10 @@ const SONG_MENU: Layout = {
     'tiles',
     // The file itself, to another app; see `media/share.ts`.
     'shareFile',
+    // One of the three, by how it is set aside.
+    'setAside',
+    'bringBack',
+    'asideWith',
     'delete',
   ],
 };
@@ -115,6 +127,9 @@ const ICONS: Partial<Record<Entry, MenuIcon>> = {
   share: ShareIcon,
   shareFile: FileIcon,
   delete: TrashIcon,
+  setAside: AsideIcon,
+  bringBack: BroughtBackIcon,
+  asideWith: AsideIcon,
   markTape: TickIcon,
   series: ListsIcon,
   tapeFolder: LibraryIcon,
@@ -140,7 +155,9 @@ export function offered(action: TrackAction, track: Track, hidden?: readonly Tra
     ((action !== 'share' && action !== 'shareFile') || canShare(track)) &&
     !(isDiscoverTrack(track.id) && (NOT_FOR_DISCOVER as readonly string[]).includes(action)) &&
     // Only where there is a record to go to. A track whose album nobody knows would lead to an empty screen.
-    (action !== 'album' || Boolean(track.album?.trim()))
+    (action !== 'album' || Boolean(track.album?.trim())) &&
+    // Whichever says how it is set aside, if it is; a tape is in no Tracks view and no shuffle of everything.
+    (!ASIDE.includes(action) || (!tape && ASIDE_BY[asideOf(track.id) ?? 'none'] === action))
   );
 }
 
@@ -150,7 +167,11 @@ export function offered(action: TrackAction, track: Track, hidden?: readonly Tra
  * to, no details to edit and no file of the library's to delete. Put in a
  * list or hearted, it is kept, and becomes one.
  */
-const NOT_FOR_LISTENED = ['album', 'tiles', 'details', 'delete'] as const;
+const NOT_FOR_LISTENED = ['album', 'tiles', 'details', 'delete', 'setAside', 'bringBack', 'asideWith'] as const;
+
+/** The three that say how a song is set aside, one at a time: to set it aside, to bring it back, or that it went with others. */
+const ASIDE: readonly TrackAction[] = ['setAside', 'bringBack', 'asideWith'];
+const ASIDE_BY = { none: 'setAside', itself: 'bringBack', others: 'asideWith' } as const;
 
 /**
  * Everything that can be done to one track, from a long press on its row.
@@ -206,8 +227,14 @@ export function TrackMenu({
           <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
             <MenuHeader
               title={track.title}
-              // A tape with nobody named is not a song by an unknown artist: it says nothing there.
-              detail={track.artist || !isTape(track) ? (track.artist ?? t.common.unknownArtist) : null}
+              // A tape with nobody named is not a song by an unknown artist: it says nothing there. A song's artists lead to them.
+              detail={
+                isTape(track) ? (track.artist || null) : (
+                  <LeaveFirst value={onClose}>
+                    <ArtistLinks credit={track.artist} off={discover || isListened(track.id)} />
+                  </LeaveFirst>
+                )
+              }
               picture={artwork}
               accessory={
                 // As the player's: it fills or empties where it is, and the sheet stays for whatever else it was opened for.

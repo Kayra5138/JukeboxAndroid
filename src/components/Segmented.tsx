@@ -72,6 +72,8 @@ export function Segmented<Value extends string | number>({
   options,
   value,
   onChange,
+  onPressIn,
+  onPressOut,
   role = 'radio',
   variant = 'tray',
   size = 'regular',
@@ -93,6 +95,10 @@ export function Segmented<Value extends string | number>({
   /** The one chosen; none, or one not among them, where nothing here is the answer (a curve changed by hand). */
   value: Value | null;
   onChange: (value: Value) => void;
+  /** A finger come down on a choice, before it is let go: for what it opens to be made ready. */
+  onPressIn?: (value: Value) => void;
+  /** And lifted, or gone off it. */
+  onPressOut?: () => void;
   role?: 'tab' | 'radio' | 'button';
   variant?: 'tray' | 'chips' | 'outline';
   size?: 'compact' | 'regular';
@@ -217,6 +223,8 @@ export function Segmented<Value extends string | number>({
             disabled={off}
             hitSlop={hitSlop}
             style={[look.cell, layout === 'fill' && styles.fill, optionStyle, own, option.disabled && styles.dim]}
+            onPressIn={onPressIn ? () => onPressIn(option.value) : undefined}
+            onPressOut={onPressOut}
             onPress={() => {
               // Felt only where something changes, or where pressing the chosen one again does something.
               if (!on || role === 'button') haptic('choices', 'tick');

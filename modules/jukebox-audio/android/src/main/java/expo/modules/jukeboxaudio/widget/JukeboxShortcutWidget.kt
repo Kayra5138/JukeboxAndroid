@@ -14,6 +14,7 @@ import android.widget.RemoteViews
 import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.R
 import expo.modules.jukeboxaudio.auto.BrowseTree
+import expo.modules.jukeboxaudio.auto.LibraryDatabase
 import java.io.File
 
 /**
@@ -51,7 +52,8 @@ class JukeboxShortcutWidget : AppWidgetProvider() {
      * the cover and two names, so it is left alone until one of those moves.
      */
     fun refresh(context: Context, state: NowPlaying = NowPlaying.read(context)) {
-      val key = "${state.artworkPath}|${Localised.tag(context)}"
+      val shuffle = LibraryDatabase.shuffle(context)
+      val key = "${state.artworkPath}|${Localised.tag(context)}|${shuffle?.carTitle}|${shuffle?.widgetText}"
       if (key == drawnFor) return
       drawnFor = key
       val manager = AppWidgetManager.getInstance(context) ?: return
@@ -105,9 +107,13 @@ class JukeboxShortcutWidget : AppWidgetProvider() {
       val words = Localised.context(context)
       val all = words.getString(R.string.jukebox_auto_shuffle_all)
       val recent = words.getString(R.string.jukebox_auto_shuffle_recent)
-      views.setTextViewText(R.id.jukebox_shortcut_all_label, all)
+      // What the app's shuffle button plays and says: the name of the list, the user's words, or only the icon.
+      val shuffle = LibraryDatabase.shuffle(context)
+      val shown = if (shuffle == null) all else shuffle.widgetText
+      views.setTextViewText(R.id.jukebox_shortcut_all_label, shown ?: "")
+      views.setViewVisibility(R.id.jukebox_shortcut_all_label, if (shown == null) View.GONE else View.VISIBLE)
       views.setTextViewText(R.id.jukebox_shortcut_recent_label, recent)
-      views.setContentDescription(R.id.jukebox_shortcut_all, all)
+      views.setContentDescription(R.id.jukebox_shortcut_all, shuffle?.carTitle?.ifBlank { null } ?: all)
       views.setContentDescription(R.id.jukebox_shortcut_recent, recent)
 
       val two = size.width >= TWO_HALVES_FROM_DP

@@ -10,7 +10,7 @@ import { bookLanguageOf, bookLanguagesFor, identifierOf, searchBooks, type BookH
 import { readSetting, SETTINGS, writeSetting } from '../../lib/db/index';
 import { useLanguage, useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
-import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
+import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../lib/ui/lists';
 
 /**
  * The books of the Add tapes screen: LibriVox's recordings of books out of
@@ -84,6 +84,7 @@ export function BooksPane() {
   return (
     <FlatList
       removeClippedSubviews={CLIP_SUBVIEWS}
+      windowSize={LIST_WINDOW}
       data={found ?? []}
       keyExtractor={(hit) => hit.id}
       keyboardShouldPersistTaps="handled"

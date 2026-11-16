@@ -40,7 +40,7 @@ export const backup: Strings['backup'] = {
 
   history: {
     title: '导入收听记录',
-    note: '从 Last.fm、Spotify 或 ListenBrainz 允许你下载的文件中导入你的收听记录。在做出任何更改之前，会先向你展示找到的内容并征得你的同意。',
+    note: '从 Last.fm、Spotify、Apple Music 或 ListenBrainz 允许你下载的文件中导入你的收听记录。在做出任何更改之前，会先向你展示找到的内容并征得你的同意。',
     question: '要导入这些收听记录吗？',
     range: (from, to) => (from === to ? `全部来自 ${from}。` : `从 ${from} 到 ${to}。`),
     matched: (matched, total) =>
@@ -49,7 +49,7 @@ export const backup: Strings['backup'] = {
     already: (count) => `${format.number(count)} 条已在你的收听记录中，将被略过。`,
     nothing: '其中所有收听记录都已在你的记录中，或太短而不计入。',
     added: (count) => `已向你的收听记录添加 ${format.number(count)} 条。`,
-    notHistory: '这不是 Jukebox 能读取的收听记录。请选择 Last.fm、Spotify 或 ListenBrainz 给你的文件：CSV 或 JSON，或装着它们的 zip。',
+    notHistory: '这不是 Jukebox 能读取的收听记录。请选择 Last.fm、Spotify、Apple Music 或 ListenBrainz 给你的文件：CSV 或 JSON，或装着它们的 zip。',
     tooBig: '该文件太大，无法读取。',
     failed: '无法导入收听记录。没有做任何更改。',
   },

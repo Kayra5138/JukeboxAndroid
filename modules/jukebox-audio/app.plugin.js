@@ -1,6 +1,9 @@
+const fs = require('fs');
+const path = require('path');
 const {
   AndroidConfig,
   withAndroidManifest,
+  withDangerousMod,
   withAndroidStyles,
   withGradleProperties,
 } = require('expo/config-plugins');
@@ -121,8 +124,49 @@ function withOpenWith(manifest) {
   activity['intent-filter'] = kept;
 }
 
+/**
+ * How long a page takes to slide in from the side, and out again, and the
+ * page under it to move aside and back: a quarter of a second, easing in to
+ * rest, where react-native-screens leaves it at Android's "medium", four
+ * tenths, which read as a page being waited for. Android has no say in it
+ * from the navigator (its `animationDuration` is iOS's alone); the app's own
+ * resources outrank a library's of the same name, so the four slides are
+ * written into the app's, as the build is made.
+ */
+const SLIDE_MS = 250;
+const SLIDES = {
+  rns_slide_in_from_right: ['100%', '0%'],
+  rns_slide_out_to_left: ['0%', '-100%'],
+  rns_slide_in_from_left: ['-100%', '0%'],
+  rns_slide_out_to_right: ['0%', '100%'],
+};
+
+function slideXml([from, to]) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by modules/jukebox-audio/app.plugin.js: see SLIDE_MS there. -->
+<translate xmlns:android="http://schemas.android.com/apk/res/android"
+    android:duration="${SLIDE_MS}"
+    android:interpolator="@android:interpolator/fast_out_slow_in"
+    android:fromXDelta="${from}"
+    android:toXDelta="${to}" />
+`;
+}
+
+function withQuickerSlides(config) {
+  return withDangerousMod(config, [
+    'android',
+    async (mod) => {
+      const folder = path.join(mod.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'anim');
+      fs.mkdirSync(folder, { recursive: true });
+      for (const [name, deltas] of Object.entries(SLIDES)) fs.writeFileSync(path.join(folder, `${name}.xml`), slideXml(deltas));
+      return mod;
+    },
+  ]);
+}
+
 module.exports = function withJukeboxMinSdk(config) {
   config = withWindowBehindTheSplash(config);
+  config = withQuickerSlides(config);
   config = withAndroidManifest(config, (mod) => {
     mod.modResults.manifest.application[0].$['android:extractNativeLibs'] = 'true';
     withOpenWith(mod.modResults);
@@ -147,3 +191,6 @@ module.exports = function withJukeboxMinSdk(config) {
     return mod;
   });
 };
+
+module.exports.slideXml = slideXml;
+module.exports.SLIDES = SLIDES;

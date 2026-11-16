@@ -266,6 +266,8 @@ export const details: Strings['details'] = {
         label: 'Restablecer',
         hint: 'Olvida lo que las búsquedas encontraron para ellas. Tus propios cambios se quedan.',
       },
+      setAside: { label: 'Apartar', hint: 'Fuera de Pistas y del aleatorio de todo' },
+      bringBack: { label: 'Recuperar', hint: 'Las apartadas una a una, de nuevo en Pistas y en el aleatorio' },
       delete: { label: 'Eliminar del teléfono', hint: 'Borra los archivos. Android pregunta antes.' },
     },
     busy: 'Ya hay una búsqueda en marcha. Espera a que termine o detenla.',

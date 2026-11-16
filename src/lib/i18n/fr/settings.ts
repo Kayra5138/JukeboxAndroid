@@ -18,7 +18,7 @@ export const settings: Strings['settings'] = {
     experimental: 'Expérimental',
   },
   categories: {
-    look: 'Le thème, les albums en bac à disques, les animations, la vibration et les vues que propose la bibliothèque.',
+    look: 'Le thème, les animations, la vibration et les vues que propose la bibliothèque.',
     sound: 'L’égaliseur et les effets, le volume harmonisé, le fondu enchaîné, la vitesse et la tonalité.',
     player: 'La portée des boutons de saut, ce qui joue quand la file d’attente se termine et la langue dans laquelle les paroles sont traduites.',
     tapes: 'Retour en arrière intelligent, la portée des boutons de saut d’une cassette et le téléchargement des podcasts en Wi‑Fi seulement.',
@@ -79,11 +79,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: 'Infos des titres et pochettes d’albums' },
-  rack: {
-    title: 'Albums en bac à disques',
-    note:
-      'Téléphone à l’horizontale, feuillette les pochettes au lieu de lire une liste. Touche celle de devant pour l’ouvrir.',
-  },
   favoritesShown: { title: "Favoris", note: "Une liste toujours là, les plus récents en haut, que remplissent un cœur sur le lecteur et Ajouter aux Favoris dans le menu d’un morceau. Désactivés, les trois sont masqués et leur contenu attend." },
   listButton: {
     title: 'Bouton Ajouter à une liste',
@@ -136,6 +131,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'La longueur de la liste, la fréquence à laquelle elle est renouvelée et ce qui a été écarté.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Apparence du lecteur', open: 'Ce qui s’affiche à la place de la pochette, et ce qui bouge avec la musique.' },
+  coverLook: {
+    songs: 'Morceaux',
+    tapes: 'Cassettes',
+    cover: 'Pochette',
+    record: 'Vinyle',
+    cassette: 'Cassette',
+    note: 'Ce qui s’affiche dans le lecteur à la place de la pochette. Un vinyle tourne pendant la lecture ; une cassette enroule sa bande d’une bobine à l’autre au fil de la partie. Avec « Figer la décoration », les deux restent immobiles.',
+    tonearm: 'Bras de lecture',
+    tonearmNote: 'Un bras au-dessus du vinyle, dont l’aiguille va du bord vers l’étiquette au fil du morceau.',
+    motion: 'Avec la musique',
+    none: 'Rien',
+    spectrum: 'Spectre',
+    ripple: 'Ondes',
+    breathe: 'Respiration',
+    scope: 'Oscilloscope',
+    motionNote: 'Ce qui bouge avec la musique autour, en même temps que ce que vous entendez, au casque aussi. Seulement pendant la lecture, lecteur ouvert.',
+    punch: 'Impulsion',
+    spectrogram: 'Spectrogramme',
+    sparks: 'Étincelles',
+    aurora: 'Aurore',
+    notes: {
+      spectrum: 'Des barres du volume de chaque hauteur ; des rayons autour d’un vinyle.',
+      ripple: 'Des anneaux qui partent du bord à chaque temps.',
+      breathe: 'Grandit un peu avec la musique, une lueur derrière.',
+      punch: 'Grandit un peu à chaque temps puis se repose.',
+      scope: 'La ligne du son lui-même.',
+      spectrogram: 'Les dernières secondes de chaque hauteur, qui défilent.',
+      sparks: 'Des étincelles jetées de son bord à chaque temps, à travers le lecteur.',
+      aurora: 'Des nuages aux couleurs de la pochette derrière tout le lecteur, chacun grandissant avec une partie du son.',
+    },
+    beats: 'Vibrer en rythme',
+    beatsNote: 'Un léger coup à chaque temps pendant que le lecteur est ouvert et que la musique joue. Aussi discret que vos réglages de vibration.',
+  },
   still: {
     title: 'Figer la décoration',
     note:
@@ -175,6 +206,8 @@ export const settings: Strings['settings'] = {
     title: 'Onglets',
     searchNote: 'Découvrir et les téléchargements YouTube sont dans cet onglet et disparaissent avec lui.',
     aside: 'Bibliothèque et Paramètres sont toujours là.',
+    names: 'Noms sous les icônes',
+    namesNote: 'Désactivé, la barre n’affiche que ses icônes et est un peu plus basse. En paysage, c’est toujours le cas.',
   },
 
   views: {

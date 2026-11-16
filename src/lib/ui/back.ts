@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { BackHandler } from 'react-native';
 
 /**
@@ -56,4 +57,29 @@ export function useBack(active: boolean, close: () => void): void {
       if (at >= 0) open.splice(at, 1);
     };
   }, [active]);
+}
+
+/**
+ * {@link useBack}, for a screen's own layer: active while [active] and the
+ * screen is in front. Told by the navigator as the screen comes and goes,
+ * rather than asked (`useIsFocused`), which drew the whole screen again every
+ * time any tab was changed to or from.
+ */
+export function useBackInFront(active: boolean, close: () => void): void {
+  const latest = useRef(close);
+  useEffect(() => {
+    latest.current = close;
+  });
+  useFocusEffect(
+    useCallback(() => {
+      if (!active) return;
+      const layer: Layer = { close: () => latest.current() };
+      open.push(layer);
+      listen();
+      return () => {
+        const at = open.indexOf(layer);
+        if (at >= 0) open.splice(at, 1);
+      };
+    }, [active])
+  );
 }

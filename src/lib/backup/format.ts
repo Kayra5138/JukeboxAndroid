@@ -136,6 +136,8 @@ export const TABLES = {
   },
   /** The places marked in tapes, each with what was noted of it. */
   tape_marks: { track_id: 'T!', position_sec: 'R!', note: 'T', created_at: 'I!' },
+  /** What is set aside (`library/setAside.ts`): a song by its id, the rest by what they are. Absent from a backup made before it. */
+  set_aside: { kind: 'T!', key: 'T!', added_at: 'I!' },
 } as const;
 
 export type TableName = keyof typeof TABLES;

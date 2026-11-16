@@ -91,6 +91,19 @@ function useTabBarOver(): number {
 }
 
 /**
+ * How far a page opened inside a tab stops short of the foot, to keep clear
+ * of the tab bar: as tall as the bar where it is laid over the page, glass
+ * along the foot upright; nought beside a rail, or where the bar is not laid
+ * over anything.
+ */
+export function useTabBarRoom(): number {
+  const c = useColours();
+  const landscape = useLandscape();
+  const tabBar = useTabBarOver();
+  return glassOf(c) > 0 && !landscape ? tabBar : 0;
+}
+
+/**
  * How much of this screen is under a bar of glass at either end, to be added
  * to the room at the top and the foot of what it scrolls:
  *

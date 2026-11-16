@@ -111,8 +111,17 @@ export const lists: Strings['lists'] = {
     exportAll: 'Exporter toutes les listes…',
     export: 'Exporter…',
     untitled: 'Liste importée',
+    liked: 'Titres likés',
     reading: 'Lecture des listes…',
 
+    choose: {
+      heading: 'Quelles playlists ?',
+      hint: 'Celles qui sont cochées deviennent des listes. Celles dont aucun morceau n’est dans la bibliothèque ne sont pas cochées.',
+      found: (found, total) => `${format.number(found)} sur ${format.number(total)} dans la bibliothèque`,
+      all: 'Toutes',
+      none: 'Aucune',
+      bring: (count) => (count === 1 ? 'Importer 1 playlist' : `Importer ${format.number(count)} playlists`),
+    },
     conflict: {
       heading: (name) => `Une liste « ${name} » existe déjà`,
       hint: 'Le fichier peut remplacer cette liste tout en gardant sa pochette, ou être ajouté comme une nouvelle liste.',

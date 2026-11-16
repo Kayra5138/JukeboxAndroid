@@ -26,6 +26,20 @@ import java.io.Serializable
 internal const val LARGEST_LIST = 4 * 1024 * 1024
 
 /**
+ * The largest of Spotify's files of playlists that is read, or of Apple's XML
+ * of a library: a song is a few hundred bytes in the one and a kilobyte or
+ * two in the other, so this is tens of thousands of songs, which a library
+ * kept on a phone does not come near.
+ */
+internal const val LARGEST_SPOTIFY = 32 * 1024 * 1024
+
+/** The largest playlist written as a table, Apple's in UTF-16 being twice the size of the text in it. */
+internal const val LARGEST_TABLE = 16 * 1024 * 1024
+
+/** The files in Spotify's zip that are playlists, of all the account's data in it: see `src/lib/playlists/spotify.ts`. */
+private val SPOTIFY_LISTS = Regex("(?i)^(Playlist\\d*|YourLibrary)\\.json$")
+
+/**
  * What the picker is asked to offer. Every name the playlist formats go by,
  * since which one a file manager or a cloud folder gives an `.m3u` depends on
  * who wrote its table of types; plain text for the ones that call it that,
@@ -38,6 +52,16 @@ private val LIST_TYPES = arrayOf(
   "application/vnd.apple.mpegurl",
   "application/x-mpegurl",
   "text/plain",
+  // Spotify's playlists, as the zip of the account's data or the file taken out of it.
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/json",
+  // Apple's, as its Music app writes them out, and those of the services that move playlists between apps.
+  "text/xml",
+  "application/xml",
+  "text/csv",
+  "text/comma-separated-values",
+  "text/tab-separated-values",
   "application/octet-stream"
 )
 
@@ -136,32 +160,85 @@ internal object ListFiles {
   /**
    * One picked file: its name, what its address says about where it is, and
    * its bytes -- or why there are none, in a word JavaScript says in the
-   * app's language.
+   * app's language. A zip of Spotify's account data is the playlists in it,
+   * one apiece (see [spotifyZip]).
    */
-  fun read(context: Context, picked: String): Map<String, Any?> {
+  fun read(context: Context, picked: String): List<Map<String, Any?>> {
     val uri = Uri.parse(picked)
     val documentId = runCatching { if (DocumentsContract.isDocumentUri(context, uri)) DocumentsContract.getDocumentId(uri) else null }.getOrNull()
+    val name = name(context, uri)
     val base = mapOf(
       "uri" to picked,
-      "name" to name(context, uri),
+      "name" to name,
       "documentId" to documentId,
       "path" to path(context, uri, documentId)
     )
+    if (isZip(context, uri)) return spotifyZip(context, uri, base)
+    val ending = name?.substringAfterLast('.', "")?.lowercase()
+    val largest = when (ending) {
+      "json", "xml" -> LARGEST_SPOTIFY
+      "txt", "csv", "tsv" -> LARGEST_TABLE
+      else -> LARGEST_LIST
+    }
     val bytes = runCatching {
       context.contentResolver.openInputStream(uri)?.use { stream ->
-        val held = ByteArray(LARGEST_LIST + 1)
-        var filled = 0
-        while (filled < held.size) {
-          val got = stream.read(held, filled, held.size - filled)
-          if (got < 0) break
-          filled += got
-        }
-        if (filled > LARGEST_LIST) return base + ("problem" to "tooBig")
-        Base64.encodeToString(held, 0, filled, Base64.NO_WRAP)
+        bounded(stream, largest) ?: return listOf(base + ("problem" to "tooBig"))
       }
-    }.getOrNull() ?: return base + ("problem" to "unreadable")
-    return base + ("bytes" to bytes)
+    }.getOrNull() ?: return listOf(base + ("problem" to "unreadable"))
+    return listOf(base + ("bytes" to bytes))
   }
+
+  /**
+   * The playlists in a zip of Spotify's account data, a file each, under the
+   * zip's own address. Only those are read: the zip holds the account's
+   * payments, searches and addresses as well, and none of that is any
+   * business of this app's. A zip with none of them is not a playlist.
+   */
+  private fun spotifyZip(context: Context, uri: Uri, base: Map<String, Any?>): List<Map<String, Any?>> {
+    val found = runCatching {
+      context.contentResolver.openInputStream(uri)?.buffered()?.use { stream ->
+        val zip = java.util.zip.ZipInputStream(stream)
+        val parts = mutableListOf<Map<String, Any?>>()
+        while (true) {
+          val entry = zip.nextEntry ?: break
+          val entryName = entry.name.substringAfterLast('/')
+          if (entry.isDirectory || !SPOTIFY_LISTS.matches(entryName)) continue
+          val bytes = bounded(zip, LARGEST_SPOTIFY)
+          parts += base + mapOf("name" to entryName, "documentId" to null, "path" to null) +
+            (if (bytes == null) mapOf("problem" to "tooBig") else mapOf("bytes" to bytes))
+        }
+        parts
+      }
+    }.getOrNull()
+    return if (found.isNullOrEmpty()) listOf(base + ("problem" to "unreadable")) else found
+  }
+
+  /** At most [largest] bytes of [stream], in base64; null where there are more. */
+  private fun bounded(stream: java.io.InputStream, largest: Int): String? {
+    val out = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(64 * 1024)
+    while (true) {
+      val got = stream.read(buffer)
+      if (got < 0) break
+      out.write(buffer, 0, got)
+      if (out.size() > largest) return null
+    }
+    return Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+  }
+
+  /** A zip begins `PK` and two bytes that say what follows. */
+  private fun isZip(context: Context, uri: Uri): Boolean = runCatching {
+    context.contentResolver.openInputStream(uri)?.use { stream ->
+      val head = ByteArray(4)
+      var filled = 0
+      while (filled < head.size) {
+        val got = stream.read(head, filled, head.size - filled)
+        if (got < 0) break
+        filled += got
+      }
+      filled == 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() && head[2] == 3.toByte() && head[3] == 4.toByte()
+    }
+  }.getOrNull() == true
 
   private fun name(context: Context, uri: Uri): String? = runCatching {
     context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->

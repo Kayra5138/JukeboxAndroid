@@ -85,6 +85,16 @@ private const val PLACE_EVERY_MS = 10_000L
 private const val NOTIFICATION_DISMISSED = "androidx.media3.session.NOTIFICATION_DISMISSED_EVENT_KEY"
 
 /**
+ * Asked by the app as it opens onto a player holding nothing -- the app was
+ * closed, and the service with it: the queue it was last playing put back,
+ * where it was, paused, as a press on the widget or a turn of the car puts it
+ * back and plays it. Answered with [RESTORED], whether it was. Only the app's
+ * own controller is offered it.
+ */
+internal const val RESTORE_QUEUE = "expo.modules.jukeboxaudio.RESTORE_QUEUE"
+internal const val RESTORED = "restored"
+
+/**
  * The surfaces a media app is expected to appear in, and the only callers
  * outside this app allowed to browse the library.
  *
@@ -760,6 +770,8 @@ class PlaybackService : MediaLibraryService() {
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS.buildUpon()
               .add(TapeButtons.back)
               .add(TapeButtons.forward)
+              // And to the app itself, the queue it was last playing put back: see [RESTORE_QUEUE].
+              .apply { if (controller.packageName == packageName) add(SessionCommand(RESTORE_QUEUE, Bundle.EMPTY)) }
               .build()
           )
           .build()
@@ -780,6 +792,10 @@ class PlaybackService : MediaLibraryService() {
       customCommand: SessionCommand,
       args: Bundle
     ): ListenableFuture<SessionResult> {
+      if (customCommand.customAction == RESTORE_QUEUE && controller.packageName == packageName) {
+        val restored = restoreQueueIfEmpty()
+        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, Bundle().apply { putBoolean(RESTORED, restored) }))
+      }
       val forward = when (customCommand.customAction) {
         TapeButtons.BACK -> false
         TapeButtons.FORWARD -> true

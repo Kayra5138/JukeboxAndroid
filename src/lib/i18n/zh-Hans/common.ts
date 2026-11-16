@@ -61,4 +61,10 @@ export const common: Strings['common'] = {
   pictureFailed: '无法加载该图片。',
 
   drawFailed: '显示此页面时出错了。',
+
+  drawFailedCopy: '复制详细信息',
+
+  drawFailedCopied: '已复制。请发给能排查问题的人。',
+
+  drawFailedNotCopied: '无法复制。',
 };

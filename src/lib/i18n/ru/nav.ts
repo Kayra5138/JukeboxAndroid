@@ -15,6 +15,7 @@ export const nav: Strings['nav'] = {
   effects: 'Эффекты',
   details: 'Сведения о треке',
   themes: 'Тема',
+  playerLook: 'Вид плеера',
   albumRest: 'Остальные треки альбома',
   customTheme: 'Своя тема',
   downloads: 'Загрузки',

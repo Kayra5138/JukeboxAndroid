@@ -261,13 +261,18 @@ internal object BrowseTree {
           ))
         }
         if (everything.isNotEmpty()) {
+          // What the app's shuffle button plays, under what it says: everything, or the list chosen for it.
+          val chosen = LibraryDatabase.shuffle(context)
+          // Everything is everything but what has been set aside on the phone.
+          val playing = chosen?.ids?.let { inOrderOf(everything, it) }?.ifEmpty { null } ?: notSetAside(context, everything)
           // A different record each day and the same one all day: something to
           // look at that is not the same sleeve for ever, without a tile that
           // changes under a finger.
           val today = (System.currentTimeMillis() / 86_400_000L).toInt()
           add(action(
-            context, SHUFFLE, words.getString(R.string.jukebox_auto_shuffle_all), songCount(context, everything.size),
-            cover = everything[Math.floorMod(today * 31, everything.size)].id
+            context, SHUFFLE, chosen?.carTitle?.ifBlank { null } ?: words.getString(R.string.jukebox_auto_shuffle_all),
+            songCount(context, playing.size),
+            cover = playing[Math.floorMod(today * 31, playing.size)].id
           ))
         }
 
@@ -515,8 +520,9 @@ internal object BrowseTree {
    * parts, and the parts have to be cut from the same sequence the whole was.
    */
   private fun entriesOf(context: Context, root: String, parentId: String): List<Entry>? = when {
+    // Not the songs set aside on the phone, which are out of its Tracks as well.
     parentId.startsWith("$TRACKS$BY") ->
-      sorted(context, tracks(context, root), Sort.of(TRACKS, parentId.removePrefix("$TRACKS$BY")))
+      sorted(context, notSetAside(context, tracks(context, root)), Sort.of(TRACKS, parentId.removePrefix("$TRACKS$BY")))
 
     // The history knows ids and when they were heard; what those ids are is
     // still the library's to say, and a track played once and deleted since
@@ -601,6 +607,17 @@ internal object BrowseTree {
   }
 
   /**
+   * [songs] less those set aside on the phone (`LibraryDatabase.setAside`):
+   * what the car's Tracks lists and what shuffling everything plays. All of
+   * them where every one is set aside, rather than nothing to play.
+   */
+  private fun notSetAside(context: Context, songs: List<Entry>): List<Entry> {
+    val aside = LibraryDatabase.setAside(context)
+    if (aside.isEmpty()) return songs
+    return songs.filter { it.id !in aside }.ifEmpty { songs }
+  }
+
+  /**
    * What to play when [mediaId] is chosen, and where in it to start.
    *
    * The whole of whatever it was found in, so that choosing the third track of
@@ -613,13 +630,17 @@ internal object BrowseTree {
       // mode the driver cannot see would mean the tile did something different
       // depending on a setting made weeks ago.
       val all = tracks(context, LibraryDatabase.libraryRoot(context))
-      val recent = if (mediaId == SHUFFLE_RECENT) {
-        inOrderOf(all, LibraryDatabase.recentlyPlayed(context, SHELF))
-      } else emptyList()
+      val chosen = when (mediaId) {
+        SHUFFLE_RECENT -> inOrderOf(all, LibraryDatabase.recentlyPlayed(context, SHELF))
+        // What the app's shuffle button plays, which the app wrote down for the car and the widget.
+        SHUFFLE -> LibraryDatabase.shuffle(context)?.ids?.let { inOrderOf(all, it) }.orEmpty()
+        else -> emptyList()
+      }
       // Carrying on is the service's to answer, since it has the queue. It
       // only arrives here when there is none, and then anything is better
-      // than a tile that does nothing.
-      return recent.ifEmpty { all }.shuffled().map { playable(context, it, RECENT) } to 0
+      // than a tile that does nothing. Shuffled as the app shuffles.
+      return SpreadShuffle.shuffled(chosen.ifEmpty { notSetAside(context, all) }) { SpreadShuffle.artistKey(it.artist) }
+        .map { playable(context, it, RECENT) } to 0
     }
 
     if (!mediaId.startsWith(PLAYABLE)) return emptyList<MediaItem>() to 0

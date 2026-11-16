@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'Clairs',
   darkGroup: 'Sombres',
   effectsGroup: 'Verre et brillance',
+  effectsNote: 'Flou en direct : plus de travail que les thèmes unis.',
   specialGroup: 'Spéciaux',
 };

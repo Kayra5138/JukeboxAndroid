@@ -189,6 +189,8 @@ export function deletePlaylist(id: number): void {
   database.withTransactionSync(() => {
     database.runSync(`DELETE FROM playlist_tracks WHERE playlist_id = ?`, id);
     database.runSync(`DELETE FROM playlists WHERE id = ?`, id);
+    // Set aside, it is set aside no more: there is nothing left of it to keep out.
+    database.runSync(`DELETE FROM set_aside WHERE kind = 'list' AND key = ?`, String(id));
   });
   listsChanged();
 }

@@ -155,6 +155,35 @@ export function readArtwork(trackId: string): string | null {
 }
 
 /**
+ * {@link readArtwork} for every track at once, by track, in two reads
+ * rather than one for each: for a wall of a few hundred covers coming up
+ * together. Tracks with no cover are left out.
+ */
+export function readAllArtwork(): Map<string, string> {
+  const database = db();
+  const shared = new Map(
+    database
+      .getAllSync<{ track_id: string; artwork_url: string }>('SELECT track_id, artwork_url FROM shared_covers')
+      .map((row) => [row.track_id, row.artwork_url])
+  );
+  const out = new Map<string, string>();
+  const rows = database.getAllSync<{ track_id: string; artwork_url: string | null; status: string; cover_removed_at: number | null }>(
+    'SELECT track_id, artwork_url, status, cover_removed_at FROM track_metadata'
+  );
+  const seen = new Set<string>();
+  for (const row of rows) {
+    seen.add(row.track_id);
+    const own = row.status !== 'not_found' ? row.artwork_url : null;
+    const given = row.cover_removed_at != null ? null : (shared.get(row.track_id) ?? null);
+    const cover = own?.startsWith('file://') ? own : (given ?? own ?? null);
+    if (cover) out.set(row.track_id, cover);
+  }
+  // Those with no row of their own, which wear what their record gave them.
+  for (const [trackId, uri] of shared) if (!seen.has(trackId)) out.set(trackId, uri);
+  return out;
+}
+
+/**
  * Every cover a track was given by the rest of its record, by track: what
  * `fillCovers` put in `shared_covers` for tracks with no row of their own.
  */

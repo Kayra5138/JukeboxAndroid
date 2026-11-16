@@ -12,7 +12,7 @@ import { folderNameFor, inNameOrder } from '../../lib/tapes/files';
 import { folderNameOf, tapeFolderOf } from '../../lib/tapes/folders';
 import { makeStyles, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
-import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
+import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../lib/ui/lists';
 
 type Picked = { uri: string; name: string };
 
@@ -67,6 +67,7 @@ export function FilesPane() {
   return (
     <FlatList
       removeClippedSubviews={CLIP_SUBVIEWS}
+      windowSize={LIST_WINDOW}
       data={picked}
       keyExtractor={(file) => file.uri}
       keyboardShouldPersistTaps="handled"

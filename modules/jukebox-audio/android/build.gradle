@@ -303,6 +303,8 @@ tasks.withType(Test).configureEach {
 }
 
 dependencies {
+  // React Native's own, for a view to say how touches go through it: see spectrum/SpectrumView.kt.
+  implementation 'com.facebook.react:react-android'
   // yt-dlp's runtime, Python and QuickJS, with the Python cut down: see `youtubedlSlim`.
   // Its FFmpeg is not taken either: see `buildFfmpeg`.
   implementation files(youtubedlSlim)

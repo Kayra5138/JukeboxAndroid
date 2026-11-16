@@ -61,4 +61,10 @@ export const common: Strings['common'] = {
   pictureFailed: 'この画像を読み込めませんでした。',
 
   drawFailed: 'この画面の表示中に問題が発生しました。',
+
+  drawFailedCopy: '詳細をコピー',
+
+  drawFailedCopied: 'コピーしました。調べられる人に送ってください。',
+
+  drawFailedNotCopied: 'コピーできませんでした。',
 };

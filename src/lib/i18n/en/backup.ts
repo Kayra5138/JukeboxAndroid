@@ -44,7 +44,7 @@ export const backup = {
   /** Settings → Your data: listens brought in from another app's history, and what is asked first. */
   history: {
     title: 'Import listening history',
-    note: 'Your listens from Last.fm, Spotify or ListenBrainz, from the files they let you download. You are shown what was found and asked before anything changes.',
+    note: 'Your listens from Last.fm, Spotify, Apple Music or ListenBrainz, from the files they let you download. You are shown what was found and asked before anything changes.',
     question: 'Import these listens?',
     /** The first and last listen brought in, each a date. */
     range: (from: string, to: string) => (from === to ? `All on ${from}.` : `From ${from} to ${to}.`),
@@ -60,7 +60,7 @@ export const backup = {
     nothing: 'Every listen in them is in your history already, or too short to count.',
     added: (count: number) => `${format.number(count)} ${oneOrMany(count, 'listen', 'listens')} added to your history.`,
     notHistory:
-      'That is not a listening history Jukebox can read. Choose the files Last.fm, Spotify or ListenBrainz gave you: CSV or JSON, or the zip they came in.',
+      'That is not a listening history Jukebox can read. Choose the files Last.fm, Spotify, Apple Music or ListenBrainz gave you: CSV or JSON, or the zip they came in.',
     tooBig: 'That file is too big to read.',
     failed: 'The listens could not be imported. Nothing was changed.',
   },

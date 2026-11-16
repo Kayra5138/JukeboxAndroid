@@ -93,13 +93,18 @@ export const library: Strings['library'] = {
       tapes: '搜索磁带、节目和作者',
     },
     sort: '排序',
-    sortShort: { name: '名称', added: '最新', played: '最近' },
+    sortShort: { name: '名称', added: '最新', played: '最近', colour: '颜色' },
     sortedBy: {
       name: '按名称排序',
       added: '按添加时间排序',
       played: '按最近播放时间排序',
+      colour: '按封面颜色排序',
     },
     sortHint: '更改音乐库的排列顺序',
+    lookSwitch: '将此视图切换为另一种显示方式',
+    view: '视图',
+    looks: { list: '列表', shelves: '书架', rack: '唱片架', map: '地图' },
+    artistMap: { drawing: '正在绘制地图…', shuffle: '随机播放其歌曲', open: '打开', with: '合作', lasso: '圈选艺人并随机播放', lassoHint: '圈出要随机播放的艺人', lassoChosen: '已圈选', putBackAll: '将手动移动的艺人放回原处', movedByHand: '手动移动', putBack: '放回' },
     groupSortShort: { name: '名称', tracks: '歌曲数', played: '播放量', added: '最新' },
     groupSortedBy: {
       name: '按名称排序',
@@ -157,6 +162,8 @@ export const library: Strings['library'] = {
       label: '选择专辑封面',
       hint: '从相册选一张图片，用于专辑中的每首歌曲',
     },
+    setAside: { label: '搁置', hint: '其歌曲不出现在“歌曲”和全部随机播放中' },
+    bringBack: { label: '恢复', hint: '其歌曲重新出现在“歌曲”和随机播放中' },
   },
 
   albumTools: {
@@ -240,6 +247,9 @@ export const library: Strings['library'] = {
     shareFile: { label: '以文件分享', hint: '以文件本身发送：聊天中作为文档保存' },
     album: { label: '前往专辑', hint: '按顺序查看这张专辑的其余歌曲' },
     addToPlaylist: { label: '添加到歌单', hint: '你的某个歌单，或新建一个' },
+    setAside: { label: '搁置', hint: '不出现在“歌曲”和全部随机播放中' },
+    bringBack: { label: '恢复', hint: '重新出现在“歌曲”和随机播放中' },
+    asideWith: { label: '随其他内容搁置', hint: '随专辑、艺人、文件夹或标签一起搁置，可在“已搁置”中恢复' },
     favoriteAdd: { label: "加入收藏", hint: "爱心填充的列表，最新的在最上面" },
     favoriteRemove: { label: "移出收藏", hint: "从爱心填充的列表中移出" },
     tiles: { label: '玩钢琴块', hint: '琴键随这首歌的节奏落下' },
@@ -269,6 +279,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}，${format.number(count)} 首歌曲`,
     hint: '开启时文件夹包含在音乐库中，关闭时排除',
     empty: (root) => `${root} 中没有包含音乐的文件夹。`,
+  },
+
+  setAside: {
+    title: '已搁置',
+    none: '无。可以把不想出现在“歌曲”和随机播放里的专辑、艺人或歌曲搁置起来。',
+    some: (count) => `已搁置 ${format.number(count)} 首歌曲`,
+    note: '搁置的歌曲不会出现在“歌曲”中，不参与全部随机播放，也不会被选来让音乐继续播放。它仍在所属专辑、艺人和文件夹里，在你的列表和搜索中，播放这些时照常播放。不会删除任何内容。',
+    empty: '没有搁置任何内容。长按专辑或歌曲，或打开艺人或文件夹，即可搁置。',
+    kinds: { album: '专辑', artist: '艺人', list: '列表', folder: '文件夹', tag: '标签', track: '歌曲' },
+    songs: (count) => `${format.number(count)} 首歌曲`,
+    bringBack: '恢复',
+    bringBackSpoken: (name) => `恢复${name}`,
+    addTag: '搁置一个标签',
+    noTags: '没有更多可搁置的标签了。',
+    album: { set: '搁置这张专辑', back: '恢复这张专辑' },
+    artist: { set: '搁置这位艺人', back: '恢复这位艺人' },
+    list: { set: '搁置这个列表', back: '恢复这个列表' },
+    folder: { set: '搁置这个文件夹', back: '恢复这个文件夹' },
   },
 
   shortFiles: {
@@ -345,5 +373,18 @@ export const library: Strings['library'] = {
     notDeleted: '文件未被删除。',
     keptRight: '保持原样，以后不会再询问。',
     failed: (error) => `无法完成。${error}`,
+  },
+
+  shuffle: {
+    menu: '随机播放',
+    everything: '所有歌曲',
+    change: '更改按钮播放的内容…',
+    heading: '随机播放按钮播放',
+    note: '长按按钮可单次随机播放其他内容。小组件和车载也播放相同内容。',
+    labelHeading: '随机播放按钮显示',
+    label: { name: '所播放内容的名称', words: '自定义文字', icon: '不显示文字，只显示图标' },
+    wordsHeading: '随机播放按钮上的文字',
+    wordsPlaceholder: '随机播放',
+    spoken: (name) => `随机播放：${name}`,
   },
 };

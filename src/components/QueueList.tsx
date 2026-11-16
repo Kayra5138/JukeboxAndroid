@@ -29,6 +29,7 @@ import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { progressOf, useTapePlace } from '../lib/tapes/places';
 import { isTape } from '../lib/tapes/tape';
+import { ArtistLinks } from './NameLinks';
 import { dividerAt, queueIndex, queueMove, shownIndex } from '../lib/player/autoplay/section';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
 import { laid, makeStyles, outlined, useColours, withAlpha } from '../lib/theme/index';
@@ -164,7 +165,7 @@ const QueueRow = memo(function QueueRow({
       delayLongPress={onMenu ? undefined : LIFT_AFTER_MS}>
       <View style={styles.mark}>{playing ? <PlayIcon size={8} /> : null}</View>
       {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
+        <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" drawnAt={36} />
       ) : (
         <View style={[styles.art, styles.artEmpty]} />
       )}
@@ -173,7 +174,9 @@ const QueueRow = memo(function QueueRow({
           {track.title}
         </Text>
         <Text style={styles.artist} numberOfLines={1}>
-          {[track.artist ?? t.common.unknownArtist, tapeNote].filter(Boolean).join(' · ')}
+          {/* Who it is by, as words only: a touch on a song's row is for the song, and a name that led elsewhere took it there by mistake. */}
+          <ArtistLinks credit={track.artist} off />
+          {tapeNote ? ` · ${tapeNote}` : ''}
         </Text>
       </View>
       {/*
@@ -694,7 +697,14 @@ export function QueueList({
   // A row says its number on screen; the screen is told the queue's.
   const select = useCallback((row: number) => {
     const index = queueIndex(row, handlers.current.divider);
-    if (index >= 0) handlers.current.onSelect(index);
+    if (index < 0) return;
+    /*
+      Played from where it is, the list left where it is: the row touched is
+      in sight already, and a list that slid it to the top as it began was a
+      list lost from under the finger that had found it.
+    */
+    expectIndex(index);
+    handlers.current.onSelect(index);
   }, []);
 
   const menu = useCallback((row: number) => {

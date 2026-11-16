@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Keyboard, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
 import { TextField } from './FormScroll';
@@ -6,6 +6,9 @@ import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { hintKey, laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+
+/** What a screen can do to its search box. */
+export type SearchBox = { focus: () => void };
 
 /**
  * A search box with a way out of it.
@@ -23,6 +26,8 @@ export function SearchField({
   onSubmitEditing,
   maxLength,
   style,
+  height,
+  ref,
 }: {
   value: string;
   onChangeText: (value: string) => void;
@@ -33,11 +38,16 @@ export function SearchField({
   maxLength?: number;
   /** The box as a whole, for where it is laid out. */
   style?: StyleProp<ViewStyle>;
+  /** How tall the box is, where it stands in a row of things as tall as each other; its own height otherwise. */
+  height?: number;
   /** Told when the box is being typed in, for anything that should stand aside. */
   onFocus?: () => void;
   onBlur?: () => void;
+  /** For a screen to put the cursor in it: its tab pressed again at the top (`ui/tabReselect.ts`). */
+  ref?: Ref<SearchBox>;
 }) {
   const input = useRef<TextInput>(null);
+  useImperativeHandle(ref, () => ({ focus: () => input.current?.focus() }), []);
   const t = useT();
   const c = useColours();
   const styles = useStyles();
@@ -83,7 +93,7 @@ export function SearchField({
   }, []);
 
   return (
-    <View style={[styles.field, style]}>
+    <View style={[styles.field, height != null && { height }, style]}>
       {/*
         A form's field, which brings itself out from under the keyboard inside
         a form that scrolls (the details screen's lyrics) and is an ordinary
@@ -92,7 +102,7 @@ export function SearchField({
       <TextField
         key={made}
         ref={input}
-        style={styles.input}
+        style={[styles.input, height != null && styles.inputFitted]}
         value={value}
         onChangeText={onChangeText}
         onFocus={onFocus}
@@ -150,6 +160,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 11,
   },
+  // In a box of a given height, the words in the middle of it rather than room round them.
+  inputFitted: { paddingVertical: 0, alignSelf: 'stretch' },
   clear: { padding: 6 },
   clearCircle: {
     width: 20,

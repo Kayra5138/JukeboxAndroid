@@ -10,6 +10,7 @@ import type { Track } from '../lib/types';
 import { MoreButton } from './MoreButton';
 import { PlaylistCover } from './PlaylistCover';
 import { trackRowHeight } from './TrackRow';
+import { ArtistLinks } from './NameLinks';
 
 /** A track row's cover, in size. */
 const COVER = 46;
@@ -49,6 +50,7 @@ export function useBrowseRowHeight(): number {
 export const BrowseRow = memo(function BrowseRow({
   id,
   title,
+  by,
   detail,
   tracks,
   cover,
@@ -60,6 +62,8 @@ export const BrowseRow = memo(function BrowseRow({
 }: {
   id: string;
   title: string;
+  /** Whoever a record is by, before the rest of its line, leading to them (`NameLinks`). */
+  by?: string | null;
   detail: string;
   /** What is under the heading; only ever looked at for a cover. */
   tracks: Track[];
@@ -98,7 +102,7 @@ export const BrowseRow = memo(function BrowseRow({
       accessibilityState={choosing ? { checked: mark } : undefined}
       // Both lines as one sentence. Left to itself the reader says the two
       // texts apart, and the second is only a number without the first.
-      accessibilityLabel={`${title}, ${detail}`}
+      accessibilityLabel={`${title}, ${[by, detail].filter(Boolean).join(' · ')}`}
       accessibilityHint={choosing ? t.library.row.selectsTracks : t.library.row.opensTracks}
       // Named for the reason a track's long press is: nobody using a screen
       // reader finds a held row by trying. Left out once choosing has begun,
@@ -144,6 +148,13 @@ export const BrowseRow = memo(function BrowseRow({
           {title}
         </Text>
         <Text style={styles.detail} numberOfLines={1}>
+          {/* Not while tracks are being ticked, when a touch on the row chooses it. */}
+          {by ? (
+            <>
+              <ArtistLinks credit={by} off={choosing} />
+              {detail ? ' · ' : ''}
+            </>
+          ) : null}
           {detail}
         </Text>
       </View>

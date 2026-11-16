@@ -58,7 +58,7 @@ export const backup: Strings['backup'] = {
 
   history: {
     title: 'Hörverlauf importieren',
-    note: 'Deine Wiedergaben von Last.fm, Spotify oder ListenBrainz, aus den Dateien, die du dort herunterladen kannst. Du siehst, was gefunden wurde, und wirst gefragt, bevor sich etwas ändert.',
+    note: 'Deine Wiedergaben von Last.fm, Spotify, Apple Music oder ListenBrainz, aus den Dateien, die du dort herunterladen kannst. Du siehst, was gefunden wurde, und wirst gefragt, bevor sich etwas ändert.',
     question: 'Diese Wiedergaben importieren?',
     range: (from, to) => (from === to ? `Alle am ${from}.` : `Von ${from} bis ${to}.`),
     matched: (matched, total) =>
@@ -71,7 +71,7 @@ export const backup: Strings['backup'] = {
     added: (count) =>
       `${format.number(count)} ${oneOrMany(count, 'Wiedergabe', 'Wiedergaben')} zu deinem Verlauf hinzugefügt.`,
     notHistory:
-      'Das ist kein Hörverlauf, den Jukebox lesen kann. Wähle die Dateien, die du von Last.fm, Spotify oder ListenBrainz bekommen hast: CSV oder JSON oder die ZIP-Datei, in der sie kamen.',
+      'Das ist kein Hörverlauf, den Jukebox lesen kann. Wähle die Dateien, die du von Last.fm, Spotify, Apple Music oder ListenBrainz bekommen hast: CSV oder JSON oder die ZIP-Datei, in der sie kamen.',
     tooBig: 'Diese Datei ist zu groß, um sie zu lesen.',
     failed: 'Die Wiedergaben konnten nicht importiert werden. Es wurde nichts geändert.',
   },

@@ -17,7 +17,7 @@ import { usePathname } from 'expo-router';
  * the host, to hide the layer, and the player, to stop answering the back
  * button while it is hidden. Importing one from the other made a cycle.
  */
-const OVER_THE_PLAYER = new Set(['/equalizer', '/transitions', '/effects']);
+const OVER_THE_PLAYER = new Set(['/equalizer', '/transitions', '/effects', '/player-look']);
 
 /**
  * Whether one of those routes is currently on top of the player.

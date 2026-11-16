@@ -287,3 +287,15 @@ test('a catalogue note in brackets is the same recording, a version in brackets 
 test('two untagged files with a plain name that only run close are two songs', () => {
   assert.deepEqual(findCopies([file('Intro.mp3', 90), file('Intro (1).mp3', 91.5, { title: 'Intro' })]), []);
 });
+
+test('a file whose name has no letter or digit in it is looked through like any other, and is nobody\'s copy', () => {
+  // `???.mp3` and the like threw on opening the library, for the one phone that had one.
+  const found = findCopies([
+    file('???.mp3', 200),
+    file('♪.mp3', 200),
+    file('—.mp3', 180),
+    file('Eminem - Berzerk [ab9176Srb5Y].mp3', 200),
+    file('Eminem - Berzerk (1).mp3', 200),
+  ]);
+  assert.deepEqual(ids(found), [['Eminem - Berzerk [ab9176Srb5Y].mp3', 'Eminem - Berzerk (1).mp3']]);
+});

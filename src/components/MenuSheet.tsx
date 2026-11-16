@@ -25,7 +25,8 @@ export function MenuHeader({
   under,
 }: {
   title: string;
-  detail?: string | null;
+  /** A line of words, or of words some of which lead somewhere (`NameLinks`). */
+  detail?: ReactNode;
   picture?: string | null | false;
   accessory?: ReactNode;
   /** A line under the rest, for something the thing is in the middle of. */

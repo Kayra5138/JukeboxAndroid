@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'Chiari',
   darkGroup: 'Scuri',
   effectsGroup: 'Vetro e riflessi',
+  effectsNote: 'Sfocatura in tempo reale: più lavoro dei temi semplici.',
   specialGroup: 'Speciali',
 };

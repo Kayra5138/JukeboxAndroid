@@ -28,14 +28,16 @@ export function useListColumns(): number {
 }
 
 /**
- * Whether records are browsed as a rack rather than as a list.
+ * Whether records are browsed as a rack rather than as a list, held the way
+ * the phone is: each way round asked apart (Settings → Look & feel).
  *
- * Never upright, whatever the setting says. The rack is records turned about a
- * vertical axis and seen from the side, and a tall frame cannot hold that
- * shape — it has to stack them instead, which comes out as a pile of slabs
- * rather than a shelf. So the question is only asked of a phone on its side,
- * and there it is on unless turned off.
+ * Either way the rack is the same: records on their edges seen from the side,
+ * flicked across. Upright it was once stacked instead, a pile of slabs seen
+ * from above that was neither a shelf nor a quicker way to anything than the
+ * list; now it runs across the top of the screen, with the tracks of the
+ * record in front under it. Sideways it is on unless turned off; upright, off
+ * unless turned on.
  */
 export function rackWanted(landscape: boolean): boolean {
-  return landscape && readSetting(SETTINGS.coverFlow) !== 'false';
+  return landscape ? readSetting(SETTINGS.coverFlow) !== 'false' : readSetting(SETTINGS.coverFlowUpright) === 'true';
 }

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 
 import { PlaylistPicker } from './PlaylistPicker';
 import { TrackMenu, type TrackAction } from './TrackMenu';
+import { setAside } from '../lib/library/setAside';
 import { albumKey } from '../lib/media/albums';
 import { deleteTracks } from '../lib/media/remove';
 import { queueNow } from '../lib/player/current';
@@ -194,6 +195,17 @@ export function useTrackMenu({
       else if (action === 'tapeDetails') {
         hooks.current.beforeLeaving?.();
         router.push({ pathname: '/tape', params: { trackId: track.id } });
+      }
+      else if (action === 'setAside' || action === 'bringBack') {
+        // Kept out of Tracks and of shuffling everything, or back: see `library/setAside.ts`.
+        setAside('track', track.id, action === 'setAside');
+        haptic('results', action === 'setAside' ? 'confirm' : 'toggleOff');
+        hooks.current.onChanged?.();
+      }
+      else if (action === 'asideWith') {
+        // Set aside with something else, which is brought back from where everything set aside is.
+        hooks.current.beforeLeaving?.();
+        router.push('/set-aside');
       }
       else if (action === 'album') {
         const name = track.album?.trim();

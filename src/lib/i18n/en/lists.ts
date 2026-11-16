@@ -141,8 +141,19 @@ export const lists = {
     export: 'Export…',
     /** What a list or a file is called when nothing gives it a name. */
     untitled: 'Imported list',
+    /** The list the songs saved with Spotify's heart come in as. */
+    liked: 'Liked Songs',
     reading: 'Reading the playlists…',
 
+    /** Choosing which of several playlists to bring in, before any of them is. */
+    choose: {
+      heading: 'Which playlists?',
+      hint: 'The ticked ones come in as lists. Those with none of their songs in the library are left unticked.',
+      found: (found: number, total: number) => `${format.number(found)} of ${format.number(total)} in the library`,
+      all: 'All',
+      none: 'None',
+      bring: (count: number) => oneOrMany(count, 'Import 1 playlist', `Import ${format.number(count)} playlists`),
+    },
     /** When a list of the file's name is already there. */
     conflict: {
       heading: (name: string) => `There is already a list called “${name}”`,

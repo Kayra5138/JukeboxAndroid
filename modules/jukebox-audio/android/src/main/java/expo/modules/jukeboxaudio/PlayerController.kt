@@ -13,6 +13,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import expo.modules.jukeboxaudio.transitions.Crossfades
@@ -408,6 +409,28 @@ class PlayerController(
       "all" -> Player.REPEAT_MODE_ALL
       else -> Player.REPEAT_MODE_OFF
     }
+  }
+
+  /**
+   * The queue the app was last playing put back in the player, paused where
+   * it was left, where the player holds nothing: see [RESTORE_QUEUE]. Told
+   * whether it was.
+   */
+  fun restoreSaved(onResult: (Boolean) -> Unit) = onMain {
+    val player = controller
+    if (player == null || released) {
+      onResult(false)
+      return@onMain
+    }
+    val asked = runCatching { player.sendCustomCommand(SessionCommand(RESTORE_QUEUE, Bundle.EMPTY), Bundle.EMPTY) }.getOrNull()
+    if (asked == null) {
+      onResult(false)
+      return@onMain
+    }
+    asked.addListener(
+      { onResult(runCatching { asked.get().extras.getBoolean(RESTORED) }.getOrDefault(false)) },
+      ContextCompat.getMainExecutor(context)
+    )
   }
 
   /** Callback rather than a return value because reading state is main-thread only. */

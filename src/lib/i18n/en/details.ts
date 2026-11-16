@@ -288,6 +288,8 @@ export const details = {
         label: 'Reset',
         hint: 'Forgets what lookups found for them. Your own edits stay.',
       },
+      setAside: { label: 'Set aside', hint: 'Kept out of Tracks and of shuffling everything' },
+      bringBack: { label: 'Bring back', hint: 'Those set aside by themselves, into Tracks and the shuffle again' },
       delete: { label: 'Delete from phone', hint: 'Erases the files. Android asks first.' },
     },
     /** Under a lookup that cannot be started while another is going. */

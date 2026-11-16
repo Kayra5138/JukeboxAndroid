@@ -253,6 +253,8 @@ export const details: Strings['details'] = {
         label: 'リセット',
         hint: '自動取得で見つかった情報を破棄します。自分で編集した内容は残ります。',
       },
+      setAside: { label: '保留', hint: '「曲」とすべてのシャッフルから外す' },
+      bringBack: { label: '戻す', hint: '1曲ずつ保留したものを「曲」とシャッフルに戻す' },
       delete: { label: '端末から削除', hint: 'ファイルを削除します。先にAndroidが確認を求めます。' },
     },
     busy: 'ほかの自動取得が進行中です。終わるまで待つか、停止してください。',

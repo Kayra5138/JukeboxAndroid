@@ -3,7 +3,8 @@
  * A new theme adds its name here, in every language, and nothing else.
  *
  * The lines ending in `Group` are not themes but the headings the picker puts
- * over them. The two default themes and following the phone come first and
+ * over them. `effectsNote` is the line under the glass ones' heading: why they cost more
+ * than the rest. The two default themes and following the phone come first and
  * go without one.
  */
 export const themes = {
@@ -40,5 +41,6 @@ export const themes = {
   lightGroup: 'Light',
   darkGroup: 'Dark',
   effectsGroup: 'Glass and gloss',
+  effectsNote: 'Live blur: more work than the flat themes.',
   specialGroup: 'Special',
 };

@@ -7,6 +7,17 @@ import { ALL_TIME, type Listen, type Range } from '../stats/period.ts';
 export type { Play };
 
 /**
+ * Something that changes whenever a listen is written down or taken away: how
+ * many there are and the newest. One cheap question, for a screen that would
+ * otherwise read the whole history again each time it is come back to only
+ * to find it as it was.
+ */
+export function playsMark(): string {
+  const row = db().getFirstSync<{ n: number; last: number | null }>('SELECT COUNT(*) AS n, MAX(id) AS last FROM plays');
+  return `${row?.n ?? 0}:${row?.last ?? 0}`;
+}
+
+/**
  * Store a finished listen. What counts as one is decided in `player/session.ts`
  * — it is arithmetic over wall clock, and putting it there is what let it be
  * tested without SQLite underneath.
@@ -180,6 +191,29 @@ export function lastPlayedAt(): Map<string, number> {
   const latest = new Map<string, number>();
   for (const row of rows) latest.set(row.track_id, row.at);
   return latest;
+}
+
+/**
+ * For the library's shelves: each track's listens since [since], and its
+ * listens begun within an hour either side of [hour] o'clock on any day.
+ * Tracks with neither are absent from both.
+ */
+export function shelfListens(since: number, hour: number): { recent: Map<string, number>; atHour: Map<string, number> } {
+  const rows = db().getAllSync<{ track_id: string; recent: number; at_hour: number }>(
+    `SELECT track_id,
+            SUM(started_at >= ?) AS recent,
+            SUM(((CAST(strftime('%H', started_at / 1000, 'unixepoch', 'localtime') AS INTEGER) - ? + 24) % 24) IN (0, 1, 23)) AS at_hour
+     FROM plays GROUP BY track_id`,
+    since,
+    hour
+  );
+  const recent = new Map<string, number>();
+  const atHour = new Map<string, number>();
+  for (const row of rows) {
+    if (row.recent > 0) recent.set(row.track_id, row.recent);
+    if (row.at_hour > 0) atHour.set(row.track_id, row.at_hour);
+  }
+  return { recent, atHour };
 }
 
 /**

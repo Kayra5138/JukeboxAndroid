@@ -184,6 +184,16 @@ export function readings(track: Track): Identity[] {
 /** How many readings of one name are tried at most: each is a search or two of every catalogue. */
 const MOST_READINGS = 4;
 
+/**
+ * The likeliest reading of a track's name.
+ *
+ * A name with not a letter or a digit in it -- `???`, `♪`, a dash, nothing
+ * at all -- has no reading worth searching for, and {@link readings} gives
+ * it none. It is still the track's name, and whatever asks what the track is
+ * called is answered with it as it stands. Left to the empty list, the answer
+ * was nothing, and the library's search for copies of a song, which asks this
+ * of every track, threw on opening for anybody with such a file.
+ */
 export function identify(track: Track): Identity {
-  return readings(track)[0]!;
+  return readings(track)[0] ?? reading(track.artist, track.title ?? '');
 }

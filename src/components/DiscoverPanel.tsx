@@ -11,7 +11,7 @@ import { useDiscoverIds } from './discover/hooks';
 import { ListEmpty, ListFoot } from './discover/ListEdges';
 import { makeStyles } from '../lib/theme/index';
 import { useTip } from '../lib/ui/tipsStore';
-import { useListColumns } from '../lib/ui/layout';
+import { useColumnsInSight } from '../lib/ui/tabOpen';
 import { DiscoverTip } from './welcome/DiscoverTip';
 import { useUnderBars } from './UnderBars';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
@@ -33,7 +33,7 @@ const keyOf = (id: string) => id;
  */
 export function DiscoverPanel() {
   const ids = useDiscoverIds();
-  const columns = useListColumns();
+  const columns = useColumnsInSight();
   const { width, fontScale } = useWindowDimensions();
   const router = useRouter();
   const styles = useStyles();

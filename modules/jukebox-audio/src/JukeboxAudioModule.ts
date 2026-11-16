@@ -234,7 +234,13 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * Null when the file carries none. The only artwork source that resolves:
    * `LibraryTrack.artworkUri` is always null.
    */
+  /** The queue last played put back, paused where it was left, onto a player holding nothing; whether it was. */
+  restoreSavedQueueAsync?(): Promise<boolean>;
   getEmbeddedArtworkAsync(trackId: string): Promise<string | null>;
+  /** Where the small copies of the covers are, and the names of those made: see Thumbs.kt. */
+  thumbsMadeAsync?(): Promise<{ dir: string; names: string[] }>;
+  /** The small copy of the cover at [source] (a file of the app's) under [name], made if need be; null where it cannot be. */
+  thumbAsync?(source: string, name: string): Promise<string | null>;
   /**
    * Which of these tracks carry a picture inside the file: true, false, or
    * null where finding out would mean opening the file and [open] is false.
@@ -441,6 +447,13 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * Missing from an older build.
    */
   feel?(kind: string, strength: number): void;
+  /**
+   * A picture of part of the screen as it is now, in points as measured in
+   * the window, written to a file: its address, or null where it could not
+   * be taken. For a screen to stand still as a picture of itself while a
+   * page of glass is over it. Missing from an older build.
+   */
+  snapshotAsync?(x: number, y: number, width: number, height: number): Promise<string | null>;
   /**
    * Puts a piece of text on the clipboard: the report screen's Copy.
    * Missing from a build from before there was one.

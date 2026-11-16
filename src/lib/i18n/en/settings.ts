@@ -31,7 +31,7 @@ export const settings = {
    * in words. Beside the name goes what is live, where anything is.
    */
   categories: {
-    look: 'The theme, albums as a rack, motion, vibration, and which views the library offers.',
+    look: 'The theme, motion, vibration, and which views the library offers.',
     sound: 'The equalizer and effects, even loudness, crossfade, and speed and pitch.',
     player: 'How far the jump buttons go, what plays when the queue runs out, and the language lyrics are translated into.',
     tapes: 'Smart rewind, how far a tape’s jump buttons go, and fetching podcasts on Wi‑Fi only.',
@@ -102,11 +102,6 @@ export const settings = {
   },
 
   tags: { note: 'Track information and album covers' },
-  rack: {
-    title: 'Albums as a rack',
-    note:
-      'Holding the phone sideways, flick through sleeves instead of reading a list. Tap the one in front to open it.',
-  },
   /** The last row of the player's page: Favorites, with the heart that fills it, on or off. */
   favoritesShown: { title: "Favorites", note: "A list that is always there, newest first, filled by a heart on the player and by Add to Favorites in a song’s menu. Off, all three are hidden and what is in it waits." },
   /** Settings → Player: the button on the player that adds the song playing to a list. */
@@ -168,6 +163,42 @@ export const settings = {
   },
   /** Under the row that opens Discover's settings from the page of downloads. */
   discover: { note: 'How long the list is, how often it is made anew, and what has been turned away.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Player look', open: 'What stands where the cover is, and what moves with the music.' },
+  coverLook: {
+    songs: 'Songs',
+    tapes: 'Tapes',
+    cover: 'Cover',
+    record: 'Record',
+    cassette: 'Cassette',
+    note: 'What stands in the player where the cover is. A record turns while it plays; a cassette winds its tape from one reel to the other as the part goes on. Neither turns while Hold the decoration still is on.',
+    tonearm: 'Tonearm',
+    tonearmNote: 'An arm over the record, its needle going in from the edge toward the label as the song goes on.',
+    motion: 'With the music',
+    none: 'Nothing',
+    spectrum: 'Spectrum',
+    ripple: 'Ripples',
+    breathe: 'Breathing',
+    scope: 'Oscilloscope',
+    motionNote: 'What moves with the music round it, in time with what you hear, through headphones as well. Only while it plays and the player is open.',
+    punch: 'Punch',
+    spectrogram: 'Spectrogram',
+    sparks: 'Sparks',
+    aurora: 'Aurora',
+    notes: {
+      spectrum: 'Bars of how loud each pitch is; spokes round a record.',
+      ripple: 'Rings going out from the edge on each beat.',
+      breathe: 'Grows a little with the music, a glow behind it.',
+      punch: 'Jumps a little larger on each beat and settles back.',
+      scope: 'The line of the sound itself.',
+      spectrogram: 'The last few seconds of every pitch, flowing past.',
+      sparks: 'Sparks thrown off its edge on each beat, across the player.',
+      aurora: 'Clouds of the cover\'s own colours behind the whole player, each swelling with a part of the sound.',
+    },
+    beats: 'Vibrate on the beat',
+    beatsNote: 'A light knock on each beat while the player is open and the music plays. As quiet as your vibration settings make it.',
+  },
   still: {
     title: 'Hold the decoration still',
     note:
@@ -211,6 +242,8 @@ export const settings = {
     title: 'Tabs',
     searchNote: 'Discover and YouTube downloads are on this tab, and go with it.',
     aside: 'Library and Settings are always there.',
+    names: 'Names under the icons',
+    namesNote: 'Off, the bar shows its icons alone and is a little lower. Sideways it always does.',
   },
 
   views: {

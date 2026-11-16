@@ -17,7 +17,7 @@ export const settings: Strings['settings'] = {
     experimental: 'Deneysel',
   },
   categories: {
-    look: 'Tema, albümlerin raf görünümü, hareket, titreşim ve kütüphanenin sunduğu görünümler.',
+    look: 'Tema, hareket, titreşim ve kütüphanenin sunduğu görünümler.',
     sound: 'Ekolayzer ve efektler, ses düzeyini eşitleme, çapraz geçiş, hız ve perde.',
     player: 'Atlama düğmelerinin süresi, sıra bitince ne çalacağı ve şarkı sözlerinin çevrildiği dil.',
     tapes: 'Akıllı geri sarma, kasetin atlama düğmelerinin süresi ve podcast’leri yalnızca Wi‑Fi’de indirme.',
@@ -78,11 +78,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: 'Parça bilgileri ve albüm kapakları' },
-  rack: {
-    title: 'Albümleri raf olarak göster',
-    note:
-      'Telefonu yan tutarken liste okumak yerine kapakların arasında gezin. Açmak için öndeki kapağa dokun.',
-  },
   favoritesShown: { title: "Favoriler", note: "Her zaman duran, en yenisi en üstte bir liste. Oynatıcıdaki kalp ve şarkı menüsündeki Favorilere ekle onu doldurur. Kapalıyken üçü de gizlenir, içindekiler bekler." },
   listButton: {
     title: 'Listeye ekle düğmesi',
@@ -135,6 +130,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'Listenin uzunluğu, ne sıklıkla yenilendiği ve hariç tutulanlar.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Oynatıcı görünümü', open: 'Kapağın yerinde ne duracağı ve müzikle ne hareket edeceği.' },
+  coverLook: {
+    songs: 'Şarkılar',
+    tapes: 'Kasetler',
+    cover: 'Kapak',
+    record: 'Plak',
+    cassette: 'Kaset',
+    note: 'Oynatıcıda kapağın yerinde ne duracağı. Plak çalarken döner; kaset, bölüm ilerledikçe bandı bir makaradan ötekine sarar. «Animasyonları azalt» açıkken ikisi de durur.',
+    tonearm: 'İğne kolu',
+    tonearmNote: 'Plağın üstünde bir pikap kolu; şarkı ilerledikçe iğnesi kenardan etikete doğru ilerler.',
+    motion: 'Müzikle birlikte',
+    none: 'Hiçbiri',
+    spectrum: 'Spektrum',
+    ripple: 'Dalgalar',
+    breathe: 'Nefes',
+    scope: 'Osiloskop',
+    motionNote: 'Çevresinde müzikle ne hareket edeceği, duyduğunla aynı anda, kulaklıkta da. Yalnızca çalarken ve oynatıcı açıkken.',
+    punch: 'Vuruş',
+    spectrogram: 'Spektrogram',
+    sparks: 'Kıvılcımlar',
+    aurora: 'Renk bulutu',
+    notes: {
+      spectrum: 'Her perdenin ne kadar yüksek olduğunu gösteren çubuklar; plakta etiketin çevresinde ışınlar.',
+      ripple: 'Her vuruşta kenardan dışa yayılan halkalar.',
+      breathe: 'Müzikle biraz büyür, arkasında bir parıltı.',
+      punch: 'Her vuruşta biraz büyüyüp geri oturur.',
+      scope: 'Sesin kendi dalga çizgisi.',
+      spectrogram: 'Son birkaç saniyenin tüm perdeleri, akıp giderek.',
+      sparks: 'Her vuruşta kenarından oynatıcıya saçılan kıvılcımlar.',
+      aurora: 'Tüm oynatıcının arkasında kapağın kendi renklerinden bulutlar, her biri sesin bir kısmıyla büyür.',
+    },
+    beats: 'Vuruşta titreşim',
+    beatsNote: 'Oynatıcı açıkken ve müzik çalarken her vuruşta hafif bir titreşim. Titreşim ayarların ne kadar izin veriyorsa o kadar.',
+  },
   still: {
     title: 'Animasyonları azalt',
     note:
@@ -174,6 +205,8 @@ export const settings: Strings['settings'] = {
     title: 'Sekmeler',
     searchNote: 'Keşfet ve YouTube indirmeleri bu sekmede; sekme kapanınca onlar da görünmez.',
     aside: 'Kütüphane ve Ayarlar her zaman görünür.',
+    names: 'Simgelerin altında adlar',
+    namesNote: 'Kapalıyken bar yalnızca simgeleri gösterir ve biraz daha alçak olur. Yatayda hep öyledir.',
   },
 
   views: {

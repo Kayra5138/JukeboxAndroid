@@ -1,17 +1,23 @@
 package expo.modules.jukeboxaudio.loudness
 
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaFormat
 import android.os.Handler
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.Renderer
 import androidx.media3.exoplayer.audio.AudioRendererEventListener
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.MediaCodecAudioRenderer
 import androidx.media3.exoplayer.mediacodec.MediaCodecAdapter
 import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.MediaSource
+import expo.modules.jukeboxaudio.spectrum.Spectrum
+import expo.modules.jukeboxaudio.spectrum.SpectrumAnalyzer
+import java.nio.ByteBuffer
 
 /**
  * Which track the samples now reaching one player's processors belong to.
@@ -82,6 +88,75 @@ class NamingAudioRenderer(
   private val waiting = ArrayDeque<String?>()
   private var first = true
 
+  /**
+   * What the player draws of the music as it is heard: given each piece the
+   * decoder hands on with the time it is heard at, and where playback has got
+   * to. Looks at nothing unless something is drawing it; see [SpectrumAnalyzer].
+   */
+  private val spectrum = SpectrumAnalyzer().also { Spectrum.add(it) }
+
+  override fun onOutputFormatChanged(format: Format, mediaFormat: MediaFormat?) {
+    super.onOutputFormatChanged(format, mediaFormat)
+    if (mediaFormat != null) {
+      val encoding =
+        if (mediaFormat.containsKey(MediaFormat.KEY_PCM_ENCODING)) mediaFormat.getInteger(MediaFormat.KEY_PCM_ENCODING)
+        else C.ENCODING_PCM_16BIT
+      spectrum.format(
+        mediaFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+        mediaFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT),
+        encoding
+      )
+    } else {
+      // Handed on without a decoder: as it came.
+      spectrum.format(format.sampleRate, format.channelCount, format.pcmEncoding)
+    }
+  }
+
+  override fun processOutputBuffer(
+    positionUs: Long,
+    elapsedRealtimeUs: Long,
+    codec: MediaCodecAdapter?,
+    buffer: ByteBuffer?,
+    bufferIndex: Int,
+    bufferFlags: Int,
+    sampleCount: Int,
+    bufferPresentationTimeUs: Long,
+    isDecodeOnlyBuffer: Boolean,
+    isLastBuffer: Boolean,
+    format: Format
+  ): Boolean {
+    // Before the sink takes it, which moves it on; read once, however many goes the sink takes.
+    if (buffer != null && !isDecodeOnlyBuffer && (bufferFlags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) == 0) {
+      spectrum.feed(buffer, bufferPresentationTimeUs)
+    }
+    return super.processOutputBuffer(
+      positionUs, elapsedRealtimeUs, codec, buffer, bufferIndex, bufferFlags, sampleCount,
+      bufferPresentationTimeUs, isDecodeOnlyBuffer, isLastBuffer, format
+    )
+  }
+
+  // Where what is heard has got to, as the player is told: the time the pieces above were given.
+  override fun getPositionUs(): Long {
+    val position = super.getPositionUs()
+    spectrum.clock(position, state == Renderer.STATE_STARTED, playbackParameters.speed)
+    return position
+  }
+
+  override fun onStarted() {
+    super.onStarted()
+    spectrum.playing(true)
+  }
+
+  override fun onStopped() {
+    spectrum.playing(false)
+    super.onStopped()
+  }
+
+  override fun onRelease() {
+    Spectrum.remove(spectrum)
+    super.onRelease()
+  }
+
   override fun onEnabled(joining: Boolean, mayRenderStartOfStream: Boolean) {
     first = true
     waiting.clear()
@@ -114,6 +189,7 @@ class NamingAudioRenderer(
   }
 
   override fun onPositionReset(positionUs: Long, joining: Boolean, sampleStreamIsResetToKeyFrame: Boolean) {
+    spectrum.reset()
     if (waiting.isNotEmpty()) {
       stream.id = waiting.last()
       waiting.clear()
@@ -122,6 +198,8 @@ class NamingAudioRenderer(
   }
 
   override fun onDisabled() {
+    spectrum.reset()
+    spectrum.playing(false)
     waiting.clear()
     first = true
     super.onDisabled()

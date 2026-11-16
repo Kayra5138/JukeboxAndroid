@@ -120,8 +120,17 @@ export const lists: Strings['lists'] = {
     exportAll: 'Exportar todas as listas…',
     export: 'Exportar…',
     untitled: 'Lista importada',
+    liked: 'Músicas Curtidas',
     reading: 'Lendo as listas…',
 
+    choose: {
+      heading: 'Quais playlists?',
+      hint: 'As marcadas entram como listas. As que não têm nenhuma música na biblioteca ficam desmarcadas.',
+      found: (found, total) => `${format.number(found)} de ${format.number(total)} na biblioteca`,
+      all: 'Todas',
+      none: 'Nenhuma',
+      bring: (count) => oneOrMany(count, 'Importar 1 playlist', `Importar ${format.number(count)} playlists`),
+    },
     conflict: {
       heading: (name) => `Já existe uma lista chamada “${name}”`,
       hint: 'O arquivo pode tomar o lugar dela, mantendo a capa, ou entrar como uma lista separada.',

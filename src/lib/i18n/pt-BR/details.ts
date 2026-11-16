@@ -262,6 +262,8 @@ export const details: Strings['details'] = {
         label: 'Redefinir',
         hint: 'Esquece o que as consultas encontraram para elas. Suas próprias edições ficam.',
       },
+      setAside: { label: 'Deixar de lado', hint: 'Fora de Faixas e do aleatório de tudo' },
+      bringBack: { label: 'Trazer de volta', hint: 'As deixadas de lado uma a uma, de novo em Faixas e no aleatório' },
       delete: { label: 'Excluir do celular', hint: 'Apaga os arquivos. O Android pergunta antes.' },
     },
     busy: 'Já há uma consulta em andamento. Espere terminar ou pare a consulta.',

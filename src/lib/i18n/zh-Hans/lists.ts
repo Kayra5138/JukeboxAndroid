@@ -103,8 +103,17 @@ export const lists: Strings['lists'] = {
     exportAll: '导出全部歌单…',
     export: '导出…',
     untitled: '导入的歌单',
+    liked: '已点赞的歌曲',
     reading: '正在读取 M3U 文件…',
 
+    choose: {
+      heading: '导入哪些歌单？',
+      hint: '勾选的歌单会作为列表导入。曲库中一首都没有的歌单未勾选。',
+      found: (found, total) => `曲库中有 ${format.number(found)}/${format.number(total)} 首`,
+      all: '全选',
+      none: '全不选',
+      bring: (count) => `导入 ${format.number(count)} 个歌单`,
+    },
     conflict: {
       heading: (name) => `已有名为“${name}”的歌单`,
       hint: '文件可以替换它的内容并保留封面，也可以作为单独的歌单导入。',

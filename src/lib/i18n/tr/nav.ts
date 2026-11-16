@@ -15,6 +15,7 @@ export const nav: Strings['nav'] = {
   effects: 'Efektler',
   details: 'Ayrıntıları gör ve düzenle',
   themes: 'Tema',
+  playerLook: 'Oynatıcı görünümü',
   albumRest: 'Albümün geri kalanı',
   customTheme: 'Özel tema',
   downloads: 'İndirmeler',

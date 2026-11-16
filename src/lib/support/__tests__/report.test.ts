@@ -71,3 +71,32 @@ test('half an emoji is put as a replacement character, so that a link can always
   assert.throws(() => encodeURIComponent(`a${half}`));
   assert.doesNotThrow(() => encodeURIComponent(wellFormed(`a${half}`)));
 });
+
+test('a screen that could not be drawn is copied whole: what, where, in which components, and on what', async () => {
+  const { crashText } = await import('../report.ts');
+  const stack = ['TypeError: Cannot read property \'title\' of undefined', ...Array.from({ length: 70 }, (_, i) => `    at f${i} (address at index.android.bundle:1:${i})`)].join('\n');
+  const text = crashText(
+    facts,
+    {
+      at: Date.UTC(2026, 10, 12, 17, 3),
+      name: 'TypeError',
+      message: "Cannot read property 'title' of undefined",
+      stack,
+      componentStack: '\n    in Setup\n    in WindowBehind',
+    },
+    [entry(0)]
+  );
+  assert.match(text, /^Jukebox could not draw a screen\nWhen: 2026-11-12 17:03Z\nError: TypeError: Cannot read property 'title' of undefined/);
+  assert.match(text, /Version: 0\.33\.1\nPhone: Google Pixel 8, Android 14/);
+  assert.match(text, /Recent errors/);
+  assert.match(text, /at f0 \(address at index\.android\.bundle:1:0\)/);
+  assert.match(text, /… 11 more/);
+  assert.match(text, /Components:\n```\n    in Setup\n    in WindowBehind\n```$/);
+});
+
+test('a crash with no stack says so rather than leaving the box empty', async () => {
+  const { crashText } = await import('../report.ts');
+  const text = crashText(facts, { at: 0, name: 'Error', message: 'x', stack: null, componentStack: '' }, null);
+  assert.match(text, /Stack:\n```\n\(none\)\n```/);
+  assert.match(text, /Components:\n```\n\(none\)\n```/);
+});

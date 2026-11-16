@@ -26,7 +26,7 @@ import { createStore } from '../ui/store.ts';
 
 export { withAlpha } from './colour.ts';
 export { DEFAULT_SEEDS, type CustomSeeds } from './custom.ts';
-export { outlined, outlinedClip, outlineWidth } from './edges.ts';
+export { outlined, outlinedClip, outlineWidth, ringed } from './edges.ts';
 export { backdropOf, effectsOf, laid, page, scene } from './effects.ts';
 export { THEMES, type ThemeChoice, type ThemeId } from './registry.ts';
 export type { Palette, Theme, ThemeGroup } from './tokens.ts';

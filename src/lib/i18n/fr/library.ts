@@ -97,13 +97,18 @@ export const library: Strings['library'] = {
       tapes: 'Rechercher cassettes, émissions et auteurs',
     },
     sort: 'Tri',
-    sortShort: { name: 'A–Z', added: 'Ajout', played: 'Écoute' },
+    sortShort: { name: 'A–Z', added: 'Ajout', played: 'Écoute', colour: 'Couleur' },
     sortedBy: {
       name: 'Trié par nom',
       added: 'Trié par date d’ajout',
       played: 'Trié par date de dernière écoute',
+      colour: 'Trié par la couleur de la pochette',
     },
     sortHint: 'Change l’ordre de la bibliothèque',
+    lookSwitch: 'Passe cette vue à son autre affichage',
+    view: 'Vue',
+    looks: { list: 'Liste', shelves: 'Rayons', rack: 'Bac', map: 'Carte' },
+    artistMap: { drawing: 'Dessin de la carte…', shuffle: 'Lire ses titres au hasard', open: 'Ouvrir', with: 'Avec', lasso: 'Entourer des artistes pour les lire au hasard', lassoHint: 'Entoure les artistes à lire au hasard', lassoChosen: 'Entourés', putBackAll: 'Remettre en place les artistes déplacés à la main', movedByHand: 'Déplacés à la main', putBack: 'Remettre' },
     groupSortShort: { name: 'A–Z', tracks: 'Titres', played: 'Écoutes', added: 'Récents' },
     groupSortedBy: {
       name: 'Trié par nom',
@@ -163,6 +168,8 @@ export const library: Strings['library'] = {
       label: 'Choisir la pochette de l’album',
       hint: 'Une image de ta galerie, pour chacun de ses titres',
     },
+    setAside: { label: 'Mettre de côté', hint: 'Ses morceaux hors de Titres et de la lecture aléatoire de tout' },
+    bringBack: { label: 'Remettre', hint: 'Ses morceaux de nouveau dans Titres et la lecture aléatoire' },
   },
 
   albumTools: {
@@ -251,6 +258,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'Partager comme fichier', hint: 'Envoyé tel quel : une discussion le garde comme document' },
     album: { label: 'Aller à l’album', hint: 'Le reste du disque, dans l’ordre' },
     addToPlaylist: { label: 'Ajouter à une liste', hint: 'Une de tes listes, ou une nouvelle' },
+    setAside: { label: 'Mettre de côté', hint: 'Hors de Titres et de la lecture aléatoire de tout' },
+    bringBack: { label: 'Remettre', hint: 'De nouveau dans Titres et la lecture aléatoire' },
+    asideWith: { label: 'Mis de côté avec d’autres', hint: 'Avec son album, son artiste, son dossier ou un tag, à remettre depuis Mis de côté' },
     favoriteAdd: { label: "Ajouter aux Favoris", hint: "La liste que remplit le cœur, les plus récents en haut" },
     favoriteRemove: { label: "Retirer des Favoris", hint: "Hors de la liste que remplit le cœur" },
     tiles: { label: 'Jouer aux piano tiles', hint: 'Des touches qui tombent en rythme avec ce morceau' },
@@ -278,6 +288,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}, ${tracks(count)}`,
     hint: 'Activé, le dossier est dans la bibliothèque ; désactivé, il en est écarté',
     empty: (root) => `Aucun dossier contenant de la musique dans ${root}.`,
+  },
+
+  setAside: {
+    title: 'Mis de côté',
+    none: 'Rien. Mets de côté un album, un artiste ou un morceau que tu ne veux ni dans Titres ni dans la lecture aléatoire.',
+    some: (count) => `${format.number(count)} ${one(count, 'morceau mis', 'morceaux mis')} de côté`,
+    note: 'Un morceau mis de côté n’apparaît plus dans Titres, ni dans la lecture aléatoire de tout, ni parmi les morceaux choisis pour que la musique continue. Il reste dans son album, chez son artiste et dans son dossier, dans tes listes et dans la recherche, et il est joué quand l’un d’eux l’est. Rien n’est supprimé.',
+    empty: 'Rien n’est mis de côté. Maintiens un album ou un morceau, ou ouvre un artiste ou un dossier, pour le mettre de côté.',
+    kinds: { album: 'Albums', artist: 'Artistes', list: 'Listes', folder: 'Dossiers', tag: 'Tags', track: 'Morceaux' },
+    songs: (count) => `${format.number(count)} ${one(count, 'morceau', 'morceaux')}`,
+    bringBack: 'Remettre',
+    bringBackSpoken: (name) => `Remettre ${name}`,
+    addTag: 'Mettre un tag de côté',
+    noTags: 'Il n’y a plus de tags à mettre de côté.',
+    album: { set: 'Mettre cet album de côté', back: 'Remettre cet album' },
+    artist: { set: 'Mettre cet artiste de côté', back: 'Remettre cet artiste' },
+    list: { set: 'Mettre cette liste de côté', back: 'Remettre cette liste' },
+    folder: { set: 'Mettre ce dossier de côté', back: 'Remettre ce dossier' },
   },
 
   shortFiles: {
@@ -358,5 +386,18 @@ export const library: Strings['library'] = {
     notDeleted: 'Le fichier n’a pas été supprimé.',
     keptRight: 'Gardé tel quel. La question ne sera plus posée.',
     failed: (error) => `Impossible de le faire. ${error}`,
+  },
+
+  shuffle: {
+    menu: 'Lecture aléatoire',
+    everything: 'Tous les morceaux',
+    change: 'Changer ce que joue le bouton…',
+    heading: 'Le bouton aléatoire joue',
+    note: 'Appuie longuement sur le bouton pour mélanger autre chose une seule fois. Le widget et la voiture jouent la même chose.',
+    labelHeading: 'Sur le bouton aléatoire',
+    label: { name: 'Le nom de ce qu’il joue', words: 'Un texte à toi', icon: 'Rien, seulement l’icône' },
+    wordsHeading: 'Texte du bouton aléatoire',
+    wordsPlaceholder: 'Aléatoire',
+    spoken: (name) => `Aléatoire : ${name}`,
   },
 };

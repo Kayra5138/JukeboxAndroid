@@ -99,13 +99,18 @@ export const library: Strings['library'] = {
       The button is 56 points wide and also stands over albums, so the added
       order is "Recentes", which has no gender; "Tocadas" is last played.
     */
-    sortShort: { name: 'A–Z', added: 'Recentes', played: 'Tocadas' },
+    sortShort: { name: 'A–Z', added: 'Recentes', played: 'Tocadas', colour: 'Cor' },
     sortedBy: {
       name: 'Em ordem alfabética',
       added: 'Ordenado por data de adição',
       played: 'Ordenado pela última reprodução',
+      colour: 'Ordenado pela cor da capa',
     },
     sortHint: 'Muda a ordem da biblioteca',
+    lookSwitch: 'Alterna esta visão para a outra exibição',
+    view: 'Visão',
+    looks: { list: 'Lista', shelves: 'Prateleiras', rack: 'Estante', map: 'Mapa' },
+    artistMap: { drawing: 'Desenhando o mapa…', shuffle: 'Tocar as músicas em ordem aleatória', open: 'Abrir', with: 'Com', lasso: 'Circular artistas para tocar em ordem aleatória', lassoHint: 'Circule os artistas que quer misturar', lassoChosen: 'Circulados', putBackAll: 'Devolver os artistas movidos à mão', movedByHand: 'Movidos à mão', putBack: 'Devolver' },
     groupSortShort: { name: 'A–Z', tracks: 'Faixas', played: 'Reprod.', added: 'Recentes' },
     groupSortedBy: {
       name: 'Em ordem alfabética',
@@ -165,6 +170,8 @@ export const library: Strings['library'] = {
       label: 'Escolher a capa do álbum',
       hint: 'Uma imagem da sua galeria, para todas as faixas dele',
     },
+    setAside: { label: 'Deixar de lado', hint: 'Suas músicas fora de Faixas e do aleatório de tudo' },
+    bringBack: { label: 'Trazer de volta', hint: 'Suas músicas de novo em Faixas e no aleatório' },
   },
 
   albumTools: {
@@ -258,6 +265,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'Compartilhar como arquivo', hint: 'Enviado como o próprio arquivo: a conversa guarda como documento' },
     album: { label: 'Ir para o álbum', hint: 'O resto do álbum, em ordem' },
     addToPlaylist: { label: 'Adicionar a uma lista', hint: 'Uma das suas listas ou uma nova' },
+    setAside: { label: 'Deixar de lado', hint: 'Fora de Faixas e do aleatório de tudo' },
+    bringBack: { label: 'Trazer de volta', hint: 'De novo em Faixas e no aleatório' },
+    asideWith: { label: 'De lado com outras', hint: 'Com o álbum, artista, pasta ou uma tag: traga de volta em Deixadas de lado' },
     favoriteAdd: { label: "Adicionar às Favoritas", hint: "A lista que o coração enche, as mais novas no topo" },
     favoriteRemove: { label: "Tirar das Favoritas", hint: "Fora da lista que o coração enche" },
     tiles: { label: 'Jogar piano tiles', hint: 'Teclas caindo no ritmo desta faixa' },
@@ -285,6 +295,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}, ${format.number(count)} ${oneOrMany(count, 'faixa', 'faixas')}`,
     hint: 'Ativada, a pasta está na biblioteca; desativada, fica de fora',
     empty: (root) => `Não há pastas com música dentro de ${root}.`,
+  },
+
+  setAside: {
+    title: 'Deixadas de lado',
+    none: 'Nada. Deixe de lado um álbum, um artista ou uma música que você não quer em Faixas nem no aleatório.',
+    some: (count) => `${format.number(count)} ${oneOrMany(count, 'música deixada', 'músicas deixadas')} de lado`,
+    note: 'Uma música deixada de lado fica fora de Faixas, de tocar tudo no aleatório e das músicas escolhidas para a música continuar. Ela continua no álbum, com o artista e na pasta, nas suas listas e na busca, e toca quando qualquer um deles é tocado. Nada é excluído.',
+    empty: 'Nada foi deixado de lado. Mantenha pressionado um álbum ou uma música, ou abra um artista ou uma pasta, para deixá-lo de lado.',
+    kinds: { album: 'Álbuns', artist: 'Artistas', list: 'Listas', folder: 'Pastas', tag: 'Tags', track: 'Músicas' },
+    songs: (count) => `${format.number(count)} ${oneOrMany(count, 'música', 'músicas')}`,
+    bringBack: 'Trazer de volta',
+    bringBackSpoken: (name) => `Trazer ${name} de volta`,
+    addTag: 'Deixar uma tag de lado',
+    noTags: 'Não há mais tags para deixar de lado.',
+    album: { set: 'Deixar este álbum de lado', back: 'Trazer este álbum de volta' },
+    artist: { set: 'Deixar este artista de lado', back: 'Trazer este artista de volta' },
+    list: { set: 'Deixar esta lista de lado', back: 'Trazer esta lista de volta' },
+    folder: { set: 'Deixar esta pasta de lado', back: 'Trazer esta pasta de volta' },
   },
 
   shortFiles: {
@@ -367,5 +395,18 @@ export const library: Strings['library'] = {
     notDeleted: 'O arquivo não foi excluído.',
     keptRight: 'Fica como está. Não vamos perguntar de novo.',
     failed: (error) => `Não foi possível. ${error}`,
+  },
+
+  shuffle: {
+    menu: 'Aleatório',
+    everything: 'Todas as músicas',
+    change: 'Mudar o que o botão toca…',
+    heading: 'O botão aleatório toca',
+    note: 'Mantenha o botão pressionado para embaralhar outra coisa só uma vez. O widget e o carro tocam o mesmo.',
+    labelHeading: 'O botão aleatório mostra',
+    label: { name: 'O nome do que ele toca', words: 'Um texto seu', icon: 'Nada, só o ícone' },
+    wordsHeading: 'Texto do botão aleatório',
+    wordsPlaceholder: 'Aleatório',
+    spoken: (name) => `Aleatório: ${name}`,
   },
 };

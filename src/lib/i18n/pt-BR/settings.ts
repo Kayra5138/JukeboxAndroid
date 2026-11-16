@@ -18,7 +18,7 @@ export const settings: Strings['settings'] = {
     experimental: 'Experimental',
   },
   categories: {
-    look: 'O tema, álbuns em prateleira, animações, vibração e quais modos a biblioteca oferece.',
+    look: 'O tema, animações, vibração e quais modos a biblioteca oferece.',
     sound: 'Equalizador e efeitos, volume uniforme, crossfade, velocidade e tom.',
     player: 'Quanto os botões de pular avançam, o que toca quando a fila acaba e o idioma para o qual as letras são traduzidas.',
     tapes: 'Retrocesso inteligente, quanto os botões de pular de uma fita avançam e baixar podcasts só no Wi‑Fi.',
@@ -79,11 +79,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: 'Informações das faixas e capas dos álbuns' },
-  rack: {
-    title: 'Álbuns em prateleira',
-    note:
-      'Com o celular na horizontal, passe pelas capas em vez de ler uma lista. Toque na da frente para abri-la.',
-  },
   favoritesShown: { title: "Favoritas", note: "Uma lista que está sempre lá, as mais novas no topo, enchida por um coração no player e por Adicionar às Favoritas no menu de uma música. Desligada, os três somem e o conteúdo espera." },
   listButton: {
     title: 'Botão de adicionar à lista',
@@ -136,6 +131,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'O tamanho da lista, a frequência com que ela é refeita e o que foi dispensado.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Aparência do player', open: 'O que aparece no lugar da capa e o que se mexe com a música.' },
+  coverLook: {
+    songs: 'Músicas',
+    tapes: 'Fitas',
+    cover: 'Capa',
+    record: 'Disco',
+    cassette: 'Fita cassete',
+    note: 'O que aparece no player no lugar da capa. Um disco gira enquanto toca; uma fita passa de um carretel para o outro conforme a parte avança. Com “Parar as animações decorativas”, os dois ficam parados.',
+    tonearm: 'Braço',
+    tonearmNote: 'Um braço sobre o disco; a agulha vai da borda até o rótulo conforme a música avança.',
+    motion: 'Com a música',
+    none: 'Nada',
+    spectrum: 'Espectro',
+    ripple: 'Ondas',
+    breathe: 'Respiração',
+    scope: 'Osciloscópio',
+    motionNote: 'O que se mexe com a música em volta, junto com o que você ouve, também no fone. Só enquanto toca e o player está aberto.',
+    punch: 'Batida',
+    spectrogram: 'Espectrograma',
+    sparks: 'Faíscas',
+    aurora: 'Aurora',
+    notes: {
+      spectrum: 'Barras de quão alto está cada tom; raios em volta de um disco.',
+      ripple: 'Anéis que saem da borda a cada batida.',
+      breathe: 'Cresce um pouco com a música, com um brilho atrás.',
+      punch: 'Cresce um pouco a cada batida e volta ao lugar.',
+      scope: 'A linha do próprio som.',
+      spectrogram: 'Os últimos segundos de cada tom, passando.',
+      sparks: 'Faíscas lançadas da borda a cada batida, pelo player todo.',
+      aurora: 'Nuvens com as cores da capa atrás de todo o player, cada uma crescendo com uma parte do som.',
+    },
+    beats: 'Vibrar na batida',
+    beatsNote: 'Um toque leve a cada batida enquanto o player está aberto e a música toca. Tão leve quanto suas configurações de vibração.',
+  },
   still: {
     title: 'Parar as animações decorativas',
     note:
@@ -175,6 +206,8 @@ export const settings: Strings['settings'] = {
     title: 'Abas',
     searchNote: 'O Descobrir e os downloads do YouTube ficam nesta aba e somem com ela.',
     aside: 'Biblioteca e Ajustes estão sempre lá.',
+    names: 'Nomes sob os ícones',
+    namesNote: 'Desligado, a barra mostra só os ícones e fica um pouco mais baixa. Na horizontal é sempre assim.',
   },
 
   views: {

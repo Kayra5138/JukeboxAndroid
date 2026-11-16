@@ -1,6 +1,6 @@
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect, useRouter, useIsFocused } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { BlurArea, GlassScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
@@ -48,7 +48,8 @@ import { Behind, scrimOf } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
 import type { Track } from '../lib/types';
 import type { EnrichedTrack } from '../lib/media/merge';
-import { useBack } from '../lib/ui/back';
+import { useBackInFront } from '../lib/ui/back';
+import { useTopOnReselect } from '../lib/ui/tabReselect';
 
 /** Enough tags to pick from without the sheet becoming the tag screen. */
 const TAG_CHOICES = 40;
@@ -70,6 +71,11 @@ const AUTO_SIGNS: Record<AutoListId, typeof FlameIcon> = {
   forgotten: HourglassIcon,
   skipped: SkipIcon,
 };
+
+/** Whether two readings of the database say the same: plain rows, compared as written. */
+function sameAs(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 export default function PlaylistsScreen() {
   const router = useRouter();
@@ -96,8 +102,7 @@ export default function PlaylistsScreen() {
     out a screen reader's user reaches for first, and the sheet has no button
     of its own to cancel with.
   */
-  const focused = useIsFocused();
-  useBack(fromTags && focused, () => setFromTags(false));
+  useBackInFront(fromTags, () => setFromTags(false));
   /** Which of the two a tag list will be. Following the tag is the one people
       mean more often, and it is also the one that cannot be got back to by
       hand once a copy has been taken. */
@@ -146,8 +151,11 @@ export default function PlaylistsScreen() {
   const load = useCallback(() => {
     // Made here on the first visit after an update, in the language the app speaks now.
     favorites();
-    setLists(playlists());
-    setTags(tagCounts().slice(0, TAG_CHOICES));
+    // Kept as they were where nothing has changed: a new list of the same lists is every row and cover drawn again.
+    const lists = playlists();
+    setLists((before) => (sameAs(before, lists) ? before : lists));
+    const tags = tagCounts().slice(0, TAG_CHOICES);
+    setTags((before) => (sameAs(before, tags) ? before : tags));
   }, []);
 
   /*
@@ -234,10 +242,14 @@ export default function PlaylistsScreen() {
   // described correctly on the way back.
   useFocusEffect(
     useCallback(() => {
-      load();
-      // And the library looked at again, for the covers and the counts. It
-      // says for itself when it has changed, and usually it has not.
-      void refreshLibrary();
+      // After the tab is on the screen, not before it: see the library's.
+      const later = setTimeout(() => {
+        load();
+        // And the library looked at again, for the covers and the counts. It
+        // says for itself when it has changed, and usually it has not.
+        void refreshLibrary();
+      }, 0);
+      return () => clearTimeout(later);
     }, [load, downloadRevision])
   );
 
@@ -285,6 +297,8 @@ export default function PlaylistsScreen() {
     onChanged: load,
     onOpen: (listId) => router.push({ pathname: '/playlist', params: { id: String(listId) } }),
   });
+  // Its tab pressed again: back to the top of it.
+  const backUp = useTopOnReselect();
 
   if (!lists) return <View style={styles.screen} />;
 
@@ -316,6 +330,7 @@ export default function PlaylistsScreen() {
       <Behind veiled={fromTags} style={landscape ? styles.sideways : styles.upright}>
       <BlurArea style={styles.middle}>
       <ScrollView
+        {...backUp}
         style={styles.fill}
         contentContainerStyle={[
           styles.content,
@@ -491,7 +506,7 @@ export default function PlaylistsScreen() {
             accessibilityRole="button"
             android_ripple={pressed}
             style={styles.tile}
-            onPress={() => router.push('/(tabs)/search?mode=discover')}>
+            onPress={() => router.navigate('/search?mode=discover')}>
             <CompassIcon size={20} color={c.accent} />
             <Text style={styles.tileName} numberOfLines={1}>{t.lists.screen.discover}</Text>
             <Text style={styles.tileDetail} numberOfLines={2}>{t.lists.screen.discoverHint}</Text>

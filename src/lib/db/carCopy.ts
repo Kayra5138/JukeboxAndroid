@@ -2,6 +2,17 @@ import { AppState } from 'react-native';
 import { defaultDatabaseDirectory } from 'expo-sqlite';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
+import { strings } from '../i18n/languages';
+import { libraryState, subscribeLibrary } from '../library/index';
+import { librarySetAside, setAsideRules, watchSetAside } from '../library/setAside';
+import {
+  shuffleLabel,
+  shuffleNamesOf,
+  shuffleSource,
+  shuffleTracks,
+  shuffleWordsFor,
+  watchShuffle,
+} from '../lists/shuffleSource';
 import { db } from './index';
 
 /**
@@ -38,6 +49,9 @@ const NEXT = 'car.next.db';
 /** How often the copy is brought up to date while the app is open. */
 const EVERY_MS = 60_000;
 
+/** How long after the shuffle button's choice or the library changes the copy follows. */
+const SOON_MS = 2_000;
+
 /**
  * What goes across, and nothing else.
  *
@@ -63,6 +77,34 @@ const TABLES: Record<string, string> = {
 
 /** How many rows this connection had changed when the copy was last made. */
 let copiedAt = -1;
+
+/**
+ * What the shuffle button plays and says was worked out from, as it was when
+ * the copy was last made: the library, the choice and the language. None of
+ * them is a row of this database changing, and any of them changes what the
+ * car's shuffle and the widget's are.
+ */
+let shuffledFrom: unknown[] = [];
+
+const shuffleMarks = (): unknown[] => [libraryState(), shuffleSource(), shuffleLabel(), strings(), setAsideRules()];
+
+/**
+ * The shuffle button's, for the car and the widget, which cannot work it out
+ * for themselves: a smart list's songs and those made from the listening are
+ * known only here. Its words, and its songs in the list's order -- none for
+ * everything, which they read for themselves. Nothing at all before the
+ * library has been read, and they then shuffle everything, as they did.
+ */
+function shuffleRows(): { carTitle: string; widgetText: string | null; ids: string[] } | null {
+  const state = libraryState();
+  if (state.kind !== 'library') return null;
+  const t = strings();
+  const wanted = shuffleSource();
+  const { tracks, name, gone } = shuffleTracks(wanted, state.tracks, shuffleNamesOf(t), librarySetAside());
+  const playing = gone ? { kind: 'all' as const } : wanted;
+  const words = shuffleWordsFor(t, playing, shuffleLabel(), name);
+  return { carTitle: words.spoken, widgetText: words.shown, ids: playing.kind === 'all' ? [] : tracks.map((track) => track.id) };
+}
 let copying = false;
 
 function changes(): number {
@@ -88,6 +130,8 @@ export async function publishCarCopy(): Promise<void> {
       // Nothing was attached.
     }
 
+    const marks = shuffleMarks();
+    const shuffle = shuffleRows();
     database.execSync(`ATTACH DATABASE '${path.replace(/'/g, "''")}' AS car`);
     try {
       // One transaction, so the file is either the whole copy or not touched.
@@ -98,9 +142,37 @@ export async function publishCarCopy(): Promise<void> {
             `DROP TABLE IF EXISTS car."${name}"`,
             `CREATE TABLE car."${name}" AS ${select}`,
           ]),
-          'COMMIT',
+          'DROP TABLE IF EXISTS car.shuffle_words',
+          'DROP TABLE IF EXISTS car.shuffle_tracks',
+          'DROP TABLE IF EXISTS car.set_aside_tracks',
         ].join(';\n')
       );
+      /*
+        The songs set aside, by id, worked out here as the Tracks view works
+        them out: the car keeps them out of its Tracks and of shuffling
+        everything, as the phone does, and could not tell for itself which
+        record or artist a song is filed under the way the phone does.
+      */
+      if (libraryState().kind === 'library') {
+        database.execSync('CREATE TABLE car.set_aside_tracks (track_id TEXT PRIMARY KEY)');
+        const aside = database.prepareSync('INSERT OR IGNORE INTO car.set_aside_tracks (track_id) VALUES (?)');
+        try {
+          for (const id of librarySetAside()) aside.executeSync(id);
+        } finally {
+          aside.finalizeSync();
+        }
+      }
+      if (shuffle) {
+        database.execSync('CREATE TABLE car.shuffle_words (car_title TEXT, widget_text TEXT); CREATE TABLE car.shuffle_tracks (position INTEGER, track_id TEXT)');
+        database.runSync('INSERT INTO car.shuffle_words (car_title, widget_text) VALUES (?, ?)', shuffle.carTitle, shuffle.widgetText);
+        const insert = database.prepareSync('INSERT INTO car.shuffle_tracks (position, track_id) VALUES (?, ?)');
+        try {
+          shuffle.ids.forEach((id, position) => insert.executeSync(position, id));
+        } finally {
+          insert.finalizeSync();
+        }
+      }
+      database.execSync('COMMIT');
     } catch (error) {
       try {
         database.execSync('ROLLBACK');
@@ -121,6 +193,7 @@ export async function publishCarCopy(): Promise<void> {
     const written = changes();
     await JukeboxAudio.publishCarCopyAsync();
     copiedAt = written;
+    shuffledFrom = marks;
   } catch (error) {
     console.warn('The copy for the car could not be written.', error);
   } finally {
@@ -130,7 +203,9 @@ export async function publishCarCopy(): Promise<void> {
 
 function publishIfChanged(): void {
   try {
-    if (changes() !== copiedAt) void publishCarCopy();
+    const marks = shuffleMarks();
+    const moved = marks.some((mark, at) => mark !== shuffledFrom[at]);
+    if (moved || changes() !== copiedAt) void publishCarCopy();
   } catch {
     // A database that will not open has bigger problems than a stale copy.
   }
@@ -143,8 +218,28 @@ export function keepCarCopy(): () => void {
   const leaving = AppState.addEventListener('change', (state) => {
     if (state !== 'active') publishIfChanged();
   });
+  /*
+    What the shuffle button plays chosen again, or the library read again:
+    the widget's tile says so within seconds rather than within the minute.
+    Held a moment first, a library being read changing several times running.
+  */
+  let soon: ReturnType<typeof setTimeout> | null = null;
+  const presently = () => {
+    if (soon) clearTimeout(soon);
+    soon = setTimeout(() => {
+      soon = null;
+      publishIfChanged();
+    }, SOON_MS);
+  };
+  const shuffling = watchShuffle(presently);
+  const setting = watchSetAside(presently);
+  const reading = subscribeLibrary(presently);
   return () => {
     clearInterval(timer);
+    if (soon) clearTimeout(soon);
     leaving.remove();
+    shuffling();
+    setting();
+    reading();
   };
 }

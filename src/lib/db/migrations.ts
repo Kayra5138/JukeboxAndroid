@@ -765,7 +765,7 @@ const SMART_LISTS = `
 
 /**
  * Where a listen was heard, for one brought in from another app's history:
- * `lastfm`, `spotify` or `listenbrainz`. Null is a listen heard in Jukebox,
+ * `lastfm`, `spotify`, `applemusic` or `listenbrainz`. Null is a listen heard in Jukebox,
  * which is every listen there was before this.
  *
  * On the listen itself rather than in a table beside it, unlike what
@@ -777,6 +777,25 @@ const SMART_LISTS = `
  */
 const PLAYS_FROM_ELSEWHERE = `
   ALTER TABLE plays ADD COLUMN source TEXT;
+`;
+
+/**
+ * What has been set aside: kept out of the Tracks view and out of shuffling
+ * everything, and nothing else (`library/setAside.ts`). A song by its id, a
+ * record by its key, an artist by theirs, a folder by its path, a tag by its
+ * name, one row each.
+ *
+ * A table rather than a setting, for the songs in it: a song's id is moved
+ * with it when its file is moved, and on to the song a backup is restored
+ * onto, as its tags are, which a list kept in a setting would not be.
+ */
+const SET_ASIDE = `
+  CREATE TABLE IF NOT EXISTS set_aside (
+    kind TEXT NOT NULL,
+    key TEXT NOT NULL,
+    added_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, key)
+  );
 `;
 
 export const MIGRATIONS: string[] = [
@@ -817,6 +836,7 @@ export const MIGRATIONS: string[] = [
   EPISODE_EXTRAS,
   SMART_LISTS,
   PLAYS_FROM_ELSEWHERE,
+  SET_ASIDE,
 ];
 
 /**

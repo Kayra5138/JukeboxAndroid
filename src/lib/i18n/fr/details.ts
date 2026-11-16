@@ -265,6 +265,8 @@ export const details: Strings['details'] = {
         label: 'Réinitialiser',
         hint: 'Oublie ce que les recherches ont trouvé pour eux. Tes propres modifications restent.',
       },
+      setAside: { label: 'Mettre de côté', hint: 'Hors de Titres et de la lecture aléatoire de tout' },
+      bringBack: { label: 'Remettre', hint: 'Ceux mis de côté un par un, de nouveau dans Titres et la lecture aléatoire' },
       delete: { label: 'Supprimer du téléphone', hint: 'Efface les fichiers. Android demande d’abord.' },
     },
     busy: 'Une recherche est déjà en cours. Attends qu’elle se termine, ou arrête-la.',

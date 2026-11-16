@@ -7,6 +7,9 @@ import { frostedWashOf } from '../lib/theme/effects';
 import { outlineWidth, useColours } from '../lib/theme/index';
 import type { Palette } from '../lib/theme/tokens';
 import { createStore } from '../lib/ui/store';
+import { useIsFocused } from 'expo-router';
+import { Curtain } from './Curtain';
+import { TabOpen } from '../lib/ui/tabOpen';
 import { barsLaidOver } from './UnderBars';
 
 /**
@@ -191,10 +194,36 @@ function tintOf(c: Palette): 'dark' | 'light' {
 const tabTargets = createStore<Readonly<Record<string, Target>>>({});
 
 /**
+ * The tab a finger is on in the tab bar, not yet opened: made ready to be
+ * shown while the finger is still down (see `Curtain`). Let go of a little
+ * after the finger is lifted, by when the tab has been opened or was not.
+ */
+const warmTab = createStore<string | null>(null);
+let coolLater: ReturnType<typeof setTimeout> | null = null;
+
+/** A finger came down on [routeKey]'s tab in the bar; null, it was lifted. */
+export function readyTab(routeKey: string | null) {
+  if (coolLater) clearTimeout(coolLater);
+  coolLater = null;
+  if (routeKey) warmTab.set(routeKey);
+  else coolLater = setTimeout(() => warmTab.set(null), 600);
+}
+
+/**
  * A tab's screen, as an area the tab bar can blur. For the tab navigator's
  * `screenLayout`, around each tab.
+ *
+ * Every tab once opened is kept standing, laid out and drawn into the
+ * phone's records, and only those not open are left out of the drawing (a
+ * `Curtain` shut). Left to the navigator, a tab not open was taken off the
+ * screen altogether, and opened again everything in it was put back and
+ * drawn afresh: some tenths of a second, from the library to Settings, on a
+ * fast phone.
  */
 export function TabArea({ routeKey, children }: { routeKey: string; children: ReactNode }) {
+  const open = useIsFocused();
+  // Asked as whether it is this tab, so that the others are not drawn again for it.
+  const warm = useSyncExternalStore(warmTab.subscribe, () => warmTab.get() === routeKey);
   const onTarget = useCallback(
     (target: Target | null) => {
       const next = { ...tabTargets.get() };
@@ -205,9 +234,11 @@ export function TabArea({ routeKey, children }: { routeKey: string; children: Re
     [routeKey]
   );
   return (
-    <BlurArea style={styles.fill} onTarget={onTarget}>
-      {children}
-    </BlurArea>
+    <Curtain shut={!open} warm={warm && !open} style={styles.fill}>
+      <BlurArea style={styles.fill} onTarget={onTarget}>
+        <TabOpen value={open}>{children}</TabOpen>
+      </BlurArea>
+    </Curtain>
   );
 }
 

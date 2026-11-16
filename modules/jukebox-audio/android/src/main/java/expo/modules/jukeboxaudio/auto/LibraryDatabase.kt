@@ -144,6 +144,40 @@ internal object LibraryDatabase {
     }
 
   /**
+   * What the app's shuffle button plays, as the app worked it out and wrote
+   * into the copy (`src/lib/db/carCopy.ts`): the songs of the list it plays,
+   * in the list's order, none for everything; and what the button says, the
+   * car's tile in words and the widget's beside its icon, null for the icon
+   * alone. Null where the copy has none of it -- before the app has read its
+   * library, or written by an app from before -- and then everything is
+   * shuffled, under the words the car always had.
+   */
+  data class Shuffle(val ids: List<String>, val carTitle: String, val widgetText: String?)
+
+  fun shuffle(context: Context): Shuffle? = read(context, null) { database ->
+    val words = database.rawQuery("SELECT car_title, widget_text FROM shuffle_words", null).use { cursor ->
+      if (cursor.moveToFirst()) (cursor.getString(0) ?: "") to (if (cursor.isNull(1)) null else cursor.getString(1)) else null
+    } ?: return@read null
+    val ids = database.rawQuery("SELECT track_id FROM shuffle_tracks ORDER BY position", null).use { cursor ->
+      buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+    }
+    Shuffle(ids, words.first, words.second)
+  }
+
+  /**
+   * The songs set aside on the phone, by id: kept out of the car's Tracks and
+   * of shuffling everything, as they are out of the phone's. Worked out by the
+   * app, which files songs under records and artists as it alone can. None
+   * where the copy is from before there was any setting aside, or cannot be
+   * read.
+   */
+  fun setAside(context: Context): Set<String> = read(context, emptySet()) { database ->
+    database.rawQuery("SELECT track_id FROM set_aside_tracks", null).use { cursor ->
+      buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
+    }
+  }
+
+  /**
    * Tracks in the order they were last listened to, most recent first.
    *
    * The listening history is the app's own, written whenever a play counts as

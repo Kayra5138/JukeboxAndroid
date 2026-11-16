@@ -138,7 +138,7 @@ export function freeListName(name: string, taken: readonly string[]): string {
  * else its file name without the ending, or else [fallback].
  */
 export function listNameFor(declared: string | null, fileName: string | null, fallback: string): string {
-  const fromFile = (fileName ?? '').replace(/\.(m3u8?|txt)$/i, '').trim();
+  const fromFile = (fileName ?? '').replace(/\.(m3u8?|txt|csv|xml)$/i, '').trim();
   return (declared ?? '').trim() || fromFile || fallback;
 }
 

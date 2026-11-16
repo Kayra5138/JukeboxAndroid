@@ -21,6 +21,7 @@ import { haptic } from '../lib/ui/haptics';
 import { useLandscape } from '../lib/ui/layout';
 import { BlurArea, Frost, GlassScene, useFrosted, useSceneTarget } from './Frosted';
 import { barGlass, FootDock } from './UnderBars';
+import { ArtistLinks } from './NameLinks';
 
 /** One track's cover, looked up per card so the neighbours arrive with theirs. */
 function Cover({ track, column }: { track: Track; column: boolean }) {
@@ -169,7 +170,8 @@ function PlayingBar({ column }: { column: boolean }) {
             {track.title}
           </Text>
           <Text style={styles.artist} numberOfLines={column ? 2 : 1}>
-            {track.artist ?? t.common.unknownArtist}
+            {/* Words only: the card is for opening the player, all of it; the player's own names lead on. */}
+            <ArtistLinks credit={track.artist} off />
             {track.id === currentId && isTape(track) ? <TapeLeft /> : null}
           </Text>
         </View>

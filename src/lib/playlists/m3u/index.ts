@@ -1,19 +1,19 @@
 import { fromBase64 } from '../../lyrics/decode.ts';
-import type { AutoListId } from '../../db/autoLists.ts';
-import { autoListTrackIds } from '../../db/autoLists.ts';
 import { readSetting, SETTINGS, writeSetting } from '../../db/index.ts';
 import {
   addToPlaylist,
   createPlaylist,
   playlist,
   playlists,
-  playlistTrackIds,
   setPlaylistTracks,
 } from '../../db/playlists.ts';
-import { trackIdsWithTag } from '../../db/tags.ts';
 import { libraryRoot, scanEverything } from '../../media/library.ts';
 import { withMetadata, type EnrichedTrack } from '../../media/merge.ts';
-import { smartListTracks } from '../../lists/smartLive.ts';
+import { listMemberIds, type ListSource } from '../../lists/memberIds.ts';
+import { songFinder, type LibrarySong, type NamedSong } from '../../history/import.ts';
+import { readAppleXml } from '../appleXml.ts';
+import { readSpotifyLists } from '../spotify.ts';
+import { readTableLists } from '../tables.ts';
 import { readings } from './decode.ts';
 import { foundCount, indexLibrary, matchEntries, type EntryResult, type ListTrack } from './match.ts';
 import { listsNative, type PickedListFile } from './native.ts';
@@ -111,26 +111,68 @@ export async function chooseListFiles(): Promise<PickedListFile[]> {
 
 /**
  * Reads each picked playlist against the library, without changing
- * anything yet.
+ * anything yet: an M3U file is one list, and a file of Spotify's playlists
+ * (see `spotify.ts`) is one for each of its playlists, and one more for the
+ * songs saved with the heart, called [names.liked]; Apple's XML of a library
+ * (`appleXml.ts`) is one for each of its playlists, and a playlist written as
+ * a table (`tables.ts`) one, or one for each playlist it names.
  *
- * Of the ways a file can be read, the one kept is the one that finds the
- * most songs; see `decode.ts` for why that is the judge.
+ * Of the ways an M3U file can be read, the one kept is the one that finds
+ * the most songs; see `decode.ts` for why that is the judge.
  */
-export async function prepareListFiles(picked: PickedListFile[], untitled: string): Promise<Prepared[]> {
+export async function prepareListFiles(
+  picked: PickedListFile[],
+  names: { untitled: string; liked: string }
+): Promise<Prepared[]> {
   if (picked.length === 0) return [];
+  const { untitled } = names;
   const library = await wholeLibrary();
   const index = indexLibrary(library.tracks);
+  let find: ((named: NamedSong) => LibrarySong | null) | null = null;
+  // Spotify's songs, and Apple's, are named, not pointed at, and found by name as listens are.
+  const spotifyList = (name: string, items: readonly NamedSong[]): Prepared => {
+    find ??= songFinder(librarySongs(library));
+    const results = items.map((song, at): EntryResult => {
+      const entry = {
+        location: '',
+        line: at + 1,
+        durationSec: null,
+        artist: song.artist,
+        title: song.title,
+        label: song.artist ? `${song.artist} – ${song.title}` : song.title,
+      };
+      const trackId = find!(song)?.id ?? null;
+      return { entry, trackId, how: trackId ? 'tags' : 'notFound' };
+    });
+    return { kind: 'ready', file: name, name: name || untitled, results, encoding: 'UTF-8' };
+  };
 
-  return picked.map((one): Prepared => {
+  // The songs saved with the heart after every playlist, wherever in the zip their file was.
+  const liked: Prepared[] = [];
+  const prepared = picked.flatMap((one): Prepared[] => {
     const file = one.name ?? untitled;
     if (one.problem || one.bytes == null) {
-      return { kind: 'problem', file, problem: one.problem === 'tooBig' ? 'tooBig' : 'unreadable' };
+      return [{ kind: 'problem', file, problem: one.problem === 'tooBig' ? 'tooBig' : 'unreadable' }];
     }
     const bytes = fromBase64(one.bytes);
     const ways = bytes ? readings(bytes) : [];
-    if (ways.length === 0) return { kind: 'problem', file, problem: 'unreadable' };
+    if (ways.length === 0) return [{ kind: 'problem', file, problem: 'unreadable' }];
 
-    if (!looksLikePlaylist(ways[0]!.text, parseM3u(ways[0]!.text))) return { kind: 'problem', file, problem: 'unreadable' };
+    const spotify = readSpotifyLists(ways[0]!.text);
+    if (spotify) {
+      const lists = spotify.lists.map((list) => spotifyList(list.name, list.items));
+      if (spotify.liked && spotify.liked.length > 0) liked.push(spotifyList(names.liked, spotify.liked));
+      return lists.length > 0 || spotify.liked?.length ? lists : [{ kind: 'problem', file, problem: 'empty' }];
+    }
+    // Others' playlists that name their songs rather than their files: found by name, as Spotify's are.
+    const named = readAppleXml(ways[0]!.text) ?? readTableLists(ways[0]!.text, listNameFor(null, one.name, untitled));
+    if (named) {
+      return named.length > 0
+        ? named.map((list) => spotifyList(list.name, list.items))
+        : [{ kind: 'problem', file, problem: 'empty' }];
+    }
+
+    if (!looksLikePlaylist(ways[0]!.text, parseM3u(ways[0]!.text))) return [{ kind: 'problem', file, problem: 'unreadable' }];
     const folder = placeOfDocument(one);
     let best: { name: string | null; results: EntryResult[]; encoding: string } | null = null;
     for (const way of ways) {
@@ -140,14 +182,32 @@ export async function prepareListFiles(picked: PickedListFile[], untitled: strin
         best = { name: document.name, results, encoding: way.encoding };
       }
     }
-    if (!best || best.results.length === 0) return { kind: 'problem', file, problem: 'empty' };
-    return {
-      kind: 'ready',
-      file,
-      name: listNameFor(best.name, one.name, untitled),
-      results: best.results,
-      encoding: best.encoding,
+    if (!best || best.results.length === 0) return [{ kind: 'problem', file, problem: 'empty' }];
+    return [
+      {
+        kind: 'ready',
+        file,
+        name: listNameFor(best.name, one.name, untitled),
+        results: best.results,
+        encoding: best.encoding,
+      },
+    ];
+  });
+  return [...prepared, ...liked];
+}
+
+/** The library as songs to be found by name: each track under the names the app shows and under its file's own. */
+function librarySongs(library: Library): LibrarySong[] {
+  return library.tracks.flatMap((track) => {
+    const song = {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      durationSec: track.durationSec,
+      filename: track.filename,
     };
+    return [song, ...(track.aliases ?? []).map((alias) => ({ ...song, title: alias.title, artist: alias.artist }))];
   });
 }
 
@@ -211,28 +271,7 @@ export function bringIn(prepared: Extract<Prepared, { kind: 'ready' }>, as: { na
 
 // ---- writing lists out ----
 
-export type ListSource = { kind: 'list'; id: number } | { kind: 'auto'; id: AutoListId; name: string };
-
-/**
- * What a list holds, by id, in its order: what was put in it, or what
- * carries its tag in the library's order, or what a smart list's rules or an
- * auto list find today.
- * Members that are hidden from the library are in it: they are files, and
- * the list has them.
- */
-function memberIds(source: ListSource, library: Library): { name: string; ids: string[] } | null {
-  if (source.kind === 'auto') return { name: source.name, ids: autoListTrackIds(source.id, Date.now()) };
-  const details = playlist(source.id);
-  if (!details) return null;
-  if (details.kind === 'smart') {
-    return { name: details.name, ids: smartListTracks(library.tracks, details.rules).map((track) => track.id) };
-  }
-  if (details.tag) {
-    const tagged = new Set(trackIdsWithTag(details.tag));
-    return { name: details.name, ids: library.tracks.filter((track) => tagged.has(track.id)).map((track) => track.id) };
-  }
-  return { name: details.name, ids: playlistTrackIds(source.id) };
-}
+export type { ListSource } from '../../lists/memberIds.ts';
 
 /** A list's playlist text, and how many of its members could not be written: gone, or outside the library folder. */
 function written(name: string, ids: string[], library: Library, style: PathStyle): { text: string; left: number } {
@@ -261,7 +300,7 @@ export async function exportList(
   const native = listsNative;
   if (!native) return { saved: false, name: '', written: 0, left: 0 };
   const library = await wholeLibrary();
-  const members = memberIds(source, library);
+  const members = listMemberIds(source, library.tracks);
   if (!members) return { saved: false, name: '', written: 0, left: 0 };
   const { text, left } = written(members.name, members.ids, library, style);
   const [fileName] = fileNamesFor([members.name], untitled);
@@ -289,7 +328,7 @@ export async function exportAllLists(
   const texts: string[] = [];
   let left = 0;
   for (const list of all) {
-    const members = memberIds({ kind: 'list', id: list.id }, library);
+    const members = listMemberIds({ kind: 'list', id: list.id }, library.tracks);
     const out = written(list.name, members?.ids ?? [], library, style);
     texts.push(out.text);
     left += out.left;

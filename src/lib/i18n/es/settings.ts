@@ -18,7 +18,7 @@ export const settings: Strings['settings'] = {
     experimental: 'Experimental',
   },
   categories: {
-    look: 'El tema, los álbumes en estantería, las animaciones, la vibración y las vistas que ofrece la biblioteca.',
+    look: 'El tema, las animaciones, la vibración y las vistas que ofrece la biblioteca.',
     sound: 'El ecualizador y los efectos, la igualación del volumen, el fundido, y la velocidad y el tono.',
     player: 'Cuánto saltan los botones de avance y retroceso, qué suena cuando se acaba la cola y el idioma al que se traducen las letras.',
     tapes: 'Rebobinado inteligente, cuánto saltan los botones de un casete y descargar pódcasts solo con Wi‑Fi.',
@@ -79,11 +79,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: 'Información de las pistas y portadas de álbumes' },
-  rack: {
-    title: 'Álbumes en estantería',
-    note:
-      'Con el teléfono en horizontal, pasa las fundas de los discos en lugar de leer una lista. Toca la de delante para abrirla.',
-  },
   favoritesShown: { title: "Favoritos", note: "Una lista que siempre está, lo más nuevo arriba, que llenan un corazón en el reproductor y Añadir a Favoritos en el menú de una canción. Desactivada, los tres se ocultan y lo que tiene espera." },
   listButton: {
     title: 'Botón de añadir a lista',
@@ -136,6 +131,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'Cuántas canciones tiene la lista, cada cuánto se renueva y lo que has descartado.' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'Aspecto del reproductor', open: 'Lo que aparece en lugar de la portada y lo que se mueve con la música.' },
+  coverLook: {
+    songs: 'Canciones',
+    tapes: 'Cintas',
+    cover: 'Portada',
+    record: 'Disco',
+    cassette: 'Casete',
+    note: 'Lo que aparece en el reproductor en lugar de la portada. Un disco gira mientras suena; un casete pasa la cinta de un carrete al otro a medida que avanza la parte. Con «Sin animaciones decorativas» ambos se quedan quietos.',
+    tonearm: 'Brazo',
+    tonearmNote: 'Un brazo sobre el disco; su aguja va del borde a la etiqueta a medida que avanza la canción.',
+    motion: 'Con la música',
+    none: 'Nada',
+    spectrum: 'Espectro',
+    ripple: 'Ondas',
+    breathe: 'Respiración',
+    scope: 'Osciloscopio',
+    motionNote: 'Lo que se mueve con la música a su alrededor, a la vez que lo que oyes, también con auriculares. Solo mientras suena y el reproductor está abierto.',
+    punch: 'Golpe',
+    spectrogram: 'Espectrograma',
+    sparks: 'Chispas',
+    aurora: 'Aurora',
+    notes: {
+      spectrum: 'Barras de lo fuerte que suena cada tono; rayos alrededor de un disco.',
+      ripple: 'Anillos que salen del borde en cada golpe.',
+      breathe: 'Crece un poco con la música, con un brillo detrás.',
+      punch: 'Crece un poco en cada golpe y vuelve a su sitio.',
+      scope: 'La línea del propio sonido.',
+      spectrogram: 'Los últimos segundos de cada tono, pasando.',
+      sparks: 'Chispas que salen de su borde en cada golpe, por todo el reproductor.',
+      aurora: 'Nubes con los colores de la portada detrás de todo el reproductor; cada una crece con una parte del sonido.',
+    },
+    beats: 'Vibrar con el ritmo',
+    beatsNote: 'Un toque suave en cada golpe mientras el reproductor está abierto y suena música. Tan suave como lo dejen tus ajustes de vibración.',
+  },
   still: {
     title: 'Sin animaciones decorativas',
     note:
@@ -175,6 +206,8 @@ export const settings: Strings['settings'] = {
     title: 'Pestañas',
     searchNote: 'Descubrir y las descargas de YouTube están en esta pestaña y desaparecen con ella.',
     aside: 'Biblioteca y Ajustes siempre están.',
+    names: 'Nombres bajo los iconos',
+    namesNote: 'Si está desactivado, la barra solo muestra sus iconos y es un poco más baja. En horizontal siempre es así.',
   },
 
   views: {

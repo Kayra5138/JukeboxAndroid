@@ -4,12 +4,14 @@ import type { PressRingFor } from './PressMenu';
 import type { Track } from '../lib/types';
 import { Image } from './Picture';
 import { useIsFocused } from 'expo-router';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AlbumTools } from './AlbumTools';
+import { SetAsideLink } from './SetAsideLink';
+import { AlbumBy } from './NameLinks';
 import type { Sleeve } from './CoverFlow';
-import { LIST_COVER_SIZE, ListHeading } from './ListHeading';
+import { LIST_COVER_SIZE, ListHeading, SIDE_COLUMN, sideCoverSize } from './ListHeading';
 import { PlaylistCover } from './PlaylistCover';
 import { Pressable } from './Pressable';
 import { QueueList } from './QueueList';
@@ -42,6 +44,7 @@ const LIST_BY = 0.6;
  */
 const LANDS_FROM = 0.8;
 
+
 /**
  * A record taken out of the rack: the list of what is on it, over the rack.
  *
@@ -57,7 +60,12 @@ const LANDS_FROM = 0.8;
  *
  * It fills whatever it is put in and nothing more. Sideways that is the
  * library's share of the window, between the tabs and the player's panel,
- * both of which go on working beside it.
+ * both of which go on working beside it; and there it is two columns, the
+ * record's name, cover and buttons down the left and its tracks the whole
+ * height of the right (see `ListHeading`).
+ *
+ * Opened from a row of the list of albums rather than from the rack, there is
+ * no sleeve to fly: the record simply fades in over the list, and out.
  */
 export function AlbumListing({
   album,
@@ -65,6 +73,7 @@ export function AlbumListing({
   sleeveNow,
   top,
   bottom = 0,
+  side = false,
   onPlay,
   onTap,
   onLongPress,
@@ -73,8 +82,8 @@ export function AlbumListing({
   onClosed,
 }: {
   album: Album;
-  /** Where the sleeve was when it was tapped, measured from this view's corner. */
-  sleeve: Sleeve;
+  /** Where the sleeve was when it was tapped, measured from this view's corner; null when it was opened from a row. */
+  sleeve: Sleeve | null;
   /**
    * Where it is by the time the record goes back, or null if the rack no
    * longer has it square on — or is not there at all, the phone having been
@@ -85,6 +94,8 @@ export function AlbumListing({
   top: number;
   /** How much of the foot is under the bars of glass, for the last row to be scrolled clear of. */
   bottom?: number;
+  /** Two columns, as sideways: see above. */
+  side?: boolean;
   onPlay: (tracks: EnrichedTrack[], index: number) => void;
   /** A row tapped, where that is not simply [onPlay] from it. */
   onTap?: (tracks: EnrichedTrack[], index: number) => void;
@@ -107,6 +118,8 @@ export function AlbumListing({
   const insets = useSafeAreaInsets();
   const t = useT();
   const styles = useStyles();
+  const { height: tall } = useWindowDimensions();
+  const coverSize = side ? sideCoverSize(tall, top, bottom) : LIST_COVER_SIZE;
   // The sleeve in flight, which has to be the very picture the rack showed.
   const artwork = useAlbumArtwork(album.tracks);
 
@@ -229,7 +242,7 @@ export function AlbumListing({
     and what is interpolated is where that middle is.
   */
   const flying = !still && from != null;
-  const size = sleeve.width;
+  const size = sleeve?.width ?? coverSize;
   const flight =
     from && to
       ? [
@@ -258,7 +271,7 @@ export function AlbumListing({
             }),
           },
         ]
-      : [{ translateX: sleeve.x }, { translateY: sleeve.y }];
+      : [{ translateX: sleeve?.x ?? 0 }, { translateY: sleeve?.y ?? 0 }];
   const listed = progress.interpolate({
     inputRange: [0, LIST_BY],
     outputRange: [0, 1],
@@ -275,6 +288,50 @@ export function AlbumListing({
     extrapolate: 'clamp',
   });
 
+  const heading = (
+    <ListHeading
+      side={side}
+      onBack={close}
+      cover={
+        <Animated.View
+          ref={cover}
+          collapsable={false}
+          onLayout={arrive}
+          // Kept back while a sleeve is on its way to stand here,
+          // or there would be two of them.
+          style={{ opacity: flying ? landed : 1 }}>
+          <PlaylistCover
+            tracks={album.tracks}
+            chosen={null}
+            sleeve={album.tracks}
+            size={coverSize}
+          />
+        </Animated.View>
+      }
+      name={album.name}
+      tracks={album.tracks}
+      hint={<AlbumBy artist={album.artist} year={album.year} />}
+      onPlay={() => onPlay(album.tracks, 0)}
+      // Shuffled here rather than by the player's shuffle, so the
+      // queue itself is in the new order.
+      onShuffle={() => onPlay(shuffled(album.tracks), 0)}>
+      {/* Quiet, under the two buttons: where the record's own page
+          keeps the things that are not playing it. */}
+      <View style={styles.links}>
+        {onFindRest ? (
+          <Pressable
+            style={styles.linkHit}
+            accessibilityRole="button"
+            onPress={() => onFindRest(album.key)}>
+            <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
+          </Pressable>
+        ) : null}
+        <AlbumTools album={album} />
+        <SetAsideLink kind="album" itemKey={album.key} hit={styles.linkHit} style={styles.link} />
+      </View>
+    </ListHeading>
+  );
+
   return (
     <View
       ref={frame}
@@ -289,68 +346,37 @@ export function AlbumListing({
         nothing meant for the list reaches the rack while one is turning into
         the other.
       */}
-      <Animated.View style={[styles.page, { opacity: listed }]}>
-        <QueueList
-          // On a plate where screens are glass, as the record's own page has them.
-          plate
-          queue={album.tracks}
-          // Nothing in a list is "the playing one"; the mark column stays empty.
-          currentIndex={-1}
-          // What a tap plays is a choice (`player/tap.ts`); the record from that track, unless one was made.
-          onSelect={(index) => (onTap ?? onPlay)(album.tracks, index)}
-          onLongPress={
-            onLongPress &&
-            ((index) => {
-              const track = album.tracks[index];
-              if (track) onLongPress(track);
-            })
-          }
-          ring={ring}
-          header={
-            <View style={{ paddingTop: top }}>
-              <ListHeading
-                onBack={close}
-                cover={
-                  <Animated.View
-                    ref={cover}
-                    collapsable={false}
-                    onLayout={arrive}
-                    // Kept back while a sleeve is on its way to stand here,
-                    // or there would be two of them.
-                    style={{ opacity: flying ? landed : 1 }}>
-                    <PlaylistCover
-                      tracks={album.tracks}
-                      chosen={null}
-                      sleeve={album.tracks}
-                      size={LIST_COVER_SIZE}
-                    />
-                  </Animated.View>
-                }
-                name={album.name}
-                tracks={album.tracks}
-                hint={[album.artist, album.year].filter(Boolean).join(' · ') || null}
-                onPlay={() => onPlay(album.tracks, 0)}
-                // Shuffled here rather than by the player's shuffle, so the
-                // queue itself is in the new order.
-                onShuffle={() => onPlay(shuffled(album.tracks), 0)}>
-                {/* Quiet, under the two buttons: where the record's own page
-                    keeps the things that are not playing it. */}
-                <View style={styles.links}>
-                  {onFindRest ? (
-                    <Pressable
-                      style={styles.linkHit}
-                      accessibilityRole="button"
-                      onPress={() => onFindRest(album.key)}>
-                      <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
-                    </Pressable>
-                  ) : null}
-                  <AlbumTools album={album} />
-                </View>
-              </ListHeading>
-            </View>
-          }
-          footer={<View style={{ paddingBottom: insets.bottom + 32 + bottom }} />}
-        />
+      <Animated.View style={[styles.page, side && styles.sides, { opacity: listed }]}>
+        {side ? (
+          // The left column: scrolled on its own, should a long name and the links under it not fit.
+          <ScrollView
+            style={styles.sidePane}
+            contentContainerStyle={{ paddingTop: top, paddingBottom: bottom + insets.bottom }}
+            showsVerticalScrollIndicator={false}>
+            {heading}
+          </ScrollView>
+        ) : null}
+        <View style={styles.tracks}>
+          <QueueList
+            // On a plate where screens are glass, as the record's own page has them.
+            plate
+            queue={album.tracks}
+            // Nothing in a list is "the playing one"; the mark column stays empty.
+            currentIndex={-1}
+            // What a tap plays is a choice (`player/tap.ts`); the record from that track, unless one was made.
+            onSelect={(index) => (onTap ?? onPlay)(album.tracks, index)}
+            onLongPress={
+              onLongPress &&
+              ((index) => {
+                const track = album.tracks[index];
+                if (track) onLongPress(track);
+              })
+            }
+            ring={ring}
+            header={<View style={{ paddingTop: top }}>{side ? null : heading}</View>}
+            footer={<View style={{ paddingBottom: insets.bottom + 32 + bottom }} />}
+          />
+        </View>
       </Animated.View>
 
       {flying ? (
@@ -379,6 +405,14 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   */
   // Or, where screens are glass, the wash every other one has, over a heading and a rack put out of focus by the library.
   page: { flex: 1, ...(glassOf(c) > 0 ? glassPage(c) : page(c)) },
+  // Sideways: the record down the left, a share of the width within bounds, and the tracks beside it.
+  sides: { flexDirection: 'row' },
+  sidePane: {
+    ...SIDE_COLUMN,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: c.border,
+  },
+  tracks: { flex: 1 },
   // The rack's own sleeve, to the corner and the colour behind the picture.
   sleeve: {
     position: 'absolute',

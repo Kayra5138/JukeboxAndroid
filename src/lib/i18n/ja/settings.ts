@@ -17,7 +17,7 @@ export const settings: Strings['settings'] = {
     experimental: '試験運用',
   },
   categories: {
-    look: 'テーマ、アルバムのラック表示、アニメーション、バイブレーション、ライブラリで使う表示の種類。',
+    look: 'テーマ、アニメーション、バイブレーション、ライブラリで使う表示の種類。',
     sound: 'イコライザーとエフェクト、音量の均一化、クロスフェード、速度とピッチ。',
     player: 'スキップボタンで移動する秒数、キューが終わるときに続けて流す曲、歌詞の翻訳先の言語。',
     tapes: 'スマート巻き戻し、カセットのスキップボタンの秒数、ポッドキャストを Wi‑Fi のときだけ取得する設定。',
@@ -78,11 +78,6 @@ export const settings: Strings['settings'] = {
   },
 
   tags: { note: '曲の情報とアルバムジャケット' },
-  rack: {
-    title: 'アルバムをラック表示',
-    note:
-      '端末を横向きにすると、リストの代わりにジャケットをめくって選べます。手前のジャケットをタップすると開きます。',
-  },
   favoritesShown: { title: "お気に入り", note: "常にあるリスト（新しい順）。プレーヤーのハートと曲のメニューの「お気に入りに追加」で追加します。オフにすると3つとも隠れ、中身はそのまま残ります。" },
   listButton: {
     title: 'リストに追加ボタン',
@@ -135,6 +130,42 @@ export const settings: Strings['settings'] = {
     },
   },
   discover: { note: 'リストの曲数、更新の頻度、除外したもの。' },
+  /** What stands where the cover is in the player: Settings → Player. See `ui/coverLook.ts`. */
+  /** Settings → Look & feel, under the theme: the row that opens how the player looks. */
+  playerLook: { title: 'プレーヤーの見た目', open: 'カバーの代わりに表示するものと、音楽に合わせて動くもの。' },
+  coverLook: {
+    songs: '曲',
+    tapes: 'テープ',
+    cover: 'カバー',
+    record: 'レコード',
+    cassette: 'カセット',
+    note: 'プレーヤーでカバーの代わりに表示するもの。レコードは再生中に回転し、カセットはパートが進むにつれてテープを片方のリールからもう片方へ巻き取ります。「装飾の動きを止める」がオンのときはどちらも止まります。',
+    tonearm: 'トーンアーム',
+    tonearmNote: 'レコードの上のアーム。曲が進むにつれて針が外側からラベルへ進みます。',
+    motion: '音楽に合わせて',
+    none: 'なし',
+    spectrum: 'スペクトラム',
+    ripple: '波紋',
+    breathe: '呼吸',
+    scope: 'オシロスコープ',
+    motionNote: 'その周りで音楽に合わせて動くもの。聞こえている音と同時に、ヘッドホンでも。再生中でプレーヤーが開いているときだけ。',
+    punch: 'パンチ',
+    spectrogram: 'スペクトログラム',
+    sparks: 'スパーク',
+    aurora: 'オーロラ',
+    notes: {
+      spectrum: '音の高さごとの大きさを示すバー。レコードでは周りに光線。',
+      ripple: 'ビートのたびに縁から広がる輪。',
+      breathe: '音楽に合わせて少し大きくなり、後ろが光ります。',
+      punch: 'ビートのたびに少し大きくなり、元に戻ります。',
+      scope: '音そのものの波形。',
+      spectrogram: '直近数秒のすべての音の高さが流れていきます。',
+      sparks: 'ビートのたびに縁からプレーヤー全体へ飛び散る火花。',
+      aurora: 'プレーヤー全体の後ろに、カバーの色の雲。それぞれ音の一部に合わせて膨らみます。',
+    },
+    beats: 'ビートで振動',
+    beatsNote: 'プレーヤーが開いていて音楽が再生中のとき、ビートごとに軽く振動します。強さは振動の設定に従います。',
+  },
   still: {
     title: '装飾の動きを止める',
     note:
@@ -174,6 +205,8 @@ export const settings: Strings['settings'] = {
     title: 'タブ',
     searchNote: 'ディスカバーとYouTubeのダウンロードはこのタブにあり、タブと一緒に非表示になります。',
     aside: 'ライブラリと設定は常に表示されます。',
+    names: 'アイコンの下に名前',
+    namesNote: 'オフにすると、バーにはアイコンだけが表示され、少し低くなります。横向きでは常にそうなります。',
   },
 
   views: {

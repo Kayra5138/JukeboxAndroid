@@ -118,8 +118,17 @@ export const lists: Strings['lists'] = {
     exportAll: 'Alle Listen exportieren…',
     export: 'Exportieren…',
     untitled: 'Importierte Liste',
+    liked: 'Lieblingssongs',
     reading: 'M3U-Dateien werden gelesen…',
 
+    choose: {
+      heading: 'Welche Playlists?',
+      hint: 'Die angehakten kommen als Listen. Playlists ohne einen einzigen Song aus der Mediathek sind nicht angehakt.',
+      found: (found, total) => `${format.number(found)} von ${format.number(total)} in der Mediathek`,
+      all: 'Alle',
+      none: 'Keine',
+      bring: (count) => oneOrMany(count, '1 Playlist importieren', `${format.number(count)} Playlists importieren`),
+    },
     conflict: {
       heading: (name) => `Es gibt schon eine Liste namens „${name}“`,
       hint: 'Die Datei kann die Liste ersetzen, deren Cover dabei bleibt, oder als eigene Liste dazukommen.',

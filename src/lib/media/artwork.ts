@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { readArtwork } from '../db/metadata';
+import { readAllArtwork } from '../db/metadata';
 import { artworkRevision, subscribeArtwork } from './artworkEvents';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
@@ -17,6 +17,39 @@ import type { Track } from '../types.ts';
  * is no flicker to prevent either.
  */
 const found = new Map<string, string>();
+
+/*
+  The covers the app holds, every track's read at once and kept until a
+  cover changes anywhere -- which is when the hook asks again as well. Read
+  one track at a time, as each cover came on screen, a wall of several
+  hundred was as many reads in a row on the thread that draws.
+*/
+let catalogue: Map<string, string> | null = null;
+let catalogueAt = -1;
+function catalogued(trackId: string): string | null {
+  const now = artworkRevision();
+  if (!catalogue || catalogueAt !== now) {
+    try {
+      catalogue = readAllArtwork();
+    } catch {
+      catalogue = new Map();
+    }
+    catalogueAt = now;
+  }
+  return catalogue.get(trackId) ?? null;
+}
+
+/**
+ * The cover a track can be drawn with at once, and whether that is the last
+ * word on it or the file itself is still to be asked for a picture.
+ */
+function coverNow(track: Track): { uri: string | null; settled: boolean } {
+  const held = catalogued(track.id);
+  if (held?.startsWith('file://')) return { uri: held, settled: true };
+  const known = found.get(track.id);
+  if (known !== undefined) return { uri: known, settled: true };
+  return { uri: held ?? track.artworkUri, settled: false };
+}
 
 /**
  * Forgets the picture found inside a track's file, because the file has just
@@ -96,22 +129,21 @@ export function warmArtwork(tracks: readonly (Track | null | undefined)[]): () =
  * once and has nowhere to put a hook per row.
  */
 export async function artworkFor(trackId: string): Promise<string | null> {
-  const catalogue = readArtwork(trackId);
-  if (catalogue?.startsWith('file://')) return catalogue;
+  const held = catalogued(trackId);
+  if (held?.startsWith('file://')) return held;
 
   const known = found.get(trackId);
   if (known !== undefined) return known;
 
   const embedded = await JukeboxAudio.getEmbeddedArtworkAsync(trackId).catch(() => null);
   if (embedded) found.set(trackId, embedded);
-  return embedded ?? catalogue ?? null;
+  return embedded ?? held ?? null;
 }
 
 export function useTrackArtwork(track: Track | null): string | null {
   const revision = useSyncExternalStore(subscribeArtwork, artworkRevision);
-  const [uri, setUri] = useState<string | null>(() =>
-    track ? (found.get(track.id) ?? track.artworkUri) : null
-  );
+  // Drawn the first time with what is known, so that a cover come on screen is not drawn again a moment later with the same.
+  const [uri, setUri] = useState<string | null>(() => (track ? coverNow(track).uri : null));
 
   useEffect(() => {
     if (!track) {
@@ -124,18 +156,10 @@ export function useTrackArtwork(track: Track | null): string | null {
     // showing that track's cover until the answer arrived, and the wrong
     // picture is worse than a blank one.
     // A later Tags lookup can upgrade a downloaded YouTube thumbnail.
-    const catalogue = readArtwork(track.id);
-    if (catalogue?.startsWith('file://')) {
-      setUri(catalogue);
-      return;
-    }
-    const known = found.get(track.id);
-    if (known !== undefined) {
-      setUri(known);
-      return;
-    }
-    const fallback = catalogue ?? track.artworkUri;
-    setUri(fallback);
+    const now = coverNow(track);
+    setUri(now.uri);
+    if (now.settled) return;
+    const fallback = now.uri;
 
     let cancelled = false;
     void JukeboxAudio.getEmbeddedArtworkAsync(track.id).then((embedded) => {
@@ -275,11 +299,19 @@ export function useAlbumArtwork(
   onGap?: (tracks: readonly Track[]) => void
 ): string | null {
   const revision = useSyncExternalStore(subscribeArtwork, artworkRevision);
-  const [uri, setUri] = useState<string | null>(() =>
-    tracks ? (storedSleeve(tracks) ?? sleeves.get(sleeveKey(tracks)) ?? null) : null
-  );
+  /*
+    Which tracks the answer is for, as well as the answer: handed other
+    tracks, as a recycled row or a sleeve of the rack given to another record
+    is, what is known of theirs is shown on that render rather than the
+    other's until the next.
+  */
+  const [found, setFound] = useState<{ of: readonly Track[] | null; uri: string | null }>(() => ({
+    of: tracks,
+    uri: knownSleeve(tracks),
+  }));
 
   useEffect(() => {
+    const setUri = (uri: string | null) => setFound({ of: tracks, uri });
     if (!tracks || tracks.length === 0) {
       setUri(null);
       return;
@@ -306,5 +338,11 @@ export function useAlbumArtwork(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tracks, revision]);
 
-  return uri;
+  return found.of === tracks ? found.uri : knownSleeve(tracks);
+}
+
+/** The cover of [tracks] if it is known without asking: see {@link useAlbumArtwork}. */
+function knownSleeve(tracks: readonly Track[] | null): string | null {
+  if (!tracks || tracks.length === 0) return null;
+  return storedSleeve(tracks) ?? sleeves.get(sleeveKey(tracks)) ?? null;
 }

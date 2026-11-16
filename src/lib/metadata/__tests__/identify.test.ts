@@ -146,3 +146,17 @@ describe('readings of a name written the Japanese way', () => {
     assert.deepEqual(read('Itterasshai', 'Ai Higuchi'), ['Ai Higuchi | Itterasshai']);
   });
 });
+
+describe('a name with nothing in it to read', () => {
+  it('is still answered with itself, rather than with nothing', () => {
+    for (const [title, artist] of [['???', null], ['♪', null], ['—', null], ['', null], ['...', '...'], ['🎵', null]] as const) {
+      const found = identify(track({ title, artist }));
+      assert.ok(found, `nothing for ${JSON.stringify(title)}`);
+      assert.equal(typeof found.title, 'string');
+    }
+  });
+
+  it('gives nothing to search for', () => {
+    assert.deepEqual(readings(track({ title: '???', artist: null })), []);
+  });
+});

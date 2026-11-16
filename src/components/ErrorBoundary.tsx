@@ -1,10 +1,14 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import Constants from 'expo-constants';
+import { Component, useState, type ErrorInfo, type ReactNode } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { Pressable } from './Pressable';
 
-import { useT } from '../lib/i18n/index';
-import { noteError } from '../lib/support/errorLogStore';
-import { makeStyles, outlined, page, usePressed } from '../lib/theme/index';
+import JukeboxAudio from '../../modules/jukebox-audio';
+import { useLanguage, useT } from '../lib/i18n/index';
+import { crashText, stamp, type Crash, type ReportFacts } from '../lib/support/report';
+import { noteError, useErrorEntries } from '../lib/support/errorLogStore';
+import { downloads } from '../lib/youtube/native';
+import { makeStyles, outlined, page, usePressed, useTheme, useThemeChoice } from '../lib/theme/index';
 
 /**
  * Somewhere for a screen that threw while drawing to land.
@@ -21,24 +25,35 @@ import { makeStyles, outlined, page, usePressed } from '../lib/theme/index';
  * somebody — but a good many faults belong to one moment's state, and those do
  * not survive being started over.
  */
-export class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state: { error: Error | null } = { error: null };
+type Fall = { error: Error | null; at: number; where: string | null };
+
+export class ErrorBoundary extends Component<{ children: ReactNode }, Fall> {
+  state: Fall = { error: null, at: 0, where: null };
 
   static getDerivedStateFromError(error: unknown) {
-    return { error: error instanceof Error ? error : new Error(String(error)) };
+    return { error: error instanceof Error ? error : new Error(String(error)), at: Date.now() };
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('A screen could not be drawn', error, info.componentStack);
     // For the report screen, scrubbed: see `support/errorLog.ts`.
     noteError('render', error);
+    // Which components it was in, for the copy: React says it only here.
+    this.setState({ where: info.componentStack ?? null });
   }
 
   render() {
-    const { error } = this.state;
+    const { error, at, where } = this.state;
     if (!error) return this.props.children;
 
-    return <Fallen error={error} onRetry={() => this.setState({ error: null })} />;
+    const crash: Crash = {
+      at,
+      name: error.name,
+      message: error.message,
+      stack: typeof error.stack === 'string' ? error.stack : null,
+      componentStack: where,
+    };
+    return <Fallen error={error} crash={crash} onRetry={() => this.setState({ error: null, where: null })} />;
   }
 }
 
@@ -50,10 +65,26 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: E
  * provider, so they can still be asked for out here, above every provider
  * there is.
  */
-function Fallen({ error, onRetry }: { error: Error; onRetry: () => void }) {
+function Fallen({ error, crash, onRetry }: { error: Error; crash: Crash; onRetry: () => void }) {
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
+  const language = useLanguage();
+  const choice = useThemeChoice();
+  const theme = useTheme();
+  const errors = useErrorEntries();
+  const [copiedNow, setCopied] = useState<boolean | null>(null);
+
+  /*
+    Everything there is to know of it, onto the clipboard, for sending to
+    whoever can look into it: what was thrown and where, which components it
+    was in, the version, the build, the phone, and the errors before it. The
+    same facts the report screen gathers, which cannot be reached from here.
+  */
+  const copy = () => {
+    const text = crashText(factsNow(language, choice === 'system' ? `system → ${theme.id}` : choice), crash, errors);
+    setCopied(copied(text));
+  };
 
   return (
     <View style={styles.screen}>
@@ -66,8 +97,44 @@ function Fallen({ error, onRetry }: { error: Error; onRetry: () => void }) {
       <Pressable android_ripple={pressed} style={styles.button} accessibilityRole="button" onPress={onRetry}>
         <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
       </Pressable>
+      <Pressable android_ripple={pressed} style={styles.button} accessibilityRole="button" onPress={copy}>
+        <Text style={styles.buttonLabel}>{t.common.drawFailedCopy}</Text>
+      </Pressable>
+      {copiedNow != null ? (
+        <Text style={styles.muted} accessibilityLiveRegion="polite">
+          {copiedNow ? t.common.drawFailedCopied : t.common.drawFailedNotCopied}
+        </Text>
+      ) : null}
     </View>
   );
+}
+
+/** [text] onto the clipboard, answering whether it went. */
+function copied(text: string): boolean {
+  if (!JukeboxAudio.copyText) return false;
+  try {
+    JukeboxAudio.copyText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The facts the report screen gathers, gathered here: that screen cannot be reached from this one. */
+function factsNow(language: string, theme: string): ReportFacts {
+  const built = JukeboxAudio.buildTimestamp ? new Date(JukeboxAudio.buildTimestamp).getTime() : NaN;
+  const phone = Platform.OS === 'android' ? Platform.constants : null;
+  return {
+    version: Constants.expoConfig?.version ?? null,
+    built: Number.isFinite(built) ? stamp(built) : null,
+    android: phone?.Release ?? null,
+    maker: phone ? phone.Manufacturer || phone.Brand || null : null,
+    model: phone?.Model ?? null,
+    language,
+    theme,
+    tracks: null,
+    downloads: downloads != null,
+  };
 }
 
 // The library's own "could not load" screen, so the two failures look alike.

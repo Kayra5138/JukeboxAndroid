@@ -79,7 +79,15 @@ internal object HistoryFiles {
     val found = mutableListOf<String>()
     while (true) {
       val entry = zip.nextEntry ?: break
-      if (!entry.isDirectory && worthReading(entry.name)) found += entry.name
+      if (entry.isDirectory) continue
+      if (nested(entry.name)) {
+        // Read where it lies, without being unpacked anywhere; and not closed, which would close the zip around it.
+        val inner = ZipInputStream(zip)
+        while (true) {
+          val part = inner.nextEntry ?: break
+          if (!part.isDirectory && worthReading(part.name)) found += "${entry.name}$INSIDE${part.name}"
+        }
+      } else if (worthReading(entry.name)) found += entry.name
     }
     found
   }
@@ -90,23 +98,46 @@ internal object HistoryFiles {
    */
   fun read(context: Context, address: String, part: String): String? = open(context, address).use { stream ->
     if (part == WHOLE) return bounded(stream)
+    val outer = part.substringBefore(INSIDE)
+    val within = part.substringAfter(INSIDE, "")
     val zip = ZipInputStream(stream)
     while (true) {
       val entry = zip.nextEntry ?: break
-      if (entry.name == part) return bounded(zip)
+      if (entry.name != outer) continue
+      if (within.isEmpty()) return bounded(zip)
+      val inner = ZipInputStream(zip)
+      while (true) {
+        val each = inner.nextEntry ?: break
+        if (each.name == within) return bounded(inner)
+      }
     }
     throw Told(R.string.jukebox_file_not_opened)
   }
 
+  /** Between a zip inside the zip and a file inside that, in the name of a part. */
+  private const val INSIDE = "!/"
+
+  /**
+   * Whether a zip inside the zip is looked into: Apple's copy of an account's
+   * data, which may come as a zip of zips. No other.
+   */
+  private fun nested(path: String): Boolean =
+    path.endsWith(".zip", ignoreCase = true) && Regex("(?i)apple").containsMatchIn(path)
+
   /**
    * Whether a file in a zip is one of the histories: Spotify's of music, in
-   * either of the forms it gives; ListenBrainz's, one file a month in a
-   * folder of listens; or a table of scrobbles, which is what a Last.fm
-   * export is.
+   * either of the forms it gives; Apple Music's of each day; ListenBrainz's,
+   * one file a month in a folder of listens; or a table of scrobbles, which
+   * is what a Last.fm export is.
    */
   private fun worthReading(path: String): Boolean {
     val name = path.substringAfterLast('/')
     if (name.startsWith(".")) return false
+    // Apple's copy of an account's data: the one table of what was played each day, and nothing else of it,
+    // not the purchases, the devices or the table of every play with where the phone was.
+    if (Regex("(?i)apple").containsMatchIn(path)) return Regex("(?i)Play History Daily Tracks.*\\.csv$").containsMatchIn(name)
+    // Spotify's history of podcasts and videos, which are not songs: a newer export names them as it names music.
+    if (Regex("(?i)^StreamingHistory_(podcast|video)").containsMatchIn(name)) return false
     if (Regex("(?i)^StreamingHistory.*\\.json$").matches(name)) return true
     if (Regex("(?i)^Streaming_History_Audio.*\\.json$").matches(name)) return true
     if (Regex("(?i)(^|/)listens/").containsMatchIn(path) && Regex("(?i)\\.jsonl?$").containsMatchIn(name)) return true

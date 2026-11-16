@@ -260,6 +260,8 @@ export const details: Strings['details'] = {
         label: 'Azzera',
         hint: 'Dimentica ciò che le ricerche hanno trovato per loro. Le tue modifiche restano.',
       },
+      setAside: { label: 'Metti da parte', hint: 'Fuori da Brani e dalla riproduzione casuale di tutto' },
+      bringBack: { label: 'Riporta', hint: 'Quelli messi da parte uno per uno, di nuovo in Brani e nella riproduzione casuale' },
       delete: { label: 'Elimina dal telefono', hint: 'Cancella i file. Android chiede prima.' },
     },
     busy: 'C’è già una ricerca in corso. Aspetta che finisca o fermala.',

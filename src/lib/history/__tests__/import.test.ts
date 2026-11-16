@@ -101,6 +101,14 @@ describe('reading a history', () => {
     });
   });
 
+  it('reads Spotify’s history as a newer export names it, the artist as `creator`', () => {
+    const newer = JSON.stringify([{ endTime: '2026-01-02 10:00', creator: 'Radiohead', itemName: 'Lucky', msPlayed: 259000 }]);
+    const [only] = readHistory(newer)!;
+    assert.equal(only!.title, 'Lucky');
+    assert.equal(only!.artist, 'Radiohead');
+    assert.equal(only!.secondsPlayed, 259);
+  });
+
   it('reads Spotify’s extended history, with what it says of skips, and without the podcasts', () => {
     const listens = readHistory(fixture('Streaming_History_Audio_2023.json'))!;
     assert.deepEqual(
@@ -111,6 +119,35 @@ describe('reading a history', () => {
       ]
     );
     assert.equal(listens[0]!.startedAt, Date.UTC(2023, 3, 1, 13, 52, 23) - 383000);
+  });
+
+  it('reads Apple Music’s days of plays, each listen in an hour it names, and leaves a radio station out', () => {
+    const listens = readHistory(fixture('Apple Music - Play History Daily Tracks.csv'))!;
+    assert.deepEqual(
+      listens.map((each) => [each.artist, each.title, each.completed]),
+      [
+        ['Radiohead', 'Paranoid Android', true],
+        ['Radiohead', 'Paranoid Android', true],
+        ['Radiohead', 'Paranoid Android', true],
+        ['Radiohead', 'Paranoid Android', false],
+        ['Daft Punk', 'Get Lucky (feat. Pharrell Williams & Nile Rodgers)', true],
+      ]
+    );
+    // Four times in the one hour, one after another, each a quarter of the time.
+    assert.deepEqual(
+      listens.slice(0, 4).map((each) => each.startedAt),
+      [0, 383, 766, 1149].map((seconds) => Date.UTC(2024, 2, 5, 9) + seconds * 1000)
+    );
+    assert.equal(listens[0]!.secondsPlayed, 383);
+    assert.equal(listens[4]!.startedAt, Date.UTC(2024, 2, 6, 7), 'in the first of the hours, in order');
+    assert.equal(listens[0]!.source, 'applemusic');
+    // The same file twice comes to the same listens, which the import then knows it has.
+    assert.deepEqual(readHistory(fixture('Apple Music - Play History Daily Tracks.csv')), listens);
+  });
+
+  it('brings nothing from Apple’s other tables of plays, which tell the same listens again', () => {
+    assert.deepEqual(readHistory(fixture('Apple Music Play Activity.csv')), []);
+    assert.deepEqual(readHistory('Track Description,Container Description,Total plays\nRadiohead - Creep,Pablo Honey,3\n'), []);
   });
 
   it('reads a ListenBrainz export, as a list and as a file of one listen a line', () => {

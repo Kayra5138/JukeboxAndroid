@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: '浅色',
   darkGroup: '深色',
   effectsGroup: '玻璃与光泽',
+  effectsNote: '实时模糊：比平面主题更费资源。',
   specialGroup: '特殊',
 };

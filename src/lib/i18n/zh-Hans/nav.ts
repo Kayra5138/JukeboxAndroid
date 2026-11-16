@@ -15,6 +15,7 @@ export const nav: Strings['nav'] = {
   effects: '音效',
   details: '查看和编辑信息',
   themes: '主题',
+  playerLook: '播放器外观',
   albumRest: '专辑其余歌曲',
   customTheme: '自定义主题',
   downloads: '下载',

@@ -143,3 +143,55 @@ export function issueLink(
   }
   return { url, left: errors.length - kept.length };
 }
+
+/** A screen that could not be drawn, as the error screen has it: see `ErrorBoundary`. */
+export type Crash = {
+  at: number;
+  name: string;
+  message: string;
+  /** Where in the code, as the engine says it: in a release, places in the bundle, read back with the build's source map. */
+  stack: string | null;
+  /** Which components it was in, innermost first, as React says it. */
+  componentStack: string | null;
+};
+
+/** How much of a stack is kept: the end of one is the framework, and says nothing. */
+const STACK_LINES = 60;
+
+function trimmed(text: string | null): string {
+  if (!text) return '(none)';
+  const lines = text
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '');
+  const kept = lines.slice(0, STACK_LINES);
+  if (lines.length > kept.length) kept.push(`… ${lines.length - kept.length} more`);
+  return kept.join('\n') || '(none)';
+}
+
+/**
+ * Everything there is to know of a screen that could not be drawn, as one
+ * piece of text, for the error screen's copy button: what was thrown and
+ * where, which components it was in, the version, the build and the phone,
+ * and the errors written down before it. Somebody it is sent to has all of
+ * it at once, and nobody has to be asked for more.
+ */
+export function crashText(facts: ReportFacts, crash: Crash, errors: readonly ErrorEntry[] | null): string {
+  return [
+    'Jukebox could not draw a screen',
+    `When: ${stamp(crash.at)}`,
+    `Error: ${crash.name}: ${crash.message}`,
+    '',
+    reportText(facts, errors),
+    '',
+    'Stack:',
+    '```',
+    trimmed(crash.stack),
+    '```',
+    '',
+    'Components:',
+    '```',
+    trimmed(crash.componentStack),
+    '```',
+  ].join('\n');
+}

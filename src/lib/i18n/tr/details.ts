@@ -254,6 +254,8 @@ export const details: Strings['details'] = {
         label: 'Sıfırla',
         hint: 'Aramaların bu parçalar için bulduklarını unutur. Senin düzenlemelerin kalır.',
       },
+      setAside: { label: 'Kenara ayır', hint: 'Parçalar’dan ve hepsini karıştırmadan çıkar' },
+      bringBack: { label: 'Geri getir', hint: 'Tek tek kenara ayrılanları yeniden Parçalar’a ve karıştırmaya al' },
       delete: { label: 'Telefondan sil', hint: 'Dosyaları siler. Android önce sorar.' },
     },
     busy: 'Başka bir arama sürüyor. Bitmesini bekle ya da durdur.',

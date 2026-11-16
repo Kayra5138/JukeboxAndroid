@@ -90,6 +90,10 @@ const NOISE = new Set([
  * platform can arrive decomposed and compare unequal to itself composed.
  */
 export function canonicalLabel(value: string): string {
+  return remembered(labels, value, labelOf);
+}
+
+function labelOf(value: string): string {
   return value
     .normalize('NFC')
     .replace(/İ/g, 'i')
@@ -99,6 +103,31 @@ export function canonicalLabel(value: string): string {
 }
 
 export function foldForMatch(value: string): string {
+  return remembered(folds, value, foldOf);
+}
+
+/*
+  Folded and labelled once for each string, and remembered: a search folds
+  the title, artist, record and tags of every song in the library at every
+  letter typed, and a sort labels every title it puts in order, the same
+  strings each time; worked out afresh, with the patterns over every script
+  these take, that was most of a tenth of a second a letter on a fast phone.
+  Kept to a few tens of thousands, let go of all at once past that.
+*/
+const REMEMBERED = 40_000;
+const folds = new Map<string, string>();
+const labels = new Map<string, string>();
+
+function remembered(kept: Map<string, string>, value: string, work: (value: string) => string): string {
+  const known = kept.get(value);
+  if (known !== undefined) return known;
+  const made = work(value);
+  if (kept.size >= REMEMBERED) kept.clear();
+  kept.set(value, made);
+  return made;
+}
+
+function foldOf(value: string): string {
   return value
     .replace(/[ıİğĞşŞçÇöÖüÜ]/g, (char) => TURKISH_FOLD[char] ?? char)
     .normalize('NFD')

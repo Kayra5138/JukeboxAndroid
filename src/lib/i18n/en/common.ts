@@ -70,4 +70,8 @@ export const common = {
 
   /** What the screen that catches a failed draw says; see `ErrorBoundary`. */
   drawFailed: 'Something went wrong drawing this screen.',
+  /** Under it, a button that copies what went wrong, where and on what phone, for sending on; what is said once it has, and if it could not. */
+  drawFailedCopy: 'Copy the details',
+  drawFailedCopied: 'Copied. Send it to whoever can look into it.',
+  drawFailedNotCopied: 'Could not copy.',
 };

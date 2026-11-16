@@ -34,5 +34,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'Claros',
   darkGroup: 'Oscuros',
   effectsGroup: 'Cristal y brillo',
+  effectsNote: 'Desenfoque en vivo: más trabajo que los temas planos.',
   specialGroup: 'Especiales',
 };

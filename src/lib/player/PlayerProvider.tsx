@@ -563,6 +563,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         adopt(reading.state);
         return;
       }
+      /*
+        An empty player, which is the app opened after it was closed: the
+        queue it was last playing put back, paused where it was left, as the
+        widget and the car and a headset's button already put it back. Left
+        empty, the app opened onto nothing while all three of them could
+        still have gone on with it.
+      */
+      const restored = await (JukeboxAudio.restoreSavedQueueAsync?.() ?? Promise.resolve(false)).catch(() => false);
+      if (abandoned()) return;
+      if (restored) {
+        const again = await readPlayer(CONNECT_GIVE_UP_MS, abandoned);
+        if (abandoned()) return;
+        if (again.seen && again.state) {
+          adopt(again.state);
+          return;
+        }
+      }
       // An empty player: whatever the note said was about a queue that is gone.
       tailRead.current = true;
 

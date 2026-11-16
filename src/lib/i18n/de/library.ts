@@ -99,13 +99,18 @@ export const library: Strings['library'] = {
       them finishes it: it must fit a button 56 points wide.
     */
     sort: 'Sortiert',
-    sortShort: { name: 'A–Z', added: 'Neueste', played: 'Gehört' },
+    sortShort: { name: 'A–Z', added: 'Neueste', played: 'Gehört', colour: 'Farbe' },
     sortedBy: {
       name: 'Nach Name sortiert',
       added: 'Nach dem Hinzufügedatum sortiert',
       played: 'Nach der letzten Wiedergabe sortiert',
+      colour: 'Nach der Farbe des Covers sortiert',
     },
     sortHint: 'Ändert die Reihenfolge der Bibliothek',
+    lookSwitch: 'Wechselt zur anderen Darstellung dieser Ansicht',
+    view: 'Ansicht',
+    looks: { list: 'Liste', shelves: 'Regale', rack: 'Regal', map: 'Karte' },
+    artistMap: { drawing: 'Die Karte wird gezeichnet…', shuffle: 'Ihre Songs zufällig abspielen', open: 'Öffnen', with: 'Mit', lasso: 'Künstler einkreisen und zufällig abspielen', lassoHint: 'Kreise die Künstler ein, die du mischen willst', lassoChosen: 'Eingekreist', putBackAll: 'Von Hand verschobene Künstler zurücksetzen', movedByHand: 'Von Hand verschoben', putBack: 'Zurücksetzen' },
     groupSortShort: { name: 'A–Z', tracks: 'Titel', played: 'Beliebt', added: 'Neueste' },
     groupSortedBy: {
       name: 'Nach Name sortiert',
@@ -163,6 +168,8 @@ export const library: Strings['library'] = {
       label: 'Albumcover wählen',
       hint: 'Ein Bild aus deiner Galerie, für jeden Titel darauf',
     },
+    setAside: { label: 'Beiseitelegen', hint: 'Seine Titel nicht mehr in „Titel“ und in „Alles zufällig“' },
+    bringBack: { label: 'Zurückholen', hint: 'Seine Titel wieder in „Titel“ und in der Zufallswiedergabe' },
   },
 
   albumTools: {
@@ -250,6 +257,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'Als Datei teilen', hint: 'Als die Datei selbst gesendet: ein Chat behält sie als Dokument' },
     album: { label: 'Zum Album', hint: 'Der Rest des Albums, in Reihenfolge' },
     addToPlaylist: { label: 'Zu einer Liste hinzufügen', hint: 'Eine deiner Listen oder eine neue' },
+    setAside: { label: 'Beiseitelegen', hint: 'Nicht mehr in „Titel“ und in „Alles zufällig“' },
+    bringBack: { label: 'Zurückholen', hint: 'Wieder in „Titel“ und in der Zufallswiedergabe' },
+    asideWith: { label: 'Mit anderen beiseitegelegt', hint: 'Mit Album, Künstler, Ordner oder Tag: unter „Beiseitegelegt“ zurückholen' },
     favoriteAdd: { label: "Zu Favoriten hinzufügen", hint: "Die Liste, die das Herz füllt, Neueste zuerst" },
     favoriteRemove: { label: "Aus Favoriten entfernen", hint: "Aus der Liste, die das Herz füllt" },
     tiles: { label: 'Piano Tiles spielen', hint: 'Tasten fallen im Takt dieses Titels' },
@@ -276,6 +286,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}, ${format.number(count)} Titel`,
     hint: 'An: Der Ordner gehört zur Bibliothek. Aus: Er bleibt außen vor.',
     empty: (root) => `In ${root} gibt es keine Ordner mit Musik.`,
+  },
+
+  setAside: {
+    title: 'Beiseitegelegt',
+    none: 'Nichts. Lege ein Album, einen Künstler oder einen Titel beiseite, den du nicht in „Titel“ und in der Zufallswiedergabe haben willst.',
+    some: (count) => `${format.number(count)} ${oneOrMany(count, 'Titel', 'Titel')} beiseitegelegt`,
+    note: 'Ein beiseitegelegter Titel bleibt aus „Titel“, aus „Alles zufällig“ und aus den Titeln heraus, die gewählt werden, damit die Musik weiterläuft. Er bleibt in seinem Album, bei seinem Künstler und in seinem Ordner, in deinen Listen und in der Suche, und spielt, wenn eines davon gespielt wird. Nichts wird gelöscht.',
+    empty: 'Nichts ist beiseitegelegt. Halte ein Album oder einen Titel gedrückt oder öffne einen Künstler oder Ordner, um ihn beiseitezulegen.',
+    kinds: { album: 'Alben', artist: 'Künstler', list: 'Listen', folder: 'Ordner', tag: 'Tags', track: 'Titel' },
+    songs: (count) => `${format.number(count)} ${oneOrMany(count, 'Titel', 'Titel')}`,
+    bringBack: 'Zurückholen',
+    bringBackSpoken: (name) => `${name} zurückholen`,
+    addTag: 'Tag beiseitelegen',
+    noTags: 'Es gibt keine weiteren Tags zum Beiseitelegen.',
+    album: { set: 'Album beiseitelegen', back: 'Album zurückholen' },
+    artist: { set: 'Künstler beiseitelegen', back: 'Künstler zurückholen' },
+    list: { set: 'Liste beiseitelegen', back: 'Liste zurückholen' },
+    folder: { set: 'Ordner beiseitelegen', back: 'Ordner zurückholen' },
   },
 
   shortFiles: {
@@ -358,5 +386,18 @@ export const library: Strings['library'] = {
     notDeleted: 'Die Datei wurde nicht gelöscht.',
     keptRight: 'Bleibt, wie er ist. Du wirst nicht noch einmal gefragt.',
     failed: (error) => `Das ging nicht. ${error}`,
+  },
+
+  shuffle: {
+    menu: 'Zufallswiedergabe',
+    everything: 'Alle Songs',
+    change: 'Ändern, was die Taste abspielt …',
+    heading: 'Die Zufallstaste spielt',
+    note: 'Halte die Taste gedrückt, um einmalig etwas anderes zufällig abzuspielen. Widget und Auto spielen dasselbe.',
+    labelHeading: 'Auf der Zufallstaste steht',
+    label: { name: 'Der Name dessen, was sie spielt', words: 'Eigener Text', icon: 'Nichts, nur das Symbol' },
+    wordsHeading: 'Text auf der Zufallstaste',
+    wordsPlaceholder: 'Zufällig',
+    spoken: (name) => `Zufällig: ${name}`,
   },
 };

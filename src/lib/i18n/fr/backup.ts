@@ -71,7 +71,7 @@ export const backup: Strings['backup'] = {
 
   history: {
     title: 'Importer l’historique d’écoute',
-    note: 'Tes écoutes sur Last.fm, Spotify ou ListenBrainz, depuis les fichiers qu’ils te laissent télécharger. Tu vois ce qui a été trouvé, et ta confirmation est demandée avant tout changement.',
+    note: 'Tes écoutes sur Last.fm, Spotify, Apple Music ou ListenBrainz, depuis les fichiers qu’ils te laissent télécharger. Tu vois ce qui a été trouvé, et ta confirmation est demandée avant tout changement.',
     question: 'Importer ces écoutes ?',
     range: (from, to) => (from === to ? `Toutes le ${from}.` : `Du ${from} au ${to}.`),
     matched: (matched, total) =>
@@ -83,7 +83,7 @@ export const backup: Strings['backup'] = {
     nothing: 'Toutes leurs écoutes sont déjà dans ton historique, ou trop courtes pour compter.',
     added: (count) => `${format.number(count)} ${one(count, 'écoute ajoutée', 'écoutes ajoutées')} à ton historique.`,
     notHistory:
-      'Ce n’est pas un historique d’écoute que Jukebox sait lire. Choisis les fichiers que Last.fm, Spotify ou ListenBrainz t’ont donnés : CSV ou JSON, ou le zip dans lequel ils sont arrivés.',
+      'Ce n’est pas un historique d’écoute que Jukebox sait lire. Choisis les fichiers que Last.fm, Spotify, Apple Music ou ListenBrainz t’ont donnés : CSV ou JSON, ou le zip dans lequel ils sont arrivés.',
     tooBig: 'Ce fichier est trop volumineux pour être lu.',
     failed: 'Les écoutes n’ont pas pu être importées. Rien n’a été modifié.',
   },

@@ -66,3 +66,14 @@ export function saveArtistPhoto(name: string, photo: ArtistPhoto | null): void {
     Date.now()
   );
 }
+
+/**
+ * Every artist's photograph there is on this phone, by the folded name, in
+ * one query: for the map of the artists, which shows a few hundred at once.
+ */
+export function artistPhotoUris(): Map<string, string> {
+  const rows = db().getAllSync<{ artist: string; photo_uri: string }>(
+    'SELECT artist, photo_uri FROM artist_photos WHERE photo_uri IS NOT NULL'
+  );
+  return new Map(rows.map((row) => [row.artist, row.photo_uri]));
+}

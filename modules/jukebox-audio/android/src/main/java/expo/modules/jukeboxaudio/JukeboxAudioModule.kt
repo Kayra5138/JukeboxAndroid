@@ -1,5 +1,7 @@
 package expo.modules.jukeboxaudio
 
+import expo.modules.jukeboxaudio.spectrum.SpectrumView
+import expo.modules.jukeboxaudio.spectrum.TonearmView
 import android.Manifest
 import android.net.Uri
 import android.os.Build
@@ -75,6 +77,14 @@ class JukeboxAudioModule : Module() {
    */
   private val io = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+  /*
+    The small copies of the covers, two at a time: a wall of covers coming up
+    asks for a few hundred at once, and a cheap phone has few cores to spare
+    from drawing it.
+  */
+  @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+  private val thumbing = CoroutineScope(Dispatchers.IO.limitedParallelism(2) + SupervisorJob())
+
   /** The covers a backup refers to, by name, looked for in the app's own artwork folder and nowhere else. */
   private fun backupPictures(names: List<String>): List<java.io.File> {
     val home = java.io.File(context.filesDir, "album-artwork")
@@ -92,6 +102,28 @@ class JukeboxAudioModule : Module() {
       Prop("radius") { view: FrostView, pixels: Float -> view.setRadius(pixels) }
       Prop("overlay") { view: FrostView, colour: Int -> view.setOverlay(colour) }
     }
+    // The arm over a record in the player: see [TonearmView].
+    View(TonearmView::class) {
+      Name("TonearmView")
+      Prop("turn") { view: TonearmView, degrees: Float -> view.setTurn(degrees) }
+    }
+    // The music as it is heard, over the cover in the player: see [SpectrumView].
+    View(SpectrumView::class) {
+      Name("SpectrumView")
+      Prop("mode") { view: SpectrumView, mode: String -> view.setMode(mode) }
+      Prop("active") { view: SpectrumView, on: Boolean -> view.setActive(on) }
+      Prop("colour") { view: SpectrumView, colour: String -> view.setColour(colour) }
+      Prop("room") { view: SpectrumView, room: List<Float> -> if (room.size == 2) view.setRoom(room[0], room[1]) }
+      Prop("ring") { view: SpectrumView, ring: List<Float> -> if (ring.size == 2) view.setRing(ring[0], ring[1]) }
+      Prop("inset") { view: SpectrumView, inset: List<Float> -> if (inset.size == 2) view.setInset(inset[0], inset[1]) }
+      Prop("shade") { view: SpectrumView, on: Boolean -> view.setShade(on) }
+      Prop("strength") { view: SpectrumView, share: Float -> view.setStrength(share) }
+      Prop("target") { view: SpectrumView, place: List<Float> -> view.setTarget(place) }
+      Prop("feel") { view: SpectrumView, on: Boolean -> view.setFeel(on) }
+      Prop("colours") { view: SpectrumView, colours: List<String> -> view.setColours(colours) }
+      Prop("round") { view: SpectrumView, on: Boolean -> view.setRound(on) }
+      Prop("corner") { view: SpectrumView, points: Float -> view.setCorner(points) }
+    }
     // What is under a sheet or a screen of glass, out of focus: see [VeilView].
     View(VeilView::class) {
       Name("VeilView")
@@ -101,6 +133,21 @@ class JukeboxAudioModule : Module() {
     // What scrolls under the bars, kept as a record for them to blur: see [FrostTargetView].
     View(FrostTargetView::class) {
       Name("FrostTargetView")
+    }
+
+    // A ring drawn round some of the artists' map with a finger: see [LassoView].
+    View(LassoView::class) {
+      Name("LassoView")
+      Events("onLasso")
+      Prop("colour") { view: LassoView, colour: String -> view.setColour(colour) }
+      Prop("clear") { view: LassoView, at: Int -> view.setClear(at) }
+    }
+
+    // What is in it left standing and laid out, and, shut, not drawn: see [CurtainView].
+    View(CurtainView::class) {
+      Name("CurtainView")
+      Prop("shut") { view: CurtainView, shut: Boolean -> view.setShut(shut) }
+      Prop("warm") { view: CurtainView, warm: Boolean -> view.setWarm(warm) }
     }
 
     Events("onTrackChange", "onPlaybackStateChange", "onQueueEnded", "onPlaybackError", "onQueueReplaced",
@@ -192,6 +239,7 @@ class JukeboxAudioModule : Module() {
       audioOpen = null
       historyOpen = null
       io.cancel()
+      thumbing.cancel()
     }
 
     // ---- library ----
@@ -400,7 +448,10 @@ class JukeboxAudioModule : Module() {
      * other side either finds the old copy or the new one, never half of one.
      */
     AsyncFunction("publishCarCopyAsync") {
-      expo.modules.jukeboxaudio.auto.LibraryDatabase.adopt(context)
+      val adopted = expo.modules.jukeboxaudio.auto.LibraryDatabase.adopt(context)
+      // The shuffle tile says what the app's shuffle button plays, which the copy has just told it.
+      runCatching { expo.modules.jukeboxaudio.widget.JukeboxShortcutWidget.refresh(context) }
+      adopted
     }.runOnQueue(io)
 
     // ---- backup ----
@@ -576,6 +627,11 @@ class JukeboxAudioModule : Module() {
      * the app looks at what somebody else put there. From Android 13 the
      * phone says "Copied" by itself.
      */
+    // A picture of part of the screen as it is, for a screen to stand still as while a page is over it: see Snapshot.
+    AsyncFunction("snapshotAsync") Coroutine { x: Double, y: Double, width: Double, height: Double ->
+      Snapshot.take(context, appContext.currentActivity, x, y, width, height)
+    }
+
     Function("copyText") { text: String ->
       val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
       clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Jukebox", text))
@@ -585,6 +641,15 @@ class JukeboxAudioModule : Module() {
       expo.modules.jukeboxaudio.downloads.DownloadStore.artwork(context, trackId)
         ?: MediaStoreLibrary.embeddedArtwork(context, trackId)
     }.runOnQueue(io)
+
+    // The small copies of the covers: see Thumbs.
+    AsyncFunction("thumbsMadeAsync") { ->
+      Thumbs.list(context)
+    }.runOnQueue(io)
+
+    AsyncFunction("thumbAsync") { source: String, name: String ->
+      Thumbs.make(context, source, name)
+    }.runOnQueue(thumbing)
 
     AsyncFunction("downloadArtworkAsync") { url: String ->
       AlbumArtwork.download(context, url)
@@ -1114,6 +1179,13 @@ class JukeboxAudioModule : Module() {
       val controller = player
       if (controller == null) promise.resolve(emptyList<Map<String, Any?>>())
       else controller.shuffleQueue(order) { promise.resolve(it) }
+    }
+
+    // The queue the app was last playing put back, paused, onto a player holding nothing: see PlaybackService.
+    AsyncFunction("restoreSavedQueueAsync") { promise: Promise ->
+      val controller = player
+      if (controller == null) promise.resolve(false)
+      else controller.restoreSaved { promise.resolve(it) }
     }
 
     AsyncFunction("getQueueAsync") { promise: Promise ->

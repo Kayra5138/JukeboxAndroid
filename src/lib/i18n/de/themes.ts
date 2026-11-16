@@ -35,5 +35,6 @@ export const themes: Strings['themes'] = {
   lightGroup: 'Hell',
   darkGroup: 'Dunkel',
   effectsGroup: 'Glas und Glanz',
+  effectsNote: 'Live-Unschärfe: mehr Arbeit als die flachen Designs.',
   specialGroup: 'Spezial',
 };

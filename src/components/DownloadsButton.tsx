@@ -30,8 +30,6 @@ const RING = 3;
 /** How far it keeps from an edge of the screen, and from whatever it sits above. */
 const MARGIN = 14;
 
-/** The five tabs, which have the bar along the bottom or down the left. */
-const TABS = new Set(['/', '/lists', '/search', '/stats', '/settings']);
 /** The screens that draw the bar of what is playing at their foot, or down their right. */
 const WITH_PLAYER = new Set(['/', '/lists', '/search', '/stats', '/settings', '/playlist']);
 /**
@@ -269,7 +267,8 @@ function useSpot(pathname: string): { right: number; bottom: number } {
     right: insets.right + MARGIN,
     bottom:
       insets.bottom +
-      (TABS.has(pathname) ? tabBarHeight(fontScale) : 0) +
+      // The tab bar is along the foot of every page it is shown over: each is opened inside a tab.
+      tabBarHeight(fontScale) +
       (playing ? nowPlayingHeight(fontScale) : 0) +
       MARGIN,
   };

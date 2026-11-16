@@ -258,6 +258,8 @@ export const details: Strings['details'] = {
         label: 'Zurücksetzen',
         hint: 'Vergisst, was beim Nachschlagen für sie gefunden wurde. Deine eigenen Änderungen bleiben.',
       },
+      setAside: { label: 'Beiseitelegen', hint: 'Nicht mehr in „Titel“ und in „Alles zufällig“' },
+      bringBack: { label: 'Zurückholen', hint: 'Die einzeln beiseitegelegten wieder in „Titel“ und in die Zufallswiedergabe' },
       delete: { label: 'Vom Gerät löschen', hint: 'Löscht die Dateien. Android fragt vorher.' },
     },
     busy: 'Es läuft schon ein Nachschlagen. Warte, bis es fertig ist, oder stopp es.',

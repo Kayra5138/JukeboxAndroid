@@ -77,9 +77,20 @@ class FrostView(context: Context, appContext: AppContext) : ExpoView(context, ap
    */
   private val redraw = ViewTreeObserver.OnPreDrawListener {
     val list = target
-    if (isShown && list != null && (list.isDirty || moved(list))) invalidate()
+    if (isShown && list != null && (list.isDirty || moved(list) || inSight(list) != drewShown)) invalidate()
     true
   }
+
+  /*
+    Whether what it blurs was in sight when it last drew. Shut away (see
+    [CurtainView]) the list is not drawn and its record not kept up: blurred
+    then, it would be what was last drawn of it, over the rack of records
+    that stands in its place, and so the glass is only its tint until the
+    list is back.
+  */
+  private var drewShown = false
+
+  private fun inSight(list: View) = list.isShown && !CurtainView.hides(list)
 
   /** Where the bar was over the list when it was last drawn. */
   private var drawnAtX = 0
@@ -142,7 +153,8 @@ class FrostView(context: Context, appContext: AppContext) : ExpoView(context, ap
     val strip = node
     val list = target
     val recorded = list?.recorded
-    if (strip != null && list != null && recorded != null && canvas.isHardwareAccelerated && width > 0 && height > 0) {
+    drewShown = list != null && inSight(list)
+    if (strip != null && list != null && recorded != null && drewShown && canvas.isHardwareAccelerated && width > 0 && height > 0) {
       getLocationInWindow(here)
       list.getLocationInWindow(there)
       drawnAtX = here[0] - there[0]
@@ -167,7 +179,16 @@ class FrostView(context: Context, appContext: AppContext) : ExpoView(context, ap
         val view = behind.callback
         behind.callback = null
         behind.copyBounds(kept)
-        behind.setBounds(0, 0, list.width, list.height)
+        // And as far as the bar reaches past the list's edge as well: the tabs' bar runs on to the foot of the
+        // screen, past the open tab, and the strip under it with nothing behind there showed through unblurred.
+        val fromX = drawnAtX - reach.toInt()
+        val fromY = drawnAtY - reach.toInt()
+        behind.setBounds(
+          minOf(0, fromX),
+          minOf(0, fromY),
+          maxOf(list.width, fromX + width + 2 * reach.toInt()),
+          maxOf(list.height, fromY + height + 2 * reach.toInt())
+        )
         behind.draw(record)
         behind.bounds = kept
         behind.callback = view

@@ -101,7 +101,7 @@ export function PlayerSettings({
     fixes the picture without throwing the state away -- so coming back arrives
     here, at the menu this was opened from, rather than at the library.
   */
-  const leaveFor = (route: '/equalizer' | '/transitions' | '/effects') => {
+  const leaveFor = (route: '/equalizer' | '/transitions' | '/effects' | '/player-look') => {
     router.push(route);
   };
 
@@ -337,6 +337,12 @@ export function PlayerSettings({
         {effects && effects.voice !== 'off' ? (
           <Text style={styles.hint}>{t.sound.effects.voices[effects.voice].hint}</Text>
         ) : null}
+
+        {/* How the player looks, from the player itself: what stands where the cover is, and what moves with the music. */}
+        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/player-look')}>
+          <Text style={styles.rowTitle}>{t.settings.playerLook.title}</Text>
+          <Text style={styles.hint}>{t.settings.playerLook.open}</Text>
+        </Pressable>
 
         <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/equalizer')}>
           <Text style={styles.rowTitle}>{t.nav.equalizer}</Text>

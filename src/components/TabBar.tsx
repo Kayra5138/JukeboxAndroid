@@ -7,8 +7,9 @@ import { useEffect, useState } from 'react';
 import { SlidingMark, type MarkPlace } from './SlidingMark';
 import { useLandscape } from '../lib/ui/layout';
 import { useHiddenTabs } from '../lib/ui/tabs';
+import { useTabLabelsShown } from '../lib/ui/tabLabels';
 import { haptic } from '../lib/ui/haptics';
-import { Frost, useFrosted, useTabTarget } from './Frosted';
+import { Frost, readyTab, useFrosted, useTabTarget } from './Frosted';
 import { barGlass, barsLaidOver, noteTabBar } from './UnderBars';
 
 /** Wide enough for an icon and a short word under it, and no wider. */
@@ -44,8 +45,18 @@ type TabBarProps = {
       canPreventDefault: true;
     }) => { defaultPrevented: boolean };
     navigate: (name: string, params?: object) => void;
+    preload?: (name: string) => void;
   };
 };
+
+/** How long the mark waits on a tab pressed to open before it goes back, should it not. */
+const REACH_HELD_MS = 700;
+
+/** How long after the app is up the tabs not yet opened begin to be made, and how far apart. */
+const PRELOAD_AFTER_MS = 4000;
+const PRELOAD_APART_MS = 1500;
+/** The tabs made or opened already: each is made once for the life of the app. */
+const made = new Set<string>();
 
 /**
  * The navigation, along the bottom or down the left.
@@ -70,6 +81,23 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
     an icon and its word is: what the one mark of the open tab is moved by.
   */
   const [cells, setCells] = useState<Record<string, MarkPlace>>({});
+  /*
+    The tab a finger came down on, which the mark goes to at once rather
+    than when the tab has been opened: that is a little later, the app having
+    the opening to do first, and on a slow phone a good deal later. Let go of
+    once that tab is open, or a while after the finger left without opening it.
+  */
+  const [reaching, setReaching] = useState<string | null>(null);
+  const openKey = state.routes[state.index]?.key ?? '';
+  useEffect(() => {
+    if (reaching == null) return;
+    if (reaching === openKey) {
+      setReaching(null);
+      return;
+    }
+    const gone = setTimeout(() => setReaching(null), REACH_HELD_MS);
+    return () => clearTimeout(gone);
+  }, [openKey, reaching]);
   const [patchHeight, setPatchHeight] = useState(0);
   /*
     In a theme of glass, laid over the foot of the screens rather than under
@@ -84,13 +112,48 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
     name, Discover's link on the Lists tab among them.
   */
   const hidden = useHiddenTabs() as ReadonlySet<string>;
-  const open = state.routes[state.index]?.name;
+  // Each tab is the group its stack is in, `(lists)`; the choice of which are shown says `lists`.
+  const nameOf = (route: string) => route.replace(/^\((.*)\)$/, '$1');
+  // Names under the icons, unless switched off under Settings → Look.
+  const named = useTabLabelsShown();
+  const open = nameOf(state.routes[state.index]?.name ?? '');
   // The open tab, out of focus behind the bar: see `Frosted`.
   const target = useTabTarget(state.routes[state.index]?.key);
   const frosted = useFrosted(over ? target : null);
+  /*
+    The tabs not opened yet, made a while after the app is up, one at a time
+    and while it is idle, and kept standing out of sight (`TabArea`). Made
+    the first time each was opened, as they were, Settings took a sixth of a
+    second to come on a fast phone, and a slow one some three times that.
+  */
+  const routeNames = state.routes.map((route) => route.name).join('|');
+  const openName = state.routes[state.index]?.name ?? '';
+  useEffect(() => {
+    // Begun again from the start at every change of tab, so that it waits for the app to be left alone.
+    made.add(openName);
+    // Not those taken off the bar, which nobody can open from it.
+    const names = routeNames.split('|').filter((name) => !made.has(name) && !hidden.has(name.replace(/^\((.*)\)$/, '$1')));
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let idle: number | null = null;
+    names.forEach((name, at) => {
+      timers.push(
+        setTimeout(() => {
+          idle = requestIdleCallback(() => {
+            made.add(name);
+            navigation.preload?.(name);
+          });
+        }, PRELOAD_AFTER_MS + at * PRELOAD_APART_MS)
+      );
+    });
+    return () => {
+      timers.forEach(clearTimeout);
+      if (idle != null) cancelIdleCallback(idle);
+    };
+  }, [hidden, navigation, openName, routeNames]);
+
   // Taken off while it was open: the library, rather than a tab nobody can see is on.
   useEffect(() => {
-    if (open && hidden.has(open)) navigation.navigate('index');
+    if (open && hidden.has(open)) navigation.navigate('(library)');
   }, [hidden, navigation, open]);
 
   return (
@@ -114,11 +177,11 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
         rail item.
       */}
       <SlidingMark
-        place={markOf(cells[state.routes[state.index]?.key ?? ''], landscape, patchHeight)}
+        place={markOf(cells[reaching ?? openKey], landscape, patchHeight)}
         style={landscape ? styles.railMark : styles.slidingMark}
       />
       {state.routes.map((route, index) => {
-        if (hidden.has(route.name)) return null;
+        if (hidden.has(nameOf(route.name))) return null;
         const { options } = descriptors[route.key];
         const focused = state.index === index;
         // On the mark of the open tab, which a theme may have made a fill to be
@@ -142,6 +205,16 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
             accessibilityState={{ selected: focused }}
             accessibilityLabel={options.tabBarAccessibilityLabel ?? options.title ?? route.name}
             style={landscape ? styles.railItem : styles.item}
+            // Made ready while the finger is down: see `TabArea`.
+            onPressIn={
+              focused
+                ? undefined
+                : () => {
+                    readyTab(route.key);
+                    setReaching(route.key);
+                  }
+            }
+            onPressOut={focused ? undefined : () => readyTab(null)}
             onPress={() => {
               const event = navigation.emit({
                 type: 'tabPress',
@@ -171,7 +244,7 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
               </View>
             ) : (
               <View
-                style={styles.patch}
+                style={[styles.patch, !named && styles.patchBare]}
                 onLayout={(event) => {
                   const height = event.nativeEvent.layout.height;
                   setPatchHeight((before) => (before === height ? before : height));
@@ -194,13 +267,15 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
                   at a large size of writing a long name — İstatistikler —
                   came out as its first few letters and a dot.
                 */}
-                <Text
-                  style={[styles.label, { color: colour }]}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.7}>
-                  {options.title ?? route.name}
-                </Text>
+                {named ? (
+                  <Text
+                    style={[styles.label, { color: colour }]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.7}>
+                    {options.title ?? route.name}
+                  </Text>
+                ) : null}
               </View>
             )}
           </Pressable>
@@ -263,6 +338,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     than one moving between them.
   */
   patch: { width: 72, alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 4 },
+  // The icon alone, in a patch as round as the one with its name is wide: a little more room above and below it.
+  patchBare: { paddingVertical: 8 },
   slidingMark: { borderRadius: 14, backgroundColor: c.selected },
   railMark: { borderRadius: 12, backgroundColor: c.selected },
   icon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },

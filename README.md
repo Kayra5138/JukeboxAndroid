@@ -3,9 +3,9 @@
 A music player for Android that plays the files already on your phone.
 
 No account needed, no server, no ads, no tracking. Your library, your listening
-history and your stats stay on the device, unless you choose to connect
-ListenBrainz and switch sending on. It is free software (GPL-3.0-or-later), and
-it comes with a rhythm game built out of your own songs, because why not.
+history and your stats stay on the device. It is free software
+(GPL-3.0-or-later), and it comes with a rhythm game built out of your own songs,
+because why not.
 
 <p>
   <img src="docs/screenshots/player.jpg" width="16%" alt="The player, with what is up next under it">
@@ -82,11 +82,44 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
 - Leave folders out (voice notes, call recordings, ringtones) and hide files
   shorter than 10, 30 or 60 seconds. Nothing is deleted, and a folder switched
   back on comes back with its history.
+- **Set aside** what you do not want in the general mix: a song, an album,
+  an artist, a list, a folder or a tag. It is kept out of Tracks, out of shuffling
+  everything (on the phone, the widget and in the car) and out of the songs
+  picked to keep the music going, and stays on its album, under its artist
+  and folder, in your lists and in search, playing when you play any of
+  those. Nothing is deleted; Settings › Library lists what is set aside and
+  brings it back.
 - Browse by track or by album. Sort by name, date added or most played, and
   search as you type.
 - Or by artist, where a song by two artists is under both, or by the folders
   the files are kept in. Settings chooses which of the four views are offered,
   and each keeps its own sort order.
+- **The artists as a map**, from the view button beside the library's tabs: a circle for
+  each, as big as their songs are many and with their picture, a line to
+  everyone they share a song with, and the genres gathered each in a colour of
+  its own. Drag it, pinch it nearer or further, double-tap to come in; tap an
+  artist for their lines and a card with their page, a shuffle of them and the
+  artists they share songs with. Typing a name dims everybody else and goes to
+  them. The lasso at its top right draws round some of it, and the artists
+  inside are shuffled together. Hold an artist still for a moment to pick
+  them up and put them somewhere else, their lines with them; they stay
+  there, beside their genre, and a button at the map's top left puts
+  everybody moved by hand back. It is laid out once and kept: songs added later find
+  their artists a place without moving anybody else.
+- **Pinch any list into a wall of covers**: tracks, albums, artists, folders
+  and the songs of a list or an artist, three to a row with their names, then
+  five, eight, thirteen and twenty-one, under big letters or months as the
+  list is sorted; pinch
+  back out to the list. Each list remembers how far it was pinched.
+- **A scroll bar to take hold of** comes up on the right of every long list as
+  you scroll it; drag it and the letter, month or count of where you are shows
+  beside your finger, with the cover there.
+- **Shelves over Tracks**, from the view button beside the library's tabs,
+  whose picture says how the view looks now: rows of
+  covers for what came in last, what you play around this hour, what has
+  been on repeat this month, what you have not heard in a while, what you
+  have never played and your biggest genres, each played from where you tap
+  it, with the whole list under them.
 - Swipe a track right to play it next, left to add it to the end of the queue.
 - Long-press a track for the full menu: play next, add to queue, go to album,
   add to a list, piano tiles, view & edit details, delete from the phone. The
@@ -128,8 +161,36 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
   the Search tab and searches for them there.
 - Albums, lists, artists and folders open with **Play**, **Shuffle** and
   **Add to queue** side by side.
+- **The shuffle button over the tracks plays what you choose**: everything
+  (as it always did), Favorites, any list or smart list, or one of the lists
+  made from your listening, under Settings › Library. Hold it and a list of
+  them opens under your finger: slide to one and let go to shuffle it just
+  once, or let go without moving to tap one, with *Change what the button
+  plays…* at the foot. It says the name of what it plays, words of your own,
+  or nothing beside its icon. The widget and the car shuffle the same.
 - In the player, the artist's name and the album under the title open that
-  artist and that record.
+  artist and that record, as they do on a record's page, in menus and on the
+  rack; a song's own row is for the song, and its names there are words only.
+  A name leading from one artist or record page to another opens it in place
+  of the one you were on, and Back goes back through them in turn; the name
+  of the page you are on does nothing.
+- **What stands where the cover is** in the player, under Settings → Look &
+  feel → Player look, or from the settings button in the player itself: the
+  cover, or a record with the cover for its label, turning while it plays,
+  with a tonearm over it if you like, its needle going in as the song goes on;
+  for tapes, a cassette whose tape winds from one reel to the other as the
+  part goes on.
+- **Something moving with the music** round it, if you like, in time with
+  what you hear, through headphones as well: a spectrum, bars of how loud each
+  pitch is rising from the foot of the cover or standing out round the label
+  of a record; ripples going out from its edge on each beat; the cover
+  breathing with the music, a glow behind it, or jumping on each beat; an
+  oscilloscope, the line of the sound itself; a spectrogram, the last
+  few seconds of every pitch flowing past, wound round a record; sparks thrown
+  across the player on each beat; or clouds of the cover's own colours behind
+  the whole player. And, if you want it, a light knock on each beat. No
+  recording permission: the app reads the music it is playing. It draws only
+  while the music plays and the player is open.
 - A queue you can reorder, trim and jump around in.
 - **What a tap plays** is yours to choose: the rest of the list (as it always
   was), the rest of it shuffled, similar songs, or only that song. On Tracks
@@ -323,6 +384,21 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
   file name or by the artist and title the file names. Write one list, or all
   of them into a folder, as `.m3u8` with the phone's paths or paths a computer
   can follow. A list holds each song once, so repeats in a file are folded.
+- **Spotify playlists in.** The same *Import playlists…* takes the zip of
+  your account data from Spotify's privacy page, or the `Playlist1.json` and
+  `YourLibrary.json` taken out of it: each playlist becomes a list, and the
+  songs you liked come in as one called *Liked Songs*. A screen first shows
+  every playlist with how many of its songs are in your library, to tick the
+  ones you want. Songs are matched by artist and title, as listens are
+  (below); podcast episodes are left out, and only those two files are read
+  out of the zip. Spotify keeps its own way in closed to apps like this one,
+  so the download is the way.
+- **Apple Music playlists in**, the same way: the text or XML file the Music
+  app on a Mac or in Windows writes out (*File › Library › Export Playlist*,
+  or *Export Library* for all of them, each then ticked or not), or the CSV
+  a service such as TuneMyMusic or Soundiiz makes of them, which is the way
+  from an iPhone. Matched by artist and title; the library itself, its
+  kinds, folders and podcasts are left out.
 - Suggestions for what else belongs in a list, based on its tags. Rare tags
   weigh more than common ones.
 - Four automatic lists built from your history: Most played, New this month,
@@ -331,8 +407,21 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
   narrowed, a card out) and says how many are away. Only erasing the file
   takes it off.
 - Albums are assembled from your tags. In landscape you can flick through them
-  as a rack of sleeves instead of a list; the one in front opens into the
-  record's full list and closes back to where the rack was.
+  as a rack of sleeves instead of a list: it follows your finger, glides on
+  when you let go and slows onto a record without overshooting, and the one
+  in front opens into the record's full list and closes back to where the
+  rack was. The rack starts out in the order of the colours of the covers, a
+  rainbow from red to violet with the black, grey and white ones after; the
+  sort button also puts it by name, date added or last played. Pinch it to
+  see every record at once from far off, and tap one to be back in front of
+  it. The view button beside the tabs turns the rack on and off; upright, the
+  record's name is under the rack as it is sideways.
+- Sideways, an album or a list opens in two columns: its cover, name and
+  buttons down the left and its tracks the whole height of the right, beside
+  the tabs, whether from the rack, from the list of albums or turned sideways
+  while open. The player keeps its cover, title and controls in one column
+  and its other buttons down a column beside them, so the cover has the
+  height.
 - **Find the rest of this album.** Hold an album, or open it, and the app
   lists the whole record: what you have, and what is missing, ticked. One
   button fetches the missing tracks, and each lands in the album in its
@@ -578,6 +667,12 @@ from the song itself.
   music, lists and settings left as they are.
 - **Tabs you do not use can go.** Lists, Search and Stats can each be taken
   off the bar in Settings → Look & feel; Library and Settings stay.
+- **Names under the tabs**, if you want them: the bar shows its icons alone
+  until you switch the names on.
+- **The tab you are on, pressed again**, goes back a step at a time: out of
+  choosing tracks, to the top of the list, the search cleared, and then in
+  the library to its first view and on round the others, on Search into its
+  box.
 - **Your own pair for day and night.** Following the phone goes between two
   themes, and you choose which: any theme for its light mode, any for its
   dark.
@@ -624,7 +719,8 @@ from the song itself.
   - **Now playing** (4×2): a large cover, a progress bar, shuffle and repeat;
   - **Up next** (4×4): the same with the next songs in the queue, each
     playable with a tap;
-  - **Shuffle** (2×1): Shuffle all and Shuffle recent in one tap.
+  - **Shuffle** (2×1): the shuffle button's choice and Shuffle recent in one
+    tap.
 
   The now-playing ones change layout as they are resized, and the cover opens
   the player. With nothing playing, they offer to carry on with the tape you
@@ -654,7 +750,8 @@ from the song itself.
 ### Android Auto
 
 - Four tabs: Home, Tracks, Albums, Lists. Everything is cover tiles.
-- Home starts with Continue, Shuffle recent and Shuffle all, then a Tapes
+- Home starts with Continue, Shuffle recent and the shuffle button's choice
+  (Shuffle all unless you chose something else), then a Tapes
   tile and the three tapes you are part way through, then what you played
   lately.
 - Tapes holds the shows you follow and your books, each a tile, then other
@@ -702,9 +799,12 @@ from the song itself.
 - **Import listening history** brings in what you played elsewhere, from the
   files the services let you download: Last.fm scrobbles as a CSV export,
   Spotify's `StreamingHistory_music_*.json` or extended
-  `Streaming_History_Audio_*.json`, and a ListenBrainz export. Pick one file
-  or several, or the zip they came in; only the history files are read out
-  of a zip, never the rest of what Spotify puts in it.
+  `Streaming_History_Audio_*.json`, Apple Music's
+  `Apple Music - Play History Daily Tracks.csv` from Apple's privacy page,
+  and a ListenBrainz export. Pick one file or several, or the zip they came
+  in; only the history files are read out of a zip, never the rest of what
+  Spotify or Apple puts in it. Apple's says how often a song was played on a
+  day and in which hours, so each listen is placed in one of those hours.
 - Each listen is matched to a song in your library by artist and title,
   ignoring case, accents, punctuation, guests and "Remastered" notes. Songs
   you do not have are kept under their names and still count in Stats.
@@ -917,6 +1017,10 @@ release's code: the history here is a commit per version, not every change.
   form for each. Settings → Report a problem fills the bug form in for you
   with the version, the phone and the app's recent errors (scrubbed of names,
   paths and addresses), and shows all of it before anything is sent.
+- **If a screen cannot be drawn**, only that page says so; the tabs stay, and
+  the rest of the app can still be reached. Copy the details under the message
+  copies what went wrong and where, the version and the phone, to send to
+  whoever can look into it.
 - **Translations.** English is written by hand. The other nine languages,
   Turkish included, were translated by AI and have not yet been checked by
   a native speaker; the app says so on its language screen. If a line

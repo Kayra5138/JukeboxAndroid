@@ -43,7 +43,7 @@ export const backup: Strings['backup'] = {
 
   history: {
     title: 'Dinleme geçmişini içe aktar',
-    note: 'Last.fm, Spotify ya da ListenBrainz’deki dinlemelerin, oradan indirebildiğin dosyalardan. Ne bulunduğunu görürsün; bir şey değişmeden önce sana sorulur.',
+    note: 'Last.fm, Spotify, Apple Music ya da ListenBrainz’deki dinlemelerin, oradan indirebildiğin dosyalardan. Ne bulunduğunu görürsün; bir şey değişmeden önce sana sorulur.',
     question: 'Bu dinlemeler içe aktarılsın mı?',
     range: (from, to) => (from === to ? `Hepsi ${from} tarihinde.` : `${from} ile ${to} arasında.`),
     matched: (matched, total) =>
@@ -53,7 +53,7 @@ export const backup: Strings['backup'] = {
     nothing: 'İçlerindeki tüm dinlemeler ya zaten geçmişinde ya da sayılamayacak kadar kısa.',
     added: (count) => `Geçmişine ${format.number(count)} dinleme eklendi.`,
     notHistory:
-      'Bu, Jukebox’ın okuyabildiği bir dinleme geçmişi değil. Last.fm, Spotify ya da ListenBrainz’in sana verdiği dosyaları seç: CSV ya da JSON veya geldikleri zip.',
+      'Bu, Jukebox’ın okuyabildiği bir dinleme geçmişi değil. Last.fm, Spotify, Apple Music ya da ListenBrainz’in sana verdiği dosyaları seç: CSV ya da JSON veya geldikleri zip.',
     tooBig: 'Bu dosya okunamayacak kadar büyük.',
     failed: 'Dinlemeler içe aktarılamadı. Hiçbir şey değişmedi.',
   },

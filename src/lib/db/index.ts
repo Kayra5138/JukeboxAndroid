@@ -131,6 +131,23 @@ export const SETTINGS = {
    * the first one on offer is drawn instead.
    */
   libraryView: 'library:view',
+  /** How the Tracks view is drawn: the list, or one of the looks being tried (`components/looks`). */
+  libraryTracksLook: 'library:tracksLook',
+  /**
+   * How far a list is pinched out into a wall of covers, after a colon and
+   * the list's name (`library:zoom:tracks`): `components/looks/shared.tsx`.
+   */
+  listZoom: 'library:zoom',
+  /** The order of the records on the rack, its own: `colour`, or one of the library's (`media/sort.ts`). */
+  rackSort: 'library:sort:rack',
+  /** `'map'` when the artists are drawn as a map (`components/artists/ArtistMap.tsx`) rather than as a list. */
+  artistLook: 'library:artistLook',
+  /** The artists' map as last laid out, with what it was laid out from: `components/artists/ArtistMap.tsx`. */
+  artistMapLayout: 'library:artistMap',
+  /** The artists put somewhere on the map by hand: see `MapPin`. */
+  artistMapPins: 'library:artistMapPins',
+  /** The colour of each record's cover, by its key, read once: `media/albumColours.ts`. */
+  albumColours: 'library:albumColours',
   /**
    * The views the library's switch offers, as their names with commas between
    * — see `media/views.ts` for what an absent one means.
@@ -161,14 +178,17 @@ export const SETTINGS = {
   /** Which of the tapes view's parts are shown: `tapes/sort.ts`. */
   libraryTapeFilter: 'library:tapes:filter',
   /**
-   * `'true'` when records are browsed as a rack rather than as a list.
-   *
-   * Only a question sideways. The rack is records turned about a vertical axis
-   * and seen from the side; upright the same shape has to stack instead, which
-   * reads as a pile of slabs rather than a shelf, so there is no rack to offer
-   * and the key is read only when the phone is on its side.
+   * `'false'` when records are browsed as a list rather than as a rack with
+   * the phone on its side; anything else, a rack.
    */
   coverFlow: 'library:coverFlow:landscape',
+  /**
+   * `'true'` when records are browsed as a rack with the phone held upright,
+   * the same rack across the top of the screen and the tracks of the record
+   * in front under it; anything else, a list. Asked apart from the other: a
+   * rack that is to be had either way round is not the same question.
+   */
+  coverFlowUpright: 'library:coverFlow:upright',
   /**
    * `'true'` when the decoration should hold still.
    *
@@ -186,6 +206,8 @@ export const SETTINGS = {
   reduceMotion: 'ui:reduceMotion',
   /** `'false'` when rows of tracks leave out the three dots that open their menu; anything else shows them. */
   moreButton: 'ui:moreButton',
+  /** `'true'` where the tabs at the foot show their names under their icons; anything else, icons alone. See `ui/tabLabels.ts`. */
+  tabLabels: 'ui:tabLabels',
   /** The lists something was last put in from the list picker, most recent first, as a JSON list of ids: the picker's order. */
   listsRecent: 'lists:recent',
   /** Whether Favorites is shown among the lists. Shown unless 'false'; the heart fills it either way. */
@@ -238,6 +260,28 @@ export const SETTINGS = {
   downloadsButton: 'ui:downloadsButton',
   /** `'false'` where the player leaves out its add-to-list button; anything else shows it. */
   listButton: 'player:listButton',
+  /**
+   * What the shuffle button over the tracks plays, and the widget's and the
+   * car's with it: `all`, `list:` and a list's id, or `auto:` and one of the
+   * lists made from the listening. See `lists/shuffleSource.ts`.
+   */
+  shuffleSource: 'library:shuffleSource',
+  /** What that button says: the name of what it plays, words of the user's, or nothing beside its icon. JSON. */
+  shuffleLabel: 'library:shuffleLabel',
+  /**
+   * What stands where the cover is in the player, for a song: `cover`, or
+   * `record`, the cover the label of a record that turns while it plays.
+   * Absent, the cover. See `ui/coverLook.ts`.
+   */
+  songLook: 'player:songLook',
+  /** And for a tape: `cover`, or `cassette`, its reels turning and the tape going from one to the other as it plays. */
+  tapeLook: 'player:tapeLook',
+  /** What moves with the music round what stands where the cover is: `none`, `spectrum`, `ripple`, `breathe` or `scope`. See `ui/coverLook.ts`. */
+  coverMotion: 'player:coverMotion',
+  /** `'on'` where the phone knocks lightly on each beat while the player is open; see `ui/coverLook.ts`. */
+  beatFeel: 'player:beatFeel',
+  /** `'on'` where a record in the player has its arm over it, the needle following the song; see `ui/coverLook.ts`. */
+  tonearm: 'player:tonearm',
   /**
    * `'false'` where the app is not to look for a newer yt-dlp by itself.
    * Anything else, and nothing at all, is yes: see `lib/youtube/extractor.ts`

@@ -13,7 +13,7 @@ import { channelFeedOf, searchChannels, searchShows, type FoundShow } from '../.
 import { podcastsWifiOnly, setPodcastsWifiOnly } from '../../lib/podcasts/refresh';
 import { subscriptions, type Subscription } from '../../lib/podcasts/store';
 import { makeStyles, outlined, switchColours, useColours, usePressed } from '../../lib/theme/index';
-import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
+import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../lib/ui/lists';
 
 /** A search's results, or the podcasts followed: one row either way. */
 type Row = { feedUrl: string; title: string; author: string | null; image: string | null; followers?: number | null };
@@ -133,6 +133,7 @@ export function PodcastsPane() {
   return (
     <FlatList
       removeClippedSubviews={CLIP_SUBVIEWS}
+      windowSize={LIST_WINDOW}
       data={items}
       keyExtractor={(item) => (item.kind === 'row' ? item.feedUrl : item.key)}
       keyboardShouldPersistTaps="handled"

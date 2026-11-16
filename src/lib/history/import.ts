@@ -14,9 +14,12 @@ import { foldForMatch } from '../metadata/text.ts';
  *    linked to), or one with headings that name the columns, a Unix time
  *    among them.
  *  - Spotify's "Download your data": `StreamingHistory_music_*.json`, a list
- *    of `endTime`, `artistName`, `trackName` and `msPlayed`; and the extended
+ *    of `endTime`, `artistName`, `trackName` and `msPlayed` (`creator` and
+ *    `itemName` for the names, in a newer export); and the extended
  *    history, `Streaming_History_Audio_*.json`, whose rows say when they
  *    ended to the second, how long they ran and whether they were skipped.
+ *  - Apple's "Get a copy of your data": `Apple Music - Play History Daily
+ *    Tracks.csv`, a day of each song a row (see {@link appleListens}).
  *  - ListenBrainz's export, a list of listens or a file of them a line each.
  *
  * Each listen found becomes a row of the history like any heard here. This
@@ -25,7 +28,7 @@ import { foldForMatch } from '../metadata/text.ts';
  * in sight, so that every format can be checked against a sample of it.
  */
 
-export type HistorySource = 'lastfm' | 'spotify' | 'listenbrainz';
+export type HistorySource = 'lastfm' | 'spotify' | 'applemusic' | 'listenbrainz';
 
 /** A listen as another app's history gives it. */
 export type ForeignListen = {
@@ -108,13 +111,15 @@ export function momentOf(value: unknown): number | null {
 /** A row of Spotify's own history: null where it is a podcast's or cannot be read, undefined where it is not one at all. */
 function spotifyListen(row: Json): ForeignListen | null | undefined {
   if ('endTime' in row && 'msPlayed' in row) {
-    const title = text(row.trackName);
+    // `trackName` and `artistName` as Spotify has long written them; `itemName` and `creator`, as its own page
+    // now describes the file, for an export made since.
+    const title = text(row.trackName) ?? text(row.itemName);
     const ended = momentOf(row.endTime);
     const ms = number(row.msPlayed);
     if (!title || ended == null || ms == null) return null;
     return {
       title,
-      artist: text(row.artistName),
+      artist: text(row.artistName) ?? text(row.creator),
       album: null,
       startedAt: ended - ms,
       secondsPlayed: ms / 1000,
@@ -191,8 +196,8 @@ function jsonRows(json: string): unknown[] | null {
   }
 }
 
-/** The cells of a table, quotes and all, split on [delimiter]. */
-function csvRows(table: string, delimiter: string): string[][] {
+/** The cells of a table, quotes and all, split on [delimiter]. Playlists written as tables are read with it too (`playlists/tables.ts`). */
+export function csvRows(table: string, delimiter: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = '';
@@ -228,6 +233,96 @@ const TITLE_COLUMNS = ['track', 'title', 'track name', 'track_name', 'trackname'
 const ALBUM_COLUMNS = ['album', 'album name', 'album_name', 'albumname', 'release'];
 // A count of seconds first, where there is one beside a date written out: it cannot be misread.
 const TIME_COLUMNS = ['uts', 'timestamp', 'date', 'utc_time', 'time', 'played at', 'played_at', 'listened_at', 'scrobble time'];
+
+/** The heading of a table, its cells as written, and the delimiter it is split on. */
+function headingOf(table: string): { cells: string[]; delimiter: string } {
+  const firstLine = table.slice(0, table.search(/\r?\n|$/));
+  const delimiter = [',', ';', '\t'].reduce((best, each) =>
+    firstLine.split(each).length > firstLine.split(best).length ? each : best
+  );
+  return { cells: (csvRows(firstLine, delimiter)[0] ?? []).map((cell) => cell.trim()), delimiter };
+}
+
+/** Of Apple's tables of what was played, those that say again what `Daily Tracks` says, by a column only they have. */
+const APPLE_ALSO = [
+  // `Apple Music Play Activity.csv`: every event of every play, with no artist, and the network it came over.
+  ['Song Name', 'Event Start Timestamp'],
+  // `Apple Music - Recently Played Tracks.csv`: each song's plays added up.
+  ['Track Description', 'Total plays'],
+  // `Apple Music - Track Play History.csv`: when each song was last played.
+  ['Track Name', 'Last Played Date'],
+];
+
+/**
+ * Apple Music's history, from the copy of an account's data Apple sends:
+ * the listens in `Apple Music - Play History Daily Tracks.csv`, an empty list
+ * for the other tables of plays beside it, and undefined for a table that is
+ * none of Apple's.
+ *
+ * `Daily Tracks` is a day of one song a row: the song as `Artist - Title`,
+ * the day as `20150630`, the hours of it the song was heard in (`18, 19`),
+ * how many times it was heard and skipped, and for how long in all. That is
+ * made into as many listens as it was heard, each the day's time divided
+ * among them, laid in the hours named in turn and one after another inside
+ * each, so that the hour of the day each was heard in is right and the same
+ * file brought in twice comes to the same listens. As many as were skipped
+ * are counted as not heard to the end. A row that is not `Artist - Title` is
+ * a radio station played, not a song.
+ *
+ * The other tables are left as they are, for they are the same listens told
+ * another way, and counting them as well would count each listen twice:
+ * `Play Activity` has each of them to the second, but no artist to know the
+ * song by, and Apple's every record of where the phone was besides.
+ */
+function appleListens(table: string): ForeignListen[] | null | undefined {
+  const { cells, delimiter } = headingOf(table);
+  if (APPLE_ALSO.some((names) => names.every((name) => cells.includes(name)))) return [];
+  const at = (name: string) => cells.indexOf(name);
+  const described = at('Track Description');
+  const day = at('Date Played');
+  const count = at('Play Count');
+  if (described < 0 || day < 0 || count < 0) return undefined;
+  const hours = at('Hours');
+  const duration = at('Play Duration Milliseconds');
+  const skips = at('Skip Count');
+
+  const listens: ForeignListen[] = [];
+  for (const row of csvRows(table, delimiter).slice(1)) {
+    const description = text(row[described]);
+    const date = /^(\d{4})(\d{2})(\d{2})$/.exec(text(row[day]) ?? '');
+    const heard = number(row[count]);
+    if (!description || !date || heard == null || heard < 1) continue;
+    const dash = description.indexOf(' - ');
+    if (dash <= 0) continue;
+    const artist = description.slice(0, dash).trim();
+    const title = description.slice(dash + 3).trim();
+    if (!artist || !title) continue;
+
+    const named = (text(row[hours]) ?? '')
+      .split(',')
+      .map((hour) => number(hour))
+      .filter((hour): hour is number => hour != null && hour >= 0 && hour < 24);
+    const inHours = named.length > 0 ? [...new Set(named)].sort((a, b) => a - b) : [12];
+    const total = number(row[duration]);
+    const each = total != null && total > 0 ? total / heard / 1000 : null;
+    const skipped = Math.min(heard, Math.max(0, number(row[skips]) ?? 0));
+    const midnight = Date.UTC(+date[1]!, +date[2]! - 1, +date[3]!);
+    for (let index = 0; index < heard; index++) {
+      const hour = inHours[index % inHours.length]!;
+      const turn = Math.floor(index / inHours.length);
+      listens.push({
+        title,
+        artist,
+        album: null,
+        startedAt: midnight + hour * 3_600_000 + Math.round(turn * (each ?? 180) * 1000),
+        secondsPlayed: each,
+        completed: index < heard - skipped,
+        source: 'applemusic',
+      });
+    }
+  }
+  return listens;
+}
 
 /**
  * A Last.fm export, which is a table.
@@ -287,7 +382,11 @@ function lastfmListens(table: string): ForeignListen[] | null {
 export function readHistory(contents: string): ForeignListen[] | null {
   const body = contents.replace(/^﻿/, '');
   const start = body.trimStart()[0];
-  if (start !== '[' && start !== '{') return lastfmListens(body);
+  if (start !== '[' && start !== '{') {
+    // Apple's first: its tables would otherwise be taken for a Last.fm export with no heading.
+    const apple = appleListens(body);
+    return apple === undefined ? lastfmListens(body) : apple;
+  }
 
   const rows = jsonRows(body);
   if (!rows) return null;
@@ -367,18 +466,58 @@ export function absentId(title: string, artist: string | null): string {
   return `absent:${hash(looseSongKey({ title, artist }))}`;
 }
 
+/** A song as another app names it: enough to find it in the library by. */
+export type NamedSong = { title: string; artist: string | null; album: string | null };
+
 /**
- * Which listens to write, and under which song each.
- *
- * A listen is put on a song of the library when the artist and title are the
- * same, folded the way the rest of the app folds names -- case, accents,
- * punctuation; failing that, when they are the same with the notes taken off
+ * Which song of the library another app's [named] song is, or null: the
+ * same artist and title folded the way the rest of the app folds names --
+ * case, accents, punctuation; failing that, the same with the notes taken off
  * that only say how a copy was issued, the guests after the lead artist and
  * a `(Remastered)` after a title. Where several songs answer, the one on the
  * same album is taken, and then the first by id, so that the same file
- * brought in twice puts its listens on the same song both times. Several
- * copies of one song are one song, and which of them carries its listens is
- * a small matter beside losing them.
+ * brought in twice finds the same song both times.
+ *
+ * Made once for a library, and asked once a song however often it is asked:
+ * a year of somebody's listening is the same few hundred songs again and
+ * again. Used for listens (`planImport`) and for another app's playlists.
+ */
+export function songFinder(library: readonly LibrarySong[]): (named: NamedSong, key?: string) => LibrarySong | null {
+  const exact = new Map<string, LibrarySong[]>();
+  const loose = new Map<string, LibrarySong[]>();
+  const add = (index: Map<string, LibrarySong[]>, key: string, song: LibrarySong) => {
+    const list = index.get(key);
+    if (!list) index.set(key, [song]);
+    else if (!list.some((each) => each.id === song.id)) list.push(song);
+  };
+  for (const song of library) {
+    if (!song.title) continue;
+    add(exact, exactKey(song.title, song.artist), song);
+    add(loose, looseSongKey({ title: song.title, artist: song.artist }), song);
+  }
+
+  const chosen = new Map<string, LibrarySong | null>();
+  return (named, key = exactKey(named.title, named.artist)) => {
+    const album = foldForMatch(named.album ?? '');
+    const asked = `${key}\u0000${album}`;
+    const known = chosen.get(asked);
+    if (known !== undefined) return known;
+
+    const candidates = exact.get(key) ?? loose.get(looseSongKey(named)) ?? [];
+    const onAlbum = album ? candidates.filter((song) => foldForMatch(song.album ?? '') === album) : [];
+    const pool = onAlbum.length > 0 ? onAlbum : candidates;
+    const song = pool.reduce<LibrarySong | null>((best, each) => (best == null || each.id < best.id ? each : best), null);
+    chosen.set(asked, song);
+    return song;
+  };
+}
+
+/**
+ * Which listens to write, and under which song each.
+ *
+ * A listen is put on the song of the library {@link songFinder} says it was
+ * of. Several copies of one song are one song, and which of them carries its
+ * listens is a small matter beside losing them.
  *
  * A song that is not in the library keeps its listens anyway, under an id of
  * its own (see {@link absentId}): it was listened to, and the hours count.
@@ -393,35 +532,8 @@ export function planImport(
   library: readonly LibrarySong[],
   held: Iterable<HeldListen>
 ): ImportPlan {
-  const exact = new Map<string, LibrarySong[]>();
-  const loose = new Map<string, LibrarySong[]>();
-  const add = (index: Map<string, LibrarySong[]>, key: string, song: LibrarySong) => {
-    const list = index.get(key);
-    if (!list) index.set(key, [song]);
-    else if (!list.some((each) => each.id === song.id)) list.push(song);
-  };
-  for (const song of library) {
-    if (!song.title) continue;
-    add(exact, exactKey(song.title, song.artist), song);
-    add(loose, looseSongKey({ title: song.title, artist: song.artist }), song);
-  }
-
-  // Asked once a song, whatever the size of the history: a year of
-  // somebody's listening is the same few hundred songs again and again.
-  const chosen = new Map<string, LibrarySong | null>();
-  const songOf = (listen: ForeignListen, key: string): LibrarySong | null => {
-    const album = foldForMatch(listen.album ?? '');
-    const asked = `${key}\u0000${album}`;
-    const known = chosen.get(asked);
-    if (known !== undefined) return known;
-
-    const candidates = exact.get(key) ?? loose.get(looseSongKey(listen)) ?? [];
-    const onAlbum = album ? candidates.filter((song) => foldForMatch(song.album ?? '') === album) : [];
-    const pool = onAlbum.length > 0 ? onAlbum : candidates;
-    const song = pool.reduce<LibrarySong | null>((best, each) => (best == null || each.id < best.id ? each : best), null);
-    chosen.set(asked, song);
-    return song;
-  };
+  const find = songFinder(library);
+  const songOf = (listen: ForeignListen, key: string): LibrarySong | null => find(listen, key);
 
   const seen = new Set<string>();
   for (const listen of held) seen.add(sameListen(listen.startedAt, exactKey(listen.title, listen.artist)));

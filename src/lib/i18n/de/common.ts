@@ -63,4 +63,10 @@ export const common: Strings['common'] = {
   pictureFailed: 'Dieses Bild ließ sich nicht laden.',
 
   drawFailed: 'Beim Anzeigen dieses Bildschirms ist etwas schiefgelaufen.',
+
+  drawFailedCopy: 'Details kopieren',
+
+  drawFailedCopied: 'Kopiert. Schick es jemandem, der sich das ansehen kann.',
+
+  drawFailedNotCopied: 'Kopieren fehlgeschlagen.',
 };

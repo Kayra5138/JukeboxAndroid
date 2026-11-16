@@ -96,13 +96,18 @@ export const library: Strings['library'] = {
     },
     /* The order has to fit a button 56 points wide: kept to seven letters at most. */
     sort: 'Ordine',
-    sortShort: { name: 'A–Z', added: 'Nuovi', played: 'Ascolti' },
+    sortShort: { name: 'A–Z', added: 'Nuovi', played: 'Ascolti', colour: 'Colore' },
     sortedBy: {
       name: 'Ordinati per nome',
       added: 'Ordinati per data di aggiunta',
       played: 'Ordinati per ultimo ascolto',
+      colour: 'Ordinato per colore della copertina',
     },
     sortHint: 'Cambia l’ordine della libreria',
+    lookSwitch: 'Passa all’altra visualizzazione di questa vista',
+    view: 'Vista',
+    looks: { list: 'Elenco', shelves: 'Scaffali', rack: 'Scaffale', map: 'Mappa' },
+    artistMap: { drawing: 'Disegno la mappa…', shuffle: 'Riproduci i brani in ordine casuale', open: 'Apri', with: 'Con', lasso: 'Cerchia gli artisti per mescolarli', lassoHint: 'Cerchia gli artisti da mescolare', lassoChosen: 'Cerchiati', putBackAll: 'Rimetti a posto gli artisti spostati a mano', movedByHand: 'Spostati a mano', putBack: 'Rimetti' },
     groupSortShort: { name: 'A–Z', tracks: 'Brani', played: 'Ascolti', added: 'Nuovi' },
     groupSortedBy: {
       name: 'Ordinati per nome',
@@ -162,6 +167,8 @@ export const library: Strings['library'] = {
       label: 'Scegli la copertina dell’album',
       hint: 'Un’immagine dalla galleria, per ogni suo brano',
     },
+    setAside: { label: 'Metti da parte', hint: 'I suoi brani fuori da Brani e dalla riproduzione casuale di tutto' },
+    bringBack: { label: 'Riporta', hint: 'I suoi brani di nuovo in Brani e nella riproduzione casuale' },
   },
 
   albumTools: {
@@ -254,6 +261,9 @@ export const library: Strings['library'] = {
     shareFile: { label: 'Condividi come file', hint: 'Inviato come file: una chat lo tiene come documento' },
     album: { label: 'Vai all’album', hint: 'Il resto del disco, in ordine' },
     addToPlaylist: { label: 'Aggiungi a una lista', hint: 'Una delle tue liste, o una nuova' },
+    setAside: { label: 'Metti da parte', hint: 'Fuori da Brani e dalla riproduzione casuale di tutto' },
+    bringBack: { label: 'Riporta', hint: 'Di nuovo in Brani e nella riproduzione casuale' },
+    asideWith: { label: 'Messo da parte con altri', hint: 'Con il suo album, artista, cartella o un tag: si riporta da Messi da parte' },
     favoriteAdd: { label: "Aggiungi ai Preferiti", hint: "La lista che riempie il cuore, i più recenti in alto" },
     favoriteRemove: { label: "Togli dai Preferiti", hint: "Fuori dalla lista che riempie il cuore" },
     tiles: { label: 'Gioca a Piano Tiles', hint: 'Tasti che cadono a tempo con questo brano' },
@@ -281,6 +291,24 @@ export const library: Strings['library'] = {
     spoken: (path, count) => `${path}, ${oneOrMany(count, '1 brano', `${format.number(count)} brani`)}`,
     hint: 'Attivata, la cartella è nella libreria; disattivata, ne resta fuori',
     empty: (root) => `In ${root} non ci sono cartelle con musica.`,
+  },
+
+  setAside: {
+    title: 'Messi da parte',
+    none: 'Niente. Metti da parte un album, un artista o un brano che non vuoi in Brani né nella riproduzione casuale.',
+    some: (count) => oneOrMany(count, '1 brano messo da parte', `${format.number(count)} brani messi da parte`),
+    note: 'Un brano messo da parte resta fuori da Brani, dalla riproduzione casuale di tutto e dai brani scelti per continuare la musica. Resta nel suo album, con il suo artista e nella sua cartella, nelle tue liste e nella ricerca, e suona quando si riproduce uno di questi. Non viene eliminato nulla.',
+    empty: 'Non c’è niente da parte. Tieni premuto un album o un brano, o apri un artista o una cartella, per metterlo da parte.',
+    kinds: { album: 'Album', artist: 'Artisti', list: 'Liste', folder: 'Cartelle', tag: 'Tag', track: 'Brani' },
+    songs: (count) => oneOrMany(count, '1 brano', `${format.number(count)} brani`),
+    bringBack: 'Riporta',
+    bringBackSpoken: (name) => `Riporta ${name}`,
+    addTag: 'Metti da parte un tag',
+    noTags: 'Non ci sono altri tag da mettere da parte.',
+    album: { set: 'Metti da parte questo album', back: 'Riporta questo album' },
+    artist: { set: 'Metti da parte questo artista', back: 'Riporta questo artista' },
+    list: { set: 'Metti da parte questa lista', back: 'Riporta questa lista' },
+    folder: { set: 'Metti da parte questa cartella', back: 'Riporta questa cartella' },
   },
 
   shortFiles: {
@@ -361,5 +389,18 @@ export const library: Strings['library'] = {
     notDeleted: 'Il file non è stato eliminato.',
     keptRight: 'Resta com’è. Non verrà chiesto di nuovo.',
     failed: (error) => `Non è stato possibile. ${error}`,
+  },
+
+  shuffle: {
+    menu: 'Casuale',
+    everything: 'Tutti i brani',
+    change: 'Cambia cosa riproduce il pulsante…',
+    heading: 'Il pulsante casuale riproduce',
+    note: 'Tieni premuto il pulsante per mescolare qualcos’altro una volta sola. Il widget e l’auto riproducono lo stesso.',
+    labelHeading: 'Sul pulsante casuale c’è scritto',
+    label: { name: 'Il nome di ciò che riproduce', words: 'Un testo tuo', icon: 'Niente, solo l’icona' },
+    wordsHeading: 'Testo del pulsante casuale',
+    wordsPlaceholder: 'Casuale',
+    spoken: (name) => `Casuale: ${name}`,
   },
 };

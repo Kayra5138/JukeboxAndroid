@@ -43,7 +43,7 @@ export const backup: Strings['backup'] = {
 
   history: {
     title: '再生履歴をインポート',
-    note: 'Last.fm、Spotify、ListenBrainzの再生記録を、それぞれでダウンロードできるファイルから取り込みます。見つかった内容が表示され、何かが変更される前に確認されます。',
+    note: 'Last.fm、Spotify、Apple Music、ListenBrainzの再生記録を、それぞれでダウンロードできるファイルから取り込みます。見つかった内容が表示され、何かが変更される前に確認されます。',
     question: 'これらの再生記録をインポートしますか？',
     range: (from, to) => (from === to ? `すべて${from}の記録です。` : `${from}から${to}までの記録です。`),
     matched: (matched, total) =>
@@ -53,7 +53,7 @@ export const backup: Strings['backup'] = {
     nothing: 'どの再生記録もすでに履歴にあるか、短すぎて数えられません。',
     added: (count) => `${format.number(count)}件の再生記録を履歴に追加しました。`,
     notHistory:
-      'Jukeboxで読み込める再生履歴ではありません。Last.fm、Spotify、ListenBrainzから受け取ったファイル（CSVかJSON、またはそれらが入ったzip）を選んでください。',
+      'Jukeboxで読み込める再生履歴ではありません。Last.fm、Spotify、Apple Music、ListenBrainzから受け取ったファイル（CSVかJSON、またはそれらが入ったzip）を選んでください。',
     tooBig: 'このファイルは大きすぎて読み込めません。',
     failed: '再生記録をインポートできませんでした。何も変更されていません。',
   },

@@ -82,6 +82,8 @@ export function ThemePicker({
         return (
           <View key={group} style={styles.group}>
             {heading ? <Text style={styles.heading}>{t.themes[heading]}</Text> : null}
+            {/* The glass is blurred afresh with every frame of whatever moves behind it, where the rest are flat colour: said, so that it is chosen knowing. */}
+            {group === 'effects' ? <Text style={styles.note}>{t.themes.effectsNote}</Text> : null}
             {/*
               One choice among all of them, for choosing the theme, and said
               so: each group is a set of radio buttons to a screen reader,
@@ -172,6 +174,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   picker: { gap: 14, marginTop: 8, marginBottom: 6 },
   group: { gap: 8 },
   heading: { color: c.textFaint, fontSize: 12, fontWeight: '600' },
+  note: { color: c.textFaint, fontSize: 11.5, marginTop: -4 },
   /*
     As many to a row as fit, at one width, so that the rows line up down the
     card whatever the width of the phone and a last row of one is not a tile

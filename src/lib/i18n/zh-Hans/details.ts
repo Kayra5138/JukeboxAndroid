@@ -246,6 +246,8 @@ export const details: Strings['details'] = {
         label: '重置',
         hint: '忘掉在线查询为它们找到的信息。你自己编辑的内容会保留。',
       },
+      setAside: { label: '搁置', hint: '不出现在“歌曲”和全部随机播放中' },
+      bringBack: { label: '恢复', hint: '把单独搁置的歌曲恢复到“歌曲”和随机播放中' },
       delete: { label: '从手机中删除', hint: '删除这些文件。Android 会先征求你的同意。' },
     },
     busy: '另一项查询正在进行。请等它完成，或将其停止。',
