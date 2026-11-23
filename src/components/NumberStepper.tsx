@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { TYPE, RADIUS, SPACE } from '../lib/theme/measures';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { MinusIcon, PlusIcon } from './Icons';
@@ -111,12 +112,12 @@ export function NumberStepper({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s, alignSelf: 'flex-start' },
   off: { opacity: 0.45 },
   button: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -127,12 +128,12 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   value: {
     minWidth: 64,
     height: 40,
-    paddingHorizontal: 14,
-    borderRadius: 12,
+    paddingHorizontal: SPACE.m,
+    borderRadius: RADIUS.control,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.surface,
     ...outlined(c),
   },
-  valueLabel: { color: c.text, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  valueLabel: { color: c.text, fontSize: TYPE.heading, fontWeight: '600', fontVariant: ['tabular-nums'] },
 }));

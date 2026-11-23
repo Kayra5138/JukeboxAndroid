@@ -1,7 +1,13 @@
 import { useCallback, useState } from 'react';
+import { LEADING, RADIUS, SPACE, TYPE, TOUCH } from '../lib/theme/measures';
+import { Note } from './Note';
+import { SwitchRow, Chevron } from './settings/rows';
+import { openLink } from '../lib/ui/openLink';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
-import { Switch } from './Switch';
+import { StyleSheet, View } from 'react-native';
+import { Busy } from './Busy';
+import { Text } from './settings/Find';
+import { Button } from './Button';
 import { Pressable } from './Pressable';
 
 import { TextPrompt } from './TextPrompt';
@@ -15,7 +21,7 @@ import {
   stopPastListens,
   useScrobbling,
 } from '../lib/scrobble/index';
-import { makeStyles, outlined, outlinedClip, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlinedClip, useColours, usePressed } from '../lib/theme/index';
 import { useBack } from '../lib/ui/back';
 import { haptic } from '../lib/ui/haptics';
 
@@ -98,6 +104,7 @@ export function ListenBrainzSettings({
 
   const prompt = (
     <TextPrompt
+      page
       visible={asking}
       heading={said.connect.promptHeading}
       hint={said.connect.promptHint}
@@ -124,9 +131,9 @@ export function ListenBrainzSettings({
           {revoked ? (
             <>
               <View style={styles.row}>
-                <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
+                <Note tone="bad">
                   {said.revoked(connection.user)}
-                </Text>
+                </Note>
               </View>
               <View style={styles.rule} />
             </>
@@ -140,7 +147,7 @@ export function ListenBrainzSettings({
             onPress={() => setAsking(true)}>
             <View style={styles.line}>
               <Text style={styles.title}>{revoked ? said.newToken : said.connect.title}</Text>
-              {checking ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
+              {checking ? <Busy color={c.textMuted} /> : <Chevron />}
             </View>
             <Text style={styles.muted}>{checking ? said.connect.checking : said.connect.note}</Text>
             <Text style={styles.muted}>{said.connect.where}</Text>
@@ -150,14 +157,14 @@ export function ListenBrainzSettings({
             android_ripple={pressed}
             accessibilityRole="link"
             style={styles.row}
-            onPress={() => void Linking.openURL(TOKEN_PAGE).catch(() => {})}>
+            onPress={() => openLink(TOKEN_PAGE)}>
             <Text style={styles.link}>{said.connect.openSite}</Text>
           </Pressable>
         </View>
         {refused ? (
-          <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.noteBad}>
+          <Note tone="bad" style={styles.noteBad}>
             {refused}
-          </Text>
+          </Note>
         ) : null}
         {prompt}
       </View>
@@ -185,7 +192,7 @@ export function ListenBrainzSettings({
         <View style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{said.connectedAs(connection.user ?? '')}</Text>
-            {running ? <ActivityIndicator color={c.textMuted} /> : null}
+            {running ? <Busy color={c.textMuted} /> : null}
           </View>
           {/*
             Only what there is to say. A queue that is empty and has never
@@ -197,53 +204,31 @@ export function ListenBrainzSettings({
             </Text>
           ) : null}
           {trouble && waiting > 0 ? (
-            <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
+            <Note tone="bad">
               {troubleSaid}
-            </Text>
+            </Note>
           ) : connection.lastSentAt ? (
             <Text style={styles.muted}>{said.lastSent(t.format.dateTime(new Date(connection.lastSentAt)))}</Text>
           ) : null}
         </View>
         <View style={styles.rule} />
 
-        <View style={styles.row}>
-          <View style={styles.line}>
-            <Text style={styles.title}>{said.sending.title}</Text>
-            <Switch
-              accessibilityLabel={said.sending.title}
-              accessibilityHint={said.sending.hint}
-              value={connection.sending}
-              onValueChange={setSendingListens}
-              {...switchColours(c, connection.sending)}
-            />
-          </View>
-          <Text style={styles.muted}>{said.sending.note}</Text>
-        </View>
+        <SwitchRow
+          title={said.sending.title}
+          hint={said.sending.note}
+          value={connection.sending}
+          onChange={setSendingListens}
+          accessibilityHint={said.sending.hint}
+        />
         <View style={styles.rule} />
 
         <View style={styles.row}>
           <View style={styles.line}>
             <Text style={styles.title}>{said.past.title}</Text>
             {uploading ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                accessibilityLabel={said.past.stopLabel}
-                hitSlop={8}
-                style={styles.action}
-                onPress={stopPastListens}>
-                <Text style={styles.actionText}>{said.past.stop}</Text>
-              </Pressable>
+              <Button size="small" kind="secondary" label={said.past.stop} accessibilityLabel={said.past.stopLabel} onPress={stopPastListens} />
             ) : sendable ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                accessibilityLabel={said.past.startLabel}
-                hitSlop={8}
-                style={styles.action}
-                onPress={sendPastListens}>
-                <Text style={styles.actionText}>{said.past.start}</Text>
-              </Pressable>
+              <Button size="small" kind="secondary" label={said.past.start} accessibilityLabel={said.past.startLabel} onPress={sendPastListens} />
             ) : null}
           </View>
           <Text style={styles.muted}>
@@ -269,26 +254,17 @@ export function ListenBrainzSettings({
             <Text style={styles.title}>{said.disconnect.question(connection.user ?? '')}</Text>
             <Text style={styles.muted}>{said.disconnect.consequence}</Text>
             <View style={styles.answers}>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                hitSlop={8}
-                style={styles.action}
-                onPress={() => setConfirming(false)}>
-                <Text style={styles.actionText}>{t.common.cancel}</Text>
-              </Pressable>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                hitSlop={8}
-                style={[styles.action, styles.actionBad]}
+              <Button size="small" kind="secondary" label={t.common.cancel} onPress={() => setConfirming(false)} />
+              <Button
+                size="small"
+                kind="danger"
+                label={said.disconnect.title}
                 onPress={() => {
                   setConfirming(false);
                   setRefused(null);
                   disconnectListenBrainz();
-                }}>
-                <Text style={styles.actionBadText}>{said.disconnect.title}</Text>
-              </Pressable>
+                }}
+              />
             </View>
           </View>
         ) : (
@@ -310,7 +286,7 @@ export function ListenBrainzSettings({
               accessibilityRole="link"
               style={styles.row}
               onPress={() =>
-                void Linking.openURL(listensPage(connection.user ?? '')).catch(() => {})
+                openLink(listensPage(connection.user ?? ''))
               }>
               <Text style={styles.link}>{said.openListens}</Text>
             </Pressable>
@@ -329,38 +305,24 @@ export function ListenBrainzSettings({
   worse than either.
 */
 const useStyles = makeStyles((c) => StyleSheet.create({
-  section: { marginTop: 26 },
+  section: { marginTop: SPACE.xl },
   heading: {
     color: c.textFaint,
-    fontSize: 11,
+    fontSize: TYPE.label,
     fontWeight: '600',
     letterSpacing: 0.8,
-    marginBottom: 8,
-    marginLeft: 4,
+    marginBottom: SPACE.s,
+    marginLeft: SPACE.xs,
   },
-  card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
-  row: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
-  rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: 16 },
-  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-  title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-  muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-  bad: { color: c.danger, fontSize: 12.5, lineHeight: 18 },
-  noteBad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
-  chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
-  link: { color: c.accent, fontSize: 14 },
-  danger: { color: c.danger, fontSize: 15.5 },
+  card: { backgroundColor: c.surface, borderRadius: RADIUS.card, overflow: 'hidden', ...outlinedClip(c) },
+  row: { paddingHorizontal: SPACE.l, paddingVertical: SPACE.m, gap: SPACE.xs },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: SPACE.l },
+  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.row },
+  title: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+  muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+  noteBad: { marginTop: SPACE.s, marginLeft: SPACE.xs },
+  link: { color: c.accent, fontSize: TYPE.small },
+  danger: { color: c.danger, fontSize: TYPE.body },
 
-  /** A thing to press that belongs to its row, where a chevron would promise another screen. */
-  action: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: c.surfaceRaised,
-    alignItems: 'center',
-    ...outlined(c),
-  },
-  actionText: { color: c.textSecondary, fontSize: 13.5, fontWeight: '600' },
-  actionBad: { backgroundColor: c.dangerSoft, ...outlined(c, c.danger) },
-  actionBadText: { color: c.danger, fontSize: 13.5, fontWeight: '600' },
-  answers: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 8 },
+  answers: { flexDirection: 'row', justifyContent: 'flex-end', gap: SPACE.s, marginTop: SPACE.s },
 }));

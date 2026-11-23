@@ -116,6 +116,8 @@ export const TABLES = {
     kind: 'T',
     /** A smart list's rules, which name tags and artists rather than songs, and so travel as they are. */
     rules: 'T',
+    /** When it was last played or opened, which the Lists tab and Free up space go by. Later than the rest: absent from older backups. */
+    used_at: 'I',
   },
   playlist_tracks: { playlist_id: 'I!', track_id: 'T!', position: 'I!', added_at: 'I!' },
   // Both later than the rest, and absent from a backup made before them.

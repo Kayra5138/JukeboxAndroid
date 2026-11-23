@@ -149,8 +149,20 @@ export function keepWhatIsListed(): () => void {
 export async function letGoOfListened(now = Date.now()): Promise<void> {
   try {
     if (!downloads?.cleanDiscoverAsync) return;
+    /*
+      Those in a list kept first, as keeping does at every start, and any the
+      keeping failed for not let go: at the same moment as the keeping, a
+      song in Favorites that could not be copied was let go in its days and
+      taken out of every list with its file.
+    */
+    await keepListed();
+    const listed = new Set(
+      db()
+        .getAllSync<{ track_id: string }>(`SELECT DISTINCT track_id FROM playlist_tracks WHERE track_id LIKE ?`, `${LISTEN_PREFIX}%`)
+        .map((row) => listenJobOf(row.track_id))
+    );
     const jobs = (await downloads.getJobsAsync(false)) as DownloadJob[];
-    const due = listenDue(jobs, listenDays(), now);
+    const due = listenDue(jobs, listenDays(), now).filter((id) => !listed.has(id));
     if (due.length === 0) return;
     const gone = await downloads.cleanDiscoverAsync(due, []);
     // What was learned of them goes too, their lyrics and details; what was heard of them stays, as it does for any song.

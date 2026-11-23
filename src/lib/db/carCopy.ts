@@ -1,5 +1,5 @@
 import { AppState } from 'react-native';
-import { defaultDatabaseDirectory } from 'expo-sqlite';
+import { defaultDatabaseDirectory, openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import { strings } from '../i18n/languages';
@@ -66,7 +66,8 @@ const TABLES: Record<string, string> = {
   playlist_tracks: `SELECT * FROM main.playlist_tracks`,
   track_tags: `SELECT track_id, tag, position FROM main.track_tags`,
   plays: `SELECT track_id, started_at FROM main.plays`,
-  track_metadata: `SELECT track_id, status, title, artist, album, album_artist, track_number, artwork_url, cover_removed_at FROM main.track_metadata`,
+  // The genre for the colour of the paper sleeve that stands in for a missing cover (`StandIn.kt`).
+  track_metadata: `SELECT track_id, status, title, artist, album, album_artist, track_number, artwork_url, cover_removed_at, genre FROM main.track_metadata`,
   // The covers tracks with no row of their own were given by their record:
   // the car's tiles should wear what the phone's rows do.
   shared_covers: `SELECT track_id, artwork_url FROM main.shared_covers`,
@@ -106,9 +107,33 @@ function shuffleRows(): { carTitle: string; widgetText: string | null; ids: stri
   return { carTitle: words.spoken, widgetText: words.shown, ids: playing.kind === 'all' ? [] : tracks.map((track) => track.id) };
 }
 let copying = false;
+/** Asked for while a copy was being made: made again once it is done, or what changed meanwhile waits a minute or for good. */
+let again = false;
 
 function changes(): number {
   return db().getFirstSync<{ n: number }>('SELECT total_changes() AS n')?.n ?? 0;
+}
+
+/*
+  The copy is made over a connection of its own, and every step of it is
+  waited on rather than done there and then: done on the app's own
+  connection, it held the app still while every listen ever made was read
+  and written out again, at the start and about once a minute while music
+  played, a hitch in whatever was being scrolled. The same SQLite as the
+  app's, so the two see each other's locks; and with the journal written
+  ahead, reading here never holds up a write there.
+*/
+let copier: Promise<SQLiteDatabase> | null = null;
+function copyConnection(): Promise<SQLiteDatabase> {
+  if (!copier) {
+    // The app's own opened first, for the tables to be as the app has made them.
+    db();
+    copier = openDatabaseAsync('jukebox.db', { useNewConnection: true }).catch((error: unknown) => {
+      copier = null;
+      throw error;
+    });
+  }
+  return copier;
 }
 
 /**
@@ -116,26 +141,41 @@ function changes(): number {
  * names is a small thing, and nothing that saves a song should fail over it.
  */
 export async function publishCarCopy(): Promise<void> {
-  if (copying || !JukeboxAudio.publishCarCopyAsync) return;
+  if (!JukeboxAudio.publishCarCopyAsync) return;
+  if (copying) {
+    again = true;
+    return;
+  }
   copying = true;
+  again = false;
   try {
-    const database = db();
+    const database = await copyConnection();
     const path = `${String(defaultDatabaseDirectory).replace(/^file:\/\//, '')}/${NEXT}`;
 
     // Not attached from an earlier try that died half way. An error here is
     // the usual case, since usually it is not.
     try {
-      database.execSync('DETACH DATABASE car');
+      await database.execAsync('DETACH DATABASE car');
     } catch {
       // Nothing was attached.
     }
 
+    /*
+      What the app had changed, counted before anything is read: a song saved
+      while the copy is made may or may not be in it, and counted from before
+      it is made again next time rather than staying out of the car until
+      something else is saved. The copy's own writing is on its own
+      connection, and is not counted.
+    */
+    const written = changes();
     const marks = shuffleMarks();
     const shuffle = shuffleRows();
-    database.execSync(`ATTACH DATABASE '${path.replace(/'/g, "''")}' AS car`);
+    // The songs set aside, by id: see below.
+    const aside = libraryState().kind === 'library' ? [...librarySetAside()] : null;
+    await database.execAsync(`ATTACH DATABASE '${path.replace(/'/g, "''")}' AS car`);
     try {
       // One transaction, so the file is either the whole copy or not touched.
-      database.execSync(
+      await database.execAsync(
         [
           'BEGIN',
           ...Object.entries(TABLES).flatMap(([name, select]) => [
@@ -153,44 +193,27 @@ export async function publishCarCopy(): Promise<void> {
         everything, as the phone does, and could not tell for itself which
         record or artist a song is filed under the way the phone does.
       */
-      if (libraryState().kind === 'library') {
-        database.execSync('CREATE TABLE car.set_aside_tracks (track_id TEXT PRIMARY KEY)');
-        const aside = database.prepareSync('INSERT OR IGNORE INTO car.set_aside_tracks (track_id) VALUES (?)');
-        try {
-          for (const id of librarySetAside()) aside.executeSync(id);
-        } finally {
-          aside.finalizeSync();
-        }
+      if (aside) {
+        await database.execAsync('CREATE TABLE car.set_aside_tracks (track_id TEXT PRIMARY KEY)');
+        await database.runAsync('INSERT OR IGNORE INTO car.set_aside_tracks (track_id) SELECT value FROM json_each(?)', JSON.stringify(aside));
       }
       if (shuffle) {
-        database.execSync('CREATE TABLE car.shuffle_words (car_title TEXT, widget_text TEXT); CREATE TABLE car.shuffle_tracks (position INTEGER, track_id TEXT)');
-        database.runSync('INSERT INTO car.shuffle_words (car_title, widget_text) VALUES (?, ?)', shuffle.carTitle, shuffle.widgetText);
-        const insert = database.prepareSync('INSERT INTO car.shuffle_tracks (position, track_id) VALUES (?, ?)');
-        try {
-          shuffle.ids.forEach((id, position) => insert.executeSync(position, id));
-        } finally {
-          insert.finalizeSync();
-        }
+        await database.execAsync('CREATE TABLE car.shuffle_words (car_title TEXT, widget_text TEXT); CREATE TABLE car.shuffle_tracks (position INTEGER, track_id TEXT)');
+        await database.runAsync('INSERT INTO car.shuffle_words (car_title, widget_text) VALUES (?, ?)', shuffle.carTitle, shuffle.widgetText);
+        await database.runAsync('INSERT INTO car.shuffle_tracks (position, track_id) SELECT key, value FROM json_each(?)', JSON.stringify(shuffle.ids));
       }
-      database.execSync('COMMIT');
+      await database.execAsync('COMMIT');
     } catch (error) {
       try {
-        database.execSync('ROLLBACK');
+        await database.execAsync('ROLLBACK');
       } catch {
         // It had not begun, or had already ended.
       }
       throw error;
     } finally {
-      database.execSync('DETACH DATABASE car');
+      await database.execAsync('DETACH DATABASE car');
     }
 
-    // Writing the copy changes rows too, in the copy, and they are counted.
-    // So the count is taken after the writing, or every copy would look like a
-    // reason to make another. But before the handing over, which is waited
-    // for: a song saved while it waits is not in this copy, and counted after
-    // it would pass for copied and stay out of the car until something else
-    // was saved.
-    const written = changes();
     await JukeboxAudio.publishCarCopyAsync();
     copiedAt = written;
     shuffledFrom = marks;
@@ -199,6 +222,7 @@ export async function publishCarCopy(): Promise<void> {
   } finally {
     copying = false;
   }
+  if (again) void publishCarCopy();
 }
 
 function publishIfChanged(): void {
@@ -213,7 +237,10 @@ function publishIfChanged(): void {
 
 /** Keeps the copy up to date for as long as the app is running. Answers with how to stop. */
 export function keepCarCopy(): () => void {
-  void publishCarCopy();
+  // Once the library has been read, which says it as it happens (below): made
+  // before, the copy was made twice over at every start, once without the
+  // shuffle button's songs. Without a library to be had, the minute's look does it.
+  if (libraryState().kind === 'library') void publishCarCopy();
   const timer = setInterval(publishIfChanged, EVERY_MS);
   const leaving = AppState.addEventListener('change', (state) => {
     if (state !== 'active') publishIfChanged();

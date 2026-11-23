@@ -28,7 +28,6 @@
   <string name="jukebox_widget_up_next">Sıradaki</string>
   <string name="jukebox_widget_up_next_empty">Sırada başka şarkı yok</string>
   <string name="jukebox_widget_open">Oynatıcıyı açar</string>
-  <string name="jukebox_widget_continue">Devam et: %1$s</string>
 
   <string name="jukebox_playback_channel">Şimdi çalıyor</string>
 

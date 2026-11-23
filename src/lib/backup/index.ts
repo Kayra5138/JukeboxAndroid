@@ -1,6 +1,6 @@
 import { version } from '../../../package.json';
 import JukeboxAudio from '../../../modules/jukebox-audio';
-import { db } from '../db/index.ts';
+import { db, forgetSettings } from '../db/index.ts';
 import { forBridge } from '../equalizer/bridge.ts';
 import { strings } from '../i18n/languages.ts';
 import { scanEverything } from '../media/library.ts';
@@ -36,6 +36,10 @@ function open(): BackupDb {
     all: <T,>(sql: string, ...params: Cell[]) => database.getAllSync<T>(sql, params),
     run: (sql: string, ...params: Cell[]) => {
       database.runSync(sql, params);
+    },
+    prepare: (sql: string) => {
+      const statement = database.prepareSync(sql);
+      return { run: (...params: Cell[]) => void statement.executeSync(params), done: () => statement.finalizeSync() };
     },
     transaction: (work: () => void) => database.withTransactionSync(work),
   };
@@ -364,8 +368,11 @@ export async function applyBackup(opened: Opened, mode: 'merge' | 'replace'): Pr
   await JukeboxAudio.adoptBackupArtworkAsync?.(referencedArtwork(tables));
 
   const database = open();
-  const final = mode === 'merge' ? mergeTables(readTables(database), tables) : tables;
-  restore(database, final, backup.settings, mode);
+  const here = mode === 'merge' ? readTables(database) : null;
+  const final = here ? mergeTables(here, tables) : tables;
+  restore(database, final, backup.settings, mode, here ?? undefined);
+  // Written past the settings' own way in: read from the table again.
+  forgetSettings();
 
   if (mode === 'replace') await writeSound(backup.sound);
   await writeTapes(backup.tapes, to, mode);

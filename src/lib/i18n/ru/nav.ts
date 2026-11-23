@@ -19,4 +19,10 @@ export const nav: Strings['nav'] = {
   albumRest: 'Остальные треки альбома',
   customTheme: 'Своя тема',
   downloads: 'Загрузки',
+  album: 'Альбом',
+  artist: 'Исполнитель',
+  folder: 'Папка',
+  list: 'Плейлист',
+  smartList: 'Умный плейлист',
+  tag: 'Тег',
 };

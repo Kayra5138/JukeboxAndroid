@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, RADIUS, SPACE, TYPE, TOUCH } from '../../lib/theme/measures';
 import { Pressable } from '../Pressable';
 import { Segmented } from '../Segmented';
 
@@ -20,6 +21,8 @@ import {
 import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlined, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
+import { TextButton } from '../Button';
+import { Chevron } from '../settings/rows';
 
 const TYPES: BandType[] = ['peak', 'lowShelf', 'highShelf'];
 
@@ -106,7 +109,7 @@ export function BandEditor({
           {db}
         </Text>
         {/* The app's one chevron, stood on end: down for more, up for less. */}
-        <Text style={[styles.chevron, open ? styles.chevronUp : styles.chevronDown]} importantForAccessibility="no">›</Text>
+        <Chevron turned={open ? 'up' : 'down'} />
       </Pressable>
 
       {open ? (
@@ -182,17 +185,16 @@ export function BandEditor({
             />
           </View>
 
-          <Pressable
-            android_ripple={pressed}
+          <TextButton
+            label={say.removeThis}
+            tone="danger"
             style={styles.remove}
+            accessibilityLabel={say.remove(number)}
             onPress={() => {
               haptic('choices', 'tick');
               onRemove();
             }}
-            accessibilityRole="button"
-            accessibilityLabel={say.remove(number)}>
-            <Text style={styles.removeLabel}>{say.removeThis}</Text>
-          </Pressable>
+          />
         </View>
       ) : null}
     </View>
@@ -217,47 +219,43 @@ function Exact({ text, label, onPress }: { text: string; label: string; onPress:
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  band: { borderRadius: 10, backgroundColor: c.surface, ...outlined(c) },
+  band: { borderRadius: RADIUS.control, backgroundColor: c.surface, ...outlined(c) },
   bandOpen: { backgroundColor: c.surfaceRaised },
 
   line: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
+    gap: SPACE.s,
+    paddingHorizontal: SPACE.m,
     // Tall enough to be a target for a thumb on its own.
-    minHeight: 48,
+    minHeight: TOUCH.normal,
   },
   number: {
     color: c.textFaint,
-    fontSize: 12,
+    fontSize: TYPE.hint,
     width: 18,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
-  kind: { color: c.text, fontSize: 14, flex: 1, minWidth: 0 },
-  figure: { color: c.textSecondary, fontSize: 13, fontVariant: ['tabular-nums'] },
+  kind: { color: c.text, fontSize: TYPE.small, flex: 1, minWidth: 0 },
+  figure: { color: c.textSecondary, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
   // A fixed width, so the frequencies above and below line up whatever the
   // gains beside them say.
   gain: { width: 68, textAlign: 'right' },
-  chevron: { color: c.textDisabled, fontSize: 17, width: 14, textAlign: 'center' },
-  chevronDown: { transform: [{ rotate: '90deg' }] },
-  chevronUp: { transform: [{ rotate: '-90deg' }] },
 
-  body: { paddingHorizontal: 12, paddingBottom: 14, gap: 16 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+  body: { paddingHorizontal: SPACE.m, paddingBottom: SPACE.m, gap: SPACE.l },
+  hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.small },
 
-  exact: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  exactLabel: { color: c.textFaint, fontSize: 12, marginRight: 2 },
+  exact: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: SPACE.s },
+  exactLabel: { color: c.textFaint, fontSize: TYPE.hint, marginRight: SPACE.xxs },
   exactButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderRadius: 8,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.s,
+    borderRadius: RADIUS.cover,
     backgroundColor: c.bg,
     ...outlined(c),
   },
-  exactText: { color: c.text, fontSize: 13, fontVariant: ['tabular-nums'] },
+  exactText: { color: c.text, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
 
-  remove: { alignSelf: 'flex-start', paddingVertical: 6 },
-  removeLabel: { color: c.danger, fontSize: 13.5 },
+  remove: { alignSelf: 'flex-start' },
 }));

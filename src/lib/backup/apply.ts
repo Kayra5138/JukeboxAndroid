@@ -267,7 +267,7 @@ function oneOfEach(
 /**
  * Listens from both, with a listen counted once.
  *
- * A listen is the moment it began, to the millisecond, and nothing else. Not
+ * A listen is the moment it began, to the millisecond, and what it was. Not
  * the song's id: that is exactly what an import changes. A listen to a song
  * that has since been deleted comes back filed under a made-up id, and one to
  * a file that was moved comes back under the file's new id, and going by id
@@ -275,17 +275,23 @@ function oneOfEach(
  * moment, merging a backup into the phone it was made on adds nothing, however
  * much of the music has gone or moved since.
  *
+ * The moment and the name the listen was written down under, which travels
+ * with it and does not change when the file does. The moment alone is not
+ * enough: a history brought in from another app can have only the hour, and
+ * two songs heard in the same hour would be taken for one.
+ *
  * Everything here is kept as it is, whatever it looks like. The backup adds
  * only as many listens at a moment as it has beyond what is already here.
  */
 function everyListen(here: Row[], there: Row[]): Row[] {
-  const held = new Map<Cell, number>();
-  for (const row of here) held.set(row.started_at!, (held.get(row.started_at!) ?? 0) + 1);
+  const key = (row: Row) => `${row.started_at}\u0000${fold(row.title)}`;
+  const held = new Map<string, number>();
+  for (const row of here) held.set(key(row), (held.get(key(row)) ?? 0) + 1);
 
   const out = [...here];
   for (const row of there) {
-    const left = held.get(row.started_at!) ?? 0;
-    if (left > 0) held.set(row.started_at!, left - 1);
+    const left = held.get(key(row)) ?? 0;
+    if (left > 0) held.set(key(row), left - 1);
     else out.push(row);
   }
   // Stable, so that what was here keeps its order among listens begun together.
@@ -451,6 +457,11 @@ export function mergeTables(here: Tables, there: Tables): Tables {
     if (mine) {
       becomes.set(row.id!, mine.id as number);
       mine.updated_at = Math.max(mine.updated_at as number, row.updated_at as number);
+      // Used the later of the two times, where either knows; a list never used since is as recent as its last change.
+      if (row.used_at != null) {
+        const here = (mine.used_at as number | null) ?? (mine.updated_at as number | null) ?? 0;
+        mine.used_at = Math.max(here, row.used_at as number);
+      }
       // A cover somebody chose here is not replaced by one chosen elsewhere.
       if (mine.cover_uri == null && mine.cover_track_id == null) {
         mine.cover_uri = row.cover_uri ?? null;

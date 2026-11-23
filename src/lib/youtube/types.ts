@@ -146,11 +146,22 @@ export function durationLabel(seconds: number | null): string {
     : `${minutes}:${rest}`;
 }
 
+/**
+ * Whether [job] is a song listened to and not kept: one fetched into the
+ * app's own files, which is what having a key of its own says. The receipt a
+ * song kept is given carries the video it came from, and a phone from before
+ * said `listen` there too; by that alone a song kept was still "listened",
+ * never looked up, and let go again at every start.
+ */
+export function isListenJob(job: Pick<DownloadJob, 'video' | 'discoverKey'>): boolean {
+  return job.video.listen === true && job.discoverKey != null;
+}
+
 export function statusLabel(job: DownloadJob, t: Strings = strings()): string {
   const said = t.search.status;
   // A held job is on no screen that says this; were it ever, waiting is the nearest true thing to say of it.
   if (job.status === 'found') return said.queued;
   // Listened to and not kept: in, but not in the library.
-  if (job.status === 'done' && job.video.listen === true) return said.listened;
+  if (job.status === 'done' && isListenJob(job)) return said.listened;
   return job.status === 'downloading' ? said.downloading(job.progress) : said[job.status];
 }

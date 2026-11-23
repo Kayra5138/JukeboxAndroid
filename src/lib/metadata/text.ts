@@ -112,9 +112,10 @@ export function foldForMatch(value: string): string {
   letter typed, and a sort labels every title it puts in order, the same
   strings each time; worked out afresh, with the patterns over every script
   these take, that was most of a tenth of a second a letter on a fast phone.
-  Kept to a few tens of thousands, let go of all at once past that.
+  Kept to a hundred thousand or so, enough for every name of a large library
+  at once, and let go of all at once past that.
 */
-const REMEMBERED = 40_000;
+const REMEMBERED = 120_000;
 const folds = new Map<string, string>();
 const labels = new Map<string, string>();
 
@@ -127,9 +128,16 @@ function remembered(kept: Map<string, string>, value: string, work: (value: stri
   return made;
 }
 
+/** Letters with no mark to take off, as the plain letters they are written as. */
+const WHOLE_LETTERS: Record<string, string> = {
+  ø: 'o', Ø: 'O', æ: 'ae', Æ: 'AE', œ: 'oe', Œ: 'OE', ł: 'l', Ł: 'L', ß: 'ss', đ: 'd', Đ: 'D', ð: 'd', Ð: 'D', þ: 'th', Þ: 'TH',
+};
+
 function foldOf(value: string): string {
   return value
     .replace(/[ıİğĞşŞçÇöÖüÜ]/g, (char) => TURKISH_FOLD[char] ?? char)
+    // Letters that are not a letter and a mark, which taking the marks off leaves as they are: `Sigur Rós` was found by `ros`, and `Røyksopp` and `Łona` not by `royksopp` and `lona`.
+    .replace(/[øØæÆœŒłŁßđĐðÐþÞ]/g, (char) => WHOLE_LETTERS[char] ?? char)
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase()

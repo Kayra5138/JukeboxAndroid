@@ -9,6 +9,7 @@ export const settings: Strings['settings'] = {
     look: 'Görünüm ve his',
     sound: 'Ses',
     player: 'Oynatıcı',
+    miniPlayer: 'Mini oynatıcı',
     tapes: 'Kasetler',
     library: 'Kütüphane',
     downloads: 'İndirmeler ve Keşfet',
@@ -20,6 +21,7 @@ export const settings: Strings['settings'] = {
     look: 'Tema, hareket, titreşim ve kütüphanenin sunduğu görünümler.',
     sound: 'Ekolayzer ve efektler, ses düzeyini eşitleme, çapraz geçiş, hız ve perde.',
     player: 'Atlama düğmelerinin süresi, sıra bitince ne çalacağı ve şarkı sözlerinin çevrildiği dil.',
+    miniPlayer: 'Çalan şarkı çubuğunun gösterdikleri, düğmeleri, görünüşü ve kullanımı.',
     tapes: 'Akıllı geri sarma, kasetin atlama düğmelerinin süresi ve podcast’leri yalnızca Wi‑Fi’de indirme.',
     library: 'Müziğinin bulunduğu klasör, etiketler ve kapaklar, aynı şarkı olabilecek dosyalar.',
     waiting: (count) => `${format.number(count)} karar bekliyor`,
@@ -27,6 +29,19 @@ export const settings: Strings['settings'] = {
     data: 'Her şeyi yedekle ya da bir yedeği içe aktar; yeni sürüm denetimi ve ListenBrainz (deneysel).',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: 'Kaydırma çubuğu', note: 'Uzun listelerin yanındaki, tutup bir anda uzağa gidebileceğin çubuk.', always: 'Her zaman', moving: 'Kaydırırken', never: 'Hiçbir zaman' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: 'Listelerin altında öneriler', note: 'Bir listenin şarkılarının altında, listenin dayandığı etiketlere bakarak kütüphaneden ona uyabilecek başka şarkılar.' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: 'Çıkardıktan sonra geri al', note: 'Bir şarkı listeden çıkarıldıktan, oynatıcıdan bırakıldıktan ya da Keşfet’te reddedildikten sonra birkaç saniye, onu geri getiren bir düğme.' },
+  search: {
+    open: 'Ayarlarda ara',
+    title: 'Ayarlarda ara',
+    placeholder: 'Herhangi bir ayardan bir kelime',
+    none: (query: string) => `Ayarlarda “${query}” geçmiyor.`,
+  },
   language: {
     title: 'Dil',
     note: 'Uygulamanın dili. Telefonun dilinden bağımsızdır.',
@@ -62,7 +77,6 @@ export const settings: Strings['settings'] = {
     saturation: 'Doygunluk',
     lightness: 'Açıklık',
     degrees: (value) => `${value}°`,
-    percent: (value) => `%${value}`,
     hex: 'Renk kodu',
     nudged: (colour) => `Üzerindeki her şey okunabilsin diye ${colour} olarak gösteriliyor.`,
     note:
@@ -163,13 +177,11 @@ export const settings: Strings['settings'] = {
       sparks: 'Her vuruşta kenarından oynatıcıya saçılan kıvılcımlar.',
       aurora: 'Tüm oynatıcının arkasında kapağın kendi renklerinden bulutlar, her biri sesin bir kısmıyla büyür.',
     },
-    beats: 'Vuruşta titreşim',
-    beatsNote: 'Oynatıcı açıkken ve müzik çalarken her vuruşta hafif bir titreşim. Titreşim ayarların ne kadar izin veriyorsa o kadar.',
   },
   still: {
     title: 'Animasyonları azalt',
     note:
-      'Kare atlayan telefonlar için. Oynatıcı yükselerek açılmak yerine doğrudan belirir, oyun da can kazanıldığında ya da kaybedildiğinde ekranı aydınlatmaz. Tuşlar yine düşer; o süsleme değil, oyunun kendisi.',
+      'Kare atlayan telefonlar için. Sayfalar ve pencereler animasyonsuz açılır, kapaklar solarak gelmez, plak ve görselleştiriciler durur, cam bulanıklık olmadan çizilir.',
   },
   scriptNames: { title: 'Diğer yazılardaki adlar', latin: 'Latin harfleri', original: 'Orijinal', note: 'Bir arama şarkının adını hem kendi yazısıyla (Japonca, Çince, Korece) hem Latin harfleriyle bulduysa kütüphanenin hangisini göstereceği. Bu eklenmeden önce aranmış şarkılar yeniden arandığında dolar.' },
   haptics: {
@@ -184,7 +196,9 @@ export const settings: Strings['settings'] = {
       custom: "Aşağıdan hangi anların titreşeceğini seç.",
     },
     strength: "Şiddet",
-    strengthNote: "Bıraktığında hissedilir. Motoru hafifletilip güçlendirilemeyen telefonlar kendi şiddetinde titreşir.",
+    strengthNote: "Bıraktığında hissedilir. %100 önerilen ayardır; üstünde aynı dokunuşlar ağırlaşır, %200'ün üstünde motor gidebildiği kadar güçlü çalışır. Motoru hafifletilip güçlendirilemeyen telefonlar o noktaya kadar kendi şiddetinde titreşir.",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "önerilen",
     groupsHeading: "Neler titreşsin",
     groups: {
       holds: { title: "Uzun basma ve sürükleme", note: "Uzun basmanın tutması, taşımak için kaldırılan satır, onay kutularında kaydırılan parmak." },
@@ -201,9 +215,81 @@ export const settings: Strings['settings'] = {
     note:
       'Her şarkı ve albüm satırının sonunda durur ve basılı tutunca açılan menünün aynısını açar. Kapalıyken de satıra basılı tutabilirsin.',
   },
+  miniPlayer: {
+    shows: 'Gösterdikleri',
+    progress: {
+      title: 'İlerleme',
+      none: 'Yok',
+      line: 'Çizgi',
+      fill: 'Dolgu',
+      note: 'Şarkının neresinde olduğun: altında ince bir çizgi ya da şarkı ilerledikçe dolan çubuk.',
+    },
+    line: {
+      title: 'Adın altında',
+      artist: 'Sanatçı',
+      album: 'Albüm',
+      both: 'Sanatçı ve albüm',
+      left: 'Kalan süre',
+      next: 'Sıradaki',
+      note: 'İkinci satırda ne yazacağı.',
+    },
+    cover: {
+      title: 'Kapak',
+      square: 'Kare',
+      round: 'Yuvarlak',
+      record: 'Plak',
+      note: 'Plak, şarkı çalarken döner.',
+    },
+    buttons: {
+      title: 'Düğmeler',
+      aside: 'En fazla dört; burada göründükleri sırayla.',
+      names: {
+        previous: 'Önceki',
+        playPause: 'Oynat ve duraklat',
+        next: 'Sonraki',
+        back: 'Geri atla',
+        forward: 'İleri atla',
+        heart: 'Favori',
+        shuffle: 'Karıştır',
+        repeat: 'Tekrarla',
+      },
+    },
+    handling: 'Dokunma',
+    swipe: {
+      title: 'Kaydırarak şarkı değiştir',
+      note: 'Yana çekince önceki ya da sonraki şarkıya geçer. Kapalıyken yalnızca oynatıcıyı açar.',
+    },
+    hold: {
+      title: 'Basılı tutunca',
+      none: 'Hiçbir şey',
+      menu: 'Şarkının menüsü',
+      queue: 'Sıra',
+      lyrics: 'Şarkı sözleri',
+      note: 'Üstündeki şarkıya uzun basınca ne açılacağı.',
+    },
+    look: 'Görünüm',
+    floating: {
+      title: 'Yüzen',
+      note: 'Tüm genişlik boyunca uzanmak yerine köşeleri yuvarlak, kenarlardan ayrık.',
+    },
+    tint: {
+      title: 'Kapak rengi',
+      note: 'Çalan şarkının kapak rengine boyanır.',
+    },
+    leftHanded: {
+      title: 'Solak',
+      note: 'Düğmeler solda, şarkı sağda.',
+    },
+  },
   tabs: {
     title: 'Sekmeler',
-    searchNote: 'Keşfet ve YouTube indirmeleri bu sekmede; sekme kapanınca onlar da görünmez.',
+    notes: {
+      library: 'Parçaların, albümlerin, sanatçıların, kasetlerin ve klasörlerin.',
+      lists: 'Çalma listelerin, akıllı listelerin ve favorilerin.',
+      search: 'Keşfet ve YouTube\'dan indirme. Bu sekmeyi kapatırsan ikisi de onunla birlikte gizlenir.',
+      stats: 'Ne dinlediğin ve dinleme raporların.',
+      settings: 'Uygulamanın nasıl göründüğü, nasıl ses verdiği ve nasıl davrandığı.',
+    },
     aside: 'Kütüphane ve Ayarlar her zaman görünür.',
     names: 'Simgelerin altında adlar',
     namesNote: 'Kapalıyken bar yalnızca simgeleri gösterir ve biraz daha alçak olur. Yatayda hep öyledir.',

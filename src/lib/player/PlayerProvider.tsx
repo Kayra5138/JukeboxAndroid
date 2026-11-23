@@ -31,11 +31,14 @@ import {
 import {
   beginSession,
   finishSession,
+  isLanding,
   setSessionPlaying,
   type Session,
 } from './session.ts';
 import { afterMoving, afterRemoving, pendingFrom, placeQueued } from './autoplay/section.ts';
-import { currentTrack, playingTrack, queueNow } from './current.ts';
+import { listening, stopWaiting } from '../listen/index.ts';
+import { stopPreview } from '../listen/preview.ts';
+import { currentTrack, playbackPitch, playbackSpeed, playingTrack, queueNow } from './current.ts';
 import { readTail, restoreTail, tailOf, writeTail } from './autoplay/tail.ts';
 import { artistKey, spreadShuffle } from '../media/shuffle.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
@@ -45,6 +48,7 @@ import { isTape } from '../tapes/tape.ts';
 import { refreshTapePlaces } from '../tapes/places.ts';
 import { noteError } from '../support/errorLogStore.ts';
 import type { Track } from '../types.ts';
+import { motionReduced } from '../ui/motion';
 
 /** A track the player refused to start, or stopped part way through. */
 export type PlaybackFailure = { trackId: string | null; message: string };
@@ -101,7 +105,7 @@ type PlayerActions = {
   removePicked: () => Promise<void>;
 };
 
-type PlayerState = {
+export type PlayerState = {
   current: Track | null;
   queue: Track[];
   /**
@@ -128,8 +132,6 @@ type PlayerState = {
    */
   shuffled: boolean;
   repeat: RepeatMode;
-  speed: number;
-  pitch: number;
   /**
    * Why nothing is playing, when that is the reason. Cleared as soon as
    * anything plays again, so it describes the present rather than accumulating.
@@ -238,8 +240,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [queue, setQueue] = useState<Track[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playWhenReady, setPlayWhenReady] = useState(false);
-  const [speed, setSpeedState] = useState(1);
-  const [pitch, setPitchState] = useState(1);
+  // Kept outside the state: see `playbackSpeed` in `current.ts`.
+  const setSpeedState = playbackSpeed.set;
+  const setPitchState = playbackPitch.set;
   const [shuffled, setShuffled] = useState(false);
   const [repeat, setRepeat] = useState<RepeatMode>('off');
   const [error, setError] = useState<PlaybackFailure | null>(null);
@@ -602,7 +605,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Media3 tells us whether the outgoing track ended or was skipped, so the
       // history entry is exact rather than inferred.
       const leftLoop = loopedRef.current != null && sessionRef.current?.track.id === loopedRef.current;
-      flushSession(event.completedPrevious, !event.completedPrevious && !leftLoop);
+      // A queue just set, landing on the song its listen was opened for: nothing was left, and nothing skipped.
+      const landed = isLanding(sessionRef.current, event, Date.now());
+      if (!landed) flushSession(event.completedPrevious, !event.completedPrevious && !leftLoop);
       loopedRef.current = event.repeated ? event.trackId : null;
       // The tape left has a new place, as may the one come on.
       refreshTapePlaces();
@@ -626,12 +631,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // never produced a sample. `playWhenReady` is the player's own intent and
       // settles it; an older native module does not send it, and there the
       // mirrored playing state answers instead.
-      if (track) startSession(track, isPlayingRef.current && event.playWhenReady !== false);
+      const playing = isPlayingRef.current && event.playWhenReady !== false;
+      const kept = sessionRef.current;
+      if (landed && kept) sessionRef.current = setSessionPlaying(kept, playing, Date.now());
+      else if (track) startSession(track, playing);
     });
 
     const stateChange = JukeboxAudio.addListener('onPlaybackStateChange', (event) => {
       const playing = event.isPlaying;
       setPlayWhenReady(event.playWhenReady);
+      // The place read at its full pace again from the moment play is pressed, not from the next reading.
+      positionPace(event.playWhenReady);
       markPlaying(playing);
       if (playing) setError(null);
       const session = sessionRef.current;
@@ -782,8 +792,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   );
 
   const playQueue = useCallback(
-    (tracks: Track[], startIndex: number, options?: { similar?: boolean }) =>
-      replaceQueue(tracks, startIndex, true, options?.similar === true),
+    (tracks: Track[], startIndex: number, options?: { similar?: boolean }) => {
+      /*
+        Something else started while a song listened to from Search is still
+        being fetched: that is what plays, and the song, once in, waits in
+        Downloads rather than taking over the queue. `Listening` lets go of
+        it before playing it itself, so its own playing is not this.
+      */
+      if (listening.get() != null) {
+        stopWaiting();
+        void stopPreview();
+      }
+      return replaceQueue(tracks, startIndex, true, options?.similar === true);
+    },
     [replaceQueue]
   );
 
@@ -1077,6 +1098,19 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     similar: boolean;
   } | null>(null);
 
+  /*
+    The two the actions read and do not draw from, kept beside them: read
+    straight from the state, every shuffle and every press of repeat made
+    the actions new, and drew again everything that holds them -- the
+    library and every list among them.
+  */
+  const repeatRef = useRef(repeat);
+  const shuffledRef = useRef(shuffled);
+  useEffect(() => {
+    repeatRef.current = repeat;
+    shuffledRef.current = shuffled;
+  }, [repeat, shuffled]);
+
   const lend = useCallback(
     async (track: Track) => {
       if (!lent.current) {
@@ -1085,7 +1119,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
           queue: null,
           index: currentIndexRef.current,
           positionSec: status?.positionSec ?? 0,
-          shuffled,
+          shuffled: shuffledRef.current,
           ...params.current,
           autoFrom: autoFromRef.current,
           dismissed: dismissedRef.current,
@@ -1114,7 +1148,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (lent.current.queue == null) lent.current.queue = queueRef.current;
       await replaceQueue([track], 0, true);
     },
-    [flushSession, replaceQueue, shuffled]
+    [flushSession, replaceQueue]
   );
 
   const giveBack = useCallback(async () => {
@@ -1286,7 +1320,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [dismissPicks, placeAuto, refused]);
 
   const cycleRepeat = useCallback(async () => {
+    const repeat = repeatRef.current;
     const mode = REPEAT_CYCLE[(REPEAT_CYCLE.indexOf(repeat) + 1) % REPEAT_CYCLE.length]!;
+    repeatRef.current = mode;
     setRepeat(mode);
     writeSetting(SETTINGS.repeat, mode);
     try {
@@ -1295,10 +1331,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       // Put back by hand: reading the player only replaces what is here when
       // the queues differ, and they do not.
       console.warn('The player would not change the repeat mode', failure);
+      repeatRef.current = repeat;
       setRepeat(repeat);
       writeSetting(SETTINGS.repeat, repeat);
     }
-  }, [repeat]);
+  }, []);
 
   const actions = useMemo<PlayerActions>(
     () => ({
@@ -1371,8 +1408,6 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       playWhenReady,
       shuffled,
       repeat,
-      speed,
-      pitch,
       error,
       autoFrom,
       autoDismissed,
@@ -1380,7 +1415,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       queueId,
       onLoan,
     }),
-    [current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, speed, pitch, error, autoFrom, autoDismissed, keepSimilar, queueId, onLoan]
+    [current, currentIndex, queue, isPlaying, playWhenReady, shuffled, repeat, error, autoFrom, autoDismissed, keepSimilar, queueId, onLoan]
   );
 
   return (
@@ -1416,7 +1451,14 @@ type Position = { positionSec: number; durationSec: number };
 const NOWHERE: Position = { positionSec: 0, durationSec: 0 };
 let position: Position = NOWHERE;
 const watching = new Set<() => void>();
+/** Those of them that show something by the quarter second -- the sung line, the game -- and want every reading. */
+const closely = new Set<() => void>();
 let polling: ReturnType<typeof setInterval> | null = null;
+/** Readings asked for, counted, for the ones skipped while the decoration is held still. */
+let ticks = 0;
+
+/** Counted up at each new song, for a reading asked before it to be told from one after: see `positionStarted`. */
+let readingsBegun = 0;
 
 async function readPosition(): Promise<void> {
   /*
@@ -1425,8 +1467,12 @@ async function readPosition(): Promise<void> {
     four times a second: a player that has gone away would otherwise be
     four unhandled rejections a second for as long as the sheet is open.
   */
+  const asked = readingsBegun;
   const status = await JukeboxAudio.getStatusAsync().catch(() => null);
   if (polling == null || !status?.connected) return;
+  meantToPlay = status.playWhenReady ?? status.isPlaying ?? true;
+  // Asked before a new song began, and answered after: the last song's place, which would be shown against this one.
+  if (asked !== readingsBegun) return;
   const positionSec = status.positionSec ?? 0;
   const durationSec = status.durationSec ?? 0;
   if (positionSec === position.positionSec && durationSec === position.durationSec) return;
@@ -1445,6 +1491,43 @@ async function readPosition(): Promise<void> {
  */
 function watchPosition(told: () => void): () => void {
   watching.add(told);
+  return startPolling(told);
+}
+
+/** The same, for something that wants every reading: see `closely`. */
+function watchClosely(told: () => void): () => void {
+  watching.add(told);
+  closely.add(told);
+  const stop = startPolling(told);
+  return () => {
+    closely.delete(told);
+    stop();
+  };
+}
+
+/*
+  Every fourth reading only, while the decoration is held still and nothing
+  wants them all: a bar and a clock moved once a second instead of four
+  times, and the trip to the player's thread that each reading is made a
+  quarter as often. And none while the app is not in front, which nothing
+  that shows the position can be.
+*/
+function wanted(): boolean {
+  ticks += 1;
+  if (AppState.currentState !== 'active') return false;
+  // Paused, the place moves only by a seek, which once a second still catches.
+  if (!meantToPlay) return ticks % 4 === 0;
+  return closely.size > 0 || !motionReduced() || ticks % 4 === 0;
+}
+
+/** Whether the player was meant to be playing at the last reading. */
+let meantToPlay = true;
+
+function positionPace(playing: boolean): void {
+  meantToPlay = playing;
+}
+
+function startPolling(told: () => void): () => void {
   if (polling == null) {
     /*
       Four times a second. The seek bar would be happy with half that, but the
@@ -1453,7 +1536,9 @@ function watchPosition(told: () => void): () => void {
       while something is on screen showing the position, which is why it can
       afford to be this often.
     */
-    polling = setInterval(() => void readPosition(), 250);
+    polling = setInterval(() => {
+      if (wanted()) void readPosition();
+    }, 250);
     void readPosition();
   }
   return () => {
@@ -1472,6 +1557,7 @@ function watchPosition(told: () => void): () => void {
  * scrolled to where the last song had got to, and left there.
  */
 function positionStarted(durationSec: number): void {
+  readingsBegun += 1;
   if (position.positionSec === 0 && position.durationSec === durationSec) return;
   position = { positionSec: 0, durationSec };
   for (const told of [...watching]) told();
@@ -1480,8 +1566,8 @@ function positionStarted(durationSec: number): void {
 const watchNothing = () => () => {};
 const positionNow = () => position;
 
-export function usePlayerPosition(active = true): Position {
-  return useSyncExternalStore(active ? watchPosition : watchNothing, positionNow);
+export function usePlayerPosition(active = true, everyReading = false): Position {
+  return useSyncExternalStore(active ? (everyReading ? watchClosely : watchPosition) : watchNothing, positionNow);
 }
 
 /**

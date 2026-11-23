@@ -23,9 +23,15 @@ export type MetadataDb = {
  * saying everything it now knows. A cover somebody has just taken off also
  * takes with it any cover the track had been given by its record, which
  * would otherwise be shown in the gap and be the cover they removed.
+ *
+ * Never over what somebody wrote by hand with anything but what they write by
+ * hand: a lookup reads which tracks are theirs as it sets out, and answers
+ * tens of minutes later for a library, so a title fixed in Details meanwhile
+ * was written over by the catalogue's, and a miss emptied it and brought
+ * back a cover they had taken off. Answers whether the row was written.
  */
-export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: number): void {
-  database.runSync(
+export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: number): boolean {
+  const written = database.runSync(
     `INSERT INTO track_metadata
        (track_id, status, source, title, artist, album, album_artist, genre, year,
         artwork_url, track_number, disc_number, cover_removed_at, fetched_at,
@@ -40,7 +46,8 @@ export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: 
        cover_removed_at = excluded.cover_removed_at,
        fetched_at = excluded.fetched_at, cover_searched_at = NULL,
        latin_title = excluded.latin_title, latin_artist = excluded.latin_artist,
-       native_title = excluded.native_title, native_artist = excluded.native_artist`,
+       native_title = excluded.native_title, native_artist = excluded.native_artist
+     WHERE excluded.status = 'manual' OR track_metadata.status <> 'manual'`,
     entry.trackId,
     entry.status,
     entry.source,
@@ -59,10 +66,11 @@ export function saveMetadataTo(database: MetadataDb, entry: TrackMetadata, now: 
     entry.latinArtist ?? null,
     entry.nativeTitle ?? null,
     entry.nativeArtist ?? null
-  );
-  if (entry.coverRemovedAt != null) {
+  ).changes > 0;
+  if (written && entry.coverRemovedAt != null) {
     database.runSync('DELETE FROM shared_covers WHERE track_id = ?', entry.trackId);
   }
+  return written;
 }
 
 /**

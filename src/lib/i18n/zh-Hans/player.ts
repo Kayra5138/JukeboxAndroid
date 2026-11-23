@@ -4,6 +4,9 @@ import type { Strings } from '../en/index.ts';
 export const player: Strings['player'] = {
   bar: {
     opensPlayer: '打开播放器',
+    upNext: (title: string) => `下一首：${title}`,
+    lastInQueue: '队列中的最后一首',
+    timeLeft: (clock: string) => `剩余 ${clock}`,
   },
   sheet: {
     nothingPlaying: '暂无播放',
@@ -50,6 +53,9 @@ export const player: Strings['player'] = {
     },
   },
   settings: {
+    tabs: { sound: '声音', look: '外观', sleep: '睡眠' },
+    moreEffects: '更多',
+    fewerEffects: '收起',
     playback: '播放',
     backToNormal: '恢复正常速度和音调',
     normal: '正常',
@@ -58,7 +64,6 @@ export const player: Strings['player'] = {
     pitchHint: '以半音为单位升高或降低，播放速度仍保持上方的设置。',
     effects: '音效',
     equalizer: { note: '频段、低音和响度' },
-    crossfade: { note: '一首歌如何过渡到下一首' },
     allEffects: { title: '全部音效', note: '宽度、交叉馈送、旋转和电平' },
     jumps: {
       heading: '本书或节目的跳转',

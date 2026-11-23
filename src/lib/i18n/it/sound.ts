@@ -3,7 +3,6 @@ import type { Strings } from '../en/index.ts';
 import { oneOrMany } from '../write.ts';
 
 export const sound: Strings['sound'] = {
-  percent: (value) => `${format.number(value)}%`,
 
   effects: {
     failures: {
@@ -19,6 +18,8 @@ export const sound: Strings['sound'] = {
       headphones: { name: 'Cuffie', hint: 'Porta fuori dalla testa i mix con panning estremo' },
       '8d': { name: '8D', hint: 'Il suono ti gira lentamente intorno' },
       karaoke: { name: 'Quasi karaoke', hint: 'Allontana il centro' },
+      nightcore: { name: 'Nightcore', hint: 'Più veloce e più acuta, come un disco suonato troppo veloce' },
+      slowed: { name: 'Slowed + reverb', hint: 'Più lenta e più grave, suonata in una grande sala' },
     },
     voices: {
       off: { name: 'Disattivato', hint: 'Il disco così com’è' },
@@ -42,6 +43,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `${percent}% a sinistra`,
     right: (percent) => `${percent}% a destra`,
     swap: { title: 'Inverti i canali', note: 'Il canale sinistro diventa il destro. Per un cavo collegato male.' },
+
+    room: 'Sala',
+
+    reverb: 'Riverbero',
+
+    reverbNote: 'Quanto di una grande sala avvolge la musica. Zero è niente.',
+
 
     headphones: 'Cuffie',
     crossfeed: 'Crossfeed',

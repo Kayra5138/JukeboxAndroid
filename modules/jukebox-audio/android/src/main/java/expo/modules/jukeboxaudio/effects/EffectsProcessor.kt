@@ -72,6 +72,15 @@ class EffectsProcessor : BaseAudioProcessor() {
   private val voices = Array(2) { VoiceChain(0) }
   private var voiceNow = Effects.OFF
 
+  /*
+    The room, built for the rate as the voices are, and emptied as it is
+    turned on: what it last held would otherwise be heard ringing out from a
+    song played long before.
+  */
+  private var room = Reverb(44_100)
+  private var roomOn = false
+  private val heard = FloatArray(2)
+
   override fun onFlush() {
     val rate = inputAudioFormat.sampleRate
     crossDelay = ((rate * 0.00027f).toInt()).coerceAtLeast(1)
@@ -82,6 +91,8 @@ class EffectsProcessor : BaseAudioProcessor() {
     duckedRight = 0f
     for (index in voices.indices) voices[index] = VoiceChain(rate)
     voiceNow = Effects.OFF
+    room = Reverb(rate)
+    roomOn = false
   }
 
   override fun queueInput(inputBuffer: ByteBuffer) {
@@ -101,6 +112,11 @@ class EffectsProcessor : BaseAudioProcessor() {
     if (settings.voice != voiceNow) {
       voiceNow = settings.voice
       for (chain in voices) chain.reset()
+    }
+
+    if ((settings.reverb > 0f) != roomOn) {
+      roomOn = settings.reverb > 0f
+      room.reset()
     }
 
     if (settings.idle || channels !in 1..2) {
@@ -129,6 +145,13 @@ class EffectsProcessor : BaseAudioProcessor() {
     } else 0.0
     val swingStep = if (settings.rotate > 0f) 1.0 / (settings.rotateSeconds * rate) else 0.0
     var swing = turn
+    /*
+      The room's level against the music's: Freeverb's own scale, three times
+      the amount, and the music itself turned down a little as the room comes
+      up, so that the whole is no louder for it.
+    */
+    val wet = settings.reverb * 3f
+    val dry = 1f - settings.reverb * 0.35f
 
     var leftGain = 1f
     var rightGain = 1f
@@ -202,6 +225,13 @@ class EffectsProcessor : BaseAudioProcessor() {
           swing += swingStep
         }
 
+        if (wet > 0f) {
+          // Last but for the level: the room hears the music as it is now to be heard, and is heard where it is.
+          room.step(left, right, heard)
+          left = left * dry + heard[0] * wet
+          right = right * dry + heard[1] * wet
+        }
+
         left *= gain * leftGain
         right *= gain * rightGain
         out.putShort(clip(left))
@@ -209,6 +239,10 @@ class EffectsProcessor : BaseAudioProcessor() {
       } else {
         left = inputBuffer.short / 32768f
         if (voice != VoiceKind.NONE) left = voices[0].step(voice, left, voiceMix)
+        if (wet > 0f) {
+          room.step(left, left, heard)
+          left = left * dry + (heard[0] + heard[1]) * 0.5f * wet
+        }
         out.putShort(clip(left * gain))
       }
     }

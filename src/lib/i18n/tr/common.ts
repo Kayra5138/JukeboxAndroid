@@ -7,6 +7,9 @@ import type { Strings } from '../en/index.ts';
 */
 export const common: Strings['common'] = {
   cancel: 'İptal',
+  /** For a moment after something is taken out, the way to have it back (`ui/undo.ts`). */
+  undo: 'Geri al',
+  undone: { reset: 'Sıfırlandı', removedFromList: (title: string) => `Listeden çıkarıldı: ${title}`, letGo: (title: string) => `Bırakıldı: ${title}` },
   save: 'Kaydet',
   done: 'Bitti',
   ok: 'Tamam',

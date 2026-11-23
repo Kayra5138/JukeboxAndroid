@@ -12,7 +12,6 @@ const dec = (value: number) => String(value).replace('.', ',');
 const bands = (count: number) => counted(count, 'полоса', 'полосы', 'полос');
 
 export const sound: Strings['sound'] = {
-  percent: (value) => `${format.number(value)}%`,
 
   effects: {
     failures: {
@@ -28,6 +27,8 @@ export const sound: Strings['sound'] = {
       headphones: { name: 'Наушники', hint: 'Жёстко разведённые миксы больше не звучат внутри головы' },
       '8d': { name: '8D', hint: 'Звук медленно кружит вокруг тебя' },
       karaoke: { name: 'Почти караоке', hint: 'Отодвигает центр' },
+      nightcore: { name: 'Найткор', hint: 'Быстрее и выше, как пластинка на слишком большой скорости' },
+      slowed: { name: 'Slowed + reverb', hint: 'Медленнее и ниже, будто в большом зале' },
     },
     voices: {
       off: { name: 'Выкл.', hint: 'Запись как есть' },
@@ -51,6 +52,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `${percent}% влево`,
     right: (percent) => `${percent}% вправо`,
     swap: { title: 'Поменять каналы', note: 'Левый становится правым. Для неправильно распаянного кабеля.' },
+
+    room: 'Зал',
+
+    reverb: 'Реверберация',
+
+    reverbNote: 'Сколько большого зала окружает музыку. Ноль — нисколько.',
+
 
     headphones: 'Наушники',
     crossfeed: 'Кроссфид',

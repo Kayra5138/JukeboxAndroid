@@ -1,3 +1,4 @@
+import { splitCredit } from '../metadata/credit.ts';
 import { foldForMatch } from '../metadata/text.ts';
 
 /** Fisher-Yates, so "play this tag" is a genuinely different order each time. */
@@ -110,7 +111,14 @@ export function spreadShuffle<T>(
 }
 
 /**
- * What counts as the same artist.
+ * What counts as the same artist: whoever the song is filed under, the first
+ * name in its credit (`metadata/credit.ts`).
+ *
+ * Not the credit as written. `Sertab Erener`, `Sertab Erener feat. Ozan` and
+ * `Sertab Erener & Demir` were three artists to the spread, each dealt out on
+ * its own, and so as likely to land beside one another as in a plain shuffle:
+ * in a library where a fair share of songs credit a guest, the same artist
+ * came back to back nearly as often as with no spreading at all.
  *
  * Folded, because `AURORA` and `Aurora` are one artist to everybody except a
  * string comparison, and a queue that spreads them separately is a queue that
@@ -119,5 +127,5 @@ export function spreadShuffle<T>(
  * playing in the order it was read in.
  */
 export function artistKey(track: { artist?: string | null }): string {
-  return foldForMatch(track.artist ?? '');
+  return foldForMatch(splitCredit(track.artist)[0] ?? '');
 }

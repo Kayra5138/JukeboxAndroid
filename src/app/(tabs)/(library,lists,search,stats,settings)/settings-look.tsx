@@ -1,16 +1,17 @@
-import { useCallback, useState } from 'react';
-import { Link, useFocusEffect } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Link } from 'expo-router';
+import { View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 import { Switch } from '../../../components/Switch';
 
 import { Pressable } from '../../../components/Pressable';
 import { Segmented } from '../../../components/Segmented';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
-import { readSetting, SETTINGS, writeSetting } from '../../../lib/db/index';
+import { SettingsPage, useRows, SwitchRow, LinkRow, SectionLabel, Chevron } from '../../../components/settings/rows';
 import { useT } from '../../../lib/i18n/index';
-import { LIBRARY_VIEWS, withView } from '../../../lib/media/views';
-import { setLibraryViews, useLibraryViews } from '../../../lib/ui/libraryViews';
-import { switchColours, useColours, usePressed, useThemeChoice } from '../../../lib/theme/index';
+import { withView } from '../../../lib/media/views';
+import { setLibraryViews, useLibraryViews, viewOrder } from '../../../lib/ui/libraryViews';
+import { tabOrder } from '../../../lib/ui/tabOrder';
+import { OrderButtons } from '../../../components/settings/OrderButtons';
+import { usePressed, useThemeChoice } from '../../../lib/theme/index';
 import { themeOf } from '../../../lib/theme/registry';
 import { useLandscape } from '../../../lib/ui/layout';
 import { setMoreButtonShown, useMoreButtonShown } from '../../../lib/ui/moreButton';
@@ -19,6 +20,9 @@ import { OPTIONAL_TABS } from '../../../lib/ui/tabChoice';
 import { setTabShown, useHiddenTabs } from '../../../lib/ui/tabs';
 import { setTabLabelsShown, useTabLabelsShown } from '../../../lib/ui/tabLabels';
 import { setScriptNames, useScriptNames } from '../../../lib/ui/scriptNames';
+import { setScrollBarMode, useScrollBarMode } from '../../../lib/ui/scrollBar';
+import { setUndoOffers, useUndoOffers } from '../../../lib/ui/undo';
+import { setStillChosen, useStillChosen } from '../../../lib/ui/motion';
 import { refreshLibrary } from '../../../lib/library/index';
 import { useCoverMotion, useSongLook } from '../../../lib/ui/coverLook';
 
@@ -31,7 +35,6 @@ import { useCoverMotion, useSongLook } from '../../../lib/ui/coverLook';
  */
 export default function LookSettingsScreen() {
   const t = useT();
-  const c = useColours();
   const styles = useRows();
   const pressed = usePressed();
   const haptics = useHaptics();
@@ -47,25 +50,22 @@ export default function LookSettingsScreen() {
   // What the player shows where the cover is, and what moves with the music, to be named on its row.
   const songLook = useSongLook();
   const coverMotion = useCoverMotion();
-  /*
-    Read as the screen is first drawn as well as each time it is come back
-    to. Starting from placeholders and correcting them a moment later drew
-    the whole screen twice on the way in.
-  */
-  const [still, setStill] = useState(() => readSetting(SETTINGS.reduceMotion) === 'true');
+  /** Held where everything that holds still is watching, so it changes the moment it is turned. */
+  const still = useStillChosen();
   /** Held where every row is watching, like the theme; switching it redraws them and this. */
   const dots = useMoreButtonShown();
   const writing = useScriptNames();
+  const scrollBar = useScrollBarMode();
+  const undoOffers = useUndoOffers();
+  // The order of the views along the library's switch, and of the tabs along the bar: each row has its arrows.
+  const viewsInOrder = viewOrder.useOrder();
+  const tabsInOrder = tabOrder.useOrder();
   /** Held where the tab bar watches it, so a switch here changes the bar at once. */
   const hiddenTabs = useHiddenTabs();
   /** Held where the bar watches it, as the tabs are. */
   const tabNames = useTabLabelsShown();
   /** The ways of looking at the library that its switch offers. */
   const views = useLibraryViews();
-
-  useFocusEffect(useCallback(() => {
-    setStill(readSetting(SETTINGS.reduceMotion) === 'true');
-  }, []));
 
   return (
     <SettingsPage>
@@ -83,20 +83,12 @@ export default function LookSettingsScreen() {
               and laid out here they were most of this screen: everything
               else in Settings was found by scrolling past them.
             */}
-            <Link href="/themes" asChild>
-              <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
-                <View style={styles.line}>
-                  <Text style={styles.title}>{t.settings.theme.title}</Text>
-                  <View style={styles.choices}>
-                    <Text style={styles.value} numberOfLines={1}>
-                      {t.themes[themeNameKey]}
-                    </Text>
-                    <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-                  </View>
-                </View>
-                <Text style={styles.muted}>{t.settings.theme.open}</Text>
-              </Pressable>
-            </Link>
+            <LinkRow
+              title={t.settings.theme.title}
+              value={t.themes[themeNameKey]}
+              hint={t.settings.theme.open}
+              href="/themes"
+            />
             <View style={styles.rule} />
             {/* How the player looks, beside the theme: its own page, as the themes are. */}
             <Link href="/player-look" asChild>
@@ -109,57 +101,34 @@ export default function LookSettingsScreen() {
                         ? t.settings.coverLook[songLook]
                         : `${t.settings.coverLook[songLook]} · ${t.settings.coverLook[coverMotion]}`}
                     </Text>
-                    <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+                    <Chevron />
                   </View>
                 </View>
                 <Text style={styles.muted}>{t.settings.playerLook.open}</Text>
               </Pressable>
             </Link>
             <View style={styles.rule} />
-            <View style={styles.row}>
-              <View style={styles.line}>
-                <Text style={styles.title}>{t.settings.still.title}</Text>
-                <Switch
-                  accessibilityLabel={t.settings.still.title}
-                  value={still}
-                  onValueChange={(on) => {
-                    setStill(on);
-                    writeSetting(SETTINGS.reduceMotion, on ? 'true' : 'false');
-                  }}
-                  {...switchColours(c, still)}
-                />
-              </View>
-              <Text style={styles.muted}>{t.settings.still.note}</Text>
-            </View>
+            <SwitchRow
+              title={t.settings.still.title}
+              hint={t.settings.still.note}
+              value={still}
+              onChange={setStillChosen}
+            />
             <View style={styles.rule} />
             {/* Beside holding the decoration still, which is the nearest thing to it: how the app answers a touch. */}
-            <Link href="/settings-haptics" asChild>
-              <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
-                <View style={styles.line}>
-                  <Text style={styles.title}>{t.settings.haptics.title}</Text>
-                  <View style={styles.choices}>
-                    <Text style={styles.value} numberOfLines={1}>
-                      {t.settings.haptics.modes[haptics.mode]}
-                    </Text>
-                    <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-                  </View>
-                </View>
-                <Text style={styles.muted}>{t.settings.haptics.open}</Text>
-              </Pressable>
-            </Link>
+            <LinkRow
+              title={t.settings.haptics.title}
+              value={t.settings.haptics.modes[haptics.mode]}
+              hint={t.settings.haptics.open}
+              href="/settings-haptics"
+            />
             <View style={styles.rule} />
-            <View style={styles.row}>
-              <View style={styles.line}>
-                <Text style={styles.title}>{t.settings.moreButton.title}</Text>
-                <Switch
-                  accessibilityLabel={t.settings.moreButton.title}
-                  value={dots}
-                  onValueChange={setMoreButtonShown}
-                  {...switchColours(c, dots)}
-                />
-              </View>
-              <Text style={styles.muted}>{t.settings.moreButton.note}</Text>
-            </View>
+            <SwitchRow
+              title={t.settings.moreButton.title}
+              hint={t.settings.moreButton.note}
+              value={dots}
+              onChange={setMoreButtonShown}
+            />
             <View style={styles.rule} />
             {/*
               Which writing a song's name is shown in, where a lookup found it
@@ -186,6 +155,37 @@ export default function LookSettingsScreen() {
               </View>
               <Text style={styles.muted}>{t.settings.scriptNames.note}</Text>
             </View>
+            <View style={styles.rule} />
+            {/*
+              The bar beside a long list: there all the while, there while the
+              list moves, or never. Three choices across the row under the name,
+              where their words have room.
+            */}
+            <View style={styles.row}>
+              <Text style={styles.title}>{t.settings.scrollBar.title}</Text>
+              <Segmented
+                role="radio"
+                variant="chips"
+                size="compact"
+                layout="fill"
+                options={[
+                  { value: 'always' as const, label: t.settings.scrollBar.always },
+                  { value: 'moving' as const, label: t.settings.scrollBar.moving },
+                  { value: 'never' as const, label: t.settings.scrollBar.never },
+                ]}
+                value={scrollBar}
+                onChange={setScrollBarMode}
+              />
+              <Text style={styles.muted}>{t.settings.scrollBar.note}</Text>
+            </View>
+            <View style={styles.rule} />
+            {/* Whether a song taken out of a list, let go or turned away is offered back for a moment: see `ui/undo.ts`. */}
+            <SwitchRow
+              title={t.settings.undoOffers.title}
+              hint={t.settings.undoOffers.note}
+              value={undoOffers}
+              onChange={setUndoOffers}
+            />
           </View>
         </View>
 
@@ -197,9 +197,9 @@ export default function LookSettingsScreen() {
             alternatives: the question for each is whether it earns a place on
             a row that gets more crowded with every one that does.
           */}
-          <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.settings.sections.views)}</Text>
+          <SectionLabel after={false}>{t.settings.sections.views}</SectionLabel>
           <View style={styles.card}>
-            {LIBRARY_VIEWS.map((view, index) => {
+            {viewsInOrder.map((view, index) => {
               const on = views.includes(view);
               /*
                 The last one left on cannot be turned off, and says so by not
@@ -214,18 +214,25 @@ export default function LookSettingsScreen() {
                   <View style={styles.row}>
                     <View style={styles.line}>
                       <Text style={styles.title}>{t.library.views[view]}</Text>
-                      <Switch
-                        accessibilityLabel={t.library.views[view]}
-                        accessibilityHint={
-                          only ? t.settings.views.onlyHint : t.settings.views.toggleHint
-                        }
-                        value={on}
-                        disabled={only}
-                        onValueChange={(wanted) => {
-                          setLibraryViews(withView(views, view, wanted));
-                        }}
-                        {...switchColours(c, on)}
-                      />
+                      <View style={styles.choices}>
+                        <OrderButtons
+                          name={t.library.views[view]}
+                          first={index === 0}
+                          last={index === viewsInOrder.length - 1}
+                          onMove={(by) => viewOrder.move(view, by)}
+                        />
+                        <Switch
+                          accessibilityLabel={t.library.views[view]}
+                          accessibilityHint={
+                            only ? t.settings.views.onlyHint : t.settings.views.toggleHint
+                          }
+                          value={on}
+                          disabled={only}
+                          onValueChange={(wanted) => {
+                            setLibraryViews(withView(views, view, wanted));
+                          }}
+                        />
+                      </View>
                     </View>
                     <Text style={styles.muted}>{t.settings.views.notes[view]}</Text>
                   </View>
@@ -242,8 +249,10 @@ export default function LookSettingsScreen() {
             {t.format.upper(t.settings.tabs.title)}
           </Text>
           <View style={styles.card}>
-            {OPTIONAL_TABS.map((tab, index) => {
-              const on = !hiddenTabs.has(tab);
+            {/* All five in the order of the bar, with their arrows; a switch on those that can be taken off it. */}
+            {tabsInOrder.map((tab, index) => {
+              const optional = (OPTIONAL_TABS as readonly string[]).includes(tab);
+              const on = !hiddenTabs.has(tab as (typeof OPTIONAL_TABS)[number]);
               const name = t.nav[tab];
               return (
                 <View key={tab}>
@@ -251,32 +260,35 @@ export default function LookSettingsScreen() {
                   <View style={styles.row}>
                     <View style={styles.line}>
                       <Text style={styles.title}>{name}</Text>
-                      <Switch
-                        accessibilityLabel={name}
-                        value={on}
-                        onValueChange={(wanted) => setTabShown(tab, wanted)}
-                        {...switchColours(c, on)}
-                      />
+                      <View style={styles.choices}>
+                        <OrderButtons
+                          name={name}
+                          first={index === 0}
+                          last={index === tabsInOrder.length - 1}
+                          onMove={(by) => tabOrder.move(tab, by)}
+                        />
+                        {optional ? (
+                          <Switch
+                            accessibilityLabel={name}
+                            value={on}
+                            onValueChange={(wanted) => setTabShown(tab as (typeof OPTIONAL_TABS)[number], wanted)}
+                          />
+                        ) : null}
+                      </View>
                     </View>
-                    {tab === 'search' ? <Text style={styles.muted}>{t.settings.tabs.searchNote}</Text> : null}
+                    <Text style={styles.muted}>{t.settings.tabs.notes[tab]}</Text>
                   </View>
                 </View>
               );
             })}
             <View style={styles.rule} />
             {/* Whether the tabs say their names under their icons. */}
-            <View style={styles.row}>
-              <View style={styles.line}>
-                <Text style={styles.title}>{t.settings.tabs.names}</Text>
-                <Switch
-                  accessibilityLabel={t.settings.tabs.names}
-                  value={tabNames}
-                  onValueChange={setTabLabelsShown}
-                  {...switchColours(c, tabNames)}
-                />
-              </View>
-              <Text style={styles.muted}>{t.settings.tabs.namesNote}</Text>
-            </View>
+            <SwitchRow
+              title={t.settings.tabs.names}
+              hint={t.settings.tabs.namesNote}
+              value={tabNames}
+              onChange={setTabLabelsShown}
+            />
           </View>
           <Text style={styles.aside}>{t.settings.tabs.aside}</Text>
         </View>

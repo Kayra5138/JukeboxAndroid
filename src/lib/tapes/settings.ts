@@ -1,6 +1,7 @@
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { wholeIn, type Range } from '../ui/range.ts';
+import { createStore } from '../ui/store.ts';
 import { jumpsFor, ownJumpsFrom, withOwnJump, type OwnJumps } from './ownJumps.ts';
 
 /**
@@ -8,6 +9,18 @@ import { jumpsFor, ownJumpsFrom, withOwnJump, type OwnJumps } from './ownJumps.t
  * buttons go, for all of them and for a book or show given its own, and
  * whether it goes back a little on being played again.
  */
+
+/**
+ * Counted up whenever a jump step changes, a song's or a tape's, for what
+ * shows one to read it again: the bar of what is playing keeps its buttons'
+ * steps and reads them afresh only then.
+ */
+export const jumpStepsChanged = createStore(0);
+
+/** Said after a step is written, by here and by the music's own setting. */
+export function jumpStepChanged(): void {
+  jumpStepsChanged.set(jumpStepsChanged.get() + 1);
+}
 
 /** How far a tape's jump buttons may go, in seconds: up to two minutes, for a talk that wanders. */
 export const TAPE_JUMP_RANGE: Range = { min: 1, max: 120 };
@@ -27,6 +40,7 @@ export function tapeJumps(): { back: number; forward: number } {
 export function setTapeJump(which: 'back' | 'forward', seconds: number): void {
   writeSetting(which === 'back' ? SETTINGS.tapeBack : SETTINGS.tapeForward, String(seconds));
   syncTapeJumps();
+  jumpStepChanged();
 }
 
 function ownJumps(): OwnJumps {
@@ -47,6 +61,7 @@ export function tapeJumpsFor(key: string | null): ReturnType<typeof jumpsFor> {
 export function setOwnTapeJump(key: string, which: 'back' | 'forward', seconds: number | null): void {
   writeSetting(SETTINGS.tapeOwnJumps, JSON.stringify(withOwnJump(ownJumps(), key, which, seconds)));
   syncTapeJumps();
+  jumpStepChanged();
 }
 
 /**

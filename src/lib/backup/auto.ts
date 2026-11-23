@@ -54,6 +54,12 @@ export function autoBackup(): AutoBackup {
 /** Turns it on or off. A folder newly chosen comes with turning it on, and is kept for the next time. */
 export function setAutoBackupOn(on: boolean, folder?: string): void {
   if (folder) {
+    /*
+      Another folder has no backup in it yet, whenever the last one was made
+      elsewhere: forgotten, the next look makes one there at once, and the
+      time shown is that folder's, where it had been the old one's for days.
+    */
+    if (folder !== read(SETTINGS.backupFolder)) writeSetting(SETTINGS.backupLast, '');
     writeSetting(SETTINGS.backupFolder, folder);
     // A folder chosen again is a fresh start: what went wrong with the last one is not this one's.
     writeSetting(SETTINGS.backupTrouble, '');

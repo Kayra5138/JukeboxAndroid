@@ -5,6 +5,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: '为你发现的新歌',
     refresh: '刷新',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: '滑动以刷新',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: '松开刷新',
     updated: (date) => `更新于 ${date}`,
 
     familiar: (because) => `你常听艺人的更多作品 · ${because}`,
@@ -42,7 +46,6 @@ export const discover: Strings['discover'] = {
     failed: '无法下载 · 点按重试',
     needsBuild: '需要新版应用',
     waitingWifi: '等待 Wi-Fi · 点按立即下载',
-    percent: (percent) => `${format.number(percent)}%`,
     gettingReady: '正在下载',
     hint: '播放这首歌，如有需要会先下载',
     nowPlaying: (title) => `正在播放“${title}”`,
@@ -148,7 +151,8 @@ export const discover: Strings['discover'] = {
     buildingArtists: (done, total) =>
       `正在查找歌曲 · ${format.number(done)} / ${format.number(total)} 位艺人`,
     preparing: (ready, target) =>
-      `新列表正在准备中 · ${format.number(target)} 首中已有 ${format.number(ready)} 首就绪。${ready > 0 ? '再次刷新即可立即查看。' : ''}`,
+      `新列表正在准备中 · ${format.number(target)} 首中已有 ${format.number(ready)} 首就绪。`,
+    showNow: '立即查看',
     offline: '没有网络连接。你的列表会保留，连接后会查找新歌曲。',
     offlineEmpty: '没有网络连接。连接后“发现”会为你生成列表。',
     noLibrary: '“发现”需要从这台手机上的音乐出发，但目前还没有找到任何音乐。',

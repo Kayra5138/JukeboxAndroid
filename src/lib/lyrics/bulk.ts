@@ -52,7 +52,8 @@ export type LyricsRunDeps = {
   wait?: (ms: number, signal: AbortSignal) => Promise<void>;
 };
 
-export type LyricsProgress = { done: number; total: number; found: number; offline?: boolean };
+/** [throttled] while it waits a minute to be let ask again, as the Tags screen and the notification say. */
+export type LyricsProgress = { done: number; total: number; found: number; offline?: boolean; throttled?: boolean };
 
 export type LyricsResult = {
   /** Tracks that had no words when the run began and have some now. */
@@ -86,8 +87,8 @@ export async function runLyrics(
   let done = 0;
   let strikes = 0;
   const total = items.length;
-  const emit = (offline?: boolean) =>
-    onProgress(offline ? { done, total, found: result.found, offline } : { done, total, found: result.found });
+  const emit = (offline?: boolean, throttled?: boolean) =>
+    onProgress({ done, total, found: result.found, ...(offline ? { offline } : {}), ...(throttled ? { throttled } : {}) });
   emit();
 
   for (const item of items) {
@@ -143,7 +144,9 @@ export async function runLyrics(
         // Asked to slow down: once, after a minute. A second refusal is left
         // for another day rather than held against the rest of the run.
         if (isThrottle(error) && tries === 0) {
+          emit(false, true);
           await wait(THROTTLE_PAUSE_MS, signal);
+          emit();
           continue;
         }
         // Answered, with something that is not an answer about this song.

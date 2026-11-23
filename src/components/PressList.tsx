@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { SPACE, TYPE, RADIUS } from '../lib/theme/measures';
 import { Animated, BackHandler, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -217,18 +218,18 @@ export function PressListHost() {
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
     // Flat, whatever the theme, as the ring is: in one of glass what is under it would read through.
-    card: { position: 'absolute', borderRadius: 16, overflow: 'hidden', ...outlinedClip(c) },
-    title: { height: LIST_HEADER, paddingHorizontal: 16, paddingTop: 14, color: c.textMuted, fontSize: 13, fontWeight: '600' },
+    card: { position: 'absolute', borderRadius: RADIUS.card, overflow: 'hidden', ...outlinedClip(c) },
+    title: { height: LIST_HEADER, paddingHorizontal: SPACE.l, paddingTop: SPACE.m, color: c.textMuted, fontSize: TYPE.small, fontWeight: '600' },
     rows: { flex: 1, overflow: 'hidden' },
-    row: { height: LIST_ROW, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    row: { height: LIST_ROW, paddingHorizontal: SPACE.l, flexDirection: 'row', alignItems: 'center', gap: SPACE.m },
     apart: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
-    rowText: { flex: 1, minWidth: 0, gap: 2 },
-    label: { color: c.text, fontSize: 15 },
+    rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+    label: { color: c.text, fontSize: TYPE.body },
     apartLabel: { color: c.accent },
     checkedLabel: { fontWeight: '600' },
     chosenText: { color: c.onPrimary },
-    detail: { color: c.textFaint, fontSize: 12 },
+    detail: { color: c.textFaint, fontSize: TYPE.hint },
     chosenDetail: { color: c.onPrimary, opacity: 0.8 },
-    check: { fontSize: 16, fontWeight: '700' },
+    check: { fontSize: TYPE.heading, fontWeight: '700' },
   })
 );

@@ -4,6 +4,9 @@ import type { Strings } from '../en/index.ts';
 export const player: Strings['player'] = {
   bar: {
     opensPlayer: 'Oynatıcıyı açar',
+    upNext: (title: string) => `Sıradaki: ${title}`,
+    lastInQueue: 'Sıradaki son şarkı',
+    timeLeft: (clock: string) => `${clock} kaldı`,
   },
   sheet: {
     nothingPlaying: 'Çalan bir şey yok.',
@@ -50,6 +53,9 @@ export const player: Strings['player'] = {
     },
   },
   settings: {
+    tabs: { sound: 'Ses', look: 'Görünüş', sleep: 'Uyku' },
+    moreEffects: 'Daha fazla',
+    fewerEffects: 'Daha az',
     playback: 'Oynatma',
     backToNormal: 'Hızı ve perdeyi normale döndür',
     normal: 'Normal',
@@ -58,7 +64,6 @@ export const player: Strings['player'] = {
     pitchHint: 'Yarım ses olarak, yukarı ya da aşağı; kayıt yine üstteki hızda çalar.',
     effects: 'Efektler',
     equalizer: { note: 'Bantlar, bas ve ses yüksekliği' },
-    crossfade: { note: 'Bir parçanın yerini sonrakine nasıl bıraktığı' },
     allEffects: { title: 'Tüm efektler', note: 'Genişlik, crossfeed, döndürme ve seviye' },
     jumps: {
       heading: 'Bu kitap ya da program için atlama',

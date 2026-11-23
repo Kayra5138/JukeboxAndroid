@@ -1,8 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
-import { Pressable } from '../../../components/Pressable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, Text } from 'react-native';
+import { CardListPage, CardRow, ListCard } from '../../../components/CardList';
 
 import { useT } from '../../../lib/i18n/index';
 import { libraryFilesChanged } from '../../../lib/library/index';
@@ -15,8 +14,8 @@ import {
   setLibraryRoot,
   type LibraryFolder,
 } from '../../../lib/media/library';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../../../lib/theme/index';
-import { CLIP_SUBVIEWS } from '../../../lib/ui/lists';
+import { makeStyles } from '../../../lib/theme/index';
+import { TYPE } from '../../../lib/theme/measures';
 
 type Screen =
   | { kind: 'loading' }
@@ -27,13 +26,7 @@ type Screen =
 export default function FoldersScreen() {
   const router = useRouter();
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  // Sideways the cutout sits beside the screen, and a routed screen gets no
-  // horizontal inset from the navigator.
-  const insets = useSafeAreaInsets();
-  const sides = { paddingLeft: insets.left, paddingRight: insets.right };
   const [screen, setScreen] = useState<Screen>({ kind: 'loading' });
   const [current, setCurrent] = useState(libraryRoot);
 
@@ -74,30 +67,7 @@ export default function FoldersScreen() {
     [router]
   );
 
-  if (screen.kind === 'loading') {
-    return (
-      <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={c.text} />
-      </View>
-    );
-  }
-
-  if (screen.kind === 'denied' || screen.kind === 'error') {
-    return (
-      <View style={[styles.screen, styles.centered]}>
-        <Text style={styles.body}>
-          {screen.kind === 'denied'
-            ? t.library.folders.needsAccess
-            : screen.message}
-        </Text>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void load()}>
-          <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
-  const folders = screen.folders;
+  const folders = screen.kind === 'folders' ? screen.folders : [];
   const total = folders.reduce((sum, folder) => sum + folder.trackCount, 0);
   // Everything under Music, as the way back from a narrower choice.
   const options: LibraryFolder[] = [{ path: DEFAULT_ROOT, trackCount: total }, ...folders];
@@ -111,62 +81,33 @@ export default function FoldersScreen() {
   }
 
   return (
-    <View style={[styles.screen, sides]}>
-      <Text style={styles.note}>{t.library.folders.note}</Text>
-      <FlatList
-              removeClippedSubviews={CLIP_SUBVIEWS}
-        data={options}
-        keyExtractor={(folder) => folder.path}
-        renderItem={({ item }) => {
-          const selected = item.path === current;
-          return (
-            <Pressable
-              android_ripple={pressed}
-              style={styles.row}
-              onPress={() => choose(item.path)}
-              // One of a set of which one is chosen, which the ring says to the
-              // eye and this to a screen reader, in place of reading the ring.
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}>
-              <Text style={styles.radio} importantForAccessibility="no">
-                {selected ? '●' : '○'}
-              </Text>
-              <Text style={[styles.path, selected && styles.pathOn]} numberOfLines={1}>
-                {item.path === DEFAULT_ROOT ? t.library.folders.everything(item.path) : item.path}
-              </Text>
-              <Text style={styles.count}>{t.format.number(item.trackCount)}</Text>
-            </Pressable>
-          );
-        }}
-      />
-    </View>
+    <CardListPage
+      // The folders are one choice, in one card.
+      items={screen.kind === 'folders' ? [options] : screen.kind === 'loading' ? null : []}
+      keyOf={() => 'folders'}
+      note={t.library.folders.note}
+      empty=""
+      error={screen.kind === 'denied' ? t.library.folders.needsAccess : screen.kind === 'error' ? screen.message : null}
+      onRetry={() => void load()}
+      renderItem={(choices) => (
+        <ListCard>
+          {choices.map((folder) => (
+            <CardRow
+              key={folder.path}
+              choice={{ on: folder.path === current }}
+              title={folder.path === DEFAULT_ROOT ? t.library.folders.everything(folder.path) : folder.path}
+              trailing={<Text style={styles.count}>{t.format.number(folder.trackCount)}</Text>}
+              onPress={() => choose(folder.path)}
+            />
+          ))}
+        </ListCard>
+      )}
+    />
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...scene(c) },
-  centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  body: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  button: {
-    backgroundColor: c.surfaceRaised,
-    borderRadius: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    ...outlined(c),
-  },
-  buttonLabel: { color: c.text, fontSize: 15 },
-  note: { color: c.textSecondary, fontSize: 13, lineHeight: 19, padding: 16 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  radio: { color: c.accent, fontSize: 16, width: 16 },
-  path: { color: c.textSecondary, fontSize: 15, flex: 1 },
-  pathOn: { color: c.text },
-  count: { color: c.textFaint, fontSize: 13, fontVariant: ['tabular-nums'] },
-}));
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    count: { color: c.textMuted, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
+  })
+);

@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { SPACE, TYPE } from '../lib/theme/measures';
 
-import { Pressable } from './Pressable';
+import { TextButton } from './Button';
 import { useT } from '../lib/i18n/index';
 import { sectionKind } from '../lib/player/autoplay/plan';
 import { useAutoplayNote } from '../lib/player/autoplay/setting';
-import { makeStyles, usePressed } from '../lib/theme/index';
+import { makeStyles } from '../lib/theme/index';
 
 /**
  * The heading over the songs picked to keep the music going, drawn in the
@@ -17,7 +18,6 @@ import { makeStyles, usePressed } from '../lib/theme/index';
 export function AutoplayDivider({ ids, onRemove }: { ids: readonly string[]; onRemove: () => void }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const note = useAutoplayNote();
   const said = t.player.queue.auto;
   const heading = said[sectionKind(ids)];
@@ -38,30 +38,16 @@ export function AutoplayDivider({ ids, onRemove }: { ids: readonly string[]; onR
           </Text>
         ) : null}
       </View>
-      <Pressable
-        android_ripple={pressed}
-        accessibilityRole="button"
-        accessibilityLabel={said.removeLabel}
-        accessibilityHint={said.removeHint}
-        style={styles.button}
-        hitSlop={SLOP}
-        onPress={onRemove}>
-        <Text style={styles.buttonLabel}>{said.remove}</Text>
-      </Pressable>
+      <TextButton label={said.remove} strong accessibilityLabel={said.removeLabel} accessibilityHint={said.removeHint} onPress={onRemove} />
     </View>
   );
 }
 
-/** The button is a short word in a tall row; this brings what takes a press for it to a finger's width. */
-const SLOP = { top: 10, bottom: 10, left: 8, right: 8 };
-
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    row: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
-    text: { flex: 1, gap: 2 },
-    heading: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8 },
-    note: { color: c.textMuted, fontSize: 11.5 },
-    button: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-    buttonLabel: { color: c.accent, fontSize: 13.5, fontWeight: '600' },
+    row: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACE.s, paddingHorizontal: SPACE.l },
+    text: { flex: 1, gap: SPACE.xxs },
+    heading: { color: c.textFaint, fontSize: TYPE.label, fontWeight: '600', letterSpacing: 0.8 },
+    note: { color: c.textMuted, fontSize: TYPE.label },
   })
 );

@@ -86,7 +86,7 @@ class Waterfall {
   private val turned = IntArray(COLUMNS)
   private val mesh = FloatArray((COLUMNS + 1) * (RINGS + 1) * 2)
   private var orderedAt = -1
-  private var meshFor = ""
+  private val meshFor = floatArrayOf(Float.NaN, Float.NaN, Float.NaN, Float.NaN)
 
   /**
    * Round ([centreX], [centreY]) between [inner] and [outer]: the newest at
@@ -117,9 +117,12 @@ class Waterfall {
       }
       ordered.setPixels(row, 0, COLUMNS, 0, 0, COLUMNS, SpectrumAnalyzer.BANDS)
     }
-    val key = "$centreX:$centreY:$inner:$outer"
-    if (key != meshFor) {
-      meshFor = key
+    // Told apart by the four numbers themselves, and not by a string of them made at every frame.
+    if (centreX != meshFor[0] || centreY != meshFor[1] || inner != meshFor[2] || outer != meshFor[3]) {
+      meshFor[0] = centreX
+      meshFor[1] = centreY
+      meshFor[2] = inner
+      meshFor[3] = outer
       var at = 0
       for (ring in 0..RINGS) {
         // The picture's top row is the highest pitch: outermost.

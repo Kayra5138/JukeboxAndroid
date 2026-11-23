@@ -1,19 +1,20 @@
 import Constants from 'expo-constants';
+import { LEADING, SPACE, TYPE } from '../../../lib/theme/measures';
+import { Note } from '../../../components/Note';
 import { useState } from 'react';
 import { Linking, Platform, StyleSheet, Text, View } from 'react-native';
-import { Switch } from '../../../components/Switch';
 
 import JukeboxAudio from '../../../../modules/jukebox-audio';
-import { Pressable } from '../../../components/Pressable';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
+import { SettingsPage, useRows, SwitchRow } from '../../../components/settings/rows';
 import { useLanguage, useT } from '../../../lib/i18n/index';
 import { useLibrary } from '../../../lib/library/useLibrary';
 import { detailLines, errorLine, issueLink, phoneLine, reportText, stamp, type ReportFacts } from '../../../lib/support/report';
 import { useErrorEntries } from '../../../lib/support/errorLogStore';
-import { makeStyles, outlined, switchColours, useColours, usePressed, useTheme, useThemeChoice } from '../../../lib/theme/index';
+import { makeStyles, useTheme, useThemeChoice } from '../../../lib/theme/index';
 import { useAnnounce } from '../../../lib/ui/announce';
 import { haptic } from '../../../lib/ui/haptics';
 import { downloads } from '../../../lib/youtube/native';
+import { Button } from '../../../components/Button';
 
 /**
  * Reporting a problem: everything that would go into an issue, in full,
@@ -31,10 +32,8 @@ import { downloads } from '../../../lib/youtube/native';
  */
 export default function ReportScreen() {
   const t = useT();
-  const c = useColours();
   const rows = useRows();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.support.report;
 
   const language = useLanguage();
@@ -97,18 +96,12 @@ export default function ReportScreen() {
       <Text style={rows.aside}>{said.detailsNote}</Text>
 
       <View style={[rows.card, styles.gap]}>
-        <View style={rows.row}>
-          <View style={rows.line}>
-            <Text style={rows.title}>{said.errors.title}</Text>
-            <Switch
-              value={including}
-              accessibilityLabel={said.errors.title}
-              onValueChange={setIncluding}
-              {...switchColours(c, including)}
-            />
-          </View>
-          <Text style={rows.muted}>{said.errors.note}</Text>
-        </View>
+        <SwitchRow
+          title={said.errors.title}
+          hint={said.errors.note}
+          value={including}
+          onChange={setIncluding}
+        />
         <View style={rows.rule} />
         <View style={rows.row}>
           {entries.length ? (
@@ -127,23 +120,14 @@ export default function ReportScreen() {
       {link.left > 0 ? <Text style={rows.aside}>{said.errors.trimmed}</Text> : null}
 
       <View style={styles.buttons}>
-        <Pressable
-          android_ripple={pressed}
-          accessibilityRole="link"
-          accessibilityHint={said.openHint}
-          style={styles.primary}
-          onPress={open}>
-          <Text style={styles.primaryLabel}>{said.open}</Text>
-        </Pressable>
-        <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.secondary} onPress={copy}>
-          <Text style={styles.secondaryLabel}>{said.copy}</Text>
-        </Pressable>
+        <Button kind="primary" wide label={said.open} accessibilityHint={said.openHint} onPress={open} />
+        <Button kind="secondary" wide label={said.copy} onPress={copy} />
       </View>
       <Text style={rows.aside}>{said.copyNote}</Text>
       {note ? (
-        <Text accessibilityRole={note.bad ? 'alert' : undefined} style={note.bad ? rows.noteBad : rows.note}>
+        <Note tone={note.bad ? 'bad' : 'good'} style={rows.noteRoom}>
           {note.text}
-        </Text>
+        </Note>
       ) : null}
     </SettingsPage>
   );
@@ -151,29 +135,13 @@ export default function ReportScreen() {
 
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    intro: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginLeft: 4, marginBottom: 4 },
-    heading: { marginTop: 20 },
+    intro: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small, marginLeft: SPACE.xs, marginBottom: SPACE.xs },
+    heading: { marginTop: SPACE.l },
     // As it will look in the issue, where it is a block of code: one character to a column.
-    code: { color: c.text, fontFamily: 'monospace', fontSize: 12.5, lineHeight: 19 },
+    code: { color: c.text, fontFamily: 'monospace', fontSize: TYPE.hint, lineHeight: LEADING.hint },
     left: { color: c.textFaint },
-    gap: { marginTop: 20 },
+    gap: { marginTop: SPACE.xl },
     // Side by side where they fit, one over the other where a large size of writing makes them too wide.
-    buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 20 },
-    primary: {
-      backgroundColor: c.primary,
-      borderRadius: 12,
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      ...outlined(c, c.primary),
-    },
-    primaryLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
-    secondary: {
-      backgroundColor: c.surfaceRaised,
-      borderRadius: 12,
-      paddingHorizontal: 20,
-      paddingVertical: 12,
-      ...outlined(c),
-    },
-    secondaryLabel: { color: c.text, fontSize: 15 },
+    buttons: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s, marginTop: SPACE.l },
   })
 );

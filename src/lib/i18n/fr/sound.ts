@@ -8,7 +8,6 @@ import type { Strings } from '../en/index.ts';
   keep the names French hi-fi gives them, which are the English ones.
 */
 export const sound: Strings['sound'] = {
-  percent: (value) => `${format.number(value)} %`,
 
   effects: {
     failures: {
@@ -24,6 +23,8 @@ export const sound: Strings['sound'] = {
       headphones: { name: 'Casque', hint: 'Sort de ton crâne les mixages très latéralisés' },
       '8d': { name: '8D', hint: 'Le son tourne lentement autour de toi' },
       karaoke: { name: 'Façon karaoké', hint: 'Repousse le centre au loin' },
+      nightcore: { name: 'Nightcore', hint: 'Plus rapide et plus aigu, comme un disque joué trop vite' },
+      slowed: { name: 'Slowed + reverb', hint: 'Plus lent et plus grave, joué dans une grande salle' },
     },
     voices: {
       off: { name: 'Désactivé', hint: 'Le morceau tel quel' },
@@ -47,6 +48,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `${percent} % à gauche`,
     right: (percent) => `${percent} % à droite`,
     swap: { title: 'Inverser les canaux', note: 'La gauche devient la droite. Pour un câble mal branché.' },
+
+    room: 'Salle',
+
+    reverb: 'Réverbération',
+
+    reverbNote: 'Quelle part d’une grande salle entoure la musique. Zéro, aucune.',
+
 
     headphones: 'Casque',
     crossfeed: 'Crossfeed',

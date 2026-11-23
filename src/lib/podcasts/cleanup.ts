@@ -3,6 +3,7 @@ import { db, readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { refreshLibrary } from '../library/index.ts';
 import { scanLibrary } from '../media/library.ts';
 import { forgetTracks } from '../media/remove.ts';
+import { queuedIds } from '../player/queuedIds.ts';
 import { refreshTapePlaces, type TapePlace } from '../tapes/places.ts';
 import { isTape } from '../tapes/tape.ts';
 import { deleteDaysFrom, playedLongAgo } from './played.ts';
@@ -39,7 +40,17 @@ export async function cleanUpPlayed(now = Date.now()): Promise<number> {
     const playing = (await JukeboxAudio.getStatusAsync().catch(() => null))?.trackId ?? null;
     // One with marks in it is kept: somebody noted something there to come back to, and it goes only by hand.
     const marked = new Set(db().getAllSync<{ track_id: string }>('SELECT DISTINCT track_id FROM tape_marks').map((row) => row.track_id));
-    const due = playedLongAgo(tapes, places, folders, days, now).filter((tape) => tape.id !== playing && !marked.has(tape.id));
+    const heard = playedLongAgo(tapes, places, folders, days, now).filter((tape) => tape.id !== playing && !marked.has(tape.id));
+    if (heard.length === 0) return 0;
+    /*
+      Nor one waiting in the queue: a show played from its page has its later
+      episodes there, and the player stopped at a file gone. The kept queue
+      too, which is the only one there is when this runs in the background
+      with no player; and nothing at all where the queue could not be read.
+    */
+    const queued = await queuedIds();
+    if (!queued) return 0;
+    const due = heard.filter((tape) => !queued.has(tape.id));
     if (due.length === 0) return 0;
     const erased = await JukeboxAudio.deleteOwnTracksAsync(due.map((tape) => tape.id));
     if (erased.length > 0) {

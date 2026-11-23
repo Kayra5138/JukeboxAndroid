@@ -19,4 +19,11 @@ export const nav = {
   albumRest: 'Rest of the album',
   customTheme: 'Custom theme',
   downloads: 'Downloads',
+  /** Over the page of a list of songs, saying what kind of list it is: a record, an artist's, a folder, one made. */
+  album: 'Album',
+  artist: 'Artist',
+  folder: 'Folder',
+  list: 'List',
+  smartList: 'Smart list',
+  tag: 'Tag',
 };

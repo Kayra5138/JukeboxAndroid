@@ -19,6 +19,10 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { makeStyles, outlined, useColours } from '../lib/theme/index';
+import { RADIUS, ROW, TYPE } from '../lib/theme/measures';
+import { motionReduced } from '../lib/ui/motion';
+
 /**
  * A scrolling form that keeps the field being typed in above the keyboard.
  *
@@ -84,7 +88,7 @@ export function FormScroll({
           // A field taller than the space there is cannot be shown whole, and
           // its top is where the typing starts, so that is what is kept.
           const most = y - boxTop - CLEAR / 2;
-          scroll.current?.scrollTo({ y: scrolled.current + Math.min(over, Math.max(0, most)), animated: true });
+          scroll.current?.scrollTo({ y: scrolled.current + Math.min(over, Math.max(0, most)), animated: !motionReduced() });
         });
       });
     };
@@ -200,6 +204,35 @@ export function TextField({
     />
   );
 }
+
+/**
+ * A box to type in: the one the app has, drawn from its measures. It is a
+ * thing of its own on the page, with its name over it as a section's label
+ * (see the details page), and not put in a card, whose edge round its own
+ * made two boxes one inside the other. A box beside a button, or in a
+ * card that holds more than it, is still this.
+ */
+export function Field({ style, placeholderTextColor, ...rest }: TextInputProps & { ref?: Ref<TextInput> }) {
+  const boxes = useBoxes();
+  const c = useColours();
+  return <TextField {...rest} placeholderTextColor={placeholderTextColor ?? c.textFaint} style={[boxes.field, style]} />;
+}
+
+const useBoxes = makeStyles((c) =>
+  StyleSheet.create({
+    field: {
+      color: c.text,
+      fontSize: TYPE.body,
+      backgroundColor: c.surface,
+      borderRadius: RADIUS.control,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+      paddingHorizontal: ROW.horizontal,
+      paddingVertical: ROW.vertical,
+      ...outlined(c),
+    },
+  })
+);
 
 const styles = StyleSheet.create({
   box: { flex: 1 },

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { RADIUS, SPACE, TYPE } from '../lib/theme/measures';
 import {
   Animated,
   StyleSheet,
@@ -9,12 +10,13 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useSharedValue, type SharedValue } from "react-native-reanimated";
 
 import { TrackCover } from "./looks/shared";
 import type { EnrichedTrack } from "../lib/media/merge";
 import { makeStyles } from "../lib/theme/index";
 import { haptic } from "../lib/ui/haptics";
+import { unlessStill } from "../lib/ui/motion";
+import { useScrollBarMode } from "../lib/ui/scrollBar";
 
 /**
  * A long list's own scroll bar, to be taken hold of: it comes up down the
@@ -37,7 +39,7 @@ import { haptic } from "../lib/ui/haptics";
  */
 export type FastScroll = {
   /** Where the list is, for JavaScript to read: told at each step. */
-  offset: SharedValue<number>;
+  offset: Held<number>;
   /** Where the list is, for the bar to stand by, natively: see above. */
   scrollY: Animated.Value;
   contentY: Animated.Value;
@@ -46,14 +48,16 @@ export type FastScroll = {
   onScrollEvent: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
   /** Something more the list wants told of each step it scrolls, beside the bar: its own handler. */
   also: (listener: ((event: NativeSyntheticEvent<NativeScrollEvent>) => void) | null) => void;
-  content: SharedValue<number>;
-  viewport: SharedValue<number>;
+  content: Held<number>;
+  viewport: Held<number>;
   /** Told by the list of each step it scrolls. */
   onScroll: (y: number) => void;
   onContentSizeChange: (width: number, height: number) => void;
   onLayout: (event: LayoutChangeEvent) => void;
   /** The bar, asking to be woken by each scroll; answers with how to stop. */
   listen: (wake: () => void) => () => void;
+  /** The bar, asking to be told when the list or its frame changes size; answers with how to stop. */
+  measured: (told: () => void) => () => void;
 };
 
 /*
@@ -64,21 +68,42 @@ export type FastScroll = {
 type Listening = {
   wake: (() => void) | null;
   extra: ((event: NativeSyntheticEvent<NativeScrollEvent>) => void) | null;
+  /** Told when the list or its frame changes size: for a bar that stands there whether it moves or not. */
+  sized: (() => void) | null;
 };
 const listeners = new WeakMap<object, Listening>();
 function listeningOf(token: object): Listening {
   let held = listeners.get(token);
   if (!held) {
-    held = { wake: null, extra: null };
+    held = { wake: null, extra: null, sized: null };
     listeners.set(token, held);
   }
   return held;
 }
 
+/*
+  A value kept on the JavaScript side alone, read and written in the shape a
+  shared value is. These were shared values, and nothing on the thread that
+  draws ever read them: but one written from here and read back from here is
+  asked of that thread, and waited on, every time -- some sixty times a
+  second while a list was flung, the moment its rows wanted the thread most.
+*/
+export type Held<T> = { get: () => T; set: (value: T) => void };
+
+function keptHere<T>(initial: T): Held<T> {
+  let value = initial;
+  return {
+    get: () => value,
+    set: (next) => {
+      value = next;
+    },
+  };
+}
+
 export function useFastScroll(): FastScroll {
-  const offset = useSharedValue(0);
-  const content = useSharedValue(0);
-  const viewport = useSharedValue(0);
+  const [offset] = useState(() => keptHere(0));
+  const [content] = useState(() => keptHere(0));
+  const [viewport] = useState(() => keptHere(0));
   const [token] = useState(() => ({}));
   const [scrollY] = useState(() => new Animated.Value(0));
   const [contentY] = useState(() => new Animated.Value(0));
@@ -114,13 +139,22 @@ export function useFastScroll(): FastScroll {
         offset.set(y);
         listeningOf(token).wake?.();
       },
+      measured: (told: () => void) => {
+        listeningOf(token).sized = told;
+        return () => {
+          const heard = listeningOf(token);
+          if (heard.sized === told) heard.sized = null;
+        };
+      },
       onContentSizeChange: (_width: number, height: number) => {
         content.set(height);
         contentY.setValue(height);
+        listeningOf(token).sized?.();
       },
       onLayout: (event: LayoutChangeEvent) => {
         viewport.set(event.nativeEvent.layout.height);
         viewportY.setValue(event.nativeEvent.layout.height);
+        listeningOf(token).sized?.();
       },
     }),
     [content, contentY, offset, scrollY, token, viewport, viewportY],
@@ -155,13 +189,18 @@ export function FastScroller({
   bottom?: number;
 }) {
   const styles = useStyles();
-  const [shown, setShown] = useState(false);
+  // Always there, there while the list moves, or never: Settings → Look & feel (`ui/scrollBar.ts`).
+  const mode = useScrollBarMode();
+  const [moving, setShown] = useState(false);
+  // Long enough to be worth a bar: told as the list and its frame are measured, and as it scrolls.
+  const [long, setLong] = useState(false);
+  const shown = mode === 'always' ? long : mode === 'moving' && moving;
   const [held, setHeld] = useState<number | null>(null);
-  // Shared values rather than refs, being read and written in the drag's callbacks.
-  const hide = useSharedValue<ReturnType<typeof setTimeout> | null>(null);
-  const dragging = useSharedValue(false);
-  const from = useSharedValue(0);
-  const lastLabel = useSharedValue("");
+  // Held rather than refs, being read and written in the drag's callbacks; never shared values: see `Held`.
+  const [hide] = useState(() => keptHere<ReturnType<typeof setTimeout> | null>(null));
+  const [dragging] = useState(() => keptHere(false));
+  const [from] = useState(() => keptHere(0));
+  const [lastLabel] = useState(() => keptHere(""));
 
   useEffect(() => {
     const later = () => {
@@ -171,13 +210,18 @@ export function FastScroller({
       }
       hide.set(setTimeout(() => setShown(false), 1500));
     };
+    const isLong = () => fast.viewport.get() > 0 && fast.content.get() >= fast.viewport.get() * LONG;
+    setLong(isLong());
+    const unmeasured = fast.measured(() => setLong(isLong()));
     const stop = fast.listen(() => {
-      if (fast.content.get() < fast.viewport.get() * LONG) return;
+      if (!isLong()) return;
+      setLong(true);
       setShown(true);
       if (!dragging.get()) later();
     });
     return () => {
       stop();
+      unmeasured();
       {
         const timer = hide.get();
         if (timer) clearTimeout(timer);
@@ -187,7 +231,14 @@ export function FastScroller({
 
   // Where it stands: as far down its run as the list is down its length, worked out natively (see `FastScroll`).
   const place = useMemo(() => {
-    const room = Animated.subtract(fast.contentY, fast.viewportY);
+    // How far the list can go, and never less than a point: before the list is measured both are nought, and
+    // nought over nought was a warning written down at every start.
+    const room = Animated.subtract(fast.contentY, fast.viewportY).interpolate({
+      inputRange: [1, 2],
+      outputRange: [1, 2],
+      extrapolateLeft: "clamp",
+      extrapolateRight: "extend",
+    });
     const share = Animated.divide(fast.scrollY, room).interpolate({
       inputRange: [0, 1],
       outputRange: [0, 1],
@@ -203,11 +254,7 @@ export function FastScroller({
   */
   const [seen] = useState(() => new Animated.Value(0));
   useEffect(() => {
-    Animated.timing(seen, {
-      toValue: shown ? 1 : 0,
-      duration: shown ? 120 : 260,
-      useNativeDriver: true,
-    }).start();
+    unlessStill(Animated.timing(seen, { toValue: shown ? 1 : 0, duration: shown ? 120 : 260, useNativeDriver: true }), seen, shown ? 1 : 0);
   }, [seen, shown]);
 
   const fractionNow = () => {
@@ -253,7 +300,7 @@ export function FastScroller({
       hide.set(setTimeout(() => setShown(false), 1500));
     });
 
-  if (count === 0) return null;
+  if (count === 0 || mode === 'never') return null;
   const cover = held != null ? coverAt?.(held) : null;
   return (
     <View pointerEvents="box-none" style={styles.layer}>
@@ -295,12 +342,12 @@ const useStyles = makeStyles((c) =>
       height: THUMB,
       alignItems: "flex-end",
       justifyContent: "center",
-      paddingRight: 3,
+      paddingRight: SPACE.xxs,
     },
     thumb: {
       width: 7,
       height: THUMB - 10,
-      borderRadius: 4,
+      borderRadius: RADIUS.check,
       backgroundColor: c.textMuted,
       opacity: 0.85,
     },
@@ -308,17 +355,17 @@ const useStyles = makeStyles((c) =>
     bubble: {
       flexDirection: "row",
       alignItems: "center",
-      gap: 10,
-      paddingLeft: 6,
-      paddingRight: 16,
-      paddingVertical: 6,
-      marginRight: 6,
-      borderRadius: 14,
+      gap: SPACE.s,
+      paddingLeft: SPACE.xs,
+      paddingRight: SPACE.l,
+      paddingVertical: SPACE.xs,
+      marginRight: SPACE.xs,
+      borderRadius: RADIUS.card,
       backgroundColor: c.surfaceRaised,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.borderStrong,
       maxWidth: 220,
     },
-    label: { color: c.text, fontSize: 24, fontWeight: "700" },
+    label: { color: c.text, fontSize: TYPE.title, fontWeight: "700" },
   }),
 );

@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { useInTab } from './Floating';
 import JukeboxAudio from '../../modules/jukebox-audio/index';
 import { useRouter } from 'expo-router';
 
@@ -44,7 +45,8 @@ export const WITHOUT_ALBUM: readonly TrackAction[] = ['album'];
 export function useTrackMenu({
   onChanged,
   onAdded,
-  beforeLeaving,
+  leave,
+  aboutOf,
 }: {
   /** A file was erased, or a list gained a track: read again what is shown. */
   onChanged?: () => void;
@@ -54,11 +56,14 @@ export function useTrackMenu({
    */
   onAdded?: (message: string) => void;
   /**
-   * Run before an entry that goes to another screen. For the player, which is
-   * a layer over the navigator and has to get out of the way first, or the
-   * screen arrives underneath it.
+   * How an entry that goes to another screen goes there: handed the going,
+   * to do once it is ready. For the player, which is a layer over the
+   * navigator, and is put away under the page first (`OverPlayer`), or the
+   * page arrives underneath it.
    */
-  beforeLeaving?: () => void;
+  leave?: (go: () => void) => void;
+  /** What a track says of itself, for the top of its menu (`MenuHeader` [about]): a podcast episode's summary. */
+  aboutOf?: (track: Track) => string | null;
 } = {}): {
   open: (track: Track, hidden?: readonly TrackAction[]) => void;
   /** Does what an entry of the menu does, with the menu not having been opened: for a screen with another way to it. */
@@ -68,8 +73,10 @@ export function useTrackMenu({
   /**
    * Erases files the way the menu's own entry does, queue and all, for a
    * screen that has its own way of choosing them. Answers whether they went.
+   * [beforeForgetting] runs once they have, before what was known of them is
+   * let go of (see `deleteTracks`).
    */
-  erase: (trackIds: string[]) => Promise<boolean>;
+  erase: (trackIds: string[], beforeForgetting?: () => void) => Promise<boolean>;
   element: ReactNode;
   /**
    * True while the list picker is up. It is drawn in the screen and not in a
@@ -91,8 +98,8 @@ export function useTrackMenu({
     system's own question about a delete can sit on screen for as long as the
     user likes, and the queue may have moved on by the time it is answered.
   */
-  const hooks = useRef({ onChanged, onAdded, beforeLeaving });
-  hooks.current = { onChanged, onAdded, beforeLeaving };
+  const hooks = useRef({ onChanged, onAdded, leave });
+  hooks.current = { onChanged, onAdded, leave };
 
   // Stable, because rows are memoised and are handed this directly.
   const open = useCallback(
@@ -122,8 +129,8 @@ export function useTrackMenu({
    * still to go.
    */
   const erase = useCallback(
-    async (trackIds: string[]): Promise<boolean> => {
-      if (!(await deleteTracks(trackIds))) return false;
+    async (trackIds: string[], beforeForgetting?: () => void): Promise<boolean> => {
+      if (!(await deleteTracks(trackIds, beforeForgetting))) return false;
       hooks.current.onChanged?.();
       const gone = new Set(trackIds);
       const rows = queueNow.get()
@@ -138,6 +145,12 @@ export function useTrackMenu({
 
   const run = useCallback(
     (action: TrackAction, track: Track) => {
+      // To another screen: at once, or once whatever the menu is in is ready for it.
+      const goTo = (go: () => void) => {
+        const leave = hooks.current.leave;
+        if (leave) leave(go);
+        else go();
+      };
       setMenu(null);
       // Spelled out rather than built from `action`: a menu entry that is not a
       // route is then a type error here instead of a dead end at the tap.
@@ -172,11 +185,10 @@ export function useTrackMenu({
         haptic('results', on ? 'confirm' : 'toggleOff');
       }
       else if (action === 'tiles') {
-        hooks.current.beforeLeaving?.();
         // The name goes with it. The game shows what it is about to play before
         // the player has been told anything, and the name it should show is the
         // one on the row that was pressed -- tags corrected by hand included.
-        router.push({ pathname: '/tiles', params: { track: track.id, title: track.title } });
+        goTo(() => router.push({ pathname: '/tiles', params: { track: track.id, title: track.title } }));
       }
       else if (action === 'playFromStart') {
         // Its place forgotten first, so the player puts it on from the top; the one playing is sent there where it is (see `TapeKeeper.marked`).
@@ -188,13 +200,13 @@ export function useTrackMenu({
       }
       else if (action === 'series' || action === 'tapeFolder') {
         const show = action === 'series' ? seriesOf(track) : null;
-        hooks.current.beforeLeaving?.();
-        if (show) router.push({ pathname: '/podcast', params: { feed: show.feedUrl } });
-        else router.push({ pathname: '/playlist', params: { folder: folderKey(track.folder ?? '') } });
+        goTo(() => {
+          if (show) router.push({ pathname: '/podcast', params: { feed: show.feedUrl } });
+          else router.push({ pathname: '/playlist', params: { folder: folderKey(track.folder ?? '') } });
+        });
       }
       else if (action === 'tapeDetails') {
-        hooks.current.beforeLeaving?.();
-        router.push({ pathname: '/tape', params: { trackId: track.id } });
+        goTo(() => router.push({ pathname: '/tape', params: { trackId: track.id } }));
       }
       else if (action === 'setAside' || action === 'bringBack') {
         // Kept out of Tracks and of shuffling everything, or back: see `library/setAside.ts`.
@@ -204,23 +216,22 @@ export function useTrackMenu({
       }
       else if (action === 'asideWith') {
         // Set aside with something else, which is brought back from where everything set aside is.
-        hooks.current.beforeLeaving?.();
-        router.push('/set-aside');
+        goTo(() => router.push('/set-aside'));
       }
       else if (action === 'album') {
         const name = track.album?.trim();
         if (!name) return;
-        hooks.current.beforeLeaving?.();
         // With the track, which says which record of the name it is on:
         // whose a record is can take the rest of the library to know.
-        router.push({
-          pathname: '/playlist',
-          params: { album: albumKey(name, track.albumArtist), track: track.id },
-        });
+        goTo(() =>
+          router.push({
+            pathname: '/playlist',
+            params: { album: albumKey(name, track.albumArtist), track: track.id },
+          })
+        );
       }
       else {
-        hooks.current.beforeLeaving?.();
-        router.push({ pathname: '/details', params: { trackId: track.id } });
+        goTo(() => router.push({ pathname: '/details', params: { trackId: track.id } }));
       }
     },
     [addToQueue, erase, playNext, playQueue, router]
@@ -235,13 +246,16 @@ export function useTrackMenu({
     Listened for only while the picker is up, which also puts this after the
     screen's own listener; the last one registered is the first one asked.
   */
-  useBack(addingTo != null, () => setAddingTo(null));
+  // In a tab the picker is a page of its own (`MenuPage`), which Back closes as any page.
+  const inTab = useInTab();
+  useBack(addingTo != null && !inTab, () => setAddingTo(null));
 
   const element = (
     <>
       <TrackMenu
         track={menu?.track ?? null}
         hidden={menu?.hidden}
+        about={menu && aboutOf ? aboutOf(menu.track) : null}
         onSelect={run}
         onClose={close}
       />
@@ -260,5 +274,5 @@ export function useTrackMenu({
     </>
   );
 
-  return { open, run, addToList, erase, element, veiled: addingTo != null };
+  return { open, run, addToList, erase, element, veiled: addingTo != null && !inTab };
 }

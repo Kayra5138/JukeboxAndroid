@@ -672,6 +672,38 @@ test('with songs fetched ahead, the new list waits behind the old until its firs
   assert.equal(desk.state.notice?.kind, 'refreshed');
 });
 
+test('a refresh lets go of the songs of the old list that were only being fetched ahead, and fetches none of them while the new one is looked for', () => {
+  const desk = new Desk({ ready: 3 });
+  desk.open();
+  const [a, b, c] = first(desk, 3);
+  for (const n of [a, b, c]) desk.send({ type: 'asked', id: id(n), jobId: `job-${id(n)}` });
+  desk.jobs([job(id(a), 'downloading'), job(id(b), 'queued'), job(id(c), 'queued')]);
+  // One of them tapped: its download is somebody's, and stays.
+  desk.send({ type: 'play', id: id(b) });
+  desk.done = [];
+  desk.send({ type: 'refresh' });
+  assert.deepEqual(desk.of('cancel').map((e) => e.jobId).sort(), [`job-${id(a)}`, `job-${id(c)}`].sort());
+  assert.equal(desk.item(a).jobId, undefined);
+  assert.equal(desk.item(b).jobId, `job-${id(b)}`);
+  // Nothing more of the old list is asked for while the new one is being found.
+  desk.done = [];
+  desk.jobs([job(id(b), 'queued')]);
+  desk.later(RETRY_AFTER_MS * 2);
+  assert.deepEqual(desk.asks(), []);
+});
+
+test('a refresh while the old list is being played from leaves its next few fetching', () => {
+  const desk = new Desk({ ready: 2 });
+  desk.open();
+  const [a, b, c] = first(desk, 3);
+  desk.ready(a);
+  desk.send({ type: 'player', currentId: `discover:job-${id(a)}`, queue: [`discover:job-${id(a)}`], playing: true });
+  for (const n of [b, c]) desk.send({ type: 'asked', id: id(n), jobId: `job-${id(n)}` });
+  desk.done = [];
+  desk.send({ type: 'refresh' });
+  assert.equal(desk.of('cancel').length, 0);
+});
+
 test('a new list that is slow to get ready is shown anyway after a few minutes, or when refresh is pressed again', () => {
   const desk = new Desk({ ready: 3 });
   desk.open();

@@ -1,11 +1,13 @@
-import { Linking, StyleSheet, Text, View } from 'react-native';
-import { Switch } from '../Switch';
+import { StyleSheet, View } from 'react-native';
+import { SPACE, RADIUS } from '../../lib/theme/measures';
+import { openLink } from '../../lib/ui/openLink';
+import { Text } from '../settings/Find';
 
 import { Pressable } from '../Pressable';
-import { useRows } from '../settings/rows';
+import { useRows, SwitchRow, Chevron } from '../settings/rows';
 import { useT } from '../../lib/i18n/index';
 import { setUpdateCheckWanted, useUpdateCheckWanted, useUpdateOffer } from '../../lib/support/updateStore';
-import { makeStyles, switchColours, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, usePressed } from '../../lib/theme/index';
 
 /**
  * The row at the top of the Settings tab that says a newer Jukebox is out,
@@ -29,13 +31,13 @@ export function UpdateRow() {
         accessibilityRole="link"
         accessibilityHint={t.support.update.hint}
         style={rows.row}
-        onPress={() => void Linking.openURL(offer.url).catch(() => {})}>
+        onPress={() => openLink(offer.url)}>
         <View style={rows.line}>
           <View style={styles.named}>
             <View style={styles.dot} importantForAccessibility="no" />
             <Text style={rows.title}>{t.support.update.available(offer.version)}</Text>
           </View>
-          <Text style={rows.chevron} importantForAccessibility="no">›</Text>
+          <Chevron />
         </View>
         <Text style={rows.muted}>{t.support.update.note}</Text>
       </Pressable>
@@ -51,7 +53,6 @@ export function UpdateRow() {
 export function UpdateCheckSetting() {
   const wanted = useUpdateCheckWanted();
   const t = useT();
-  const c = useColours();
   const rows = useRows();
   const styles = useStyles();
   const said = t.support.update;
@@ -59,18 +60,12 @@ export function UpdateCheckSetting() {
     <View style={styles.section}>
       <Text style={rows.section}>{t.format.upper(said.heading)}</Text>
       <View style={rows.card}>
-        <View style={rows.row}>
-          <View style={rows.line}>
-            <Text style={rows.title}>{said.check.title}</Text>
-            <Switch
-              value={wanted}
-              accessibilityLabel={said.check.title}
-              onValueChange={setUpdateCheckWanted}
-              {...switchColours(c, wanted)}
-            />
-          </View>
-          <Text style={rows.muted}>{said.check.note}</Text>
-        </View>
+        <SwitchRow
+          title={said.check.title}
+          hint={said.check.note}
+          value={wanted}
+          onChange={setUpdateCheckWanted}
+        />
       </View>
     </View>
   );
@@ -79,11 +74,11 @@ export function UpdateCheckSetting() {
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
     // Under the version line, with the room the categories keep from each other.
-    card: { marginTop: 16 },
-    named: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+    card: { marginTop: SPACE.xl },
+    named: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s, flexShrink: 1 },
     // The same mark as on the tab, so that the one is seen to be about the other.
-    dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.accent },
+    dot: { width: 8, height: 8, borderRadius: RADIUS.check, backgroundColor: c.accent },
     // As far from the card above as ListenBrainz's heading is from its own.
-    section: { marginTop: 26 },
+    section: { marginTop: SPACE.xl },
   })
 );

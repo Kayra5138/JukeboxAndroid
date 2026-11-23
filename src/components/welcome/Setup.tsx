@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
+import { LEADING, RADIUS, SPACE, TYPE, TOUCH } from '../../lib/theme/measures';
+import { Note } from '../Note';
+import { SwitchRow } from '../settings/rows';
 import { useRouter } from 'expo-router';
 import { AccessibilityInfo, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Switch } from '../Switch';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Choices } from '../DiscoverSettings';
+import { Button, TextButton } from '../Button';
 import { Pressable } from '../Pressable';
 import { useDiscoverSettings } from '../discover/hooks';
 import { scheduleDiscover } from '../../lib/discover/background';
@@ -32,8 +35,6 @@ import {
   outlined,
   outlinedClip,
   page,
-  switchColours,
-  useColours,
   usePressed,
   type ThemeChoice,
 } from '../../lib/theme/index';
@@ -87,7 +88,6 @@ const SETUP_THEMES: readonly ThemeChoice[] = [
 export function Setup() {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const language = useLanguage();
@@ -181,20 +181,12 @@ export function Setup() {
         key={step}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + 24, paddingBottom: 16 },
+          { paddingTop: insets.top + 24, paddingBottom: SPACE.l },
         ]}>
         <View style={styles.column}>
           <View style={styles.top}>
             <Text style={styles.brand}>Jukebox</Text>
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              accessibilityHint={said.skipHint}
-              hitSlop={SKIP_SLOP}
-              style={styles.skip}
-              onPress={finish}>
-              <Text style={styles.skipLabel}>{said.skip}</Text>
-            </Pressable>
+            <TextButton label={said.skip} size="body" strong accessibilityHint={said.skipHint} onPress={finish} />
           </View>
           {counted ? <Text style={styles.counted} importantForAccessibility="no">{counted}</Text> : null}
           {/*
@@ -227,23 +219,9 @@ export function Setup() {
       <View style={[styles.foot, { paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.buttons}>
           {at > 0 ? (
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              style={styles.back}
-              onPress={back}>
-              <Text style={styles.backLabel}>{said.back}</Text>
-            </Pressable>
+            <Button kind="secondary" shape="pill" label={said.back} onPress={back} />
           ) : null}
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            style={styles.button}
-            onPress={next}>
-            <Text style={styles.buttonLabel}>
-              {last ? said.done : step === 'language' ? t.welcome.language.go : said.next}
-            </Text>
-          </Pressable>
+          <Button shape="pill" wide label={last ? said.done : step === 'language' ? t.welcome.language.go : said.next} onPress={next} />
         </View>
       </View>
     </View>
@@ -419,7 +397,6 @@ function LookStep() {
  */
 function DiscoverStep() {
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
   const settings = useDiscoverSettings();
   const { configure } = useDiscoverActions();
@@ -457,7 +434,6 @@ function DiscoverStep() {
               accessibilityLabel={said.wifi}
               accessibilityState={{ disabled: !settings.ready, checked: settings.wifiOnly }}
               value={settings.wifiOnly}
-              {...switchColours(c, settings.wifiOnly)}
               onValueChange={(wifiOnly) => change({ wifiOnly })}
             />
           </View>
@@ -471,7 +447,6 @@ function DiscoverStep() {
               accessibilityLabel={said.preview}
               accessibilityState={{ checked: previewsOn(settings) }}
               value={previewsOn(settings)}
-              {...switchColours(c, previewsOn(settings))}
               onValueChange={(preview) => change({ preview })}
             />
           </View>
@@ -479,9 +454,9 @@ function DiscoverStep() {
         </View>
       </View>
       {error ? (
-        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.error}>
+        <Note tone="bad" style={styles.error}>
           {error}
-        </Text>
+        </Note>
       ) : null}
       <Text style={styles.small}>{t.welcome.setup.discover.more}</Text>
     </>
@@ -495,7 +470,6 @@ function DiscoverStep() {
  */
 function ViewsStep() {
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
   const views = useLibraryViews();
   return (
@@ -509,20 +483,14 @@ function ViewsStep() {
           return (
             <View key={view}>
               {index > 0 ? <View style={styles.rule} /> : null}
-              <View style={styles.row}>
-                <View style={styles.line}>
-                  <Text style={styles.title}>{t.library.views[view]}</Text>
-                  <Switch
-                    accessibilityLabel={t.library.views[view]}
-                    accessibilityHint={only ? t.settings.views.onlyHint : t.settings.views.toggleHint}
-                    value={on}
-                    disabled={only}
-                    onValueChange={(wanted) => setLibraryViews(withView(views, view, wanted))}
-                    {...switchColours(c, on)}
-                  />
-                </View>
-                <Text style={styles.muted}>{t.settings.views.notes[view]}</Text>
-              </View>
+              <SwitchRow
+                title={t.library.views[view]}
+                hint={t.settings.views.notes[view]}
+                value={on}
+                onChange={(wanted) => setLibraryViews(withView(views, view, wanted))}
+                disabled={only}
+                accessibilityHint={only ? t.settings.views.onlyHint : t.settings.views.toggleHint}
+              />
             </View>
           );
         })}
@@ -616,69 +584,54 @@ function deviceLocale(): string | null {
   }
 }
 
-/** Skip is drawn as a word; this much round it still counts. */
-const SKIP_SLOP = { top: 10, bottom: 10, left: 10, right: 10 };
 
 const useStyles = makeStyles((c) => {
-  const row = { paddingHorizontal: 16, paddingVertical: 14, gap: 8 };
-  const pill = {
-    minHeight: 52,
-    borderRadius: 26,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    paddingHorizontal: 24,
-  };
+  const row = { paddingHorizontal: SPACE.l, paddingVertical: SPACE.m, gap: SPACE.s };
   return StyleSheet.create({
     screen: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, ...page(c) },
-    content: { flexGrow: 1, paddingHorizontal: 20, alignItems: 'center' },
-    foot: { paddingHorizontal: 20, paddingTop: 12, alignItems: 'center' },
+    content: { flexGrow: 1, paddingHorizontal: SPACE.l, alignItems: 'center' },
+    foot: { paddingHorizontal: SPACE.l, paddingTop: SPACE.m, alignItems: 'center' },
     // A phone's width at most: sideways, a list as wide as the screen is hard to read across.
     column: { width: '100%', maxWidth: 480 },
-    top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 36 },
-    brand: { color: c.textFaint, fontSize: 15, fontWeight: '600', letterSpacing: 0.4 },
-    skip: { minHeight: 36, paddingHorizontal: 12, borderRadius: 18, justifyContent: 'center' },
-    skipLabel: { color: c.accent, fontSize: 15, fontWeight: '600' },
-    counted: { color: c.textFaint, fontSize: 13, marginTop: 10 },
+    top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.small },
+    brand: { color: c.textFaint, fontSize: TYPE.body, fontWeight: '600', letterSpacing: 0.4 },
+    counted: { color: c.textFaint, fontSize: TYPE.small, marginTop: SPACE.s },
     update: {
       color: c.text,
-      fontSize: 14,
-      lineHeight: 20,
-      marginTop: 12,
-      padding: 12,
-      borderRadius: 12,
+      fontSize: TYPE.small,
+      lineHeight: LEADING.small,
+      marginTop: SPACE.m,
+      padding: SPACE.m,
+      borderRadius: RADIUS.control,
       backgroundColor: c.surface,
       ...outlined(c),
     },
-    heading: { color: c.text, fontSize: 28, fontWeight: '600', letterSpacing: -0.4, marginTop: 8 },
-    note: { color: c.textSecondary, fontSize: 14, lineHeight: 20, marginTop: 8, marginBottom: 20 },
-    card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
-    pickerCard: { backgroundColor: c.surface, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, ...outlinedClip(c) },
-    rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: 16 },
+    heading: { color: c.text, fontSize: TYPE.title, fontWeight: '600', letterSpacing: -0.4, marginTop: SPACE.s },
+    note: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small, marginTop: SPACE.s, marginBottom: SPACE.l },
+    card: { backgroundColor: c.surface, borderRadius: RADIUS.card, overflow: 'hidden', ...outlinedClip(c) },
+    pickerCard: { backgroundColor: c.surface, borderRadius: RADIUS.card, paddingHorizontal: SPACE.m, paddingVertical: SPACE.s, ...outlinedClip(c) },
+    rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: SPACE.l },
     option: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: SPACE.m,
       minHeight: 52,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      paddingHorizontal: SPACE.l,
+      paddingVertical: SPACE.m,
     },
-    optionText: { flex: 1, minWidth: 0, gap: 3 },
-    label: { flex: 1, minWidth: 0, color: c.text, fontSize: 16 },
-    answer: { color: c.text, fontSize: 16 },
+    optionText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+    label: { flex: 1, minWidth: 0, color: c.text, fontSize: TYPE.heading },
+    answer: { color: c.text, fontSize: TYPE.heading },
     labelOn: { fontWeight: '600' },
     tick: { color: c.accent, fontSize: 17, fontWeight: '600' },
     row,
     rowOff: { ...row, opacity: 0.45 },
-    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-    title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-    muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-    small: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 12, marginHorizontal: 4 },
-    error: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
-    buttons: { width: '100%', maxWidth: 480, flexDirection: 'row', gap: 10 },
-    back: { ...pill, backgroundColor: c.surfaceRaised, ...outlined(c) },
-    backLabel: { color: c.text, fontSize: 16, fontWeight: '600' },
-    button: { ...pill, flex: 1, backgroundColor: c.primary, ...outlined(c, c.primary) },
-    buttonLabel: { color: c.onPrimary, fontSize: 16, fontWeight: '600' },
+    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.row },
+    title: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+    small: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: SPACE.m, marginHorizontal: SPACE.xs },
+    error: { marginTop: SPACE.s, marginLeft: SPACE.xs },
+    buttons: { width: '100%', maxWidth: 480, flexDirection: 'row', gap: SPACE.s },
   });
 });

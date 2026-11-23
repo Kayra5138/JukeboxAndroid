@@ -42,6 +42,8 @@ export type ForeignListen = {
   /** Whether it was heard to the end, where the history says. */
   completed: boolean | null;
   source: HistorySource;
+  /** Sent by Jukebox itself, where the history says (ListenBrainz's `submission_client`): one of this phone's own listens come back. */
+  ownClient?: boolean;
 };
 
 /** Shorter than this and it was not a listen: Spotify writes down every song touched on the way past. */
@@ -167,6 +169,7 @@ function brainzListen(row: Json): ForeignListen | null | undefined {
     secondsPlayed: seconds != null && seconds > 0 ? seconds : null,
     completed: true,
     source: 'listenbrainz',
+    ownClient: text(info.submission_client) === 'Jukebox',
   };
 }
 
@@ -450,8 +453,33 @@ export type ImportPlan = {
 
 const exactKey = (title: string, artist: string | null) => `${foldForMatch(artist ?? '')}|${foldForMatch(title)}`;
 
-/** What says that two listens are one: the same second, and the same song by the same artist ([name], an {@link exactKey}). */
-const sameListen = (startedAt: number, name: string) => `${Math.floor(startedAt / 1000)}\u0000${name}`;
+/**
+ * How far apart two listens of one song may have begun and be one listen:
+ * half a minute either way at the least, as far as half the song for a long
+ * one, and never more than a minute and a half.
+ *
+ * Not the same second: the same listen is written to the minute in
+ * Spotify's account data, to the second in its extended history and a few
+ * seconds off in a scrobble, and brought in from all three it was counted
+ * three times, with nothing to say which import had written which.
+ */
+const SAME_LISTEN_LEAST_MS = 30_000;
+const SAME_LISTEN_MOST_MS = 90_000;
+const sameListenWithin = (seconds: number | null) =>
+  Math.min(SAME_LISTEN_MOST_MS, Math.max(SAME_LISTEN_LEAST_MS, seconds != null && seconds > 0 ? (seconds * 1000) / 2 : SAME_LISTEN_MOST_MS));
+
+/** When a song by its loose name ({@link looseSongKey}) was begun, as far as is known: to say whether a listen is one already had. */
+class Begun {
+  private readonly times = new Map<string, number[]>();
+  add(key: string, at: number): void {
+    const list = this.times.get(key);
+    if (list) list.push(at);
+    else this.times.set(key, [at]);
+  }
+  near(key: string, at: number, within: number): boolean {
+    return this.times.get(key)?.some((when) => Math.abs(when - at) <= within) ?? false;
+  }
+}
 
 /**
  * The id a song that is not in the library is filed under.
@@ -535,8 +563,14 @@ export function planImport(
   const find = songFinder(library);
   const songOf = (listen: ForeignListen, key: string): LibrarySong | null => find(listen, key);
 
-  const seen = new Set<string>();
-  for (const listen of held) seen.add(sameListen(listen.startedAt, exactKey(listen.title, listen.artist)));
+  const looseOf = (listen: { title: string; artist: string | null }) => looseSongKey({ title: listen.title, artist: listen.artist });
+  const seen = new Begun();
+  // The seconds of the phone's own listens, whatever they were called: one sent by Jukebox and brought back is one of them.
+  const heldSeconds = new Set<number>();
+  for (const listen of held) {
+    seen.add(looseOf(listen), listen.startedAt);
+    heldSeconds.add(Math.floor(listen.startedAt / 1000));
+  }
   // The made-up ids, likewise once a song.
   const absent = new Map<string, string>();
   const absentFor = (listen: ForeignListen, name: string) => {
@@ -561,14 +595,15 @@ export function planImport(
     }
     const startedAt = Math.round(listen.startedAt);
     const name = exactKey(listen.title, listen.artist);
-    const once = sameListen(startedAt, name);
-    if (seen.has(once)) {
+    const song = songOf(listen, name);
+    const loose = looseOf(listen);
+    const within = sameListenWithin(song && song.durationSec > 0 ? song.durationSec : listen.secondsPlayed);
+    if (seen.near(loose, startedAt, within) || (listen.ownClient === true && heldSeconds.has(Math.floor(startedAt / 1000)))) {
       already++;
       continue;
     }
-    seen.add(once);
+    seen.add(loose, startedAt);
 
-    const song = songOf(listen, name);
     const length = song && song.durationSec > 0 ? song.durationSec : null;
     // A scrobble says nothing of how long it ran; the song's own length is
     // the best guess there is, and with no song, nothing is guessed.

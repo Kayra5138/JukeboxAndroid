@@ -5,6 +5,10 @@ export const discover = {
   panel: {
     heading: 'Made for your next listen',
     refresh: 'Refresh',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Slide to refresh',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Let go to refresh',
     updated: (date: string) => `Updated ${date}`,
 
     /** Why a song is here, for one kept from before the list said so itself: see `why.ts`. */
@@ -50,7 +54,6 @@ export const discover = {
     failed: 'Could not download · tap to retry',
     needsBuild: 'Needs the updated app',
     waitingWifi: 'Waiting for Wi-Fi · tap to download',
-    percent: (percent: number) => `${format.number(percent)}%`,
     /** For a screen reader, which is told a song is being fetched and not each percent of it. */
     gettingReady: 'Being downloaded',
     hint: 'Plays the song, downloading it first if it has to be',
@@ -173,7 +176,9 @@ export const discover = {
     buildingArtists: (done: number, total: number) =>
       `Looking for songs · ${format.number(done)} of ${format.number(total)} artists`,
     preparing: (ready: number, target: number) =>
-      `A new list is on its way · ${format.number(ready)} of ${format.number(target)} songs ready.${ready > 0 ? ' Refresh again to see it now.' : ''}`,
+      `A new list is on its way · ${format.number(ready)} of ${format.number(target)} songs ready.`,
+    /** Beside that line, once some of it is ready: the new list at once, as far as it has got. */
+    showNow: 'Show it now',
     offline: 'No connection. Your list is kept; new songs are looked for when there is one.',
     offlineEmpty: 'No connection. Discover makes your list when there is one.',
     /** No music found under the library's folder, or none the app may read yet. */

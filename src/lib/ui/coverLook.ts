@@ -64,7 +64,6 @@ function lookStore<Look extends string>(key: string, looks: readonly Look[]) {
 const song = lookStore(SETTINGS.songLook, SONG_LOOKS);
 const tape = lookStore(SETTINGS.tapeLook, TAPE_LOOKS);
 const motion = lookStore(SETTINGS.coverMotion, MOTIONS);
-const beats = lookStore(SETTINGS.beatFeel, ['off', 'on'] as const);
 const arm = lookStore(SETTINGS.tonearm, ['off', 'on'] as const);
 
 export const useSongLook = song.use;
@@ -73,14 +72,6 @@ export const useTapeLook = tape.use;
 export const setTapeLook = tape.set;
 export const useCoverMotion = motion.use;
 export const setCoverMotion = motion.set;
-
-/**
- * A light knock under the finger on each beat, while the player is open and
- * the music plays: Settings → Player, beside what moves with the music. Off
- * unless asked for, and as quiet as the vibration settings make it.
- */
-export const useBeatFeel = (): boolean => beats.use() === 'on';
-export const setBeatFeel = (on: boolean): void => beats.set(on ? 'on' : 'off');
 
 /** The arm over a record, its needle going in from the edge as the song goes on: off unless asked for. */
 export const useTonearm = (): boolean => arm.use() === 'on';

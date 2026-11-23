@@ -1,11 +1,13 @@
-import { usePageSides, WithNowPlaying } from '../components/NowPlayingBar';
-import { useUnderBars } from '../components/UnderBars';
+import { TabTitle, usePageRoom } from '../components/Page';
+import { CARD_GAP, RADIUS, SPACE, TOUCH, TYPE } from '../lib/theme/measures';
+import { WithNowPlaying } from '../components/NowPlayingBar';
+import { FittedText } from '../components/FittedText';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BlurArea, ClockGlass, GlassScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 import { Segmented } from '../components/Segmented';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BarChart } from '../components/BarChart';
 import { ReportViewer } from '../components/report/ReportViewer';
@@ -48,10 +50,14 @@ import {
   WHICH,
 } from '../lib/stats/period';
 import { buildReport, worthReporting } from '../lib/stats/report';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlined, scene, useColours } from '../lib/theme/index';
 import { useLandscape } from '../lib/ui/layout';
 import { useTopOnReselect } from '../lib/ui/tabReselect';
-import { ArtistLinks } from '../components/NameLinks';
+import { ArtistLinks, useOpenArtist } from '../components/NameLinks';
+import { Button } from '../components/Button';
+import { MediaRow } from '../components/MediaRow';
+import { ScreenState } from '../components/ScreenState';
+import { SectionLabel } from '../components/settings/rows';
 
 /** What the columns of the chart are measuring. */
 type Metric = 'time' | 'plays';
@@ -79,26 +85,26 @@ type Data = {
   genres: TopEntry[];
   /** Whether anything has ever been listened to, as against in this period. */
   everListened: boolean;
+  /** When the first listen of all was. */
+  first: number | null;
 };
 
 /** How long a reading of the history stands for, with nothing played since: the periods are told by the clock as well. */
 const STILL_FRESH_MS = 5 * 60 * 1000;
 
 export default function StatsScreen() {
-  const [period, setPeriod] = useState<PeriodId>('week');
-  const [which, setWhich] = useState<Which>('this');
+  // As last chosen from the first drawing, and not the week until the choice was read, which showed for a moment each time.
+  const [period, setPeriod] = useState<PeriodId>(readPeriod);
+  const [which, setWhich] = useState<Which>(readWhich);
   const [metric, setMetric] = useState<Metric>('time');
   const [data, setData] = useState<Data | null>(null);
   const [recapOpen, setRecapOpen] = useState(false);
   const landscape = useLandscape();
-  const insets = useSafeAreaInsets();
-  const sides = usePageSides();
-  // In a theme of glass the tab bar and the bar of what is playing are over the foot of this.
-  const under = useUnderBars({ player: true });
+  // The skeleton of the page a tab opens on: see `usePageRoom`.
+  const room = usePageRoom({ root: true });
   const t = useT();
   const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
 
   /*
     Worded as it is read: the title and the names under the columns are made
@@ -106,7 +112,14 @@ export default function StatsScreen() {
     has the screen read again when it changes, rather than keep a chart whose
     days are still named in the old one.
   */
-  const load = useCallback((id: PeriodId, reading: Which) => {
+  /*
+    Read on the database's own thread and waited for, all of it at once; a
+    reading overtaken by a later one, another period chosen meanwhile, is
+    let go of when it comes back rather than drawn over the later one.
+  */
+  const readings = useRef(0);
+  const load = useCallback(async (id: PeriodId, reading: Which) => {
+    const mine = ++readings.current;
     /*
       One clock for the whole read. Taken once rather than per query because a
       period asked for at 23:59:59.999 and a chart built a millisecond later
@@ -116,25 +129,34 @@ export default function StatsScreen() {
     const at = Date.now();
     const range = rangeOf(id, at, reading);
     const earlier = previousRange(id, at, reading);
-    const first = firstPlayAt();
-    const rows = listens(range);
+    const [first, rows, summary, before, beforeListens, tracks, artists, genres] = await Promise.all([
+      firstPlayAt(),
+      listens(range),
+      summarize(range),
+      earlier ? summarize(earlier) : Promise.resolve(null),
+      earlier ? listens(earlier) : Promise.resolve([]),
+      topTracks(8, range),
+      topArtists(8, range),
+      // Genres come from the metadata table, so they only appear for tracks
+      // that have been looked up.
+      topGenres(8, range),
+    ]);
+    if (mine !== readings.current) return;
     const buckets = bucketsOf(id, at, first, t, reading);
 
     setData({
       at,
       title: titleOf(id, at, t, reading),
-      summary: summarize(range),
-      before: earlier ? summarize(earlier) : null,
+      summary,
+      before,
       beforeDays: earlier ? daysIn(earlier) : 0,
-      beforeListens: earlier ? listens(earlier) : [],
+      beforeListens,
       buckets,
       totals: tally(rows, buckets),
       listens: rows,
-      tracks: topTracks(8, range),
-      artists: topArtists(8, range),
-      // Genres come from the metadata table, so they only appear for tracks
-      // that have been looked up.
-      genres: topGenres(8, range).map((row) => ({
+      tracks,
+      artists,
+      genres: genres.map((row) => ({
         key: row.key,
         label: row.genre,
         playCount: row.playCount,
@@ -142,6 +164,7 @@ export default function StatsScreen() {
         sample: row.sample ?? null,
       })),
       everListened: first != null,
+      first,
     });
   }, [t]);
 
@@ -178,7 +201,7 @@ export default function StatsScreen() {
     const of = `${period}|${which}`;
     const seen = lastRead.current;
     if (seen && seen.mark === mark && seen.of === of && seen.by === load && Date.now() - seen.at < STILL_FRESH_MS) return;
-    load(period, which);
+    void load(period, which);
     lastRead.current = { mark, at: Date.now(), of, by: load };
   }, [load, period, which]);
   /*
@@ -235,9 +258,8 @@ export default function StatsScreen() {
       // With the bar of what is playing, as the full screen has it: nothing has been heard yet
       // the first time this is opened, and the first song may well be playing as it is.
       <WithNowPlaying style={styles.screen}>
-        <View style={[styles.fill, styles.empty]}>
-          <Text style={styles.emptyTitle}>{t.stats.screen.emptyTitle}</Text>
-          <Text style={styles.emptyBody}>{t.stats.screen.emptyBody}</Text>
+        <View style={styles.fill}>
+          <ScreenState kind="empty" title={t.stats.screen.emptyTitle} text={t.stats.screen.emptyBody} />
         </View>
       </WithNowPlaying>
     );
@@ -248,7 +270,7 @@ export default function StatsScreen() {
     ? changeBetween(summary.totalSeconds, data.before.totalSeconds)
     : null;
   const hour = busiestHour(data.listens);
-  const days = countedDays(data.buckets, data.at);
+  const days = countedDays(data.buckets, data.at, data.first);
 
   /*
     The same seven figures for the period before, or nothing at all when there
@@ -258,12 +280,12 @@ export default function StatsScreen() {
   */
   const was = data.before
     ? {
-        plays: String(data.before.playCount),
-        tracks: String(data.before.distinctTracks),
-        artists: String(data.before.distinctArtists),
+        plays: t.format.number(data.before.playCount),
+        tracks: t.format.number(data.before.distinctTracks),
+        artists: t.format.number(data.before.distinctArtists),
         finished:
           data.before.playCount > 0
-            ? t.stats.percent(
+            ? t.format.percent(
                 Math.round((data.before.completedCount / data.before.playCount) * 100)
               )
             : null,
@@ -284,16 +306,14 @@ export default function StatsScreen() {
 
   return (
     <WithNowPlaying style={styles.screen}>
+    {/* The page an area the glass behind the clock blurs: see `ClockGlass`. */}
+    <GlassScene>
+    <BlurArea style={styles.fill}>
     <ScrollView
       {...backUp}
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: insets.top + 12,
-          paddingLeft: sides.left + 20,
-          paddingRight: sides.right + 20,
-        },
-      ]}>
+      // The skeleton of a tab's own page (`usePageRoom`).
+      contentContainerStyle={[styles.content, room]}>
+      <TabTitle title={t.nav.stats} />
       {/* Tabs, to a screen reader, and the open one says so: to the eye it is
           only the one the mark is on. */}
       <Segmented
@@ -326,18 +346,18 @@ export default function StatsScreen() {
           is half as tall, and stacking them puts the chart below the fold. */}
       <View style={landscape ? styles.wide : undefined}>
         <View style={landscape ? styles.wideSide : undefined}>
-          <Text accessibilityRole="header" style={styles.periodTitle}>{t.format.upper(data.title)}</Text>
+          <SectionLabel after={false}>{data.title}</SectionLabel>
           <View style={styles.headlineRow}>
             <Text style={styles.headline}>{formatDuration(summary.totalSeconds, t)}</Text>
             {worthReporting(summary) ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
+              <Button
+                kind="secondary"
+                shape="pill"
+                size="small"
+                label={t.stats.screen.recap}
                 accessibilityLabel={t.stats.screen.openRecap}
-                style={styles.recap}
-                onPress={() => setRecapOpen(true)}>
-                <Text style={styles.recapLabel}>{t.stats.screen.recap}</Text>
-              </Pressable>
+                onPress={() => setRecapOpen(true)}
+              />
             ) : null}
           </View>
           {change != null ? (
@@ -404,24 +424,24 @@ export default function StatsScreen() {
       <View style={styles.cards}>
         <Card
           label={t.stats.figures.plays}
-          value={String(summary.playCount)}
+          value={t.format.number(summary.playCount)}
           before={had(was?.plays ?? null)}
         />
         <Card
           label={t.stats.figures.tracks}
-          value={String(summary.distinctTracks)}
+          value={t.format.number(summary.distinctTracks)}
           before={had(was?.tracks ?? null)}
         />
         <Card
           label={t.stats.figures.artists}
-          value={String(summary.distinctArtists)}
+          value={t.format.number(summary.distinctArtists)}
           before={had(was?.artists ?? null)}
         />
         <Card
           label={t.stats.figures.finished}
           value={
             summary.playCount > 0
-              ? t.stats.percent(Math.round((summary.completedCount / summary.playCount) * 100))
+              ? t.format.percent(Math.round((summary.completedCount / summary.playCount) * 100))
               : '—'
           }
           before={had(was?.finished ?? null)}
@@ -446,7 +466,7 @@ export default function StatsScreen() {
       <View style={landscape ? styles.wide : undefined}>
         {lists.map((list) => (
           <View key={list.of} style={landscape ? styles.wideSide : undefined}>
-            <Text style={styles.heading}>{t.format.upper(t.stats.screen.lists[list.of])}</Text>
+            <SectionLabel>{t.stats.screen.lists[list.of]}</SectionLabel>
             {list.entries.length === 0 ? (
               <Text style={styles.muted}>
                 {list.of === 'genres'
@@ -470,7 +490,6 @@ export default function StatsScreen() {
         ))}
       </View>
 
-      <View style={{ height: insets.bottom + 24 + under.bottom }} />
 
       <ReportViewer
         visible={recapOpen}
@@ -493,6 +512,9 @@ export default function StatsScreen() {
         onClose={() => setRecapOpen(false)}
       />
     </ScrollView>
+    </BlurArea>
+    <ClockGlass />
+    </GlassScene>
     </WithNowPlaying>
   );
 }
@@ -518,48 +540,45 @@ function Card({
   const t = useT();
   const styles = useStyles();
   return (
+    // Made smaller to fit, and not cut off: two to a row on a narrow phone, a long language's words ran out of the card.
     <View style={styles.card}>
-      <Text style={styles.cardValue} numberOfLines={1}>
+      <FittedText style={styles.cardValue} numberOfLines={1} minimumFontScale={0.6}>
         {value}
-      </Text>
-      <Text style={styles.cardLabel} numberOfLines={1}>
+      </FittedText>
+      <FittedText style={styles.cardLabel} numberOfLines={1} minimumFontScale={0.7}>
         {label}
-      </Text>
+      </FittedText>
       {before ? (
-        <Text style={styles.cardBefore} numberOfLines={1}>
+        <FittedText style={styles.cardBefore} numberOfLines={1} minimumFontScale={0.7}>
           {t.stats.screen.was(before)}
-        </Text>
+        </FittedText>
       ) : null}
     </View>
   );
 }
 
 /**
- * One line of a chart-topper list.
+ * One line of a chart-topper list: a row of the app's (`MediaRow`), its place
+ * at its start and how often at its end.
  *
  * The bar behind it is the row's share of the busiest one, which is what turns
  * a column of numbers into something that can be read at a glance: whether the
- * top track is a habit or merely first past the post.
+ * top track is a habit or merely first past the post. An artist's row leads to
+ * the artist, and a song's to whoever it is by.
  */
 function Row({ rank, entry, share, of }: { rank: number; entry: TopEntry; share: number; of: 'tracks' | 'artists' | 'genres' }) {
   const styles = useStyles();
+  const openArtist = useOpenArtist();
   return (
-    <View style={styles.row}>
-      <View style={[styles.rowFill, { width: `${Math.max(2, share * 100)}%` }]} />
-      <Text style={styles.rank}>{rank}</Text>
-      <View style={styles.rowText}>
-        {/* An artist leads to their page: the name of one at the top of the artists, and whoever a song at the top is by. */}
-        <Text style={styles.rowLabel} numberOfLines={1}>
-          {of === 'artists' ? <ArtistLinks credit={entry.label} whole /> : entry.label}
-        </Text>
-        {entry.detail ? (
-          <Text style={styles.rowDetail} numberOfLines={1}>
-            {of === 'tracks' ? <ArtistLinks credit={entry.detail} /> : entry.detail}
-          </Text>
-        ) : null}
-      </View>
-      <Text style={styles.rowCount}>{entry.playCount}×</Text>
-    </View>
+    <MediaRow
+      size="compact"
+      share={share}
+      lead={<Text style={styles.rank}>{rank}</Text>}
+      title={entry.label}
+      subtitle={entry.detail ? (of === 'tracks' ? <ArtistLinks credit={entry.detail} /> : entry.detail) : undefined}
+      meta={`${entry.playCount}×`}
+      onPress={of === 'artists' ? () => openArtist(entry.label) : undefined}
+    />
   );
 }
 
@@ -570,11 +589,28 @@ function Row({ rank, entry, share, of }: { rank: number; entry: TopEntry; share:
  * first of the month would report a daily average across thirty days that have
  * not happened.
  */
-function countedDays(buckets: Bucket[], now: number): number {
+function countedDays(buckets: Bucket[], now: number, first: number | null): number {
   if (buckets.length === 0) return 0;
-  const since = buckets[0].start;
+  // From the first listen, where the history begins inside the period: all of it began at the start of that month.
+  const since = Math.max(buckets[0].start, first ?? -Infinity);
   const until = Math.min(now, buckets[buckets.length - 1].end);
-  return Math.max(1, Math.ceil((until - since) / (24 * 60 * 60 * 1000)));
+  return Math.max(1, calendarDays(since, until));
+}
+
+/**
+ * The days of the calendar from [since] to [until], today counted as one
+ * however little of it has gone: by the dates, so that a week with the
+ * clocks put back, an hour longer, is still seven days.
+ */
+function calendarDays(since: number, until: number): number {
+  const day = new Date(since);
+  day.setHours(0, 0, 0, 0);
+  let days = 0;
+  while (day.getTime() < until && days < 100_000) {
+    days += 1;
+    day.setDate(day.getDate() + 1);
+  }
+  return days;
 }
 
 /**
@@ -586,7 +622,7 @@ function countedDays(buckets: Bucket[], now: number): number {
  * against the one in progress.
  */
 function daysIn(range: Span): number {
-  return Math.max(1, Math.round((range.until - range.since) / (24 * 60 * 60 * 1000)));
+  return Math.max(1, calendarDays(range.since, range.until));
 }
 
 function streakLabel(days: number, t: Strings): string {
@@ -610,121 +646,89 @@ function had(value: string | null): string | null {
 
 /** The period last looked at, so the screen opens where it was left. */
 function readWhich(): Which {
-  const saved = readSetting(SETTINGS.statsWhich);
+  let saved: string | null = null;
+  try {
+    saved = readSetting(SETTINGS.statsWhich);
+  } catch {
+    // The usual one, then.
+  }
   return WHICH.some((entry) => entry === saved) ? (saved as Which) : 'this';
 }
 
 function readPeriod(): PeriodId {
-  const saved = readSetting(SETTINGS.statsPeriod);
+  let saved: string | null = null;
+  try {
+    saved = readSetting(SETTINGS.statsPeriod);
+  } catch {
+    // The usual one, then.
+  }
   return PERIODS.some((entry) => entry.id === saved) ? (saved as PeriodId) : 'week';
 }
 
 /** The two words are short; this reaches as far as half the gap between them each side. */
-const METRIC_SLOP = { left: 8, right: 8 };
+const METRIC_SLOP = { left: SPACE.s, right: SPACE.s };
+
+
+/** The one figure a period is summed up by, at the top of it: shown, not read, and so larger than any writing (`TYPE`). */
+const HEADLINE = 40;
+/** The least a tile of the figures under it is wide, before they go two to a row. */
+const TILE_LEAST = 78;
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
-  content: { gap: 4 },
-  empty: { alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  content: { gap: SPACE.xs },
   fill: { flex: 1 },
-  emptyTitle: { color: c.text, fontSize: 16 },
-  emptyBody: { color: c.textMuted, fontSize: 13, lineHeight: 20, textAlign: 'center' },
 
-  periods: { marginBottom: 10 },
+  periods: { marginBottom: SPACE.s },
 
   // The second question, asked more quietly than the first: which day, which
   // week. Chips and not another tray, so that the two rows are not mistaken
   // for one control with ten choices; a finger's height, as the tray's are.
-  readings: { marginBottom: 20 },
-  reading: { minHeight: 44 },
+  readings: { marginBottom: SPACE.l },
+  reading: { minHeight: TOUCH.normal },
   // All time has no second row, and keeps the room the row would have left under it.
-  periodsAlone: { marginBottom: 20 },
+  periodsAlone: { marginBottom: SPACE.l },
 
-  wide: { flexDirection: 'row', gap: 26, alignItems: 'flex-start' },
+  wide: { flexDirection: 'row', gap: CARD_GAP, alignItems: 'flex-start' },
   wideSide: { flex: 1, minWidth: 0 },
 
-  periodTitle: {
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1,
-  },
-  headlineRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  headline: { color: c.text, fontSize: 40, fontWeight: '600', lineHeight: 48, flexShrink: 1 },
-  recap: {
-    backgroundColor: c.surfaceRaised,
-    borderRadius: 999,
-    paddingHorizontal: 16,
-    minHeight: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...outlined(c),
-  },
-  recapLabel: { color: c.text, fontSize: 13.5, fontWeight: '600' },
-  change: { fontSize: 13 },
-  muted: { color: c.textMuted, fontSize: 13 },
+  headlineRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m },
+  headline: { color: c.text, fontSize: HEADLINE, fontWeight: '600', lineHeight: HEADLINE + SPACE.s, flexShrink: 1 },
+  change: { fontSize: TYPE.small },
+  muted: { color: c.textMuted, fontSize: TYPE.small },
 
   // The room that was above the two is now inside them, which makes each a
   // finger's height without moving the words.
-  metrics: { flexDirection: 'row', gap: 16 },
-  metricHit: { minHeight: 48, justifyContent: 'center' },
-  metric: { color: c.textFaint, fontSize: 12.5, letterSpacing: 1 },
+  metrics: { flexDirection: 'row', gap: SPACE.l },
+  metricHit: { minHeight: TOUCH.normal, justifyContent: 'center' },
+  metric: { color: c.textFaint, fontSize: TYPE.hint, letterSpacing: 1 },
   // Underlined as well as coloured, so that which of the two is on can be
   // told without the colour. Not heavier: the other would shift as it changed.
   metricOn: { color: c.accent, textDecorationLine: 'underline' },
 
-  chart: { paddingTop: 22 },
+  chart: { paddingTop: CARD_GAP },
 
-  cards: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingTop: 26 },
+  cards: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s, paddingTop: CARD_GAP },
   card: {
     // Four to a row on a phone, more where there is room, and the gaps are
     // taken out of the share so they never push the fourth one down.
-    minWidth: 78,
+    minWidth: TILE_LEAST,
     flexGrow: 1,
     flexBasis: '22%',
     backgroundColor: c.surface,
-    borderRadius: 12,
-    paddingVertical: 13,
-    paddingHorizontal: 12,
-    gap: 3,
+    borderRadius: RADIUS.card,
+    paddingVertical: SPACE.m,
+    paddingHorizontal: SPACE.m,
+    gap: SPACE.xxs,
     ...outlined(c),
   },
-  cardValue: { color: c.text, fontSize: 17, fontWeight: '600' },
-  cardLabel: { color: c.textFaint, fontSize: 11 },
+  cardValue: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+  cardLabel: { color: c.textFaint, fontSize: TYPE.label },
   // Dimmer than the label, which is already dim: it is the least of the three
   // lines and has to be read as the footnote it is rather than as a second
   // figure competing with the one above it.
-  cardBefore: { color: c.textDisabled, fontSize: 10.5, marginTop: 1 },
+  cardBefore: { color: c.textDisabled, fontSize: TYPE.label },
 
-  heading: {
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1,
-    paddingTop: 30,
-    paddingBottom: 10,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 11,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
-    borderRadius: 9,
-    marginBottom: 3,
-    overflow: 'hidden',
-  },
-  rowFill: {
-    // Behind the text rather than beside it, so a long title has the whole
-    // width and the proportion is still legible underneath it.
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: c.accentSoft,
-    borderRadius: 9,
-  },
-  rank: { color: c.textFaint, fontSize: 12, width: 16, fontVariant: ['tabular-nums'] },
-  rowText: { flex: 1, minWidth: 0 },
-  rowLabel: { color: c.text, fontSize: 14.5 },
-  rowDetail: { color: c.textFaint, fontSize: 11.5, paddingTop: 1 },
-  rowCount: { color: c.textMuted, fontSize: 12.5, fontVariant: ['tabular-nums'] },
+  // As wide as two figures, so that the names stand in line whatever the place.
+  rank: { color: c.textFaint, fontSize: TYPE.hint, width: SPACE.l, fontVariant: ['tabular-nums'] },
 }));

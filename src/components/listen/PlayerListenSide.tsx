@@ -1,15 +1,14 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
-import { MinusIcon, PlusIcon, TickIcon } from '../Icons';
-import { Pressable } from '../Pressable';
+import { MinusIcon, PlusIcon } from '../Icons';
+import { SideButton, SideKept } from '../PlayerSide';
 import { useT } from '../../lib/i18n/index';
 import { dropListened, keepListened } from '../../lib/listen/index';
 import { keptAs } from '../../lib/listen/kept';
 import { isListened } from '../../lib/listen/rules';
 import { usePlayerActions, usePlayerState } from '../../lib/player/PlayerProvider';
-import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
+import { offerUndo } from '../../lib/ui/undo';
 
 /**
  * Keep and let go, beside the name of a song listened to from the Search
@@ -17,6 +16,10 @@ import { haptic } from '../../lib/ui/haptics';
  * the plus copies it into the library, and a tick stands where it was for as
  * long as it plays; the minus takes it out of the queue, the next song on,
  * and lets its file go. Nothing for any other track.
+ *
+ * Drawn under the song's id (`key`): what it holds is the one song's, and
+ * drawn on for the next, the tick of one kept stood on the next as well, and
+ * that one, with no plus to keep it, went when its days ran out.
  */
 export function PlayerListenSide({
   trackId,
@@ -29,56 +32,47 @@ export function PlayerListenSide({
   small?: boolean;
 }) {
   const t = useT();
-  const c = useColours();
-  const styles = useStyles();
-  const pressed = usePressed();
-  const { removeFromQueue } = usePlayerActions();
-  const { currentIndex } = usePlayerState();
+  const { removeFromQueue, playNext, next } = usePlayerActions();
+  const { currentIndex, current } = usePlayerState();
   const [busy, setBusy] = useState(false);
   // Kept here or anywhere else, by a heart or a list: read again as it is drawn, a look in a setting.
   const [keptNow, setKeptNow] = useState(false);
   if (!isListened(trackId)) return null;
   const kept = keptNow || keptAs(trackId) !== trackId;
-  const box = small ? styles.sideSmall : styles.side;
-  const slop = small ? 4 : 2;
-
-  if (kept) {
-    return side === 'keep' ? (
-      <View accessible accessibilityRole="text" accessibilityLabel={t.discover.player.kept} style={box}>
-        <TickIcon size={18} color={c.success} />
-      </View>
-    ) : (
-      <View style={box} />
-    );
-  }
+  if (kept) return <SideKept small={small} label={side === 'keep' ? t.discover.player.kept : undefined} />;
 
   if (side === 'drop') {
     return (
-      <Pressable
-        android_ripple={pressed}
-        style={[box, styles.button]}
-        hitSlop={slop}
-        accessibilityRole="button"
-        accessibilityLabel={t.search.listenDrop}
+      <SideButton
+        small={small}
+        label={t.search.listenDrop}
         onPress={() => {
           haptic('results', 'reject');
-          // Out of the queue first, the next song on, as the cross on its row does; then its file, no longer played from.
-          void removeFromQueue(currentIndex).then(() => dropListened(trackId));
+          // Out of the queue first, the next song on, as the cross on its row does; then its file, no longer played from:
+          // but not until the offer of it back has run out (`lib/ui/undo.ts`), the file being the one thing that cannot be had back.
+          const track = current;
+          void removeFromQueue(currentIndex).then(() =>
+            offerUndo(
+              t.common.undone.letGo(track?.title ?? ''),
+              () => {
+                if (!track) return;
+                // Back in the queue where it was, and playing again.
+                void playNext(track).then(() => next());
+              },
+              () => void dropListened(trackId)
+            )
+          );
         }}>
         <MinusIcon size={18} />
-      </Pressable>
+      </SideButton>
     );
   }
 
   return (
-    <Pressable
-      android_ripple={pressed}
-      style={[box, styles.button]}
-      hitSlop={slop}
-      accessibilityRole="button"
-      accessibilityLabel={t.library.menu.keepListened.label}
-      accessibilityState={{ busy, disabled: busy }}
-      disabled={busy}
+    <SideButton
+      small={small}
+      label={t.library.menu.keepListened.label}
+      busy={busy}
       onPress={() => {
         haptic('results', 'confirm');
         setBusy(true);
@@ -88,14 +82,7 @@ export function PlayerListenSide({
           else haptic('results', 'reject');
         });
       }}>
-      {busy ? <ActivityIndicator size={16} color={c.textMuted} /> : <PlusIcon size={18} />}
-    </Pressable>
+      <PlusIcon size={18} />
+    </SideButton>
   );
 }
-
-const useStyles = makeStyles((c) => StyleSheet.create({
-  // As Discover's are: the box of the player's own small buttons, filled, as something to press.
-  side: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  sideSmall: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  button: { backgroundColor: c.surfaceRaised, ...outlined(c) },
-}));

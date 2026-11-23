@@ -29,7 +29,6 @@
   <string name="jukebox_widget_up_next">次に再生</string>
   <string name="jukebox_widget_up_next_empty">次に再生する曲はありません</string>
   <string name="jukebox_widget_open">プレーヤーを開きます</string>
-  <string name="jukebox_widget_continue">続きから再生：%1$s</string>
 
   <!-- メディア通知。 -->
   <string name="jukebox_playback_channel">再生中</string>

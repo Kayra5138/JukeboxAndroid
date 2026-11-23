@@ -105,6 +105,7 @@ export const library: Strings['library'] = {
     lookSwitch: 'この表示をもう一方の見た目に切り替えます',
     view: '表示',
     looks: { list: 'リスト', shelves: '棚', rack: 'ラック', map: 'マップ' },
+    shelf: { added: '最近追加', around: (hour: string) => `${hour}ごろ`, repeat: '今月よく聴いた曲', while: 'しばらく聴いていない曲', never: '未再生', all: 'すべての曲', play: (name: string) => `${name}を再生`, shuffle: (name: string) => `${name}をシャッフル再生`, queue: (name: string) => `${name}をキューに追加` },
     artistMap: { drawing: 'マップを描画中…', shuffle: '曲をシャッフル再生', open: '開く', with: '共演', lasso: 'アーティストを囲んでシャッフル', lassoHint: 'シャッフルしたいアーティストを囲む', lassoChosen: '囲んだアーティスト', putBackAll: '手動で動かしたアーティストを元に戻す', movedByHand: '手動で移動', putBack: '元に戻す' },
     groupSortShort: { name: 'A–Z', tracks: '曲数', played: '再生数', added: '新着' },
     groupSortedBy: {
@@ -323,9 +324,6 @@ export const library: Strings['library'] = {
     note: 'これらのファイルは、同じ録音が何度か保存されたもののようです。名前、またはアーティストとタイトルが同じで、長さの差が2秒以内です。それぞれ1つのコピーを残します。ほかのコピーを削除する前に、その再生記録、タグ、歌詞、リスト内の位置を残すコピーに移します。',
     empty: 'ライブラリに複数ある曲はありません。',
     cleanAll: (count) => `すべて整理（${format.number(count)}曲）`,
-    confirmAll: (files, songs) =>
-      `${format.number(files)}個のファイルを削除しますか？${format.number(songs)}曲それぞれ1つのコピーを残し、削除する各ファイルの再生記録、タグ、歌詞、リスト内の位置は先にそのコピーへ移します。削除する前にAndroidがもう一度確認します。`,
-    confirm: (files) => `${format.number(files)}個のファイルを削除`,
     deleteOthers: (count) => (count === 1 ? 'もう1つのコピーを削除' : `ほかの${format.number(count)}個のコピーを削除`),
     different: '別の曲です',
     choose: '残すコピー',

@@ -1,31 +1,16 @@
-import type { ReactNode } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Fragment, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Dialog } from './Dialog';
+import { OnAPage } from './OnAPage';
 import { Pressable } from './Pressable';
+import { useRows } from './settings/rows';
 
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles, usePressed } from '../lib/theme/index';
+import { LEADING, SPACE, TYPE } from '../lib/theme/measures';
 import { haptic } from '../lib/ui/haptics';
 
-/**
- * Asks for one of a list, where the list is too long to lay out in a row.
- *
- * Three alternatives are chips beside the setting's name and need no dialog.
- * Fifty languages are not, and this is where they go: the same sheet a line of
- * text is asked for on, with the list in place of the field and a tick against
- * the one already chosen. Choosing is the whole of the transaction — a tap
- * picks and closes, since there is nothing else here to confirm.
- */
-export function OptionSheet<Value extends string>({
-  visible,
-  heading,
-  note,
-  options,
-  chosen,
-  onChoose,
-  onClose,
-  picture,
-}: {
+type Asked<Value extends string> = {
   visible: boolean;
   heading: string;
   /** A line under the list about the choice as a whole. */
@@ -45,22 +30,109 @@ export function OptionSheet<Value extends string>({
    * have been given, and are not drawn.
    */
   picture?: ReactNode;
-}) {
+  /**
+   * Asked on a page of its own, in the tab, rather than over everything: for
+   * Settings, whose choices were sheets laid over a page that was itself
+   * over another, with the bar of what is playing out of reach under them.
+   */
+  page?: boolean;
+};
+
+/**
+ * Asks for one of a list, where the list is too long to lay out in a row.
+ *
+ * Three alternatives are chips beside the setting's name and need no dialog.
+ * Fifty languages are not, and this is where they go: the same sheet a line of
+ * text is asked for on, with the list in place of the field and a tick against
+ * the one already chosen. Choosing is the whole of the transaction — a tap
+ * picks and closes, since there is nothing else here to confirm.
+ */
+export function OptionSheet<Value extends string>({ page = false, ...asked }: Asked<Value>) {
+  return page ? <AskedOnAPage {...asked} /> : <AskedInASheet {...asked} />;
+}
+
+/**
+ * The same choice on a page of its own (`OnAPage`): a tap chooses and closes,
+ * as in the sheet, which takes the page away; Back closes having chosen nothing.
+ */
+function AskedOnAPage<Value extends string>({ visible, heading, note, options, chosen, onChoose, onClose, picture }: Omit<Asked<Value>, 'page'>) {
+  return (
+    <OnAPage visible={visible} title={heading} onClose={onClose}>
+      <ChoiceList note={note} options={options} chosen={chosen} picture={picture} onChoose={(value) => {
+        onChoose(value);
+        onClose();
+      }} />
+    </OnAPage>
+  );
+}
+
+/** The choices as rows of Settings, the chosen one ticked: see [AskedOnAPage]. */
+function ChoiceList<Value extends string>({
+  note,
+  options,
+  chosen,
+  picture,
+  onChoose,
+}: Pick<Asked<Value>, 'note' | 'options' | 'chosen' | 'picture' | 'onChoose'>) {
+  const rows = useRows();
+  const styles = useStyles();
+  const pressed = usePressed();
+  return (
+    <>
+      {picture ?? (
+        <View style={rows.card}>
+          {options.map((option, index) => {
+            const on = option.value === chosen;
+            return (
+              <Fragment key={option.value}>
+                {index > 0 ? <View style={rows.rule} /> : null}
+                <Pressable
+                  android_ripple={pressed}
+                  // One of a set of which one is the answer, and says which.
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: on }}
+                  style={rows.row}
+                  onPress={() => {
+                    if (!on) haptic('choices', 'click');
+                    onChoose(option.value);
+                  }}>
+                  <View style={rows.line}>
+                    <Text style={[rows.title, on && styles.labelOn]}>{option.label}</Text>
+                    {on ? <Text style={styles.tick} importantForAccessibility="no">✓</Text> : null}
+                  </View>
+                  {option.detail ? <Text style={rows.muted}>{option.detail}</Text> : null}
+                </Pressable>
+              </Fragment>
+            );
+          })}
+        </View>
+      )}
+      {note ? <Text style={rows.aside}>{note}</Text> : null}
+    </>
+  );
+}
+
+function AskedInASheet<Value extends string>({
+  visible,
+  heading,
+  note,
+  options,
+  chosen,
+  onChoose,
+  onClose,
+  picture,
+}: Omit<Asked<Value>, 'page'>) {
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
-  useWindowVeil(visible);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Neither the backdrop nor the sheet is a stop for a screen reader. Both are
-          pressable only to sort touches, and as stops they read the heading as a
-          button that does nothing, or one that closes the sheet unasked. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
-        {/* Swallows taps so touching the sheet does not count as touching the
-            backdrop behind it. */}
-        <Pressable style={styles.sheet} onPress={() => {}} accessible={false}>
-          <Text accessibilityRole="header" style={styles.heading}>{heading}</Text>
+    <Dialog
+      visible={visible}
+      onClose={onClose}
+      title={heading}
+      edge
+      answers={[{ label: t.common.cancel, kind: 'quiet', onPress: onClose }]}>
           <ScrollView style={styles.list} contentContainerStyle={picture ? styles.pictured : undefined}>
             {picture ?? options.map((option) => {
               const on = option.value === chosen;
@@ -95,54 +167,25 @@ export function OptionSheet<Value extends string>({
             })}
           </ScrollView>
           {note ? <Text style={styles.note}>{note}</Text> : null}
-          <View style={styles.actions}>
-            <Pressable android_ripple={pressed} style={styles.button} accessibilityRole="button" onPress={onClose}>
-              <Text style={styles.buttonLabel}>{t.common.cancel}</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </Dialog>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 28,
-  },
-  sheet: {
-    backgroundColor: c.surface,
-    borderRadius: 14,
-    paddingVertical: 18,
-    gap: 12,
-    alignSelf: 'stretch',
-    // Short enough to leave the backdrop showing above and below, so there is
-    // always somewhere to tap that means "never mind".
-    maxHeight: '80%',
-    ...outlined(c),
-  },
-  heading: { color: c.text, fontSize: 15, fontWeight: '600', paddingHorizontal: 18 },
   list: { flexGrow: 0 },
-  pictured: { paddingHorizontal: 18 },
+  pictured: { paddingHorizontal: SPACE.l },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 11,
+    gap: SPACE.m,
+    paddingHorizontal: SPACE.l,
+    paddingVertical: SPACE.m,
   },
-  label: { color: c.text, fontSize: 15, flexShrink: 1 },
+  label: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
   labelOn: { color: c.accent },
-  told: { flexShrink: 1, gap: 2 },
-  detail: { color: c.textMuted, fontSize: 12.5, lineHeight: 17 },
+  told: { flexShrink: 1, gap: SPACE.xxs },
+  detail: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
   tick: { color: c.accent, fontSize: 15, fontWeight: '700' },
-  note: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 18 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 18 },
-  button: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 8 },
-  buttonLabel: { color: c.textSecondary, fontSize: 14 },
+  note: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint, paddingHorizontal: SPACE.l },
 }));

@@ -1,16 +1,20 @@
 import { memo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { Artwork } from '../Artwork';
+import { Button } from '../Button';
 import { PauseIcon, PlayIcon } from '../Icons';
-import { Image } from '../Picture';
+import { MediaRow } from '../MediaRow';
 import { Pressable } from '../Pressable';
+import { Chevron } from '../settings/rows';
 import { useT } from '../../lib/i18n/index';
 import type { EnrichedTrack } from '../../lib/media/merge';
 import { useTrackArtwork } from '../../lib/media/artwork';
 import { usePlayingId } from '../../lib/player/current';
 import { nextToPlay } from '../../lib/tapes/order';
 import { progressOf, type TapePlace } from '../../lib/tapes/places';
-import { makeStyles, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, useColours, usePressed } from '../../lib/theme/index';
+import { ICON_SMALL, RADIUS, ROW_COVER_COMPACT, TOUCH } from '../../lib/theme/measures';
 import { durationLabel } from '../../lib/youtube/types';
 
 /**
@@ -82,131 +86,71 @@ export const SeriesRow = memo(function SeriesRow({
   const on = next != null && next.id === playingId;
   const verb = on ? t.common.pause : progress != null ? said.continue : said.start;
   const artwork = useTrackArtwork(next);
+  const ticked = selected === 'all' ? true : selected === 'some' ? 'mixed' : false;
+  // Two rows of the one kind (`MediaRow`): the show, and under it, closer set, the episode it carries on with.
   return (
-    <Pressable
-      android_ripple={pressed}
-      accessibilityRole={selectable ? 'checkbox' : 'button'}
-      accessibilityState={selectable ? { checked: selected === 'all' ? true : selected === 'some' ? 'mixed' : false } : undefined}
-      style={[styles.row, selectable && selected !== 'none' && styles.rowSelected]}
-      onPress={() => (selectable ? onSelect?.(show) : onPress(show))}>
-      <View style={styles.top}>
-        {selectable ? (
-          <View style={[styles.checkbox, selected !== 'none' && styles.checkboxOn]}>
-            {selected !== 'none' ? (
-              <Text style={styles.checkMark} importantForAccessibility="no">{selected === 'all' ? '✓' : '–'}</Text>
-            ) : null}
-          </View>
-        ) : null}
-        {picture ? <Image source={{ uri: picture }} style={styles.art} contentFit="cover" /> : <View style={[styles.art, styles.artEmpty]} />}
-        <View style={styles.text}>
-          <Text style={styles.title} numberOfLines={1}>{show.title}</Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {book ? t.library.tapes.bookLine(episodes.length, fresh) : episodes.length > 0 ? t.library.tapes.seriesLine(episodes.length, fresh) : t.library.tapes.seriesNone}
-          </Text>
-        </View>
-        {episodes.length > 0 ? (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityLabel={expanded ? t.library.tapes.hideEpisodes : t.library.tapes.showEpisodes}
-            accessibilityState={{ expanded }}
-            hitSlop={8}
-            style={styles.expand}
-            onPress={() => onExpand(show)}>
-            <Text style={[styles.chevron, { transform: [{ rotate: expanded ? '-90deg' : '90deg' }] }]}>›</Text>
-          </Pressable>
-        ) : null}
-      </View>
+    <View>
+      <MediaRow
+        lead={<Artwork uri={picture} />}
+        title={show.title}
+        subtitle={
+          book
+            ? t.library.tapes.bookLine(episodes.length, fresh)
+            : episodes.length > 0
+              ? t.library.tapes.seriesLine(episodes.length, fresh)
+              : t.library.tapes.seriesNone
+        }
+        check={selectable ? ticked : undefined}
+        selected={selectable && selected !== 'none'}
+        onPress={() => (selectable ? onSelect?.(show) : onPress(show))}
+        trailing={
+          episodes.length > 0 ? (
+            // Its episodes laid out under it, one row each, and folded away again.
+            <Pressable
+              android_ripple={pressed}
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? t.library.tapes.hideEpisodes : t.library.tapes.showEpisodes}
+              accessibilityState={{ expanded }}
+              style={styles.expand}
+              onPress={() => onExpand(show)}>
+              <Chevron turned={expanded ? 'up' : 'down'} />
+            </Pressable>
+          ) : null
+        }
+      />
       {next ? (
-        <View style={[styles.episode, selectable && styles.episodeShifted]}>
-          {/* Under the show's picture, the episode's own, smaller. */}
-          <View style={styles.episodeArtBox}>
-            {artwork ? (
-              <Image source={{ uri: artwork }} style={styles.episodeArt} contentFit="cover" transition={120} />
-            ) : (
-              <View style={[styles.episodeArt, styles.artEmpty]} />
-            )}
-          </View>
-          <View style={styles.episodeText}>
-            <Text style={styles.episodeTitle} numberOfLines={1}>{next.title}</Text>
-            {progress != null && place ? (
-              <View style={styles.progressLine}>
-                <View style={styles.track}>
-                  <View style={[styles.done, { width: `${Math.round(progress * 100)}%` }]} />
-                </View>
-                <Text style={styles.left} numberOfLines={1}>
-                  {t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.left} numberOfLines={1}>{durationLabel(next.durationSec)}</Text>
-            )}
-          </View>
-          {selectable ? null : (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityLabel={`${verb}, ${next.title}`}
-            hitSlop={6}
-            style={styles.play}
-            onPress={() => onPlay(next)}>
-            {on ? <PauseIcon size={14} color={c.text} /> : <PlayIcon size={14} color={c.text} />}
-            <Text style={styles.playLabel}>{verb}</Text>
-          </Pressable>
-          )}
-        </View>
+        <MediaRow
+          size="compact"
+          lead={<Artwork uri={artwork} size={ROW_COVER_COMPACT} progress={progress} />}
+          title={next.title}
+          meta={
+            progress != null && place
+              ? t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))
+              : durationLabel(next.durationSec)
+          }
+          playing={on}
+          onPress={() => (selectable ? onSelect?.(show) : onPlay(next))}
+          trailing={
+            selectable ? null : (
+              <Button
+                label={verb}
+                kind="secondary"
+                size="small"
+                shape="pill"
+                accessibilityLabel={`${verb}, ${next.title}`}
+                icon={on ? <PauseIcon size={ICON_SMALL} color={c.text} /> : <PlayIcon size={ICON_SMALL} color={c.text} />}
+                onPress={() => onPlay(next)}
+              />
+            )
+          }
+        />
       ) : null}
-    </Pressable>
+    </View>
   );
 });
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  row: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-  top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  art: { width: 46, height: 46, borderRadius: 6 },
-  artEmpty: { backgroundColor: c.surface },
-  text: { flex: 1, minWidth: 0, gap: 3 },
-  title: { color: c.text, fontSize: 15.5 },
-  subtitle: { color: c.textMuted, fontSize: 12.5 },
-  chevron: { color: c.textMuted, fontSize: 24, lineHeight: 26 },
-  expand: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  rowSelected: { backgroundColor: c.accentSoft },
-  // As a track's row has it: see TrackRow.
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: c.textDisabled,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
-  checkMark: { color: c.onAccent, fontSize: 13, fontWeight: '700', lineHeight: 15 },
-  // Its words under the show's name, its picture under the show's.
-  episode: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  // Past the tick box, so the pictures stay one above the other.
-  episodeShifted: { marginLeft: 32 },
-  episodeArtBox: { width: 46, alignItems: 'center' },
-  episodeArt: { width: 36, height: 36, borderRadius: 5 },
-  episodeText: { flex: 1, minWidth: 0, gap: 5 },
-  episodeTitle: { color: c.textSecondary, fontSize: 13.5 },
-  progressLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  track: { flex: 1, maxWidth: 90, height: 3, borderRadius: 2, backgroundColor: c.border, overflow: 'hidden' },
-  done: { height: 3, backgroundColor: c.accent },
-  left: { color: c.textFaint, fontSize: 12 },
-  play: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    overflow: 'hidden',
-    // A raised surface rather than the theme's own colour, which in a dark theme is all but white: one of these on every row was a column of glare.
-    backgroundColor: c.surfaceRaised,
-    ...outlinedClip(c),
-  },
-  playLabel: { color: c.text, fontSize: 13, fontWeight: '600' },
-}));
+const useStyles = makeStyles(() =>
+  StyleSheet.create({
+    expand: { width: TOUCH.small, height: TOUCH.small, borderRadius: RADIUS.pill, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  })
+);

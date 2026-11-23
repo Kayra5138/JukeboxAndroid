@@ -1,13 +1,17 @@
 import { useCallback, useState } from 'react';
+import { SPACE, TYPE } from '../lib/theme/measures';
+import { Note } from './Note';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Busy } from './Busy';
+import { Text } from './settings/Find';
 
 import JukeboxAudio from '../../modules/jukebox-audio/index';
 
 import { NumberStepper } from './NumberStepper';
 import { Pressable } from './Pressable';
 import { Segmented } from './Segmented';
-import { useRows } from './settings/rows';
+import { useRows, Chevron } from './settings/rows';
 import { Switch } from './Switch';
 import {
   autoBackup,
@@ -21,7 +25,7 @@ import {
 import { scheduleBackups } from '../lib/backup/background';
 import { KEEP_RANGE, type Every } from '../lib/backup/due';
 import { useT } from '../lib/i18n/index';
-import { makeStyles, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, useColours, usePressed } from '../lib/theme/index';
 import { haptic } from '../lib/ui/haptics';
 
 /**
@@ -122,13 +126,10 @@ export function AutoBackupSettings() {
               value={settings.on}
               accessibilityLabel={said.title}
               onValueChange={turn}
-              {...switchColours(c, settings.on)}
             />
           </View>
           {status ? (
-            <Text accessibilityRole={status.bad ? 'alert' : undefined} style={status.bad ? layout.bad : rows.muted}>
-              {status.text}
-            </Text>
+            <Note tone={status.bad ? 'bad' : 'muted'}>{status.text}</Note>
           ) : (
             <Text style={rows.muted}>{said.off}</Text>
           )}
@@ -146,13 +147,13 @@ export function AutoBackupSettings() {
                 <Text style={rows.title}>{lost ? said.chooseAgain : said.folder}</Text>
                 <View style={rows.choices}>
                   {lost ? null : folderName === undefined ? (
-                    <ActivityIndicator size="small" color={c.textMuted} />
+                    <Busy size="small" color={c.textMuted} />
                   ) : (
                     <Text style={rows.value} numberOfLines={1}>
                       {folderName || said.folderUnnamed}
                     </Text>
                   )}
-                  <Text style={rows.chevron} importantForAccessibility="no">›</Text>
+                  <Chevron />
                 </View>
               </View>
             </Pressable>
@@ -201,13 +202,13 @@ export function AutoBackupSettings() {
               onPress={() => void backUp(false)}>
               <View style={rows.line}>
                 <Text style={lost ? layout.off : rows.title}>{said.now}</Text>
-                {working ? <ActivityIndicator color={c.textMuted} /> : null}
+                {working ? <Busy color={c.textMuted} /> : null}
               </View>
             </Pressable>
           </>
         ) : null}
       </View>
-      {made ? <Text style={rows.note}>{said.made}</Text> : null}
+      {made ? <Note tone="good" style={rows.noteRoom}>{said.made}</Note> : null}
     </View>
   );
 }
@@ -234,10 +235,9 @@ async function pickFolder(previous: string | null): Promise<{ uri: string; name:
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
     // Under the rows that export and import, with the room the cards on this page keep from each other.
-    card: { marginTop: 16 },
+    card: { marginTop: SPACE.xl },
     // A row that cannot be pressed for now: Back up now, with no folder to back up into.
-    off: { color: c.textDisabled, fontSize: 15.5, flexShrink: 1 },
+    off: { color: c.textDisabled, fontSize: TYPE.body, flexShrink: 1 },
     // What went wrong, in the row it is about rather than under the card.
-    bad: { color: c.danger, fontSize: 12.5, lineHeight: 18 },
   })
 );

@@ -241,6 +241,16 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
   thumbsMadeAsync?(): Promise<{ dir: string; names: string[] }>;
   /** The small copy of the cover at [source] (a file of the app's) under [name], made if need be; null where it cannot be. */
   thumbAsync?(source: string, name: string): Promise<string | null>;
+  /** Where the paper sleeves standing in for missing covers are, and the names of those made: see StandIn.kt. */
+  standInsMadeAsync?(): Promise<{ dir: string; names: string[] }>;
+  /** The paper sleeve for a record (or a song with none) that has no cover, made if need be; null where it cannot be. */
+  standInAsync?(
+    album: string | null,
+    albumArtist: string | null,
+    title: string | null,
+    artist: string | null,
+    genre: string | null
+  ): Promise<string | null>;
   /**
    * Which of these tracks carry a picture inside the file: true, false, or
    * null where finding out would mean opening the file and [open] is false.
@@ -370,6 +380,8 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * the way back to it. Empty until the session connects.
    */
   getQueueAsync(): Promise<QueueEntry[]>;
+  /** The songs of the queue as it was last kept, played or not; absent on a build from before. */
+  getSavedQueueIdsAsync?(): Promise<string[]>;
   /**
    * Asks for a picture and keeps a copy of it, answering with where the copy
    * landed — or null if the user backed out.
@@ -460,6 +472,12 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    */
   copyText?(text: string): void;
   /**
+   * Holds the screen upright ([upright]), or lets it turn with the phone
+   * again: for the game, which is only laid out for a tall screen. Missing
+   * from a build from before there was one.
+   */
+  holdUpright?(upright: boolean): void;
+  /**
    * The equalizer and the tone controls, as they are set, in one read.
    *
    * Answers even with nothing playing: the bands are the app's own and are
@@ -478,6 +496,8 @@ declare class JukeboxAudioModule extends NativeModule<JukeboxAudioEvents & Sleep
    * Answers with the state that resulted.
    */
   setEqualizerAsync?(settings: EqualizerSettings): Promise<EqualizerState>;
+  /** The same put in force and not stored, for each step of a drag; the last is stored with the one above. Missing from an older build. */
+  previewEqualizerAsync?(settings: EqualizerSettings): Promise<void>;
   /**
    * Lets the user choose a text file and answers what is in it and what it
    * is called, or null if they backed out. For importing a headphone
@@ -617,6 +637,11 @@ export type AudioEffects = {
   voice: 'off' | 'robot' | 'vintage' | 'swirl' | 'chipmunk' | 'squeak';
   /** How much of that treatment is heard against the record it was made from. */
   voiceMix: number;
+  /**
+   * How much of a large room the music is heard in, nought to one. Absent from
+   * a build from before the room was built, and read as none.
+   */
+  reverb?: number;
 };
 
 export default requireNativeModule<JukeboxAudioModule>('JukeboxAudio');

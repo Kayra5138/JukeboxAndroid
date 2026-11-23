@@ -5,6 +5,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Bir sonraki dinleyişin için',
     refresh: 'Yenile',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Yenilemek için kaydır',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Bırak, yenilensin',
     updated: (date) => `Güncellendi: ${date}`,
 
     familiar: (because) => `Sanatçılarından başka şarkılar · ${because}`,
@@ -44,7 +48,6 @@ export const discover: Strings['discover'] = {
     failed: 'İndirilemedi · yeniden denemek için dokun',
     needsBuild: 'Güncel sürüm gerekiyor',
     waitingWifi: 'Wi-Fi bekleniyor · indirmek için dokun',
-    percent: (percent) => `%${format.number(percent)}`,
     gettingReady: 'İndiriliyor',
     hint: 'Şarkıyı çalar; gerekirse önce indirir',
     nowPlaying: (title) => `Çalıyor: ${title}`,
@@ -152,7 +155,8 @@ export const discover: Strings['discover'] = {
     buildingArtists: (done, total) =>
       `Şarkılar aranıyor · ${format.number(done)}/${format.number(total)} sanatçı`,
     preparing: (ready, target) =>
-      `Yeni liste yolda · ${format.number(target)} şarkıdan ${format.number(ready)} tanesi hazır.${ready > 0 ? ' Şimdi görmek için yeniden Yenile’ye dokun.' : ''}`,
+      `Yeni liste yolda · ${format.number(target)} şarkıdan ${format.number(ready)} tanesi hazır.`,
+    showNow: 'Şimdi göster',
     offline: 'Bağlantı yok. Listen korundu; bağlantı gelince yeni şarkılar aranacak.',
     offlineEmpty: 'Bağlantı yok. Bağlantı gelince Keşfet listeni hazırlayacak.',
     noLibrary: 'Keşfet bu telefondaki müzikten yola çıkar, ama henüz hiç müzik bulamadı.',

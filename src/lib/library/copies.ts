@@ -120,6 +120,15 @@ const VERSION = new Set([
   'stripped', 'orchestral', 'piano', 'remake', 'session', 'sessions',
 ]);
 
+/**
+ * Notes, folded, that name the one recording rather than another: the
+ * record's, the single's, the original, the same remastered. `version` and
+ * `mix` alone are another recording; in these they are not, and a catalogue's
+ * `(Album Version)` was taken for one nobody asked for, and never matched.
+ */
+const SAME_RECORDING =
+  /^(?:(?:\d{4} )?(?:digital(?:ly)? )?(?:remaster(?:ed)?|album|single|lp|mono|stereo|original)(?: \d{4})?(?: (?:version|mix|remaster(?:ed)?))?|original mix)$/;
+
 /** Brackets a title can carry a note in, ordinary and full-width. */
 const BRACKETED = /(?:\(([^)]*)\)|\[([^\]]*)\]|【([^】]*)】|（([^）]*)）)/g;
 
@@ -149,6 +158,8 @@ export function versionWordsOf(title: string): string[] {
   const found = new Set<string>();
   for (const match of withoutPackaging(title).matchAll(BRACKETED)) {
     const inside = foldForMatch(match.slice(1).find((part) => part !== undefined) ?? '');
+    // The recording everybody knows, said of itself: `(Album Version)`, `(Original Mix)`, `(2011 Remastered Version)`.
+    if (SAME_RECORDING.test(inside)) continue;
     for (const word of inside.split(' ')) if (VERSION.has(word)) found.add(word);
   }
   return [...found];

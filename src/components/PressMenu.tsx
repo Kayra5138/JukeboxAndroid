@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { RADIUS, SPACE, TYPE } from '../lib/theme/measures';
 import { Animated, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,7 +8,7 @@ import { Image } from './Picture';
 import { laid, makeStyles, useColours } from '../lib/theme/index';
 import { scrimOf } from '../lib/theme/Veil';
 import { haptic } from '../lib/ui/haptics';
-import { motionReduced } from '../lib/ui/motion';
+import { motionReduced, unlessStill } from '../lib/ui/motion';
 import {
   placeAt,
   PRESS_MS,
@@ -64,14 +65,17 @@ export function PressRing<Item>({
   clearOfRight?: number;
   children: ReactNode;
 }) {
+  // Kept for the gesture, which is made once; after the drawing, so that the drawing reads no ref.
   const latest = useRef({ ring, item });
-  latest.current = { ring, item };
   const window = useWindowDimensions();
   const size = useRef(window);
-  size.current = window;
   const insets = useSafeAreaInsets();
   const top = useRef(insets.top);
-  top.current = insets.top;
+  useEffect(() => {
+    latest.current = { ring, item };
+    size.current = window;
+    top.current = insets.top;
+  });
   const open = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const on = enabled && ring != null;
 
@@ -131,9 +135,9 @@ export function PressRing<Item>({
 function Slice({ place, choice, chosen }: { place: number; choice: PressChoice<PressIcon> | undefined; chosen: boolean }) {
   const c = useColours();
   const styles = useStyles();
-  const size = useRef(new Animated.Value(1)).current;
+  const [size] = useState(() => new Animated.Value(1));
   useEffect(() => {
-    Animated.spring(size, { toValue: chosen ? 1.05 : 1, speed: 50, bounciness: 10, useNativeDriver: true }).start();
+    unlessStill(Animated.spring(size, { toValue: chosen ? 1.05 : 1, speed: 50, bounciness: 10, useNativeDriver: true }), size, chosen ? 1.05 : 1);
   }, [chosen, size]);
   const angle = (sliceAngle(place) * Math.PI) / 180;
   return (
@@ -165,7 +169,7 @@ export function PressMenuHost() {
   const menu = useSyncExternalStore(pressMenu.subscribe, pressMenu.get) as PressMenu<PressIcon> | null;
   const c = useColours();
   const styles = useStyles();
-  const opened = useRef(new Animated.Value(0)).current;
+  const [opened] = useState(() => new Animated.Value(0));
   const up = menu != null;
   useEffect(() => {
     if (!up) {
@@ -205,12 +209,12 @@ const useStyles = makeStyles((c) =>
     wordsAt: { position: 'absolute', left: 0, right: 0, top: -40, alignItems: 'center' },
     words: {
       maxWidth: RING_RADIUS * 2,
-      paddingHorizontal: 12,
-      paddingVertical: 5,
-      borderRadius: 14,
+      paddingHorizontal: SPACE.m,
+      paddingVertical: SPACE.xs,
+      borderRadius: RADIUS.card,
       overflow: 'hidden',
       color: c.text,
-      fontSize: 14,
+      fontSize: TYPE.small,
       fontWeight: '600',
     },
   })

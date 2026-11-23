@@ -346,9 +346,19 @@ export function setPlaylistTracks(id: number, trackIds: string[], at: number): v
   listsChanged();
 }
 
-export function removeFromPlaylist(id: number, trackId: string, at: number): void {
+/** Where a track was in a list and since when, to be put back by {@link putBackInPlaylist}. */
+export type ListPlace = { position: number; addedAt: number };
+
+export function removeFromPlaylist(id: number, trackId: string, at: number): ListPlace | null {
   const database = db();
+  let place: ListPlace | null = null;
   database.withTransactionSync(() => {
+    const row = database.getFirstSync<{ position: number; added_at: number }>(
+      `SELECT position, added_at FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?`,
+      id,
+      trackId
+    );
+    if (row) place = { position: row.position, addedAt: row.added_at };
     database.runSync(
       `DELETE FROM playlist_tracks WHERE playlist_id = ? AND track_id = ?`,
       id,
@@ -361,6 +371,40 @@ export function removeFromPlaylist(id: number, trackId: string, at: number): voi
     database.runSync(`UPDATE playlists SET updated_at = ? WHERE id = ?`, Math.round(at), id);
   });
   listsChanged();
+  return place;
+}
+
+/**
+ * Takes back a {@link removeFromPlaylist}: the one track, where it was and
+ * with the date it was first put in.
+ *
+ * Only that track. Whatever else has happened to the list since -- songs
+ * added, others taken off, the order changed -- stays as it is. Nothing at
+ * all if the list has gone in the meantime, or holds the track again.
+ */
+export function putBackInPlaylist(id: number, trackId: string, place: ListPlace, at: number): void {
+  const database = db();
+  let done = false;
+  database.withTransactionSync(() => {
+    if (!database.getFirstSync(`SELECT 1 FROM playlists WHERE id = ?`, id)) return;
+    if (inPlaylist(id, trackId)) return;
+    database.runSync(
+      `UPDATE playlist_tracks SET position = position + 1 WHERE playlist_id = ? AND position >= ?`,
+      id,
+      place.position
+    );
+    database.runSync(
+      `INSERT INTO playlist_tracks (playlist_id, track_id, position, added_at) VALUES (?, ?, ?, ?)`,
+      id,
+      trackId,
+      place.position,
+      place.addedAt
+    );
+    renumber(id);
+    database.runSync(`UPDATE playlists SET updated_at = ? WHERE id = ?`, Math.round(at), id);
+    done = true;
+  });
+  if (done) listsChanged();
 }
 
 /**
@@ -424,24 +468,19 @@ export function playlistMembers(): Map<number, string[]> {
  */
 export function dropFromEveryList(trackIds: string[]): void {
   if (trackIds.length === 0) return;
-  const placeholders = trackIds.map(() => '?').join(',');
+  // The ids as one value rather than one each, which past some thirty thousand SQLite would not take.
+  const ids = JSON.stringify(trackIds.map(String));
   const database = db();
 
   const touched = database.getAllSync<{ playlist_id: number }>(
-    `SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id IN (${placeholders})`,
-    ...trackIds
+    `SELECT DISTINCT playlist_id FROM playlist_tracks WHERE track_id IN (SELECT value FROM json_each(?))`,
+    ids
   );
-  database.runSync(
-    `DELETE FROM playlist_tracks WHERE track_id IN (${placeholders})`,
-    ...trackIds
-  );
+  database.runSync(`DELETE FROM playlist_tracks WHERE track_id IN (SELECT value FROM json_each(?))`, ids);
   for (const row of touched) renumber(row.playlist_id);
 
   // A list cannot go on wearing the cover of a track that no longer exists.
-  database.runSync(
-    `UPDATE playlists SET cover_track_id = NULL WHERE cover_track_id IN (${placeholders})`,
-    ...trackIds
-  );
+  database.runSync(`UPDATE playlists SET cover_track_id = NULL WHERE cover_track_id IN (SELECT value FROM json_each(?))`, ids);
   listsChanged();
 }
 
@@ -450,14 +489,19 @@ function renumber(id: number): void {
   write(id, playlistTrackIds(id));
 }
 
+/**
+ * Gives each of [ids] its place in that order, in one statement: one each
+ * was a round trip a song, and the heart renumbers Favorites every time.
+ */
 function write(id: number, ids: string[]): void {
-  const database = db();
-  ids.forEach((trackId, position) => {
-    database.runSync(
-      `UPDATE playlist_tracks SET position = ? WHERE playlist_id = ? AND track_id = ?`,
-      position,
-      id,
-      trackId
-    );
-  });
+  if (ids.length === 0) return;
+  const order = JSON.stringify(ids);
+  db().runSync(
+    `UPDATE playlist_tracks
+     SET position = (SELECT CAST(key AS INTEGER) FROM json_each(?) WHERE value = playlist_tracks.track_id)
+     WHERE playlist_id = ? AND track_id IN (SELECT value FROM json_each(?))`,
+    order,
+    id,
+    order
+  );
 }

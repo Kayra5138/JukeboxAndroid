@@ -25,8 +25,6 @@ import androidx.core.content.ContextCompat
 import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.PlaybackService
 import expo.modules.jukeboxaudio.R
-import expo.modules.jukeboxaudio.TapeStore
-import expo.modules.jukeboxaudio.auto.TapeShelves
 import java.io.File
 
 /**
@@ -60,7 +58,8 @@ open class JukeboxWidget : AppWidgetProvider() {
     private const val ACTION_REPEAT = "expo.modules.jukeboxaudio.widget.REPEAT"
     private const val ACTION_JUMP = "expo.modules.jukeboxaudio.widget.JUMP"
     internal const val ACTION_SHELF = "expo.modules.jukeboxaudio.widget.SHELF"
-    private const val ACTION_TAPE = "expo.modules.jukeboxaudio.widget.TAPE"
+    /** The presses that change the queue or what plays, and so have to be the widget's own: play, pause and skipping are any media key's. */
+    private val OWN_ACTIONS = setOf(ACTION_SHUFFLE, ACTION_REPEAT, ACTION_JUMP, ACTION_SHELF)
 
     /**
      * Put on the intent that opens the app from the cover, asking it to open
@@ -106,8 +105,60 @@ open class JukeboxWidget : AppWidgetProvider() {
       JukeboxWidget::class.java, JukeboxCardWidget::class.java, JukeboxLargeWidget::class.java
     )
 
-    private fun ids(context: Context, manager: AppWidgetManager): List<Int> = PLAYERS.flatMap { provider ->
-      runCatching { manager.getAppWidgetIds(ComponentName(context, provider)).toList() }.getOrDefault(emptyList())
+    /**
+     * The placed widgets, asked of the system once and again only once one
+     * has been placed or taken away, each of which the providers below hear
+     * of. It was asked three times for every redraw, and six times a second
+     * while playing for the progress bar, a widget or none.
+     */
+    @Volatile private var placed: List<Int>? = null
+
+    /** Counted on, so that an asking begun before a widget came or went does not keep what it found. */
+    @Volatile private var placings = 0
+
+    /**
+     * Told on the main thread when a widget is placed or taken away, for the
+     * service to start or stop the clock that moves the progress bar.
+     */
+    @Volatile var placementChanged: (() -> Unit)? = null
+
+    /**
+     * How the widgets are drawn again while the player is running: beside it,
+     * in line with its own drawings (`PlaybackService.redrawWidgets`). Drawn
+     * here and now instead, a drawing of the player's still under way could
+     * finish after this one and put back what it was drawn from. Null with
+     * no player, when there is nothing to come after.
+     */
+    @Volatile var redraw: (() -> Unit)? = null
+
+    /** The widgets drawn again, in line with the player's own drawings where it is running: see [redraw]. */
+    fun redrawSoon(context: Context) {
+      val inLine = redraw
+      if (inLine != null) inLine() else refresh(context)
+    }
+
+    // Both under one lock: asked beside the player and told on the main thread, an asking could otherwise keep
+    // what it found just after a widget came or went.
+    @Synchronized
+    private fun ids(context: Context, manager: AppWidgetManager): List<Int> {
+      placed?.let { return it }
+      val asked = placings
+      var answered = true
+      val found = PLAYERS.flatMap { provider ->
+        runCatching { manager.getAppWidgetIds(ComponentName(context, provider)).toList() }
+          .getOrElse { answered = false; emptyList() }
+      }
+      // Not kept where the system did not answer, which is no reason to believe there are none.
+      if (answered && asked == placings) placed = found
+      return found
+    }
+
+    private fun forgetPlaced() {
+      synchronized(this) {
+        placings += 1
+        placed = null
+      }
+      placementChanged?.invoke()
     }
 
     /**
@@ -311,50 +362,9 @@ open class JukeboxWidget : AppWidgetProvider() {
         ?.let { views.setOnClickPendingIntent(R.id.jukebox_widget_art, it) }
       if (!idle) views.setContentDescription(R.id.jukebox_widget_art, words.getString(R.string.jukebox_widget_open))
 
-      /*
-        With nothing playing, the tape last listened to, carried on with at a
-        press from where it was left. The card and the large widget have a
-        line of their own for it. The row has no room for one, and offers it
-        only where it has nothing else to show: in place of "Nothing
-        playing", on the play button, which would otherwise have nothing to
-        play.
-      */
-      val tape = continuable(context, state)
-      val carryOn = tape?.let { words.getString(R.string.jukebox_widget_continue, it.second) }
-      if (large) {
-        views.setViewVisibility(R.id.jukebox_widget_continue, if (tape == null) View.GONE else View.VISIBLE)
-        if (tape != null) {
-          views.setTextViewText(R.id.jukebox_widget_continue, carryOn)
-          views.setContentDescription(R.id.jukebox_widget_continue, carryOn)
-          views.setOnClickPendingIntent(R.id.jukebox_widget_continue, continueTape(context, tape.first))
-        }
-      } else if (idle && tape != null) {
-        views.setTextViewText(R.id.jukebox_widget_title, carryOn)
-        views.setContentDescription(R.id.jukebox_widget_toggle, carryOn)
-        views.setOnClickPendingIntent(R.id.jukebox_widget_toggle, continueTape(context, tape.first))
-      }
-
       if (large) drawModes(context, views, state, words)
-      // A row of the queue fewer under the line for a tape, which takes about the height of one.
-      if (shape.kind == WidgetKind.LARGE) {
-        drawQueue(context, views, state, if (tape == null) shape.rows else (shape.rows - 1).coerceAtLeast(1), words)
-      }
+      if (shape.kind == WidgetKind.LARGE) drawQueue(context, views, state, shape.rows, words)
       return views
-    }
-
-    /**
-     * The tape the widget offers to carry on with, as its id and its title:
-     * the one last listened to, while nothing plays and it is part way
-     * through. Not while it is what the widget is showing, whose own play
-     * button carries it on.
-     */
-    private fun continuable(context: Context, state: NowPlaying): Pair<String, String>? {
-      if (state.playing) return null
-      val id = state.tapeId ?: return null
-      if (id == state.trackId && !state.title.isNullOrBlank()) return null
-      val title = state.tapeTitle?.takeIf { it.isNotBlank() } ?: return null
-      val place = runCatching { TapeStore.get(context, id) }.getOrNull() ?: return null
-      return if (TapeShelves.begun(place)) id to title else null
     }
 
     /** Shuffle and repeat, which only the card and the large widget have room for. */
@@ -499,7 +509,7 @@ open class JukeboxWidget : AppWidgetProvider() {
       PendingIntent.getBroadcast(
         context,
         action.hashCode(),
-        Intent(context, JukeboxWidget::class.java).setAction(action),
+        WidgetCommands.signed(context, Intent(context, JukeboxWidget::class.java).setAction(action)),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
@@ -514,19 +524,9 @@ open class JukeboxWidget : AppWidgetProvider() {
       PendingIntent.getBroadcast(
         context,
         ACTION_JUMP.hashCode() + slot,
-        Intent(context, JukeboxWidget::class.java).setAction(ACTION_JUMP)
+        WidgetCommands.signed(context, Intent(context, JukeboxWidget::class.java).setAction(ACTION_JUMP)
           .putExtra(WidgetCommands.EXTRA_INDEX, song.index)
-          .putExtra(WidgetCommands.EXTRA_ID, song.id),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-      )
-
-    /** A press of the offer to carry on with the tape [id]. */
-    private fun continueTape(context: Context, id: String): PendingIntent =
-      PendingIntent.getBroadcast(
-        context,
-        ACTION_TAPE.hashCode(),
-        Intent(context, JukeboxWidget::class.java).setAction(ACTION_TAPE)
-          .putExtra(WidgetCommands.EXTRA_ID, id),
+          .putExtra(WidgetCommands.EXTRA_ID, song.id)),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
@@ -535,8 +535,8 @@ open class JukeboxWidget : AppWidgetProvider() {
       PendingIntent.getBroadcast(
         context,
         (ACTION_SHELF + shelf).hashCode(),
-        Intent(context, JukeboxWidget::class.java).setAction(ACTION_SHELF)
-          .putExtra(WidgetCommands.EXTRA_SHELF, shelf),
+        WidgetCommands.signed(context, Intent(context, JukeboxWidget::class.java).setAction(ACTION_SHELF)
+          .putExtra(WidgetCommands.EXTRA_SHELF, shelf)),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
 
@@ -574,6 +574,8 @@ open class JukeboxWidget : AppWidgetProvider() {
     manager: AppWidgetManager,
     appWidgetIds: IntArray
   ) {
+    // Which is what a widget just placed is sent first.
+    forgetPlaced()
     val state = NowPlaying.read(context)
     for (id in appWidgetIds) update(context, manager, state, id)
   }
@@ -582,8 +584,21 @@ open class JukeboxWidget : AppWidgetProvider() {
     update(context, manager, NowPlaying.read(context), id)
   }
 
+  override fun onDeleted(context: Context, appWidgetIds: IntArray) = forgetPlaced()
+
+  override fun onEnabled(context: Context) = forgetPlaced()
+
+  override fun onDisabled(context: Context) = forgetPlaced()
+
+  override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) = forgetPlaced()
+
   override fun onReceive(context: Context, intent: Intent) {
     val state = NowPlaying.read(context)
+    // A press of a widget's own carries the word (see [WidgetCommands.isOurs]); the system's own broadcasts are left to the base class.
+    if (intent.action in OWN_ACTIONS && !WidgetCommands.isOurs(context, intent)) {
+      Log.w(TAG, "a widget command from somewhere else, ignored")
+      return
+    }
 
     when (intent.action) {
       ACTION_SHUFFLE -> return command(context, Intent(WidgetCommands.SHUFFLE_QUEUE))
@@ -609,10 +624,6 @@ open class JukeboxWidget : AppWidgetProvider() {
         context,
         Intent(WidgetCommands.SHELF)
           .putExtra(WidgetCommands.EXTRA_SHELF, intent.getStringExtra(WidgetCommands.EXTRA_SHELF))
-      )
-      ACTION_TAPE -> return command(
-        context,
-        Intent(WidgetCommands.TAPE).putExtra(WidgetCommands.EXTRA_ID, intent.getStringExtra(WidgetCommands.EXTRA_ID))
       )
     }
 
@@ -675,6 +686,7 @@ open class JukeboxWidget : AppWidgetProvider() {
    * same way (see [WidgetCommands]).
    */
   private fun command(context: Context, intent: Intent) {
+    WidgetCommands.signed(context, intent)
     intent.setComponent(ComponentName(context, PlaybackService::class.java))
     // Still guarded — the allowance is the system's to give, and losing it
     // should not take the launcher down with it — but no longer silent.

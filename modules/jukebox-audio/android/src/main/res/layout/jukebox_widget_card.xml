@@ -71,24 +71,6 @@
           android:maxLines="1"
           android:textColor="#D2D6DE"
           android:textSize="13sp" />
-
-        <!-- With nothing playing, the tape last listened to, carried on with
-             at a press; shown and named from code. -->
-        <TextView
-          android:id="@+id/jukebox_widget_continue"
-          android:layout_width="wrap_content"
-          android:layout_height="wrap_content"
-          android:layout_marginTop="8dp"
-          android:background="@drawable/jukebox_widget_continue"
-          android:ellipsize="end"
-          android:maxLines="1"
-          android:paddingStart="12dp"
-          android:paddingTop="5dp"
-          android:paddingEnd="12dp"
-          android:paddingBottom="5dp"
-          android:textColor="#F2F2F2"
-          android:textSize="13sp"
-          android:visibility="gone" />
       </LinearLayout>
     </LinearLayout>
 

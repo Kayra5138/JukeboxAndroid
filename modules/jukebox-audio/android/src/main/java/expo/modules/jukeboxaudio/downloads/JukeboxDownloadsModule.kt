@@ -192,6 +192,19 @@ class JukeboxDownloadsModule : Module() {
       DownloadStore.list()
     }.runOnQueue(io)
 
+    /** The count of changes worth reading the whole list again for; see [DownloadStore.revision]. */
+    AsyncFunction("getJobsRevisionAsync") {
+      DownloadStore.init(context)
+      DownloadStore.revision.toDouble()
+    }.runOnQueue(io)
+
+    /** Only the jobs waiting or under way, with that count: see [DownloadStore.listActive]. */
+    AsyncFunction("getActiveJobsAsync") {
+      DownloadStore.init(context)
+      val (revision, jobs) = DownloadStore.listActive()
+      mapOf("revision" to revision.toDouble(), "jobs" to jobs)
+    }.runOnQueue(io)
+
     AsyncFunction("enqueueAsync") { video: Map<String, Any?>, format: String, folder: String ->
       DownloadStore.init(context)
       val id = DownloadStore.enqueue(context, JSONObject(video), format, folder)

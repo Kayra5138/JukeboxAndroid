@@ -21,6 +21,12 @@ import {
 export type BackupDb = {
   all<T>(sql: string, ...params: Cell[]): T[];
   run(sql: string, ...params: Cell[]): void;
+  /**
+   * One statement made ready once and run for many rows, which for a history
+   * of tens of thousands is most of the time a restore takes. Without it,
+   * each row is [run] by itself.
+   */
+  prepare?(sql: string): { run(...params: Cell[]): void; done(): void };
   /** Everything in [work] or none of it. */
   transaction(work: () => void): void;
 };
@@ -100,26 +106,41 @@ export function restore(
   database: BackupDb,
   tables: Tables,
   settings: Record<string, string>,
-  mode: 'merge' | 'replace'
+  mode: 'merge' | 'replace',
+  /**
+   * Merging: the listens and skips already here, as [readTables] read them
+   * and as they are in [tables]. They stay where they are, under the row
+   * numbers they have, and only what the backup adds is written.
+   */
+  here?: Pick<Tables, 'plays' | 'skips'>
 ): void {
   database.transaction(() => {
     for (const name of TABLE_NAMES) {
-      database.run(`DELETE FROM ${name}`);
+      const staying = name === 'plays' || name === 'skips' ? here?.[name] : undefined;
+      const kept = staying ? new Set(staying) : null;
+      if (!kept) database.run(`DELETE FROM ${name}`);
       const names = columns(name);
       const sql = `INSERT INTO ${name} (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`;
-      for (const row of tables[name]) {
-        database.run(sql, ...names.map((column) => row[column] ?? null));
+      const statement = database.prepare?.(sql) ?? { run: (...params: Cell[]) => database.run(sql, ...params), done: () => {} };
+      try {
+        for (const row of tables[name]) {
+          if (kept?.has(row)) continue;
+          statement.run(...names.map((column) => row[column] ?? null));
+        }
+      } finally {
+        statement.done();
       }
     }
 
     /*
       Which listens ListenBrainz has had is kept by the row number of the
-      listen, and every listen has just been written again under a new one.
-      Left alone the record would say that other listens had been sent; empty,
-      it says none has, which costs a second sending of what the service will
-      recognise and drop.
+      listen. Replacing writes every listen again under a new one, and left
+      alone the record would say that other listens had been sent; empty, it
+      says none has, which costs a second sending of what the service will
+      recognise and drop. Merging leaves the listens here under their numbers,
+      and the record with them.
     */
-    database.run('DELETE FROM listenbrainz_listens');
+    if (!here) database.run('DELETE FROM listenbrainz_listens');
 
     if (mode === 'replace') {
       // Everything the backup did not carry was this phone's version of

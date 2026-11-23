@@ -1,6 +1,6 @@
 import { StatusBar } from 'expo-status-bar';
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react';
-import { useColorScheme } from 'react-native';
+import { Appearance, useColorScheme } from 'react-native';
 
 import { DEFAULT_SEEDS, seedsFrom, seedsToSetting, type CustomSeeds } from './custom.ts';
 import {
@@ -190,12 +190,59 @@ const Scoped = createContext<Theme | null>(null);
  */
 export function useTheme(): Theme {
   const scoped = useContext(Scoped);
-  const choice = useThemeChoice();
-  const system = useColorScheme();
-  const around = useSyncExternalStore(themeSurroundings.subscribe, themeSurroundings.get);
-  const pair = useSystemThemes();
-  return scoped ?? resolveTheme(choice, system, around, pair);
+  const resolved = useSyncExternalStore(themeInUse.subscribe, themeInUse.get);
+  return scoped ?? resolved;
 }
+
+/*
+  The theme in use, worked out once for everybody from what it is worked out
+  from, and watched as one. Asked of each of them by everything drawn in a
+  colour, it was four watches and a listener on the phone's light and dark
+  for every one of them -- some twenty-five for each row of a list, made and
+  let go as rows came and went in a scroll -- and everything drawn again for
+  a change of something the theme in use never looks at.
+*/
+const themeInUse = (() => {
+  let held: Theme | null = null;
+  const listeners = new Set<() => void>();
+  let stop: (() => void) | null = null;
+  const work = () => resolveTheme(currentThemeChoice.get(), Appearance.getColorScheme(), themeSurroundings.get(), systemThemes.get());
+  const again = () => {
+    const next = work();
+    if (next === held) return;
+    held = next;
+    for (const listener of [...listeners]) listener();
+  };
+  const watch = () => {
+    const off = [currentThemeChoice.subscribe(again), themeSurroundings.subscribe(again), systemThemes.subscribe(again)];
+    const scheme = Appearance.addChangeListener(again);
+    return () => {
+      for (const one of off) one();
+      scheme.remove();
+    };
+  };
+  return {
+    get: (): Theme => {
+      // Watched, it is kept up to date as it changes; unwatched, it is worked out as asked.
+      if (stop == null || held == null) held = work();
+      return held;
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      if (stop == null) {
+        stop = watch();
+        held = work();
+      }
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0 && stop != null) {
+          stop();
+          stop = null;
+        }
+      };
+    },
+  };
+})();
 
 /** One line of the picker: something to choose, and the themes it would be drawn in, to show a sample of. */
 export type ThemeOffer = {
@@ -368,8 +415,8 @@ export function makeStyles<T>(build: (c: Palette) => T): () => T {
 export const usePressed = makeStyles((c) => ({ color: c.pressed, foreground: true }));
 
 /**
- * What a `Switch` is coloured with, to be spread onto it:
- * `<Switch value={on} {...switchColours(c, on)} />`.
+ * What a switch is coloured with: the app's `Switch` takes it itself, and
+ * only a switch of React Native's own is handed it, `{...switchColours(c, on)}`.
  *
  * In one place because a switch takes its colours as two props of two shapes,
  * and a dozen switches each choosing four tokens is a dozen chances to choose

@@ -117,7 +117,8 @@ internal object Decode {
   fun song(context: Context, trackId: String): Song? {
     val id = trackId.toLongOrNull() ?: return null
     val uri = ContentUris.withAppendedId(
-      MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), id
+      // Every volume, as the library is read from: a song on a memory card is a song too.
+      MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), id
     )
 
     inProcess(context, uri)?.let { return it }

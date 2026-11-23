@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, RADIUS, SPACE, TYPE, TOUCH } from '../lib/theme/measures';
+import { Note } from './Note';
+import { StyleSheet, View } from 'react-native';
+import { Text } from './settings/Find';
 import { Switch } from './Switch';
 
 import { Pressable } from './Pressable';
@@ -19,8 +22,10 @@ import {
 } from '../lib/discover/policy';
 import { blockedSongs } from '../lib/discover/store';
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, outlinedClip, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlinedClip, usePressed } from '../lib/theme/index';
 import { NumberStepper } from './NumberStepper';
+import { Button } from './Button';
+import { Chevron } from './settings/rows';
 
 /** What can be chosen, as the engine reads it: see `settingsFrom`, which takes nothing else. */
 
@@ -51,7 +56,6 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
   const settings = useDiscoverSettings();
   const { configure, allowAgain } = useDiscoverActions();
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
   const [error, setError] = useState('');
   /*
@@ -126,7 +130,6 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
               accessibilityLabel={said.wifi}
               accessibilityState={{ disabled: !settings.ready, checked: settings.wifiOnly }}
               value={settings.wifiOnly}
-              {...switchColours(c, settings.wifiOnly)}
               onValueChange={(wifiOnly) => change({ wifiOnly })}
             />
           </View>
@@ -142,7 +145,6 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
               accessibilityLabel={said.preview}
               accessibilityState={{ checked: previewsOn(settings) }}
               value={previewsOn(settings)}
-              {...switchColours(c, previewsOn(settings))}
               onValueChange={(preview) => change({ preview })}
             />
           </View>
@@ -223,9 +225,9 @@ export function DiscoverSettings({ standalone = false }: { standalone?: boolean 
         </Folded>
       </View>
       {error ? (
-        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.error}>
+        <Note tone="bad" style={styles.error}>
           {error}
-        </Text>
+        </Note>
       ) : null}
     </View>
   );
@@ -287,7 +289,7 @@ function Folded({
         onPress={onToggle}>
         <View style={styles.line}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.chevron} importantForAccessibility="no">{open ? '⌄' : '›'}</Text>
+          <Chevron turned={open ? 'down' : null} />
         </View>
         {note ? <Text style={styles.muted}>{note}</Text> : null}
       </Pressable>
@@ -302,17 +304,8 @@ function Folded({
 
 /** The way back for one thing on such a list. Said with its name to a screen reader, which hears twenty of them. */
 function Undo({ label, spoken, onPress }: { label: string; spoken: string; onPress: () => void }) {
-  const styles = useStyles();
-  const pressed = usePressed();
   return (
-    <Pressable
-      android_ripple={pressed}
-      accessibilityRole="button"
-      accessibilityLabel={spoken}
-      style={styles.undo}
-      onPress={onPress}>
-      <Text style={styles.undoLabel}>{label}</Text>
-    </Pressable>
+    <Button kind="secondary" size="small" label={label} accessibilityLabel={spoken} onPress={onPress} />
   );
 }
 
@@ -320,41 +313,31 @@ function Undo({ label, spoken, onPress }: { label: string; spoken: string; onPre
 const CHOICE_SLOP = { top: 8, bottom: 8, left: 2, right: 2 };
 
 const useStyles = makeStyles((c) => {
-  const row = { paddingHorizontal: 16, paddingVertical: 14, gap: 8 };
+  const row = { paddingHorizontal: SPACE.l, paddingVertical: SPACE.m, gap: SPACE.s };
   return StyleSheet.create({
     // As the other groups in Settings, which this stands among.
-    section: { marginTop: 26 },
+    section: { marginTop: SPACE.xl },
     heading: {
       color: c.textFaint,
-      fontSize: 11,
+      fontSize: TYPE.label,
       fontWeight: '600',
       letterSpacing: 0.8,
-      marginBottom: 8,
-      marginLeft: 4,
+      marginBottom: SPACE.s,
+      marginLeft: SPACE.xs,
     },
-    card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
+    card: { backgroundColor: c.surface, borderRadius: RADIUS.card, overflow: 'hidden', ...outlinedClip(c) },
     row,
     rowOff: { ...row, opacity: 0.45 },
-    rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: 16 },
-    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-    title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-    muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-    chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
+    rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: SPACE.l },
+    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.row },
+    title: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
 
-    list: { paddingHorizontal: 16, paddingBottom: 12, gap: 2 },
-    entry: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 48 },
+    list: { paddingHorizontal: SPACE.l, paddingBottom: SPACE.m, gap: SPACE.xxs },
+    entry: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, minHeight: TOUCH.normal },
     names: { flex: 1, minWidth: 0 },
-    name: { color: c.text, fontSize: 14.5 },
-    undo: {
-      minHeight: 36,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-      justifyContent: 'center',
-      backgroundColor: c.surfaceRaised,
-      ...outlined(c),
-    },
-    undoLabel: { color: c.text, fontSize: 13 },
+    name: { color: c.text, fontSize: TYPE.body },
 
-    error: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
+    error: { marginTop: SPACE.s, marginLeft: SPACE.xs },
   });
 });

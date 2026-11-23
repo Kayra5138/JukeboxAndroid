@@ -1,11 +1,11 @@
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import {
   Pressable as Plain,
   StyleSheet,
+  View,
   type PressableProps,
   type PressableStateCallbackType,
   type StyleProp,
-  type View,
   type ViewStyle,
 } from 'react-native';
 
@@ -47,7 +47,22 @@ export function Pressable({
 }
 
 const CUT: ViewStyle = { overflow: 'hidden' };
-const CUT_AFRESH: ViewStyle = { overflow: 'hidden', borderWidth: 0, borderColor: 'transparent' };
+/*
+  Every side as well as the whole. In a theme of glass each side's width is
+  given (`edgesAt`), and React Native 0.86 keeps a side a style stops giving
+  as "not a number": a view that cuts works out where from those, and cut to
+  nowhere, so that a button's own words were gone the moment a flat theme
+  was chosen after one of glass, and its fill was all that was left.
+*/
+const CUT_AFRESH: ViewStyle = {
+  overflow: 'hidden',
+  borderWidth: 0,
+  borderTopWidth: 0,
+  borderRightWidth: 0,
+  borderBottomWidth: 0,
+  borderLeftWidth: 0,
+  borderColor: 'transparent',
+};
 
 const CORNERS = [
   'borderRadius',
@@ -77,3 +92,48 @@ function shaped(style: StyleProp<ViewStyle>): StyleProp<ViewStyle> {
   if (!flat || !CORNERS.some((corner) => flat[corner])) return style;
   return [style, BORDERS.some((border) => flat[border] != null) ? CUT : CUT_AFRESH];
 }
+
+/**
+ * A row pressed as a whole that has a control of its own in it as well: a
+ * group's heading, which opens the group, with a box at its side that ticks
+ * every row of it. The wash under a finger covers the whole row, the box's
+ * corner included; the box still takes its own presses.
+ *
+ * The press is a view of its own laid under the row's contents rather than
+ * round them: round them, the box would sit inside the thing pressed, and a
+ * screen reader could not reach it as a thing of its own. [children] are
+ * drawn over it and let touches through to it, all but [controls], which
+ * keep theirs. What the row says to a screen reader is [accessibilityLabel],
+ * so that what is written in it is not read twice.
+ */
+export function WholePress({
+  style,
+  inside,
+  controls,
+  children,
+  ...press
+}: Omit<PressableProps, 'style' | 'children'> & {
+  style?: StyleProp<ViewStyle>;
+  /** How what is written in the row is laid out. */
+  inside?: StyleProp<ViewStyle>;
+  /** What in the row is pressed by itself, at its start. */
+  controls?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <View style={style}>
+      <Pressable style={StyleSheet.absoluteFill} {...press} />
+      <View style={whole.row} pointerEvents="box-none">
+        {controls}
+        <View style={[whole.words, inside]} pointerEvents="none" importantForAccessibility="no-hide-descendants">
+          {children}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const whole = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center' },
+  words: { flex: 1, minWidth: 0 },
+});

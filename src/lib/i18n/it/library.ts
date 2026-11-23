@@ -107,6 +107,7 @@ export const library: Strings['library'] = {
     lookSwitch: 'Passa all’altra visualizzazione di questa vista',
     view: 'Vista',
     looks: { list: 'Elenco', shelves: 'Scaffali', rack: 'Scaffale', map: 'Mappa' },
+    shelf: { added: 'Aggiunti di recente', around: (hour: string) => `Verso le ${hour}`, repeat: 'In loop questo mese', while: 'Non ascoltati da un po’', never: 'Mai ascoltati', all: 'Tutti i brani', play: (name: string) => `Riproduci ${name}`, shuffle: (name: string) => `Riproduci ${name} in ordine casuale`, queue: (name: string) => `Aggiungi ${name} alla coda` },
     artistMap: { drawing: 'Disegno la mappa…', shuffle: 'Riproduci i brani in ordine casuale', open: 'Apri', with: 'Con', lasso: 'Cerchia gli artisti per mescolarli', lassoHint: 'Cerchia gli artisti da mescolare', lassoChosen: 'Cerchiati', putBackAll: 'Rimetti a posto gli artisti spostati a mano', movedByHand: 'Spostati a mano', putBack: 'Rimetti' },
     groupSortShort: { name: 'A–Z', tracks: 'Brani', played: 'Ascolti', added: 'Nuovi' },
     groupSortedBy: {
@@ -332,9 +333,6 @@ export const library: Strings['library'] = {
     note: 'Questi file sembrano la stessa registrazione salvata più volte: stesso nome, oppure stesso artista e titolo, e la stessa durata con al massimo due secondi di differenza. Di ognuna si tiene una copia. Prima di eliminare le altre, i loro ascolti, tag, testi e posizioni nelle liste passano a quella.',
     empty: 'Nessuna canzone compare più volte nella tua libreria.',
     cleanAll: (count) => `Pulisci tutte (${format.number(count)})`,
-    confirmAll: (files, songs) =>
-      `Eliminare ${format.number(files)} file? Di ${oneOrMany(songs, 'questa canzone', `ognuna delle ${format.number(songs)} canzoni`)} si tiene una copia, e ascolti, tag, testi e posizioni nelle liste di ogni file eliminato passano prima a quella. Android chiede di nuovo conferma prima di eliminare qualcosa.`,
-    confirm: (files) => `Elimina ${format.number(files)} file`,
     deleteOthers: (count) =>
       oneOrMany(count, 'Elimina l’altra copia', `Elimina le altre ${format.number(count)} copie`),
     different: 'Sono canzoni diverse',

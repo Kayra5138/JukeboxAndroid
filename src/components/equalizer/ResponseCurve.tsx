@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { RADIUS } from '../../lib/theme/measures';
 import { StyleSheet, Text, View } from 'react-native';
 
 import {
@@ -44,6 +45,9 @@ const DOT = 8;
  * line up or down without changing its shape, and the shape is what this is
  * for; the level is said in words underneath.
  */
+/** How tall the curve is drawn: on its page upright and on its side, and beside the player for a glance at the shape. */
+export const CURVE = { page: 156, wide: 116, quick: 72 } as const;
+
 export function ResponseCurve({
   bands,
   height,
@@ -179,7 +183,7 @@ export function ResponseCurve({
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   chart: {
-    borderRadius: 10,
+    borderRadius: RADIUS.control,
     backgroundColor: c.surface,
     // The line of a curve past the top of the scale stops at the edge rather
     // than running out over whatever is above the chart.

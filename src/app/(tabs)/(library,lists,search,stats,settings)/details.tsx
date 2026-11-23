@@ -1,22 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LEADING, SPACE, TYPE } from '../../../lib/theme/measures';
+import { ScreenState } from '../../../components/ScreenState';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
-import { Pressable } from '../../../components/Pressable';
+import { Button } from '../../../components/Button';
 import { Segmented } from '../../../components/Segmented';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnderBars } from '../../../components/UnderBars';
 
 import { GeneralTab } from '../../../components/details/GeneralTab';
 import { LyricsTab } from '../../../components/details/LyricsTab';
 import { TagsTab } from '../../../components/details/TagsTab';
+import { useUnsavedGuard } from '../../../components/details/unsaved';
 import { useT } from '../../../lib/i18n/index';
 import { findTrack } from '../../../lib/media/library';
-import { withMetadata, type EnrichedTrack } from '../../../lib/media/merge';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../../../lib/theme/index';
+import { oneWithMetadata, type EnrichedTrack } from '../../../lib/media/merge';
+import { makeStyles, scene } from '../../../lib/theme/index';
 import type { Track } from '../../../lib/types';
 import { AlbumLink, ArtistLinks } from '../../../components/NameLinks';
 
@@ -37,6 +40,8 @@ type Tab = (typeof TABS)[number];
 export default function DetailsScreen() {
   const router = useRouter();
   const { trackId, tab: wanted } = useLocalSearchParams<{ trackId: string; tab?: string }>();
+  // Left with something typed and not saved on any tab, whichever way: asked about first.
+  const unsavedAsk = useUnsavedGuard();
   const [tab, setTab] = useState<Tab>(
     TABS.some((key) => key === wanted) ? (wanted as Tab) : 'general'
   );
@@ -45,12 +50,12 @@ export default function DetailsScreen() {
   /** True for a track that is not there to be found; otherwise what went wrong, as it was said. */
   const [gone, setGone] = useState<true | string | null>(null);
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
   // Sideways the cutout sits beside the screen, and a routed screen gets no
   // horizontal inset from the navigator.
   const insets = useSafeAreaInsets();
+  // The bar of what is playing is along the foot of every page of a tab (see the tabs' layout), laid over it in a theme of glass: kept clear of.
+  const under = useUnderBars();
 
   const load = useCallback(async () => {
     try {
@@ -60,7 +65,7 @@ export default function DetailsScreen() {
         return;
       }
       setGone(null);
-      setFound({ file, shown: withMetadata([file])[0] ?? { ...file, genre: null, year: null, discNumber: null, tags: [], enriched: false } });
+      setFound({ file, shown: oneWithMetadata(file) });
     } catch (error) {
       /*
         Asking the provider for a track can be refused, and reading the answer
@@ -80,17 +85,15 @@ export default function DetailsScreen() {
     return (
       <View style={[styles.screen, styles.centered]}>
         <Text style={styles.gone}>{gone === true ? t.details.screen.missing : gone}</Text>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => router.back()}>
-          <Text style={styles.buttonLabel}>{t.details.screen.goBack}</Text>
-        </Pressable>
+        <Button kind="secondary" label={t.details.screen.goBack} onPress={() => router.back()} />
       </View>
     );
   }
 
   if (!found) {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={c.text} />
+      <View style={styles.screen}>
+        <ScreenState kind="loading" />
       </View>
     );
   }
@@ -98,7 +101,7 @@ export default function DetailsScreen() {
   const { file, shown } = found;
 
   return (
-    <View style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right }]}>
+    <View style={[styles.screen, { paddingLeft: insets.left, paddingRight: insets.right, paddingBottom: under.bottom }]}>
       <View style={styles.heading}>
         <Text style={styles.title} numberOfLines={1}>
           {shown.title}
@@ -131,20 +134,19 @@ export default function DetailsScreen() {
       <View style={tab === 'lyrics' ? styles.pane : styles.hidden}>
         <LyricsTab track={shown} />
       </View>
+      {unsavedAsk}
     </View>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
-  centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  gone: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  button: { backgroundColor: c.surfaceRaised, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, ...outlined(c) },
-  buttonLabel: { color: c.text, fontSize: 15 },
-  heading: { paddingHorizontal: 20, paddingTop: 14, gap: 3 },
-  title: { color: c.text, fontSize: 17, fontWeight: '600' },
-  artist: { color: c.textMuted, fontSize: 13 },
-  tabs: { marginHorizontal: 20, marginTop: 14 },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: SPACE.l, padding: SPACE.xl },
+  gone: { color: c.text, fontSize: TYPE.body, lineHeight: LEADING.body, textAlign: 'center' },
+  heading: { paddingHorizontal: SPACE.l, paddingTop: SPACE.m, gap: SPACE.xxs },
+  title: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+  artist: { color: c.textMuted, fontSize: TYPE.small },
+  tabs: { marginHorizontal: SPACE.l, marginTop: SPACE.m },
   pane: { flex: 1 },
   hidden: { display: 'none' },
 }));

@@ -105,6 +105,7 @@ export const library: Strings['library'] = {
     lookSwitch: 'Bu görünümün diğer düzenine geçer',
     view: 'Görünüm',
     looks: { list: 'Liste', shelves: 'Raflar', rack: 'Raf', map: 'Harita' },
+    shelf: { added: 'Son eklenenler', around: (hour: string) => `Saat ${hour} sularında`, repeat: 'Bu ay döne döne dinlenenler', while: 'Bir süredir dinlenmeyenler', never: 'Hiç çalınmayanlar', all: 'Tüm şarkılar', play: (name: string) => `${name} rafını çal`, shuffle: (name: string) => `${name} rafını karışık çal`, queue: (name: string) => `${name} rafını sıraya ekle` },
     artistMap: { drawing: 'Harita çiziliyor…', shuffle: 'Şarkılarını karışık çal', open: 'Aç', with: 'Birlikte', lasso: 'Sanatçıları çevirip karışık çal', lassoHint: 'Karıştırmak istediğin sanatçıların etrafını çiz', lassoChosen: 'Çevrilenler', putBackAll: 'Elle taşınan sanatçıları yerine koy', movedByHand: 'Elle taşınanlar', putBack: 'Yerine koy' },
     groupSortShort: { name: 'A–Z', tracks: 'Parça', played: 'Dinlenme', added: 'Yeni' },
     groupSortedBy: {
@@ -323,9 +324,6 @@ export const library: Strings['library'] = {
     note: 'Bu dosyalar aynı kaydın birden fazla kez kaydedilmiş hâline benziyor: adları ya da sanatçı ve şarkı adları aynı, süreleri en fazla iki saniye farklı. Her birinden bir kopya kalır. Diğerleri silinmeden önce dinlemeleri, etiketleri, sözleri ve listelerdeki yerleri kalan kopyaya aktarılır.',
     empty: 'Kütüphanende birden fazla kez bulunan şarkı yok.',
     cleanAll: (count) => `Tümünü temizle (${format.number(count)})`,
-    confirmAll: (files, songs) =>
-      `${format.number(files)} dosya silinsin mi? ${format.number(songs)} şarkının her birinden bir kopya kalır; silinen her dosyanın dinlemeleri, etiketleri, sözleri ve listelerdeki yerleri önce o kopyaya aktarılır. Bir şey silinmeden önce Android bir kez daha sorar.`,
-    confirm: (files) => `${format.number(files)} dosyayı sil`,
     deleteOthers: (count) => (count === 1 ? 'Diğer kopyayı sil' : `Diğer ${format.number(count)} kopyayı sil`),
     different: 'Bunlar farklı şarkılar',
     choose: 'Hangi kopya kalsın',

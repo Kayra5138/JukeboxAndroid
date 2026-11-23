@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LEADING, SPACE, TYPE, TOUCH, RADIUS } from '../lib/theme/measures';
 import {
   StyleSheet,
   Text,
@@ -10,6 +11,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { FittedText } from './FittedText';
 import { Pressable } from './Pressable';
 import { SlidingMark } from './SlidingMark';
 import { makeStyles, outlined, outlineWidth } from '../lib/theme/index';
@@ -76,7 +78,7 @@ export function Segmented<Value extends string | number>({
   onPressOut,
   role = 'radio',
   variant = 'tray',
-  size = 'regular',
+  size: sized,
   tone = 'strong',
   layout: laid,
   wrap: wraps,
@@ -101,6 +103,7 @@ export function Segmented<Value extends string | number>({
   onPressOut?: () => void;
   role?: 'tab' | 'radio' | 'button';
   variant?: 'tray' | 'chips' | 'outline';
+  /** `compact` unless told otherwise for a tray, which reads as a row of tabs and was taller than it needed to be (23 Nov, Kayra); `regular` for the rest. */
   size?: 'compact' | 'regular';
   /** Chips only: on a card or sheet (`strong`), or on the page (`quiet`). */
   tone?: 'strong' | 'quiet';
@@ -125,6 +128,7 @@ export function Segmented<Value extends string | number>({
 
   // Trays share their width and keep to one line; chips take what their words need and run on.
   const layout = laid ?? (variant === 'tray' ? 'fill' : 'fit');
+  const size = sized ?? (variant === 'tray' ? 'compact' : 'regular');
   const wrap = wraps ?? variant !== 'tray';
   const compact = size === 'compact';
   const look =
@@ -230,20 +234,58 @@ export function Segmented<Value extends string | number>({
               if (!on || role === 'button') haptic('choices', 'tick');
               onChange(option.value);
             }}>
-            <Text
-              style={[look.label, labelStyle, on && look.chosen, on && chosenLabelStyle]}
-              // On one line, made smaller to fit where it has to be rather than cut; laid one
-              // under another there is the width for as many lines as it takes.
-              numberOfLines={layout === 'stack' ? undefined : 1}
-              adjustsFontSizeToFit={layout !== 'stack'}
-              minimumFontScale={0.85}>
-              {option.label}
-            </Text>
+            {/*
+              On one line, made smaller to fit where it has to be rather than cut; laid one
+              under another there is the width for as many lines as it takes.
+            */}
+            {layout === 'stack' ? (
+              <Text style={[look.label, labelStyle, on && look.chosen, on && chosenLabelStyle]}>{option.label}</Text>
+            ) : (
+              // In the middle of its choice: words made to fit take the whole of the room they are given, and stood at its start.
+              <FittedText style={[look.label, styles.centredWords, labelStyle, on && look.chosen, on && chosenLabelStyle]} numberOfLines={1} minimumFontScale={0.85}>
+                {option.label}
+              </FittedText>
+            )}
             {option.hint ? <Text style={styles.hint}>{option.hint}</Text> : null}
           </Pressable>
         );
       })}
     </View>
+  );
+}
+
+/**
+ * One chip by itself, in the look of the chips above (`Segmented` `chips`):
+ * for a row of them where each is not one of a set, but on or off by itself
+ * ([role] `togglebutton`), or where some of the row are one of a set and the
+ * rest each its own (the player's effects). [on] is filled.
+ */
+export function Chip({
+  label,
+  on,
+  onPress,
+  role = 'togglebutton',
+  expanded,
+  disabled = false,
+}: {
+  label: string;
+  on: boolean;
+  onPress: () => void;
+  /** `button` for one among them that is not a choice but does something: shows more of them, [expanded] saying whether it has. */
+  role?: 'radio' | 'togglebutton' | 'button';
+  expanded?: boolean;
+  disabled?: boolean;
+}) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole={role}
+      accessibilityState={role === 'button' ? { expanded, disabled } : { checked: on, disabled }}
+      disabled={disabled}
+      style={[styles.chipCell, on ? styles.chipMark : styles.chipPlate, disabled && styles.dim]}
+      onPress={onPress}>
+      <Text style={[styles.chipLabel, on && styles.chipLabelOn]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -256,42 +298,43 @@ const useStyles = makeStyles((c) => {
       The tray's inner corners are its own less the room round the choices,
       so that the mark sits in it as one rounded shape inside another.
     */
-    tray: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 12, padding: 3, ...outlined(c) },
-    trayCompact: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: 9, padding: 2, ...outlined(c) },
+    tray: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: RADIUS.control, padding: SPACE.xxs, ...outlined(c) },
+    trayCompact: { flexDirection: 'row', backgroundColor: c.surface, borderRadius: RADIUS.control, padding: SPACE.xxs, ...outlined(c) },
     // A finger's height: drawn as a strip of words in a bar, they were some thirty points to aim at.
-    trayCell: { ...centred, minHeight: 44, paddingHorizontal: 12, borderRadius: 9 },
+    trayCell: { ...centred, minHeight: TOUCH.normal, paddingHorizontal: SPACE.m, borderRadius: RADIUS.control },
     // As small as a legible word, for a switch beside something that wants the room more.
-    trayCompactCell: { ...centred, paddingVertical: 7, paddingHorizontal: 11, borderRadius: 7 },
-    trayStackCell: { padding: 12, gap: 4, borderRadius: 9 },
+    trayCompactCell: { ...centred, paddingVertical: SPACE.s, paddingHorizontal: SPACE.m, borderRadius: RADIUS.cover },
+    trayStackCell: { padding: SPACE.m, gap: SPACE.xs, borderRadius: RADIUS.control },
     trayMark: { backgroundColor: c.selected },
-    trayLabel: { color: c.textMuted, fontSize: 13.5 },
-    trayCompactLabel: { color: c.textMuted, fontSize: 12.5 },
+    trayLabel: { color: c.textMuted, fontSize: TYPE.small },
+    trayCompactLabel: { color: c.textMuted, fontSize: TYPE.hint },
     trayLabelOn: { color: c.onSelected, fontWeight: '600' },
 
-    loose: { flexDirection: 'row', gap: 8 },
-    looseCompact: { flexDirection: 'row', gap: 6 },
+    loose: { flexDirection: 'row', gap: SPACE.s },
+    looseCompact: { flexDirection: 'row', gap: SPACE.xs },
     /*
       Room for an edge in every chip, on or off, coloured or not, so that the
       words do not move as the mark comes and goes.
     */
-    chipCell: { ...centred, minWidth: 40, minHeight: 32, paddingHorizontal: 10, borderRadius: 8, borderWidth: outlineWidth(c) },
-    chipCompactCell: { ...centred, minWidth: 32, paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, borderWidth: outlineWidth(c) },
+    centredWords: { textAlign: 'center' },
+    chipCell: { ...centred, minWidth: 40, minHeight: TOUCH.row, paddingHorizontal: SPACE.s, borderRadius: RADIUS.cover, borderWidth: outlineWidth(c) },
+    chipCompactCell: { ...centred, minWidth: 32, paddingHorizontal: SPACE.s, paddingVertical: SPACE.xs, borderRadius: RADIUS.cover, borderWidth: outlineWidth(c) },
     chipPlate: { backgroundColor: c.surfaceRaised, ...outlined(c) },
     chipMark: { backgroundColor: c.primary, ...outlined(c, c.primary) },
-    chipLabel: { color: c.textSecondary, fontSize: 13.5, fontVariant: ['tabular-nums'] },
+    chipLabel: { color: c.textSecondary, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
     chipLabelOn: { color: c.onPrimary, fontWeight: '600' },
     chipQuietPlate: { backgroundColor: c.surface, ...outlined(c) },
     chipQuietMark: { backgroundColor: c.selected, ...outlined(c, c.selected) },
-    chipQuietLabel: { color: c.textMuted, fontSize: 13.5, fontVariant: ['tabular-nums'] },
+    chipQuietLabel: { color: c.textMuted, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
     chipQuietLabelOn: { color: c.onSelected, fontWeight: '600' },
 
-    outlineCell: { ...centred, paddingHorizontal: 15, paddingVertical: 9, borderRadius: 18, borderWidth: edge },
-    outlineCompactCell: { ...centred, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 16, borderWidth: edge },
+    outlineCell: { ...centred, paddingHorizontal: SPACE.l, paddingVertical: SPACE.s, borderRadius: RADIUS.pill, borderWidth: edge },
+    outlineCompactCell: { ...centred, paddingHorizontal: SPACE.m, paddingVertical: SPACE.s, borderRadius: RADIUS.pill, borderWidth: edge },
     outlinePlate: { borderWidth: edge, borderColor: c.borderStrong },
     // Ringed in the accent itself where there are outlines, since the fill is the accent held back
     // and is not far from the card it is on.
     outlineMark: { borderWidth: edge, backgroundColor: c.accentMuted, borderColor: c.accentMuted, ...outlined(c, c.accent) },
-    outlineLabel: { color: c.textSecondary, fontSize: 13 },
+    outlineLabel: { color: c.textSecondary, fontSize: TYPE.small },
     outlineLabelOn: { color: c.text, fontWeight: '600' },
 
     wrap: { flexWrap: 'wrap' },
@@ -299,7 +342,7 @@ const useStyles = makeStyles((c) => {
     fill: { flex: 1, minWidth: 0 },
     plate: { position: 'absolute' },
     bare: { backgroundColor: 'transparent', borderColor: 'transparent' },
-    hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+    hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.small },
     dim: { opacity: 0.4 },
   });
 });

@@ -1,12 +1,14 @@
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Pressable } from './Pressable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, RADIUS, SPACE, TYPE } from '../lib/theme/measures';
+import { Busy } from './Busy';
+import { OnAPage } from './OnAPage';
 
 import type { Opened } from '../lib/backup/index';
 import { formatDateTime } from '../lib/format/date';
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, outlinedClip, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles, outlinedClip, useColours } from '../lib/theme/index';
+import { Button, TextButton } from './Button';
+import { Note } from './Note';
 
 /**
  * What stands between choosing a backup and anything happening to the phone.
@@ -48,50 +50,26 @@ export function BackupSheet({
   onCancel: () => void;
   onRestart: () => void;
 }) {
-  const insets = useSafeAreaInsets();
   const t = useT();
   const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  // Mounted always and a window only while there is a backup to ask about.
-  useWindowVeil(opened !== null);
-  if (!opened) return null;
-
   const said = t.backup;
-  const { summary, backup, occupied } = opened;
+
+  /*
+    A page of its own in the tab, the bars where they are (`OnAPage`). Neither
+    while it is being written nor once it has been can it be walked away from.
+  */
+  const asked = ({ summary, backup, occupied }: NonNullable<typeof opened>) => {
   const missing = summary.songs - summary.found;
-
-  // Neither while it is being written nor once it has been can it be walked
-  // away from, by the Back button or by touching outside.
-  const leave = working || finished ? undefined : onCancel;
-
   return (
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={leave}>
-      {/* Not a stop for a screen reader: Cancel and the back gesture are the ways out. */}
-      <Pressable style={styles.backdrop} onPress={leave} accessible={false} />
-      <ScrollView
-        style={styles.sheet}
-        contentContainerStyle={[
-          styles.body,
-          { paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 },
-        ]}>
+      <View style={styles.body}>
         {finished ? (
           <>
-            <Text accessibilityRole="header" style={styles.heading}>{said.imported}</Text>
             <Text style={styles.text}>{said.importedBody}</Text>
-            <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onRestart}>
-              <Text style={styles.primaryLabel}>{said.restart}</Text>
-            </Pressable>
+            <Button kind="primary" wide label={said.restart} onPress={onRestart} />
           </>
         ) : (
           <>
-            <Text accessibilityRole="header" style={styles.heading}>{said.question}</Text>
             <Text style={styles.text}>
               {said.made(
                 backup.exportedAt > 0 ? formatDateTime(new Date(backup.exportedAt), t) : null,
@@ -117,84 +95,57 @@ export function BackupSheet({
             </Text>
 
             {failure ? (
-              <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.failure}>
-                {failure}
-              </Text>
+              <Note tone="bad">{failure}</Note>
             ) : null}
 
             {working ? (
               <View style={styles.working}>
-                <ActivityIndicator color={c.textSecondary} />
+                <Busy color={c.textSecondary} />
                 <Text style={styles.text}>{said.importing}</Text>
               </View>
             ) : occupied ? (
               <>
-                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onMerge}>
-                  <Text style={styles.primaryLabel}>{said.merge}</Text>
-                  <Text style={styles.primaryHint}>{said.mergeHint}</Text>
-                </Pressable>
-                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.danger} onPress={onReplace}>
-                  <Text style={styles.dangerLabel}>{said.replace}</Text>
-                  <Text style={styles.dangerHint}>{said.replaceHint}</Text>
-                </Pressable>
-                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.plain} onPress={onCancel}>
-                  <Text style={styles.plainLabel}>{t.common.cancel}</Text>
-                </Pressable>
+                <Button kind="primary" wide label={said.merge} hint={said.mergeHint} onPress={onMerge} />
+                <Button kind="danger" wide label={said.replace} hint={said.replaceHint} onPress={onReplace} />
+                <TextButton label={t.common.cancel} tone="plain" size="body" onPress={onCancel} style={styles.cancel} />
               </>
             ) : (
               <>
-                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onReplace}>
-                  <Text style={styles.primaryLabel}>{t.common.import}</Text>
-                </Pressable>
-                <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.plain} onPress={onCancel}>
-                  <Text style={styles.plainLabel}>{t.common.cancel}</Text>
-                </Pressable>
+                <Button kind="primary" wide label={t.common.import} onPress={onReplace} />
+                <TextButton label={t.common.cancel} tone="plain" size="body" onPress={onCancel} style={styles.cancel} />
               </>
             )}
           </>
         )}
-      </ScrollView>
-    </Modal>
+      </View>
+  );
+  };
+
+  return (
+    <OnAPage visible={opened !== null} title={finished ? said.imported : said.question} onClose={onCancel} locked={working || finished}>
+      {opened ? asked(opened) : null}
+    </OnAPage>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '88%',
-    ...outlined(c),
-  },
-  body: { paddingTop: 20, gap: 14 },
-  heading: { color: c.text, fontSize: 19, fontWeight: '600' },
-  text: { color: c.textSecondary, fontSize: 14, lineHeight: 20 },
-  warning: { color: c.warning, fontSize: 14, lineHeight: 20 },
-  failure: { color: c.danger, fontSize: 14, lineHeight: 20 },
-  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  body: { gap: SPACE.m },
+  heading: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+  text: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small },
+  warning: { color: c.warning, fontSize: TYPE.small, lineHeight: LEADING.small },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
   fact: {
     color: c.text,
-    fontSize: 13,
+    fontSize: TYPE.small,
     backgroundColor: c.surfaceRaised,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderRadius: RADIUS.pill,
+    paddingVertical: SPACE.xs,
+    paddingHorizontal: SPACE.m,
     overflow: 'hidden',
     ...outlinedClip(c),
   },
-  working: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  primary: { backgroundColor: c.primary, borderRadius: 12, padding: 14, gap: 3, marginTop: 4, ...outlined(c, c.primary) },
-  primaryLabel: { color: c.onPrimary, fontSize: 15.5, fontWeight: '600' },
+  working: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingVertical: SPACE.s },
+  // The way out, quietly, under the ways on.
+  cancel: { alignSelf: 'center' },
   // The label's own colour, held back: there is no token for a second voice on `primary`.
-  primaryHint: { color: c.onPrimary, opacity: 0.7, fontSize: 12.5, lineHeight: 17 },
-  danger: { backgroundColor: c.dangerSoft, borderRadius: 12, padding: 14, gap: 3, ...outlined(c, c.danger) },
-  dangerLabel: { color: c.danger, fontSize: 15.5, fontWeight: '600' },
-  dangerHint: { color: c.danger, opacity: 0.75, fontSize: 12.5, lineHeight: 17 },
-  plain: { padding: 14, alignItems: 'center' },
-  plainLabel: { color: c.textSecondary, fontSize: 15 },
 }));

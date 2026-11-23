@@ -78,9 +78,15 @@ data class TransitionSettings(
      * where the crossfade was supposed to be. It is then run in silence beside
      * the main player and put in step with it: a start, a wait until its
      * position can be believed, a correction, and the same wait again to see
-     * that the correction took. Three seconds is room for all of it.
+     * that the correction took, and a nudge or two to close what is left.
+     *
+     * Three seconds was not room for it on a Samsung, where the tail took a
+     * second to make its first sound: it was still being nudged with a tenth
+     * of a second to go, and handed over 22 ms out, which is the old track
+     * heard to skip at the very moment the next one begins to come in. Six
+     * leaves room for the start, a correction and the nudges after it.
      */
-    const val PREPARE_MS = 3_000L
+    const val PREPARE_MS = 6_000L
   }
 }
 

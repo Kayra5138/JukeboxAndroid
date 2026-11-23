@@ -1,21 +1,26 @@
 import { useCallback, useState } from 'react';
+import { LEADING, SPACE, TYPE } from '../../../lib/theme/measures';
+import { Note } from '../../../components/Note';
+import { ScreenState } from '../../../components/ScreenState';
+import { Button, TextButton } from '../../../components/Button';
+import { ConfirmSheet } from '../../../components/ConfirmSheet';
+import { noteError } from '../../../lib/support/errorLogStore';
 import { useFocusEffect, useIsFocused } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useUnderBars } from '../../../components/UnderBars';
 
 import { DownloadsList } from '../../../components/downloads/DownloadsList';
 import { ExtractorPanel } from '../../../components/downloads/ExtractorPanel';
-import { Pressable } from '../../../components/Pressable';
 import { downloadsLookedAt } from '../../../lib/ui/downloadsButton';
 import { useT } from '../../../lib/i18n/index';
-import { makeStyles, outlined, scene, usePressed } from '../../../lib/theme/index';
-import { Behind, scrimOf } from '../../../lib/theme/Veil';
+import { makeStyles, scene } from '../../../lib/theme/index';
+import { Behind } from '../../../lib/theme/Veil';
 import { useDownloads } from '../../../lib/youtube/DownloadsProvider';
 import { youtubeError } from '../../../lib/youtube/errors';
 import { checkExtractor, updateExtractor, useExtractorAdvice, useExtractorBusy } from '../../../lib/youtube/extractorState';
 import { downloads } from '../../../lib/youtube/native';
 import { tallyOf } from '../../../lib/youtube/queueView';
-import { useBack } from '../../../lib/ui/back';
 import { haptic } from '../../../lib/ui/haptics';
 
 /**
@@ -39,11 +44,22 @@ import { haptic } from '../../../lib/ui/haptics';
  * is here because this is the screen a download fails on.
  */
 export default function DownloadsScreen() {
-  const { all, paused, error, refresh, cancel, retry, move, setPaused, clearHistory, cancelAll } = useDownloads();
+  const { all: allNow, paused, error, refresh, cancel, retry, move, setPaused, clearHistory, cancelAll } = useDownloads();
+  /*
+    The downloads as they were when the page was last in front, while it is
+    not, as the Search tab keeps them: told of them every second something
+    downloads, the whole list was drawn again under whatever page was over
+    it, or in a tab not open.
+  */
+  const focused = useIsFocused();
+  const [allSeen, setAllSeen] = useState(allNow);
+  if (focused && allSeen !== allNow) setAllSeen(allNow);
+  const all = focused ? allNow : allSeen;
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const insets = useSafeAreaInsets();
+  // The bar of what is playing is along the foot of every page of a tab (see the tabs' layout), laid over it in a theme of glass: kept clear of.
+  const under = useUnderBars();
   const said = t.downloads;
   /** Whether "cancel all" has been pressed and is waiting to be meant. */
   const [asking, setAsking] = useState(false);
@@ -69,8 +85,6 @@ export default function DownloadsScreen() {
     }, [])
   );
 
-  const focused = useIsFocused();
-  useBack(asking && focused, () => setAsking(false));
 
   /*
     Each of these is handed to every row, so each is the same function from
@@ -104,8 +118,7 @@ export default function DownloadsScreen() {
   if (!downloads) {
     return (
       <View style={styles.centred}>
-        <Text style={styles.emptyHeading}>{t.search.unavailable.heading}</Text>
-        <Text style={styles.emptyBody}>{said.unavailable}</Text>
+        <ScreenState kind="empty" title={t.search.unavailable.heading} text={said.unavailable} />
       </View>
     );
   }
@@ -127,49 +140,39 @@ export default function DownloadsScreen() {
       */}
       {busy || paused ? (
         <View style={styles.controls}>
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            style={styles.button}
+          <Button
+            kind="secondary"
+            label={paused ? said.resume : said.pause}
             onPress={() => {
               haptic('choices', paused ? 'toggleOn' : 'toggleOff');
-              setPaused(!paused).catch(() => {});
-            }}>
-            <Text style={styles.buttonLabel}>{paused ? said.resume : said.pause}</Text>
-          </Pressable>
-          {busy ? (
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              style={styles.quiet}
-              onPress={() => setAsking(true)}>
-              <Text style={styles.quietLabel}>{said.cancelAll}</Text>
-            </Pressable>
-          ) : null}
+              // Said where the phone would not: the button that did nothing looked broken.
+              setPaused(!paused).catch((failure: unknown) => {
+                haptic('results', 'reject');
+                noteError('download', failure, 'The queue could not be paused or resumed');
+              });
+            }}
+          />
+          {/* The quieter of the two, and the one that is asked about before it is done. */}
+          {busy ? <TextButton label={said.cancelAll} onPress={() => setAsking(true)} /> : null}
         </View>
       ) : null}
       {trouble ? (
-        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
+        <Note tone="bad">
           {trouble}
-        </Text>
+        </Note>
       ) : null}
       <ExtractorPanel />
     </View>
   );
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingBottom: under.bottom }]}>
       {/* Everything the question below is laid over. */}
-      <Behind veiled={asking} style={styles.fill}>
+      <Behind veiled={false} style={styles.fill}>
         <DownloadsList
           all={all}
           header={header}
-          empty={
-            <View style={styles.empty}>
-              <Text style={styles.emptyHeading}>{said.empty.heading}</Text>
-              <Text style={styles.emptyBody}>{said.empty.body}</Text>
-            </View>
-          }
+          empty={<ScreenState kind="empty" title={said.empty.heading} text={said.empty.body} />}
           edge={insets}
           onCancel={cancelOne}
           onRetry={retryOne}
@@ -181,38 +184,21 @@ export default function DownloadsScreen() {
         />
       </Behind>
 
-      {asking ? (
-        <View style={styles.layer}>
-          <Pressable style={styles.backdrop} accessible={false} onPress={() => setAsking(false)} />
-          <View style={styles.confirm}>
-            <Text style={styles.confirmHeading}>{said.cancelAllQuestion}</Text>
-            <Text style={styles.note}>{said.cancelAllHint}</Text>
-            <View style={styles.confirmActions}>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                style={styles.confirmButton}
-                onPress={() => setAsking(false)}>
-                <Text style={styles.confirmLabel}>{said.keep}</Text>
-              </Pressable>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                style={styles.confirmButton}
-                onPress={() => {
-                  haptic('results', 'reject');
-                  setAsking(false);
-                  setMessage(null);
-                  cancelAll().catch((failure: unknown) =>
-                    setMessage(youtubeError(failure, t.search.failed.cancel, t))
-                  );
-                }}>
-                <Text style={styles.destructive}>{said.cancelAll}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      ) : null}
+      {/* A small question, on the app's own card over the page and short of the bars (`Floating`). */}
+      <ConfirmSheet
+        visible={asking}
+        title={said.cancelAllQuestion}
+        body={said.cancelAllHint}
+        cancelLabel={said.keep}
+        confirmLabel={said.cancelAll}
+        danger
+        onCancel={() => setAsking(false)}
+        onConfirm={() => {
+          haptic('results', 'reject');
+          setMessage(null);
+          cancelAll().catch((failure: unknown) => setMessage(youtubeError(failure, t.search.failed.cancel, t)));
+        }}
+      />
     </View>
   );
 }
@@ -221,49 +207,11 @@ const useStyles = makeStyles((c) =>
   StyleSheet.create({
     screen: { flex: 1, ...scene(c) },
     fill: { flex: 1 },
-    centred: { flex: 1, ...scene(c), padding: 24, justifyContent: 'center', gap: 10 },
+    centred: { flex: 1, ...scene(c), padding: SPACE.xl, justifyContent: 'center', gap: SPACE.s },
 
-    header: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 6, gap: 8 },
-    state: { color: c.text, fontSize: 20, fontWeight: '600', letterSpacing: -0.2 },
-    note: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-    bad: { color: c.danger, fontSize: 12.5, lineHeight: 18 },
-    controls: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-    button: {
-      minHeight: 44,
-      minWidth: 108,
-      paddingHorizontal: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 12,
-      backgroundColor: c.surface,
-      ...outlined(c),
-    },
-    buttonLabel: { color: c.text, fontSize: 14, fontWeight: '600' },
-    // The quieter of the two, and the one that is asked about before it is done.
-    quiet: { minHeight: 44, paddingHorizontal: 14, justifyContent: 'center', borderRadius: 12 },
-    quietLabel: { color: c.textMuted, fontSize: 13.5 },
-
-    empty: { paddingHorizontal: 32, paddingTop: 48, alignItems: 'center', gap: 8 },
-    emptyHeading: { color: c.text, fontSize: 16, fontWeight: '600', textAlign: 'center' },
-    emptyBody: { color: c.textFaint, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-
-    backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
-    layer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: 24 },
-    confirm: {
-      // As wide as an upright phone and no wider, so that sideways it is a
-      // dialog in the middle and not a band across the screen.
-      width: '100%',
-      maxWidth: 420,
-      backgroundColor: c.surface,
-      borderRadius: 14,
-      padding: 20,
-      gap: 10,
-      ...outlined(c),
-    },
-    confirmHeading: { color: c.text, fontSize: 15.5, fontWeight: '600' },
-    confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingTop: 6 },
-    confirmButton: { paddingHorizontal: 14, paddingVertical: 9, minHeight: 40, justifyContent: 'center', borderRadius: 8 },
-    confirmLabel: { color: c.textSecondary, fontSize: 14 },
-    destructive: { color: c.danger, fontSize: 14, fontWeight: '600' },
+    header: { paddingHorizontal: SPACE.l, paddingTop: SPACE.l, paddingBottom: SPACE.xs, gap: SPACE.s },
+    state: { color: c.text, fontSize: TYPE.head, fontWeight: '600', letterSpacing: -0.2 },
+    note: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+    controls: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, marginTop: SPACE.xs },
   })
 );

@@ -98,7 +98,8 @@ function useCover(uri: string | null | undefined, small: boolean): string | null
     if (!wanted) return;
     const now = thumbNow(uri);
     if (now) {
-      setThumb({ of: uri, uri: now });
+      // The same as it was put up with, kept: a new object drew every cover a second time as it came.
+      setThumb((was) => (was?.of === uri && was.uri === now ? was : { of: uri, uri: now }));
       return;
     }
     let cancelled = false;

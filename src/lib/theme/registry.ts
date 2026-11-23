@@ -122,13 +122,18 @@ export const NOTHING_AROUND: Surroundings = { scheme: 'dark', cover: null, syste
  * would look like a change of theme every time anything was drawn. So the
  * same surroundings get the same object back. One answer a theme is plenty:
  * the surroundings move forwards, and nobody asks about the track before.
+ * One for each of light and dark, which are asked about side by side.
  */
 const worked = new Map<string, { around: Surroundings; theme: Theme }>();
 
 /** A theme as it is in these surroundings: itself, if it is written down. */
 function inSurroundings(theme: Theme, around: Surroundings): Theme {
   if (!theme.dynamic) return theme;
-  const last = worked.get(theme.id);
+  // By the scheme as well: the Themes page asks for one theme as it is in
+  // the light and in the dark together, and kept under one name the two
+  // threw each other out, a new object at every ask.
+  const key = `${theme.id}/${around.scheme}`;
+  const last = worked.get(key);
   if (
     last &&
     last.around.scheme === around.scheme &&
@@ -140,7 +145,7 @@ function inSurroundings(theme: Theme, around: Surroundings): Theme {
   }
   const { base, colours } = theme.dynamic.resolve(around);
   const made: Theme = { ...theme, base, colours };
-  worked.set(theme.id, { around, theme: made });
+  worked.set(key, { around, theme: made });
   return made;
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, View, ActivityIndicator } from 'react-native';
+import { AccessibilityInfo, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Busy } from '../../components/Busy';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import {
   cancelAnimation,
@@ -28,6 +29,7 @@ import {
   ladderFrom,
   laneAt,
   LANES,
+  LIFE_GRACE_MS,
   LIVES,
   NOTHING_YET,
   holdWonAt,
@@ -108,8 +110,15 @@ const STOP_SLOP = { top: 14, bottom: 14, left: 14, right: 14 };
 
 /** The chips of the setup are some thirty-six tall; this is the rest of a finger's height. */
 const CHIP_SLOP = { top: 6, bottom: 6 };
+/** How long the board is drawn on once nothing on it moves, for it to be drawn as it is to stay. */
+const SETTLE_SPARE_MS = 250;
 
 export default function TilesScreen() {
+  // Upright for as long as the game is open, and free to turn again once it is left: the board is laid out for a tall screen.
+  useEffect(() => {
+    JukeboxAudio.holdUpright?.(true);
+    return () => JukeboxAudio.holdUpright?.(false);
+  }, []);
   const insets = useSafeAreaInsets();
   const { current, isPlaying } = usePlayerState();
   const { lend, giveBack } = usePlayerActions();
@@ -268,6 +277,12 @@ export default function TilesScreen() {
     as something striking.
   */
   const sHurt = useSharedValue(0);
+  /*
+    When the last life went, in the song's time: one life a second at most,
+    so that a key let past and a tap beside it at the same moment, which are
+    one slip, take one life and not two (`LIFE_GRACE_MS`).
+  */
+  const sHurtAt = useSharedValue(-LIFE_GRACE_MS);
   const sHeal = useSharedValue(0);
 
   /** How many holds have a finger on them, which is whether the breath is on. */
@@ -413,8 +428,16 @@ export default function TilesScreen() {
     JukeboxAudio.prepareGame?.();
   }, []);
 
+  /*
+    Gone: the screen has been left. A run being started waits on the player
+    several times over, and a back pressed meanwhile used to leave it to carry
+    on regardless once the player answered: the game's sounds armed and the
+    record borrowed after this screen had already put both away.
+  */
+  const gone = useRef(false);
   useEffect(
     () => () => {
+      gone.current = true;
       JukeboxAudio.gameAudio?.(false);
       // The run started this record; leaving takes it with us rather than
       // letting it play on through the library behind.
@@ -776,7 +799,12 @@ export default function TilesScreen() {
           sMiss.value += 1;
           sCombo.value = 0;
           sClean.value = 0;
-          sLives.value -= 1;
+          // A miss all the same, and heard; a life only where none went within the second.
+          const hurts = now - sHurtAt.get() >= LIFE_GRACE_MS;
+          if (hurts) {
+            sLives.value -= 1;
+            sHurtAt.set(now);
+          }
           /*
             Bounded to one a frame by the same counter that bounds the life, so
             a clock that jumped cannot fire a burst of these at once -- which
@@ -785,7 +813,7 @@ export default function TilesScreen() {
           runOnJS(escaped)();
           // The sound still carries it. What goes is the light, which is the
           // part that costs a frame on a phone that has none to spare.
-          if (sStill.value === 0) {
+          if (hurts && sStill.value === 0) {
             sHurt.value = withSequence(
               withTiming(HURT_PEAK, { duration: WASH_IN_MS }),
               withTiming(0, { duration: WASH_OUT_MS })
@@ -1023,6 +1051,8 @@ export default function TilesScreen() {
       sBonus,
       sCombo,
       sLives,
+    sHurtAt,
+      sHurtAt,
       sMiss,
       rate,
       reading,
@@ -1131,14 +1161,19 @@ export default function TilesScreen() {
               sMiss.value += 1;
               sCombo.value = 0;
               sClean.value = 0;
-              sLives.value -= 1;
+              // A life only where none went within the second: see `sHurtAt`.
+              const hurts = now - sHurtAt.get() >= LIFE_GRACE_MS;
+              if (hurts) {
+                sLives.value -= 1;
+                sHurtAt.set(now);
+              }
               /*
                 The same light as a key let past, because it is the same loss.
                 This was missing: a tap on nothing took a life and said so only
                 with the dot in the corner, which is the one place a player
                 with a finger on the glass is not looking.
               */
-              if (sStill.value === 0) {
+              if (hurts && sStill.value === 0) {
                 sHurt.value = withSequence(
                   withTiming(HURT_PEAK, { duration: WASH_IN_MS }),
                   withTiming(0, { duration: WASH_OUT_MS })
@@ -1276,6 +1311,8 @@ export default function TilesScreen() {
       sEndNow,
       sHit,
       sLives,
+    sHurtAt,
+      sHurtAt,
       sLostLane,
       sMiss,
       sSlipOn,
@@ -1303,7 +1340,7 @@ export default function TilesScreen() {
    */
   const settled = useCallback(async () => {
     let last = 0;
-    for (let tries = 0; tries < 24; tries++) {
+    for (let tries = 0; tries < 24 && !gone.current; tries++) {
       const status = await JukeboxAudio.getStatusAsync().catch(() => null);
       if (status) last = Math.max(0, Math.round((status.positionSec ?? 0) * 1000));
       /*
@@ -1326,6 +1363,17 @@ export default function TilesScreen() {
   const begin = useCallback(async () => {
     if (!chart) return;
     setPhase('starting');
+    /*
+      Left while this was waiting on the player: what leaving put away is put
+      away again, the record it may have been lent after that and the music it
+      may have started, and nothing more is done.
+    */
+    const abandoned = () => {
+      if (!gone.current) return false;
+      void JukeboxAudio.pauseAsync().catch(() => {});
+      void handBack.current().catch(() => {});
+      return true;
+    };
 
     /*
       The record goes back to the top and the run waits for it. Not waiting is
@@ -1337,9 +1385,13 @@ export default function TilesScreen() {
     // mastered under the board and none of this is taken for listening.
     const track =
       asked && current?.id !== asked ? await findTrack(asked).catch(() => null) : current;
+    if (abandoned()) return;
     if (track) await lend(track).catch(() => {});
+    if (abandoned()) return;
     await JukeboxAudio.seekToAsync(0).catch(() => {});
+    if (abandoned()) return;
     await JukeboxAudio.playAsync().catch(() => {});
+    if (abandoned()) return;
 
     /*
       And then wait until the player says it is there.
@@ -1352,6 +1404,7 @@ export default function TilesScreen() {
       agree with the question is the only way to tell the two apart.
     */
     const landed = await settled();
+    if (abandoned()) return;
 
     /*
       A whole board's worth of lead, so the first key is watched the whole way
@@ -1384,6 +1437,7 @@ export default function TilesScreen() {
     sCombo.value = 0;
     sBest.value = 0;
     sLives.value = LIVES;
+    sHurtAt.set(-LIFE_GRACE_MS);
     sClean.value = 0;
     sHolding.value = 0;
     cleared();
@@ -1418,6 +1472,7 @@ export default function TilesScreen() {
     sHit,
     sLines,
     sLives,
+    sHurtAt,
     sMiss,
     sStepMs,
     settled,
@@ -1508,6 +1563,28 @@ export default function TilesScreen() {
   }, [router, running, sBlame, sEndNow, sHeal, sHurt, sPaper, sShown, ticking]);
 
   /*
+    The board drawn at every frame only while there is something on it that
+    moves: while a run is played, and for the run-back after it ends. Set up,
+    starting, paused or over, it was worked out afresh at every frame for as
+    long as the screen was open, the same each time. A moment more is let
+    run each time, for the board to be drawn as it is to stay; and it starts
+    counting again from nothing when it is woken (`frame`), its own count
+    having been begun afresh.
+  */
+  useEffect(() => {
+    if (leaving.current) return;
+    if (!ticking.isActive) {
+      lastFrame.set(0);
+      ticking.setActive(true);
+    }
+    if (phase === 'playing') return;
+    const rest = setTimeout(() => {
+      if (!leaving.current) ticking.setActive(false);
+    }, phase === 'over' ? SETTLE_MS + SETTLE_SPARE_MS : SETTLE_SPARE_MS);
+    return () => clearTimeout(rest);
+  }, [phase, ticking, lastFrame]);
+
+  /*
     Back belongs to the run before it belongs to the navigator.
 
     Leaving mid-song by catching the edge of the screen is a run thrown away by
@@ -1522,6 +1599,19 @@ export default function TilesScreen() {
     // Out of the screen, but not by simply dropping it: see `leave`.
     else leave();
   });
+
+  /*
+    The app put away mid-run, a call come in, the screen gone off: held, as
+    the pause button holds it. The notes went on falling unseen and every one
+    was a life lost by the time anybody was back.
+  */
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    const watch = AppState.addEventListener('change', (state) => {
+      if (state !== 'active') pause();
+    });
+    return () => watch.remove();
+  }, [phase, pause]);
 
   const again = useCallback(() => {
     running.set(0);
@@ -1734,7 +1824,7 @@ export default function TilesScreen() {
             <Words>{(t) => <Text style={styles.note}>{t.tiles.setup.noTrack}</Text>}</Words>
           ) : loading === 'making' ? (
             <View style={styles.waiting}>
-              <ActivityIndicator color={TEXT} />
+              <Busy color={TEXT} />
               <Words>{(t) => <Text style={styles.note}>{t.tiles.setup.making}</Text>}</Words>
             </View>
           ) : loading === 'missing' ? (

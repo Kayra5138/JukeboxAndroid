@@ -123,6 +123,8 @@ export const welcome = {
     note:
       'Shows Jukebox as it was on the day it was installed: the first settings, the offer to find covers, and the tips. Your music, lists and settings are left as they are.',
     again: 'Show again',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: 'Show the first start again?', body: 'The first settings, the offer to find covers and the tips come back. Your music, lists and settings are left as they are.' },
   },
 
   /** Under what Discover is, on its sheet: why a new install gets a list at all. */

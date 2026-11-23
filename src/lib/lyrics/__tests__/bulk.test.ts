@@ -110,6 +110,24 @@ describe('lyrics for a run of tracks', () => {
     assert.equal(result.stopped, 'offline');
   });
 
+  it('says it is being held back while it waits to be let ask again, and not once it is', async () => {
+    const w = world({ lrclib: () => words('x') });
+    let refused = false;
+    const fetch = w.deps.fetch;
+    w.deps.fetch = async (query, stop) => {
+      if (!refused) {
+        refused = true;
+        throw Object.assign(new Error('slow down'), { throttled: true });
+      }
+      return fetch(query, stop);
+    };
+    const said: boolean[] = [];
+    await runLyrics(['a'].map(item), (progress) => void said.push(progress.throttled === true), signal(), w.deps);
+    assert.ok(said.includes(true));
+    assert.equal(said[said.length - 1], false);
+    assert.equal(w.table.get('a')?.lyrics.plain, 'x');
+  });
+
   it('keeps the answer it had when stopped, and asks nothing more', async () => {
     const controller = new AbortController();
     const w = world({ lrclib: () => words('x') });

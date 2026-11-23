@@ -9,6 +9,7 @@ export const settings: Strings['settings'] = {
     look: '外観と操作感',
     sound: 'サウンド',
     player: 'プレーヤー',
+    miniPlayer: 'ミニプレーヤー',
     tapes: 'カセット',
     library: 'ライブラリ',
     downloads: 'ダウンロードとディスカバー',
@@ -20,6 +21,7 @@ export const settings: Strings['settings'] = {
     look: 'テーマ、アニメーション、バイブレーション、ライブラリで使う表示の種類。',
     sound: 'イコライザーとエフェクト、音量の均一化、クロスフェード、速度とピッチ。',
     player: 'スキップボタンで移動する秒数、キューが終わるときに続けて流す曲、歌詞の翻訳先の言語。',
+    miniPlayer: '再生中バーの表示内容、ボタン、見た目と操作。',
     tapes: 'スマート巻き戻し、カセットのスキップボタンの秒数、ポッドキャストを Wi‑Fi のときだけ取得する設定。',
     library: '音楽があるフォルダ、タグとジャケット、同じ曲かもしれないファイル。',
     waiting: (count) => `${format.number(count)}件が確認待ち`,
@@ -27,6 +29,19 @@ export const settings: Strings['settings'] = {
     data: 'データのバックアップとインポート、アップデートの確認、ListenBrainz（試験運用）。',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: 'スクロールバー', note: '長いリストの横にあるバー。つかんで一気に遠くまで移動できます。', always: '常に表示', moving: 'スクロール中', never: '表示しない' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: 'リストの下のおすすめ', note: 'リストの曲の下に、そのリストのタグをもとに、ライブラリから合いそうな曲を表示します。' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: '外したあとに元に戻す', note: '曲をリストから外したり、プレーヤーで手放したり、ディスカバーで除外したりしたあと数秒間、元に戻すボタンを表示します。' },
+  search: {
+    open: '設定を検索',
+    title: '設定を検索',
+    placeholder: '設定にある言葉',
+    none: (query: string) => `「${query}」を含む設定はありません。`,
+  },
   language: {
     title: '言語',
     note: 'アプリの表示言語です。端末の言語設定には連動しません。',
@@ -62,7 +77,6 @@ export const settings: Strings['settings'] = {
     saturation: '彩度',
     lightness: '明度',
     degrees: (value) => `${value}°`,
-    percent: (value) => `${value}%`,
     hex: 'カラーコード',
     nudged: (colour) => `文字が読みやすいよう、${colour}で表示しています。`,
     note:
@@ -163,13 +177,11 @@ export const settings: Strings['settings'] = {
       sparks: 'ビートのたびに縁からプレーヤー全体へ飛び散る火花。',
       aurora: 'プレーヤー全体の後ろに、カバーの色の雲。それぞれ音の一部に合わせて膨らみます。',
     },
-    beats: 'ビートで振動',
-    beatsNote: 'プレーヤーが開いていて音楽が再生中のとき、ビートごとに軽く振動します。強さは振動の設定に従います。',
   },
   still: {
     title: '装飾の動きを止める',
     note:
-      'コマ落ちする端末向けです。プレーヤーはせり上がらずにそのまま表示され、ゲームでライフの増減時に光る演出がなくなります。タイルが落ちてくる動きはゲームそのものなので、そのまま残ります。',
+      'コマ落ちする端末向けです。ページやシートはアニメーションなしで開き、カバーはフェードインせず、レコードとビジュアライザーは止まり、ガラスはぼかしなしで描かれます。',
   },
   scriptNames: { title: '他の文字での名前', latin: 'ローマ字', original: 'オリジナル', note: '検索で曲名がローマ字と元の文字（日本語・中国語・韓国語）の両方で見つかったとき、ライブラリにどちらを表示するか。以前に検索した曲は、もう一度検索すると埋まります。' },
   haptics: {
@@ -184,7 +196,9 @@ export const settings: Strings['settings'] = {
       custom: "下で振動させる場面を選びます。",
     },
     strength: "強さ",
-    strengthNote: "指を離したときに確認できます。強さを変えられないモーターの端末では、端末の強さのままです。",
+    strengthNote: "指を離したときに確認できます。100%が推奨です。それを超えると同じ振動が強くなり、200%を超えるとモーターを最大の強さで動かします。強さを変えられないモーターの端末では、そこまでは端末の強さのままです。",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "推奨",
     groupsHeading: "振動する場面",
     groups: {
       holds: { title: "長押しとドラッグ", note: "長押しの反応、移動するために持ち上げた行、チェックボックスをなぞる指。" },
@@ -201,9 +215,81 @@ export const settings: Strings['settings'] = {
     note:
       '曲とアルバムの各行の右端に表示され、長押しと同じメニューを開きます。オフにしても長押しは使えます。',
   },
+  miniPlayer: {
+    shows: '表示内容',
+    progress: {
+      title: '進行状況',
+      none: 'なし',
+      line: 'ライン',
+      fill: '塗りつぶし',
+      note: '曲のどのあたりか。下端の細いライン、または曲の進行に合わせてバー全体が塗られていきます。',
+    },
+    line: {
+      title: '曲名の下',
+      artist: 'アーティスト',
+      album: 'アルバム',
+      both: 'アーティストとアルバム',
+      left: '残り時間',
+      next: '次の曲',
+      note: '2行目に表示する内容。',
+    },
+    cover: {
+      title: 'カバー',
+      square: '四角',
+      round: '丸',
+      record: 'レコード',
+      note: 'レコードは再生中に回ります。',
+    },
+    buttons: {
+      title: 'ボタン',
+      aside: '最大4つまで。ここに並んだ順に表示されます。',
+      names: {
+        previous: '前へ',
+        playPause: '再生・一時停止',
+        next: '次へ',
+        back: '戻る',
+        forward: '進む',
+        heart: 'お気に入り',
+        shuffle: 'シャッフル',
+        repeat: 'リピート',
+      },
+    },
+    handling: '操作',
+    swipe: {
+      title: 'スワイプで曲を切り替え',
+      note: '横に引くと前後の曲に移ります。オフにするとプレーヤーを開くだけになります。',
+    },
+    hold: {
+      title: '長押しで開くもの',
+      none: 'なし',
+      menu: '曲のメニュー',
+      queue: 'キュー',
+      lyrics: '歌詞',
+      note: 'バーの曲を長押ししたときの動作。',
+    },
+    look: '見た目',
+    floating: {
+      title: 'フローティング',
+      note: '画面幅いっぱいではなく、角を丸めて端から離して表示します。',
+    },
+    tint: {
+      title: 'カバーの色',
+      note: '再生中の曲のカバーの色で染めます。',
+    },
+    leftHanded: {
+      title: '左利き',
+      note: 'ボタンを左に、曲を右に表示します。',
+    },
+  },
   tabs: {
     title: 'タブ',
-    searchNote: 'ディスカバーとYouTubeのダウンロードはこのタブにあり、タブと一緒に非表示になります。',
+    notes: {
+      library: '曲、アルバム、アーティスト、カセット、フォルダ。',
+      lists: 'プレイリスト、スマートリスト、お気に入り。',
+      search: 'ディスカバーとYouTubeからのダウンロード。このタブを非表示にすると、どちらも一緒に隠れます。',
+      stats: '聴いた記録と、リスニングレポート。',
+      settings: 'アプリの見た目、音、動作。',
+    },
     aside: 'ライブラリと設定は常に表示されます。',
     names: 'アイコンの下に名前',
     namesNote: 'オフにすると、バーにはアイコンだけが表示され、少し低くなります。横向きでは常にそうなります。',

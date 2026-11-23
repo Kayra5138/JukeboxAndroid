@@ -11,7 +11,7 @@ const STEP_FELT = 35;
 
 export type DragSelect = {
   /** Spread onto the view wrapping the list. */
-  panHandlers: ReturnType<typeof PanResponder.create>['panHandlers'];
+  panHandlers: ReturnType<typeof PanResponder.create>['panHandlers'] & { onTouchStart: () => void };
   /** Give this to the wrapper so the gesture knows where the list begins. */
   wrapperRef: React.RefObject<View | null>;
   onWrapperLayout: () => void;
@@ -78,6 +78,13 @@ export function useDragSelect({
   enabledRef.current = enabled;
   columnsRef.current = columns;
 
+  /*
+    Where the list is in the window: measured as it is laid out, and again
+    at every touch. Measured only as it was laid out, a page that slid in
+    from the side was measured part way in, and laid out once it had arrived
+    it was never measured again: every finger was then counted from the wrong
+    corner, and a run came to one row.
+  */
   const onWrapperLayout = useCallback(() => {
     wrapperRef.current?.measureInWindow((x, y) => {
       listLeft.current = x;
@@ -153,13 +160,14 @@ export function useDragSelect({
       },
       onPanResponderMove: (event) => {
         const index = indexAt(event.nativeEvent.pageX, event.nativeEvent.pageY);
-        if (anchor.current !== null && index !== reached.current) {
-          reached.current = index;
-          const now = Date.now();
-          if (now - felt.current >= STEP_FELT) {
-            felt.current = now;
-            haptic('holds', 'step');
-          }
+        // Still over the row it was: the choice is what it was, and saying it
+        // again drew every row of the list for nothing, at every move.
+        if (anchor.current === null || index === reached.current) return;
+        reached.current = index;
+        const now = Date.now();
+        if (now - felt.current >= STEP_FELT) {
+          felt.current = now;
+          haptic('holds', 'step');
         }
         apply(index);
       },
@@ -171,6 +179,8 @@ export function useDragSelect({
       },
     }).panHandlers;
   }, [indexAt, onChange, overCheckbox]);
+  // Spread with the responder's own, onto the same view: see `onWrapperLayout`.
+  const handlers = useMemo(() => ({ ...panHandlers, onTouchStart: onWrapperLayout }), [panHandlers, onWrapperLayout]);
 
-  return { panHandlers, wrapperRef, onWrapperLayout, onScroll, onWidth };
+  return { panHandlers: handlers, wrapperRef, onWrapperLayout, onScroll, onWidth };
 }

@@ -104,6 +104,7 @@ const list = (id: number, name: string, extra: Row = {}): Row => ({
   tag: null,
   kind: null,
   rules: null,
+  used_at: null,
   ...extra,
 });
 const entry = (playlist: number, track: string, position: number): Row => ({
@@ -528,7 +529,15 @@ describe('merging a backup into what is here', () => {
     const twice = tables({ plays: [play('1', 10), play('2', 10)] });
     assert.equal(mergeTables(twice, twice).plays.length, 2);
     assert.equal(mergeTables(tables({ plays: [play('1', 10)] }), twice).plays.length, 2);
-    assert.equal(mergeTables(twice, tables({ plays: [play('3', 10)] })).plays.length, 2);
+    // Another song at the same moment is another listen.
+    assert.equal(mergeTables(twice, tables({ plays: [play('3', 10)] })).plays.length, 3);
+  });
+
+  it('tells apart two songs another app put down at the same hour', () => {
+    const hour = 1_700_000_000_000;
+    const here = tables({ plays: [play('1', hour, { source: 'apple' })] });
+    const there = tables({ plays: [play('1', hour, { source: 'apple' }), play('2', hour, { source: 'apple' })] });
+    assert.deepEqual(mergeTables(here, there).plays.map((row) => row.title), ['song 1', 'song 2']);
   });
 
   it('believes a hand over a catalogue, and a catalogue over nothing', () => {
@@ -563,11 +572,19 @@ describe('merging a backup into what is here', () => {
     assert.deepEqual(of('2'), [['pop', 0]]);
   });
 
+  it('keeps a list changed here lately ahead of an older use of it in the backup', () => {
+    const merged = mergeTables(
+      tables({ playlists: [list(4, 'Mine', { updated_at: 100, used_at: null })] }),
+      tables({ playlists: [list(1, 'Mine', { updated_at: 10, used_at: 70 })] })
+    );
+    assert.equal(merged.playlists[0]!.used_at, 100);
+  });
+
   it('pours a list into the list of the same name and kind', () => {
     const merged = mergeTables(
       tables({ playlists: [list(4, 'Mine', { cover_uri: `${HOME}mine.jpg` })], playlist_tracks: [entry(4, '1', 0)] }),
       tables({
-        playlists: [list(1, ' mine ', { cover_uri: `${HOME}theirs.jpg`, updated_at: 50 })],
+        playlists: [list(1, ' mine ', { cover_uri: `${HOME}theirs.jpg`, updated_at: 50, used_at: 70 })],
         playlist_tracks: [entry(1, '2', 0), entry(1, '1', 1)],
       })
     );
@@ -575,6 +592,7 @@ describe('merging a backup into what is here', () => {
     assert.equal(merged.playlists[0]!.id, 4);
     assert.equal(merged.playlists[0]!.cover_uri, `${HOME}mine.jpg`, 'the cover chosen here stays');
     assert.equal(merged.playlists[0]!.updated_at, 50);
+    assert.equal(merged.playlists[0]!.used_at, 70, 'used the later of the two times');
     assert.deepEqual(merged.playlist_tracks.map((row) => [row.playlist_id, row.track_id, row.position]), [
       [4, '1', 0],
       [4, '2', 1],
@@ -708,6 +726,21 @@ describe('the database, there and back', () => {
     const elsewhere = open().database;
     restore(elsewhere, back.tables, back.settings, 'replace');
     assert.deepEqual(readTables(elsewhere), everything);
+  });
+
+  it('merging leaves the listens here under their numbers, and what ListenBrainz has had of them', () => {
+    const { raw, database } = open();
+    restore(database, tables({ plays: [play('1', 10), play('2', 30)] }), {}, 'replace');
+    const ids = () => raw.prepare('SELECT id, started_at FROM plays ORDER BY id').all().map((row) => ({ ...row }));
+    const before = ids();
+    raw.exec(`INSERT INTO listenbrainz_listens (play_id, state, at) SELECT id, 'sent', 1 FROM plays`);
+
+    const here = readTables(database);
+    restore(database, mergeTables(here, tables({ plays: [play('1', 10), play('3', 20)] })), {}, 'merge', here);
+
+    assert.deepEqual(ids().slice(0, 2), before);
+    assert.deepEqual(readTables(database).plays.map((row) => row.started_at), [10, 20, 30]);
+    assert.equal((raw.prepare('SELECT COUNT(*) AS n FROM listenbrainz_listens').get() as { n: number }).n, 2);
   });
 
   it('replaces what was there rather than adding to it', () => {

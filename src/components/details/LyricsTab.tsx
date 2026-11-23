@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Note } from '../Note';
+import { LEADING, RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Button, TextButton } from '../Button';
 import { CrossIcon } from '../Icons';
 import { Pressable } from '../Pressable';
 
@@ -119,7 +121,7 @@ export function LyricsTab({ track }: { track: Track }) {
     setEdited(storedText);
   }, [storedText]);
   // Words pasted in or edited and not kept are asked about on the way out.
-  useUnsavedBack(changed, () => setEdited(storedText));
+  useUnsavedBack(changed, () => setEdited(storedText), 'lyrics');
 
   // Seeded with what the track calls itself, as a lyrics site would have it,
   // since that is what is being looked for; the point of typing is to be able
@@ -249,38 +251,21 @@ export function LyricsTab({ track }: { track: Track }) {
   return (
     <View style={styles.screen}>
       <FormScroll contentContainerStyle={styles.content} under={SAVE_ROW}>
-        <View style={styles.finding}>
-          <SearchField
-            style={styles.grow}
+        <SearchField
             // Named for what the box is for; the hint says what to put in it,
             // and is gone once anything is typed.
             accessibilityLabel={said.find}
             value={query}
             onChangeText={setQuery}
             placeholder={said.queryPlaceholder}
-            onSubmitEditing={() => void find()}
-          />
-          <Pressable
-            accessibilityRole="button"
-            android_ripple={pressed}
-            style={[styles.action, styles.findButton, (!query.trim() || searching) && styles.actionOff]}
-            disabled={!query.trim() || searching}
-            onPress={() => void find()}>
-            {searching ? (
-              <ActivityIndicator color={c.onPrimary} />
-            ) : (
-              <Text style={styles.actionLabel}>{t.common.search}</Text>
-            )}
-          </Pressable>
-        </View>
+            go={{ label: t.common.search, busy: searching, onPress: () => void find() }}
+        />
 
         {found > 0 ? (
           <View>
             <View style={styles.resultsHead}>
               <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.results(found))}</Text>
-              <Pressable accessibilityRole="button" android_ripple={pressed} hitSlop={OFFSET_SLOP} onPress={closeResults}>
-                <Text style={styles.link}>{t.common.close}</Text>
-              </Pressable>
+              <TextButton label={t.common.close} strong onPress={closeResults} />
             </View>
             {onPhone ? (
               <Pressable
@@ -322,7 +307,7 @@ export function LyricsTab({ track }: { track: Track }) {
           </View>
         ) : null}
 
-        {note ? <Text style={styles.note}>{note}</Text> : null}
+        {note ? <Note>{note}</Note> : null}
 
         <Text style={styles.status}>
           {stored
@@ -366,30 +351,15 @@ export function LyricsTab({ track }: { track: Track }) {
 
         <View style={styles.saving}>
           {changed ? (
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={pressed}
-              style={styles.undo}
-              onPress={() => setEdited(storedText)}>
-              <Text style={styles.undoLabel}>{said.undo}</Text>
-            </Pressable>
+            <Button kind="outline" label={said.undo} onPress={() => setEdited(storedText)} />
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            android_ripple={pressed}
-            style={[styles.action, styles.grow, !changed && styles.actionOff]}
-            disabled={!changed}
-            onPress={save}>
-            <Text style={styles.actionLabel}>{changed && !edited.trim() ? said.removeWords : t.common.save}</Text>
-          </Pressable>
+          <Button label={changed && !edited.trim() ? said.removeWords : t.common.save} wide disabled={!changed} onPress={save} />
         </View>
         {timed > 0 ? <Text style={styles.hint}>{said.timedHint}</Text> : null}
         {stored?.source === 'manual' || removed ? (
           // The only way back. A hand-made choice is deliberately left alone by
           // every lookup, so without this a wrong correction would be permanent.
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.revert} onPress={revert}>
-            <Text style={styles.link}>{said.forget}</Text>
-          </Pressable>
+          <TextButton label={said.forget} strong onPress={revert} />
         ) : null}
 
         {timed > 0 ? (
@@ -397,9 +367,13 @@ export function LyricsTab({ track }: { track: Track }) {
             <Text accessibilityRole="header" style={[styles.section, styles.sectionApart]}>{t.format.upper(said.timing)}</Text>
             <Text style={styles.hint}>{said.timingHint}</Text>
             <View style={styles.row}>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(-STEP_MS)}>
-                <Text style={styles.stepLabel}>{said.earlier(STEP_MS / 1000)}</Text>
-              </Pressable>
+              <Button
+                label={said.earlier(STEP_MS / 1000)}
+                kind="outline"
+                shape="pill"
+                size="small"
+                onPress={() => nudge(-STEP_MS)}
+              />
               {/* Nudging is for finding it; typing is for when you already
                   know. Four seconds out is sixteen taps otherwise. */}
               <Pressable
@@ -410,13 +384,21 @@ export function LyricsTab({ track }: { track: Track }) {
                 onPress={() => setTypingOffset(true)}>
                 <Text style={styles.offset}>{formatOffset(offset, t)}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(STEP_MS)}>
-                <Text style={styles.stepLabel}>{said.later(STEP_MS / 1000)}</Text>
-              </Pressable>
+              <Button
+                label={said.later(STEP_MS / 1000)}
+                kind="outline"
+                shape="pill"
+                size="small"
+                onPress={() => nudge(STEP_MS)}
+              />
               {offset !== 0 ? (
-                <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.step} onPress={() => nudge(-offset)}>
-                  <Text style={styles.stepLabel}>{said.reset}</Text>
-                </Pressable>
+                <Button
+                  label={said.reset}
+                  kind="outline"
+                  shape="pill"
+                  size="small"
+                  onPress={() => nudge(-offset)}
+                />
               ) : null}
             </View>
           </>
@@ -437,92 +419,60 @@ export function LyricsTab({ track }: { track: Track }) {
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1 },
-  content: { padding: 20, paddingBottom: 48, gap: 10 },
+  content: { padding: SPACE.l, paddingBottom: 48, gap: SPACE.s },
   grow: { flex: 1 },
-  finding: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  findButton: { paddingHorizontal: 16 },
-  resultsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4 },
+  resultsHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: SPACE.xs },
+  // As the other tabs' (`styles.ts`): a step darker and heavier than the faintest, to be read over glass.
   section: {
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1,
+    color: c.textMuted,
+    fontSize: TYPE.label,
+    fontWeight: '600',
+    letterSpacing: 0.8,
   },
-  sectionApart: { paddingTop: 22 },
-  status: { color: c.textMuted, fontSize: 13, paddingTop: 6 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-  step: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 18,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.borderStrong,
-  },
-  stepLabel: { color: c.text, fontSize: 14 },
+  sectionApart: { paddingTop: SPACE.l },
+  status: { color: c.textMuted, fontSize: TYPE.small, paddingTop: SPACE.xs },
+  hint: { color: c.textMuted, fontSize: TYPE.small, lineHeight: LEADING.small },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s, flexWrap: 'wrap' },
   offset: {
     color: c.accent,
-    fontSize: 14,
+    fontSize: TYPE.small,
     minWidth: 74,
     textAlign: 'center',
     // Reads as something to touch rather than as a readout.
     textDecorationLine: 'underline',
-    paddingVertical: 9,
+    paddingVertical: SPACE.s,
   },
   input: {
     color: c.text,
-    fontSize: 15,
+    fontSize: TYPE.body,
     backgroundColor: c.surface,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    borderRadius: RADIUS.control,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.m,
     ...outlined(c),
   },
   // Room down the right for the cross, so that a long line is not read through it. Short enough
   // to fit above the keyboard with the button that saves it.
-  words: { height: 270, textAlignVertical: 'top', lineHeight: 21, paddingRight: 44 },
+  words: { height: 270, textAlignVertical: 'top', lineHeight: LEADING.body, paddingRight: 44 },
   clear: {
     position: 'absolute',
     top: 8,
     right: 8,
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.surfaceRaised,
   },
-  saving: { flexDirection: 'row', gap: 8 },
-  undo: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 18,
-    minHeight: 44,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.borderStrong,
-  },
-  undoLabel: { color: c.text, fontSize: 15 },
-  action: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    minHeight: 44,
-    ...outlined(c, c.primary),
-  },
-  actionOff: { opacity: 0.35 },
-  actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
+  saving: { flexDirection: 'row', gap: SPACE.s },
   // Good news and bad both come here, so it is neither colour.
-  note: { color: c.text, fontSize: 13 },
-  revert: { alignSelf: 'flex-start', paddingVertical: 4 },
-  link: { color: c.accent, fontSize: 13.5 },
   candidate: {
-    gap: 3,
-    paddingVertical: 11,
+    gap: SPACE.xxs,
+    paddingVertical: SPACE.m,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,
   },
-  candidateTitle: { color: c.text, fontSize: 14.5 },
-  candidateMeta: { color: c.textFaint, fontSize: 12 },
+  candidateTitle: { color: c.text, fontSize: TYPE.body },
+  candidateMeta: { color: c.textMuted, fontSize: TYPE.small },
 }));

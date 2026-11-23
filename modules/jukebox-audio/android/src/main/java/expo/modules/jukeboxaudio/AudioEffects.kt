@@ -162,6 +162,18 @@ object AudioEffects {
   }
 
   /**
+   * Puts [settings] in force and nothing more, for a slider being dragged:
+   * stored, every step of a drag read and wrote the settings' file six
+   * times over, twenty-five times a second. What is let go of is stored by
+   * [update].
+   */
+  @Synchronized
+  fun preview(settings: EffectsStore.Settings, parametric: ParametricSettings?) {
+    parametric?.let { Parametric.publish(it.curve(settings.enabled)) }
+    apply(settings)
+  }
+
+  /**
    * Everything the settings screen needs, in one read.
    *
    * The same with nothing playing as with something: the equalizer is the

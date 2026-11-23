@@ -4,16 +4,17 @@ import type { PressRingFor } from './PressMenu';
 import type { Track } from '../lib/types';
 import { Image } from './Picture';
 import { useIsFocused } from 'expo-router';
-import { Animated, Easing, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AlbumTools } from './AlbumTools';
-import { SetAsideLink } from './SetAsideLink';
+import { useAlbumTools } from './AlbumTools';
+import { useSetAsideLink } from './SetAsideLink';
 import { AlbumBy } from './NameLinks';
 import type { Sleeve } from './CoverFlow';
-import { LIST_COVER_SIZE, ListHeading, SIDE_COLUMN, sideCoverSize } from './ListHeading';
+import { GlassHeader } from './GlassHeader';
+import { LIST_COVER_SIZE, ListHeading } from './ListHeading';
+import { HeadColumn } from './MediaPage';
 import { PlaylistCover } from './PlaylistCover';
-import { Pressable } from './Pressable';
 import { QueueList } from './QueueList';
 import { useT } from '../lib/i18n/index';
 import type { Album } from '../lib/media/albums';
@@ -21,7 +22,8 @@ import { useAlbumArtwork } from '../lib/media/artwork';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { shuffled } from '../lib/media/shuffle';
 import { makeStyles, page } from '../lib/theme/index';
-import { motionReduced } from '../lib/ui/motion';
+import { PAGE, RADIUS } from '../lib/theme/measures';
+import { motionReduced, useMotionReduced } from '../lib/ui/motion';
 import { useBack } from '../lib/ui/back';
 
 /** How long a sleeve takes to become its record, and to go back. */
@@ -118,8 +120,8 @@ export function AlbumListing({
   const insets = useSafeAreaInsets();
   const t = useT();
   const styles = useStyles();
-  const { height: tall } = useWindowDimensions();
-  const coverSize = side ? sideCoverSize(tall, top, bottom) : LIST_COVER_SIZE;
+  // The head's cover, across the top or down the column alike: as every page of a thing has it (`HEAD_COVER`).
+  const coverSize = LIST_COVER_SIZE;
   // The sleeve in flight, which has to be the very picture the rack showed.
   const artwork = useAlbumArtwork(album.tracks);
 
@@ -128,6 +130,8 @@ export function AlbumListing({
     so it cannot change while this is up.
   */
   const [still] = useState(motionReduced);
+  // Watched, unlike the flight above: it has to agree with the library under it, which watches it too.
+  const solid = useMotionReduced();
 
   /** Nought while it is still a sleeve in the rack, one once it is the list. */
   const progress = useRef(new Animated.Value(still ? 1 : 0)).current;
@@ -288,10 +292,11 @@ export function AlbumListing({
     extrapolate: 'clamp',
   });
 
+  const albumTools = useAlbumTools(album);
+  const setAsideLink = useSetAsideLink('album', album.key);
   const heading = (
     <ListHeading
       side={side}
-      onBack={close}
       cover={
         <Animated.View
           ref={cover}
@@ -314,21 +319,14 @@ export function AlbumListing({
       onPlay={() => onPlay(album.tracks, 0)}
       // Shuffled here rather than by the player's shuffle, so the
       // queue itself is in the new order.
-      onShuffle={() => onPlay(shuffled(album.tracks), 0)}>
-      {/* Quiet, under the two buttons: where the record's own page
-          keeps the things that are not playing it. */}
-      <View style={styles.links}>
-        {onFindRest ? (
-          <Pressable
-            style={styles.linkHit}
-            accessibilityRole="button"
-            onPress={() => onFindRest(album.key)}>
-            <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
-          </Pressable>
-        ) : null}
-        <AlbumTools album={album} />
-        <SetAsideLink kind="album" itemKey={album.key} hit={styles.linkHit} style={styles.link} />
-      </View>
+      onShuffle={() => onPlay(shuffled(album.tracks), 0)}
+      // Under the buttons, as the record's own page has them: what is done to it that is not playing it.
+      links={[
+        ...(onFindRest ? [{ label: t.library.albumActions.rest.label, onPress: () => onFindRest(album.key) }] : []),
+        ...(albumTools.link ? [albumTools.link] : []),
+        ...(setAsideLink ? [setAsideLink] : []),
+      ]}>
+      {albumTools.status}
     </ListHeading>
   );
 
@@ -346,23 +344,23 @@ export function AlbumListing({
         nothing meant for the list reaches the rack while one is turning into
         the other.
       */}
-      <Animated.View style={[styles.page, side && styles.sides, { opacity: listed }]}>
+      <Animated.View style={[styles.page, solid && styles.solid, { opacity: listed }]}>
+        {/* The bar every page of a thing has, saying what it is, with the way back: see `GlassHeader`. */}
+        <GlassHeader title={t.nav.album} onBack={close} top={top} />
+        <View style={[styles.body, side && styles.sides]}>
         {side ? (
-          // The left column: scrolled on its own, should a long name and the links under it not fit.
-          <ScrollView
-            style={styles.sidePane}
-            contentContainerStyle={{ paddingTop: top, paddingBottom: bottom + insets.bottom }}
-            showsVerticalScrollIndicator={false}>
+          <HeadColumn room={{ paddingTop: PAGE.top, paddingHorizontal: PAGE.side, paddingBottom: bottom + insets.bottom }}>
             {heading}
-          </ScrollView>
+          </HeadColumn>
         ) : null}
         <View style={styles.tracks}>
           <QueueList
             // On a plate where screens are glass, as the record's own page has them.
             plate
             queue={album.tracks}
-            // Nothing in a list is "the playing one"; the mark column stays empty.
+            // No place in a record is "the one playing"; the song playing is marked where it is in it all the same.
             currentIndex={-1}
+            marksPlaying
             // What a tap plays is a choice (`player/tap.ts`); the record from that track, unless one was made.
             onSelect={(index) => (onTap ?? onPlay)(album.tracks, index)}
             onLongPress={
@@ -373,9 +371,10 @@ export function AlbumListing({
               })
             }
             ring={ring}
-            header={<View style={{ paddingTop: top }}>{side ? null : heading}</View>}
+            header={<View style={side ? styles.topSide : styles.top}>{side ? null : heading}</View>}
             footer={<View style={{ paddingBottom: insets.bottom + 32 + bottom }} />}
           />
+        </View>
         </View>
       </Animated.View>
 
@@ -405,28 +404,23 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   */
   // Or, where screens are glass, the wash every other one has, over a heading and a rack put out of focus by the library.
   page: { flex: 1, ...(glassOf(c) > 0 ? glassPage(c) : page(c)) },
-  // Sideways: the record down the left, a share of the width within bounds, and the tracks beside it.
+  // Held still, the library under a record is not out of focus (`LibraryScreen`), and would be read sharp through glass.
+  solid: page(c),
+  body: { flex: 1 },
+  // Sideways: the record down the left (`HeadColumn`), and the tracks beside it.
   sides: { flexDirection: 'row' },
-  sidePane: {
-    ...SIDE_COLUMN,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: c.border,
-  },
+  // Over the tracks, the page's room; upright, the head in it at the page's margins, as `MediaPage` has it.
+  top: { paddingTop: PAGE.top, paddingHorizontal: PAGE.side },
+  topSide: { paddingTop: PAGE.top },
   tracks: { flex: 1 },
   // The rack's own sleeve, to the corner and the colour behind the picture.
   sleeve: {
     position: 'absolute',
     top: 0,
     left: 0,
-    borderRadius: 4,
+    borderRadius: RADIUS.check,
     overflow: 'hidden',
     backgroundColor: c.surfaceRaised,
   },
   art: { width: '100%', height: '100%' },
-  // As the record's own page draws them.
-  // As the record's own page has them: a finger's height each, the room that
-  // was above them now inside the first row, so they sit where they did.
-  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
-  linkHit: { minHeight: 48, justifyContent: 'center' },
-  link: { color: c.accent, fontSize: 13.5 },
 }));

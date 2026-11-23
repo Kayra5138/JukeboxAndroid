@@ -1,16 +1,21 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Image } from './Picture';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
-import { Pressable } from './Pressable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { FlatList, StyleSheet, View } from 'react-native';
 
+import { Artwork } from './Artwork';
+import { Button, TextButton } from './Button';
+import { MediaRow } from './MediaRow';
+import { usePageSides } from './NowPlayingBar';
+import { ScreenState } from './ScreenState';
+
+import { OnAPage } from './OnAPage';
 import { SearchField } from './SearchField';
+import { useUnderBars } from './UnderBars';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { search } from '../lib/media/search';
 import type { EnrichedTrack } from '../lib/media/merge';
-import { makeStyles, outlined, usePressed } from '../lib/theme/index';
-import { scrimOf } from '../lib/theme/Veil';
+import { makeStyles } from '../lib/theme/index';
+import { PAGE, ROW_COVER_COMPACT, SPACE } from '../lib/theme/measures';
 import { CLIP_SUBVIEWS, LIST_WINDOW } from '../lib/ui/lists';
 
 /**
@@ -39,10 +44,36 @@ export function TrackPicker({
   onClose: () => void;
   onAdd: (trackIds: string[]) => void;
 }) {
-  const insets = useSafeAreaInsets();
+  const t = useT();
+  // A page of its own in the tab, the bars where they are; what is searched and chosen is kept on it (`PickerPage`).
+  return (
+    <OnAPage visible={visible} title={t.lists.trackPicker.heading} onClose={onClose} bare>
+      <PickerPage library={library} already={already} onAdd={onAdd} onDone={onClose} />
+    </OnAPage>
+  );
+}
+
+/**
+ * The search, the songs and the button that adds the ones ticked. What is
+ * typed and ticked is kept here, on the page, which is drawn where the page
+ * is and not where it was opened from.
+ */
+function PickerPage({
+  library,
+  already,
+  onAdd,
+  onDone,
+}: {
+  library: EnrichedTrack[];
+  already: Set<string>;
+  onAdd: (trackIds: string[]) => void;
+  onDone: () => void;
+}) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
+  // The bar of what is playing and the tab bar, in a theme of glass laid over the foot of the page.
+  const under = useUnderBars({ player: true });
+  const sides = usePageSides();
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(new Set());
 
@@ -57,183 +88,81 @@ export function TrackPicker({
     });
   }, []);
 
-  const close = useCallback(() => {
-    setQuery('');
-    setChosen(new Set());
-    onClose();
-  }, [onClose]);
-
-  if (!visible) return null;
-
+  // The search and the buttons at the page's margins; the songs to its sides, as rows of a list are (`MediaRow`).
+  const margins = { paddingLeft: PAGE.side + sides.left, paddingRight: PAGE.side + sides.right };
   return (
-    <View style={styles.layer}>
-      {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
-          of its own, touching outside it is one of the ways out, and it has to be findable. */}
-      <Pressable
-        style={styles.backdrop}
-        accessibilityRole="button"
-        accessibilityLabel={t.common.close}
-        onPress={close}
+    <View style={[styles.page, { paddingTop: PAGE.top + under.top, paddingBottom: SPACE.m + under.bottom }]}>
+      <View style={margins}>
+        <SearchField value={query} onChangeText={setQuery} placeholder={t.lists.trackPicker.search} />
+      </View>
+
+      <FlatList
+        removeClippedSubviews={CLIP_SUBVIEWS}
+        windowSize={LIST_WINDOW}
+        style={styles.list}
+        data={results}
+        keyExtractor={(track) => track.id}
+        keyboardShouldPersistTaps="handled"
+        initialNumToRender={12}
+        renderItem={({ item }) => <Row track={item} held={already.has(item.id)} ticked={chosen.has(item.id)} onToggle={toggle} />}
+        ListEmptyComponent={<ScreenState kind="empty" text={t.library.nothingMatches(query)} />}
       />
-      <View style={[styles.sheet, { paddingBottom: insets.bottom + 14 }]}>
-        <View style={styles.head}>
-          <Text accessibilityRole="header" style={styles.heading}>{t.lists.trackPicker.heading}</Text>
-          {/* A word in the corner; this much further is a finger's height to press. */}
-          <Pressable accessibilityRole="button" hitSlop={14} onPress={close}>
-            <Text style={styles.link}>{t.common.done}</Text>
-          </Pressable>
-        </View>
 
-        <SearchField
-          value={query}
-          onChangeText={setQuery}
-          placeholder={t.lists.trackPicker.search}
-        />
-
-        <FlatList
-                  removeClippedSubviews={CLIP_SUBVIEWS}
-                  windowSize={LIST_WINDOW}
-          style={styles.list}
-          data={results}
-          keyExtractor={(track) => track.id}
-          keyboardShouldPersistTaps="handled"
-          initialNumToRender={12}
-          renderItem={({ item }) => (
-            <Row
-              track={item}
-              held={already.has(item.id)}
-              ticked={chosen.has(item.id)}
-              onPress={() => toggle(item.id)}
-            />
-          )}
-          ListEmptyComponent={
-            <Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>
-          }
-        />
-
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={[styles.action, chosen.size === 0 && styles.actionOff]}
+      <View style={[styles.actions, margins]}>
+        <TextButton label={t.common.done} size="body" onPress={onDone} />
+        <Button
+          label={t.lists.trackPicker.add(chosen.size)}
+          wide
           disabled={chosen.size === 0}
           onPress={() => {
             onAdd([...chosen]);
-            // The sheet stays open. Building a list is several searches, and
-            // closing after each one would mean reopening for the next.
+            // The page stays open. Building a list is several searches, and
+            // closing after each one would mean opening it again for the next.
             setChosen(new Set());
             setQuery('');
-          }}>
-          <Text style={styles.actionLabel}>{t.lists.trackPicker.add(chosen.size)}</Text>
-        </Pressable>
+          }}
+        />
       </View>
     </View>
   );
 }
 
-function Row({
+/**
+ * A song to tick, in a close-set row: the box at its start, as everywhere
+ * something is chosen. One already in the list is ticked, faint, and cannot
+ * be unticked here.
+ */
+const Row = memo(function Row({
   track,
   held,
   ticked,
-  onPress,
+  onToggle,
 }: {
   track: EnrichedTrack;
   held: boolean;
   ticked: boolean;
-  onPress: () => void;
+  onToggle: (id: string) => void;
 }) {
   const artwork = useTrackArtwork(track);
   const t = useT();
-  const styles = useStyles();
-  const pressed = usePressed();
-
   return (
-    <Pressable
-      android_ripple={pressed}
-      style={styles.row}
-      onPress={onPress}
-      disabled={held}
-      // A tick box, which says whether it is ticked: the dot at the end is
-      // all that says so to the eye. One already in the list is ticked and
-      // cannot be unticked here.
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: ticked || held, disabled: held }}>
-      {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
-      ) : (
-        <View style={[styles.art, styles.artEmpty]} />
-      )}
-      <View style={styles.text}>
-        <Text style={[styles.title, held && styles.dim]} numberOfLines={1}>
-          {track.title}
-        </Text>
-        <Text style={styles.artist} numberOfLines={1}>
-          {held ? t.lists.trackPicker.alreadyHere : (track.artist ?? t.common.unknownArtist)}
-        </Text>
-      </View>
-      <View style={[styles.tick, (ticked || held) && styles.tickOn, held && styles.tickHeld]}>
-        {ticked || held ? <View style={styles.dot} /> : null}
-      </View>
-    </Pressable>
+    <MediaRow
+      size="compact"
+      lead={<Artwork uri={artwork} size={ROW_COVER_COMPACT} />}
+      title={track.title}
+      subtitle={held ? t.lists.trackPicker.alreadyHere : (track.artist ?? t.common.unknownArtist)}
+      check={ticked || held}
+      selected={ticked}
+      off={held}
+      onPress={() => onToggle(track.id)}
+    />
   );
-}
+});
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  layer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: scrimOf(c),
-  },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: '85%',
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 16,
-    paddingHorizontal: 18,
-    gap: 12,
-    ...outlined(c),
-  },
-  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heading: { color: c.text, fontSize: 16, fontWeight: '600' },
-  link: { color: c.accent, fontSize: 14.5 },
-  list: { flex: 1 },
-  empty: { color: c.textFaint, fontSize: 13, paddingVertical: 18, textAlign: 'center' },
-
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9 },
-  art: { width: 42, height: 42, borderRadius: 6 },
-  artEmpty: { backgroundColor: c.surfaceRaised },
-  text: { flex: 1, minWidth: 0, gap: 2 },
-  title: { color: c.text, fontSize: 14.5 },
-  dim: { color: c.textMuted },
-  artist: { color: c.textFaint, fontSize: 12 },
-  tick: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: c.borderStrong,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tickOn: { backgroundColor: c.accent, borderColor: c.accent },
-  tickHeld: { backgroundColor: c.borderStrong, borderColor: c.borderStrong },
-  dot: { width: 9, height: 9, borderRadius: 2, backgroundColor: c.onAccent },
-
-  action: {
-    alignItems: 'center',
-    backgroundColor: c.primary,
-    borderRadius: 11,
-    paddingVertical: 12,
-    ...outlined(c, c.primary),
-  },
-  actionOff: { opacity: 0.35 },
-  actionLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
-}));
+const useStyles = makeStyles(() =>
+  StyleSheet.create({
+    page: { flex: 1, gap: SPACE.m },
+    actions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.l },
+    list: { flex: 1 },
+  })
+);

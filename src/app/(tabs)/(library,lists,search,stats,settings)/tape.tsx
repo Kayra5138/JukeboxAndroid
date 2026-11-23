@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Linking, StyleSheet, Text, View } from 'react-native';
+import { TextButton } from '../../../components/Button';
+import { HeadCover, MediaHead, SectionLabel } from '../../../components/MediaPage';
+import { PageScroll } from '../../../components/Page';
+import { ScreenState } from '../../../components/ScreenState';
+import { useRows } from '../../../components/settings/rows';
 
-import { Image } from '../../../components/Picture';
 import { Pressable } from '../../../components/Pressable';
 import { useT } from '../../../lib/i18n/index';
 import { libraryState, refreshLibrary } from '../../../lib/library/index';
@@ -18,7 +21,8 @@ import { partsOf } from '../../../lib/tapes/order';
 import { useTapePlace } from '../../../lib/tapes/places';
 import { tapeKeyOf, tapeSpeedOf } from '../../../lib/tapes/speed';
 import { isTape } from '../../../lib/tapes/tape';
-import { makeStyles, outlinedClip, scene, usePressed } from '../../../lib/theme/index';
+import { makeStyles, usePressed } from '../../../lib/theme/index';
+import { LEADING, TYPE } from '../../../lib/theme/measures';
 import { downloads } from '../../../lib/youtube/native';
 import type { DownloadJob } from '../../../lib/youtube/types';
 
@@ -33,9 +37,8 @@ import type { DownloadJob } from '../../../lib/youtube/types';
 export default function TapeDetailsScreen() {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
+  const rows = useRows();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const said = t.library.tapes.details;
   const { trackId } = useLocalSearchParams<{ trackId: string }>();
   const library = useLibraryTracks();
@@ -67,9 +70,9 @@ export default function TapeDetailsScreen() {
 
   if (!track) {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <Text style={styles.muted}>{libraryState().kind === 'library' ? said.missing : ''}</Text>
-      </View>
+      <PageScroll>
+        {libraryState().kind === 'library' ? <ScreenState kind="empty" text={said.missing} /> : <ScreenState kind="loading" />}
+      </PageScroll>
     );
   }
 
@@ -83,8 +86,9 @@ export default function TapeDetailsScreen() {
       : place && place.positionSec >= 10
         ? `${t.library.tapes.heard(Math.floor(place.positionSec / 60), Math.max(1, minutes(place.durationSec || track.durationSec)))} · ${t.library.tapes.left(Math.max(1, minutes((place.durationSec || track.durationSec) - place.positionSec)))}`
         : said.notBegun;
-  const when = (ms: number | null | undefined) => (ms ? new Date(ms).toLocaleString() : null);
-  const day = (ms: number | null | undefined) => (ms ? new Date(ms).toLocaleDateString() : null);
+  // In the app's own way of writing a date, in the language chosen, as everywhere else: the phone's own was neither.
+  const when = (ms: number | null | undefined) => (ms ? t.format.dateTime(new Date(ms)) : null);
+  const day = (ms: number | null | undefined) => (ms ? t.format.date(new Date(ms)) : null);
 
   const video = job?.video;
   // A part of a playlist fetched as a book says which list; a video read off one for a list of songs says so too.
@@ -106,15 +110,12 @@ export default function TapeDetailsScreen() {
   const extension = track.filename?.includes('.') ? track.filename.slice(track.filename.lastIndexOf('.') + 1).toUpperCase() : null;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}>
-      <View style={styles.head}>
-        {artwork ? <Image source={{ uri: artwork }} style={styles.cover} contentFit="cover" /> : <View style={[styles.cover, styles.coverEmpty]} />}
-        <View style={styles.headText}>
-          <Text style={styles.title} numberOfLines={4}>{track.title}</Text>
-          {track.artist ? <Text style={styles.muted} numberOfLines={2}>{track.artist}</Text> : null}
-          {track.album && track.album !== track.artist ? <Text style={styles.faint} numberOfLines={2}>{track.album}</Text> : null}
-        </View>
-      </View>
+    <PageScroll>
+      <MediaHead
+        cover={<HeadCover uri={artwork} />}
+        title={track.title}
+        lines={[track.artist, track.album && track.album !== track.artist ? track.album : null]}
+      />
 
       <Section title={said.listening}>
         <Row label={said.heard} value={heard} />
@@ -123,7 +124,7 @@ export default function TapeDetailsScreen() {
         <Row label={said.speed} value={`${Math.round(tapeSpeedOf(tapeKeyOf(track)) * 100) / 100}×`} />
         <Row
           label={said.marks}
-          value={String(marks.length)}
+          value={t.format.number(marks.length)}
           onPress={marks.length > 0 ? () => router.push('/marks') : undefined}
         />
       </Section>
@@ -135,9 +136,9 @@ export default function TapeDetailsScreen() {
             {video?.direct ? <Row label={book ? said.book : said.show} value={video.tape?.name ?? video.channel} /> : null}
             {video && !video.direct ? <Row label={said.channel} value={video.channel} /> : null}
             {playlist ? <Row label={said.list} value={playlist.name} /> : null}
-            {video?.tape?.date ? <Row label={said.published} value={dayOfIso(video.tape.date)} /> : null}
+            {video?.tape?.date ? <Row label={said.published} value={dayOfIso(t, video.tape.date)} /> : null}
             {job?.finishedAt ? <Row label={said.fetched} value={when(job.finishedAt)} /> : null}
-            {chapters.length > 1 ? <Row label={said.chapters} value={String(chapters.length)} /> : null}
+            {chapters.length > 1 ? <Row label={said.chapters} value={t.format.number(chapters.length)} /> : null}
             {/* A video's parts SponsorBlock marked, which the player passes over: see `tapes/extras.ts`. */}
             {video && !video.direct ? (
               <Row label={said.skipped} value={!tapeFlag('skipSponsors') ? said.skippedOff : skipTrouble ? said.skippedTrouble : skippedLine(JukeboxAudio.getTapeSkips?.(trackId) ?? null, said)} />
@@ -145,13 +146,14 @@ export default function TapeDetailsScreen() {
             {address ? <Row label={said.address} value={address} link onPress={() => void Linking.openURL(address)} /> : null}
             {listAddress ? <Row label={said.listAddress} value={listAddress} link onPress={() => void Linking.openURL(listAddress)} /> : null}
             {show ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                style={styles.action}
-                onPress={() => router.push({ pathname: '/podcast', params: { feed: show.feedUrl } })}>
-                <Text style={styles.actionLabel}>{said.openSeries}</Text>
-              </Pressable>
+              <View style={rows.row}>
+                <TextButton
+                  label={said.openSeries}
+                  size="body"
+                  strong
+                  onPress={() => router.push({ pathname: '/podcast', params: { feed: show.feedUrl } })}
+                />
+              </View>
             ) : null}
           </>
         )}
@@ -164,7 +166,7 @@ export default function TapeDetailsScreen() {
         {track.size ? <Row label={said.size} value={said.megabytes(Math.max(1, Math.round(track.size / 1_000_000)))} /> : null}
         {track.addedAt ? <Row label={said.added} value={day(track.addedAt)} /> : null}
       </Section>
-    </ScrollView>
+    </PageScroll>
   );
 }
 
@@ -176,9 +178,9 @@ function skippedLine(skips: [number, number][] | null, said: ReturnType<typeof u
 }
 
 /** A day written `2026-10-10`, as the phone writes days; as it was, where it is not one. */
-function dayOfIso(day: string): string {
+function dayOfIso(t: ReturnType<typeof useT>, day: string): string {
   const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
-  return parts ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])).toLocaleDateString() : day;
+  return parts ? t.format.date(new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))) : day;
 }
 
 /** The download that brought [trackId], the latest should it have been fetched more than once; null for none. Never throws. */
@@ -192,12 +194,11 @@ async function jobOf(trackId: string): Promise<DownloadJob | null> {
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
-  const t = useT();
-  const styles = useStyles();
+  const rows = useRows();
   return (
     <>
-      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(title)}</Text>
-      <View style={styles.card}>{children}</View>
+      <SectionLabel>{title}</SectionLabel>
+      <View style={rows.card}>{children}</View>
     </>
   );
 }
@@ -205,6 +206,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** A label and what it is, one above the other, so a long address or folder has the width to itself. */
 function Row({ label, value, link = false, onPress }: { label: string; value: string | null; link?: boolean; onPress?: () => void }) {
   const styles = useStyles();
+  const rows = useRows();
   const pressed = usePressed();
   if (value == null || value === '') return null;
   const body = (
@@ -214,31 +216,18 @@ function Row({ label, value, link = false, onPress }: { label: string; value: st
     </>
   );
   return onPress ? (
-    <Pressable android_ripple={pressed} accessibilityRole={link ? 'link' : 'button'} style={styles.row} onPress={onPress}>
+    <Pressable android_ripple={pressed} accessibilityRole={link ? 'link' : 'button'} style={rows.row} onPress={onPress}>
       {body}
     </Pressable>
   ) : (
-    <View style={styles.row}>{body}</View>
+    <View style={rows.row}>{body}</View>
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...scene(c) },
-  centered: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  content: { padding: 20 },
-  head: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  cover: { width: 96, height: 96, borderRadius: 10 },
-  coverEmpty: { backgroundColor: c.surface },
-  headText: { flex: 1, minWidth: 0, gap: 4 },
-  title: { color: c.text, fontSize: 18, fontWeight: '600' },
-  muted: { color: c.textMuted, fontSize: 13.5 },
-  faint: { color: c.textFaint, fontSize: 12.5 },
-  section: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginTop: 24, marginBottom: 8, marginLeft: 4 },
-  card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
-  row: { paddingHorizontal: 16, paddingVertical: 11, gap: 2 },
-  label: { color: c.textMuted, fontSize: 12 },
-  value: { color: c.text, fontSize: 14.5, lineHeight: 20 },
-  valueLink: { color: c.accent },
-  action: { paddingHorizontal: 16, paddingVertical: 13, overflow: 'hidden' },
-  actionLabel: { color: c.accent, fontSize: 14.5, fontWeight: '600' },
-}));
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    label: { color: c.textMuted, fontSize: TYPE.hint },
+    value: { color: c.text, fontSize: TYPE.body, lineHeight: LEADING.body },
+    valueLink: { color: c.accent },
+  })
+);

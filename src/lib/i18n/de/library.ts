@@ -110,6 +110,7 @@ export const library: Strings['library'] = {
     lookSwitch: 'Wechselt zur anderen Darstellung dieser Ansicht',
     view: 'Ansicht',
     looks: { list: 'Liste', shelves: 'Regale', rack: 'Regal', map: 'Karte' },
+    shelf: { added: 'Kürzlich hinzugefügt', around: (hour: string) => `Gegen ${hour.replace(/:00$/, '')} Uhr`, repeat: 'Diesen Monat in Dauerschleife', while: 'Länger nicht gehört', never: 'Nie gespielt', all: 'Alle Titel', play: (name: string) => `${name} abspielen`, shuffle: (name: string) => `${name} zufällig abspielen`, queue: (name: string) => `${name} zur Warteschlange hinzufügen` },
     artistMap: { drawing: 'Die Karte wird gezeichnet…', shuffle: 'Ihre Songs zufällig abspielen', open: 'Öffnen', with: 'Mit', lasso: 'Künstler einkreisen und zufällig abspielen', lassoHint: 'Kreise die Künstler ein, die du mischen willst', lassoChosen: 'Eingekreist', putBackAll: 'Von Hand verschobene Künstler zurücksetzen', movedByHand: 'Von Hand verschoben', putBack: 'Zurücksetzen' },
     groupSortShort: { name: 'A–Z', tracks: 'Titel', played: 'Beliebt', added: 'Neueste' },
     groupSortedBy: {
@@ -327,9 +328,6 @@ export const library: Strings['library'] = {
     note: 'Diese Dateien sehen aus wie eine Aufnahme, die mehrmals gespeichert wurde: gleicher Name oder gleicher Interpret und Titel, und die Länge weicht höchstens zwei Sekunden ab. Von jedem Song bleibt eine Kopie. Bevor die anderen gelöscht werden, wandern ihre Wiedergaben, Tags, Songtexte und Plätze in Listen zu ihr.',
     empty: 'Kein Song ist mehrfach in deiner Bibliothek.',
     cleanAll: (count) => `Alle ${format.number(count)} aufräumen`,
-    confirmAll: (files, songs) =>
-      `${oneOrMany(files, '1 Datei', `${format.number(files)} Dateien`)} löschen? Von ${oneOrMany(songs, '1 Song', `jedem der ${format.number(songs)} Songs`)} bleibt eine Kopie, und Wiedergaben, Tags, Songtexte und Listenplätze jeder gelöschten Datei wandern vorher zu ihr. Android fragt noch einmal, bevor etwas gelöscht wird.`,
-    confirm: (files) => `${oneOrMany(files, '1 Datei', `${format.number(files)} Dateien`)} löschen`,
     deleteOthers: (count) =>
       oneOrMany(count, 'Die andere Kopie löschen', `Die anderen ${format.number(count)} Kopien löschen`),
     different: 'Das sind verschiedene Songs',

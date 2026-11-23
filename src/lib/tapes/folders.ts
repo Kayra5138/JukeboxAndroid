@@ -27,7 +27,7 @@ export function folderNameOf(name: string, otherwise = 'Tape'): string {
 export function partTitleOf(title: string, list: string): string {
   let rest = title.trim();
   const name = list.trim();
-  if (name && rest.toLocaleLowerCase().startsWith(name.toLocaleLowerCase())) rest = rest.slice(name.length);
+  if (name && rest.toLowerCase().startsWith(name.toLowerCase())) rest = rest.slice(name.length);
   rest = rest.replace(/^[\s\-–—:|·,.]+/, '').replace(/^(?:part|chapter|bölüm|kapitel|teil)?\s*\d{1,3}\s*[-–—:.)|]\s*/i, '').trim();
   return rest || title.trim();
 }

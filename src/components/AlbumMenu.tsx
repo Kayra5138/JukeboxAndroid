@@ -1,14 +1,11 @@
-import { Modal, ScrollView, StyleSheet } from 'react-native';
+import { MenuCard } from './MenuPage';
 import { AsideIcon, BroughtBackIcon, DiscIcon, PictureIcon, SearchIcon, SelectIcon } from './Icons';
 import { MenuEntry, MenuHeader, type MenuIcon } from './MenuSheet';
 import { ArtistLinks, LeaveFirst } from './NameLinks';
-import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { useAlbumArtwork } from '../lib/media/artwork';
 import type { Track } from '../lib/types';
-import { makeStyles, outlined } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
 
 export type AlbumAction = 'select' | 'rest' | 'lookUp' | 'cover' | 'setAside' | 'bringBack';
 
@@ -56,62 +53,40 @@ export function AlbumMenu({
   onClose: () => void;
 }) {
   const t = useT();
-  const styles = useStyles();
   const cover = useAlbumArtwork(album?.covers ?? null);
-  useWindowVeil(album !== null);
   return (
-    <Modal visible={album !== null} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Not a stop for a screen reader, which would otherwise read the whole
-          heading as one button that closes the menu. The back gesture closes it. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
-        {album ? (
-          <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
-            {/* Whoever it is by leads to them, the menu put away first. */}
-            <LeaveFirst value={onClose}>
-              <MenuHeader
-                title={album.name}
-                detail={
-                  album.by ? (
-                    <>
-                      <ArtistLinks credit={album.by} />
-                      {album.detail ? ` · ${album.detail}` : ''}
-                    </>
-                  ) : (
-                    album.detail
-                  )
-                }
-                picture={cover}
-              />
-            </LeaveFirst>
-            {ACTIONS.filter((action) => !hidden?.includes(action)).map((action) => (
-              <MenuEntry
-                key={action}
-                icon={ICONS[action]}
-                label={t.library.albumActions[action].label}
-                hint={t.library.albumActions[action].hint}
-                onPress={() => onSelect(action)}
-              />
-            ))}
-          </ScrollView>
-        ) : null}
-      </Pressable>
-    </Modal>
+    // A card over the page, the bars left as they are, as a song's held is (`MenuCard`).
+    <MenuCard visible={album !== null} onClose={onClose}>
+      {album ? (
+        <>
+          {/* Whoever it is by leads to them, the menu put away first. */}
+          <LeaveFirst value={onClose}>
+            <MenuHeader
+              title={album.name}
+              detail={
+                album.by ? (
+                  <>
+                    <ArtistLinks credit={album.by} />
+                    {album.detail ? ` · ${album.detail}` : ''}
+                  </>
+                ) : (
+                  album.detail
+                )
+              }
+              picture={cover}
+            />
+          </LeaveFirst>
+          {ACTIONS.filter((action) => !hidden?.includes(action)).map((action) => (
+            <MenuEntry
+              key={action}
+              icon={ICONS[action]}
+              label={t.library.albumActions[action].label}
+              hint={t.library.albumActions[action].hint}
+              onPress={() => onSelect(action)}
+            />
+          ))}
+        </>
+      ) : null}
+    </MenuCard>
   );
 }
-
-const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '85%',
-    flexGrow: 0,
-    ...outlined(c),
-  },
-  sheetBody: { paddingTop: 4, paddingBottom: 28 },
-}));

@@ -3,11 +3,13 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type Ref,
 } from 'react';
+import { LEADING, TYPE, SPACE, RADIUS } from '../lib/theme/measures';
 import { Image } from './Picture';
 import { PixelRatio, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -16,15 +18,17 @@ import { useT } from '../lib/i18n/index';
 import { albumArtworkFor, useAlbumArtwork, warmAlbumArtwork } from '../lib/media/artwork';
 import { thumbOf, useThumb } from '../lib/media/thumbs';
 import type { Album } from '../lib/media/albums';
-import { laid, makeStyles } from '../lib/theme/index';
+import { laid, makeStyles, useColours } from '../lib/theme/index';
+import { useHoldsCurrent } from '../lib/player/current';
+import { PlayingIcon } from './Icons';
 import { withAlpha } from '../lib/theme/colour';
 import { haptic } from '../lib/ui/haptics';
-import { motionReduced } from '../lib/ui/motion';
 import Animated, {
   cancelAnimation,
   Easing,
   Extrapolation,
   interpolate,
+  ReduceMotion,
   runOnJS,
   runOnUI,
   type SharedValue,
@@ -439,6 +443,7 @@ export function CoverFlow({
   caption = true,
   initial = 0,
   onSettle,
+  inSight = true,
   ref,
 }: {
   albums: Album[];
@@ -455,6 +460,12 @@ export function CoverFlow({
   initial?: number;
   /** Told which record it has come to rest on, each time it does: not as it passes them. */
   onSettle?: (index: number) => void;
+  /**
+   * Whether the rack is in front, or about to be: another view of the
+   * library in front of it, it is kept standing and not drawn, and nothing
+   * is made ready for it either, the covers of the whole library among it.
+   */
+  inSight?: boolean;
   ref?: Ref<Rack>;
 }) {
   const t = useT();
@@ -554,7 +565,62 @@ export function CoverFlow({
   */
   const [resting, setResting] = useState(true);
   const last = Math.max(albums.length - 1, 0);
-  const reduced = motionReduced();
+  /*
+    Other records handed in -- a search narrowing them, most often -- with
+    another in front than there was: the rack goes to the one it is told is
+    in front ([initial]), the record it was on where that is still among
+    them. Left where it was by number, the sleeve in front, its name and the
+    songs under it were three different records, and with few found the rack
+    stood empty until it was dragged.
+  */
+  const [handed, setHanded] = useState(albums);
+  const [moveTo, setMoveTo] = useState<{ to: number; by: number } | null>(null);
+  if (handed !== albums) {
+    setHanded(albums);
+    const was = handed[front]?.key;
+    // Past the last of them as well: nothing there to tell apart, and nothing put up.
+    if (was !== albums[front]?.key || front > last) {
+      // The record that was in front, wherever it now is: a song downloaded can put another record before it.
+      const kept = was == null ? -1 : albums.findIndex((album) => album.key === was);
+      const to = kept >= 0 ? kept : startAt;
+      setFront(to);
+      setLanding(null);
+      // Stopped where it was going: a glide cut short never comes to rest, and the rack seen from far off stayed unsharp.
+      setResting(true);
+      setHeading(0);
+      setMoveTo({ to, by: to - front });
+    }
+  }
+  /*
+    Before the frame is drawn, so that there is no frame with the new record
+    named and the old one in front; and with the finger's hold moved by as
+    much, a drag going on carrying on from the record it is on.
+  */
+  const unticked = useRef<number | null>(null);
+  /*
+    How many times the rack has been moved by this rather than by the rack
+    itself, on both threads. A detent is told across from the thread that
+    draws, and one on its way as the rack is moved here arrived after it and
+    put the record it had come from back in front: the rack and what it
+    called the front then went their own ways, and a search that left a
+    single record showed none at all. A detent told before the last move is
+    let go.
+  */
+  const moves = useSharedValue(0);
+  const movesHere = useRef(0);
+  useLayoutEffect(() => {
+    if (moveTo == null) return;
+    movesHere.current += 1;
+    moves.set(movesHere.current);
+    cancelAnimation(position);
+    cancelAnimation(lift);
+    lift.set(0);
+    grabbed.set(grabbed.get() + moveTo.by);
+    // Come to by itself, not by a finger: no click for it, where there is a detent to be clicked at all.
+    unticked.current = Math.round(position.get()) !== moveTo.to ? moveTo.to : null;
+    position.set(moveTo.to);
+    setMoveTo(null);
+  }, [grabbed, lift, moveTo, moves, position]);
 
   /** True when a record is square on, near enough to be worth opening. */
   const squared = () => {
@@ -566,16 +632,22 @@ export function CoverFlow({
     Which record is in front, told here as the rack comes to it: what is
     mounted, the caption, and a click, the way a detent does.
   */
-  const detent = useCallback((index: number, before: number) => {
+  const detent = useCallback((index: number, before: number, movedBy: number) => {
+    if (movedBy !== movesHere.current) return;
     if (MEASURE) countScroll(index);
     setFront(index);
+    if (unticked.current === index) {
+      unticked.current = null;
+      return;
+    }
+    unticked.current = null;
     setHeading(Math.sign(index - before));
     haptic('notches', 'tick');
   }, []);
   useAnimatedReaction(
     () => Math.min(Math.max(Math.round(position.get()), 0), last),
     (now, before) => {
-      if (before !== null && now !== before) runOnJS(detent)(now, before);
+      if (before !== null && now !== before) runOnJS(detent)(now, before, moves.get());
     },
     [last]
   );
@@ -605,9 +677,9 @@ export function CoverFlow({
     'worklet';
     const from = position.get();
     const way = Math.abs(target - from);
-    if (way < 0.001 || reduced) {
+    if (way < 0.001) {
       position.set(target);
-      lift.set(withTiming(0, { duration: 160 }));
+      lift.set(withTiming(0, { duration: 160, reduceMotion: ReduceMotion.Never }));
       runOnJS(settled)(target);
       return;
     }
@@ -636,6 +708,7 @@ export function CoverFlow({
               'worklet';
               return cubic * (x * x * x - 2 * x * x + x) + (3 * x * x - 2 * x * x * x);
             },
+            reduceMotion: ReduceMotion.Never,
           }, (finished) => {
             'worklet';
             if (!finished) return;
@@ -643,7 +716,7 @@ export function CoverFlow({
             runOnJS(settled)(target);
           })
         );
-        lift.set(withTiming(0, { duration, easing: Easing.out(Easing.quad) }));
+        lift.set(withTiming(0, { duration, easing: Easing.out(Easing.quad), reduceMotion: ReduceMotion.Never }));
         return;
       }
     }
@@ -653,7 +726,7 @@ export function CoverFlow({
       return (1 - Math.exp(-k * x)) / (1 - Math.exp(-k));
     };
     position.set(
-      withTiming(target, { duration, easing: slide }, (finished) => {
+      withTiming(target, { duration, easing: slide, reduceMotion: ReduceMotion.Never }, (finished) => {
         'worklet';
         if (!finished) return;
         if (MEASURE) runOnJS(reportFlick)();
@@ -661,7 +734,7 @@ export function CoverFlow({
       })
     );
     // As fast as the rack is going, which falls the same way.
-    lift.set(withTiming(0, { duration, easing: slide }));
+    lift.set(withTiming(0, { duration, easing: slide, reduceMotion: ReduceMotion.Never }));
   };
 
   /** On to [index] from wherever the rack is, from standing. */
@@ -693,9 +766,9 @@ export function CoverFlow({
       cancelAnimation(position);
       if (position.get() > BACK_FROM) position.set(BACK_FROM);
       lift.set(Math.max(lift.get(), 0.6));
-      lift.set(withTiming(0, { duration: BACK_MS, easing: Easing.out(Easing.quad) }));
+      lift.set(withTiming(0, { duration: BACK_MS, easing: Easing.out(Easing.quad), reduceMotion: ReduceMotion.Never }));
       position.set(
-        withTiming(0, { duration: BACK_MS, easing: Easing.out(Easing.cubic) }, (finished) => {
+        withTiming(0, { duration: BACK_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.Never }, (finished) => {
           'worklet';
           if (finished) runOnJS(settled)(0);
         })
@@ -765,7 +838,7 @@ export function CoverFlow({
     })
     .onEnd(() => {
       // Nearly as it stands: as it stands.
-      if (distance.get() > 0.94) distance.set(withTiming(1, { duration: 160 }));
+      if (distance.get() > 0.94) distance.set(withTiming(1, { duration: 160, reduceMotion: ReduceMotion.Never }));
     });
   const seen = useAnimatedStyle(() => ({ transform: [{ scale: distance.value }] }));
   // Back near once and for all, the further records let go of.
@@ -862,13 +935,15 @@ export function CoverFlow({
     passed on the way there.
   */
   useEffect(() => {
+    // Begun again at every change to the library, a download landing among it, for a rack nobody was looking at.
+    if (!inSight) return;
     const from = Math.round(position.get()) || 0;
     const covers = [albums[from]?.tracks];
     for (let out = 1; out < albums.length; out += 1) {
       covers.push(albums[from + out]?.tracks, albums[from - out]?.tracks);
     }
     return warmAlbumArtwork(covers);
-  }, [albums, position]);
+  }, [albums, inSight, position]);
 
   /*
     Seen from far off, the small copies of the covers made ahead of the rack,
@@ -876,7 +951,8 @@ export function CoverFlow({
     that wants it goes by. Made once, and kept.
   */
   useEffect(() => {
-    if (!wide) return;
+    // Nor gone on with once another view is in front, left seen from far off: through the whole library, for nothing.
+    if (!wide || !inSight) return;
     let stopped = false;
     const from = Math.round(position.get()) || 0;
     const run = async () => {
@@ -894,7 +970,7 @@ export function CoverFlow({
     return () => {
       stopped = true;
     };
-  }, [albums, position, wide]);
+  }, [albums, inSight, position, wide]);
 
   useImperativeHandle(ref, () => ({
     sleeveOf: (key, then) => {
@@ -903,7 +979,7 @@ export function CoverFlow({
     },
     nearer: () => {
       if (distance.get() >= 0.999) return false;
-      distance.set(withTiming(1, { duration: 220 }));
+      distance.set(withTiming(1, { duration: 220, reduceMotion: ReduceMotion.Never }));
       return true;
     },
     toStart: () => {
@@ -943,7 +1019,9 @@ export function CoverFlow({
       out kept the pictures of those in sight waiting behind theirs. The
       sleeves standing are handed on to them as the rack gets there.
     */
-    for (const about of landing === null || wide ? [front] : [front, landing]) {
+    // Never about a record past the last: nothing would be put up at all.
+    const at = Math.min(front, Math.max(albums.length - 1, 0));
+    for (const about of landing === null || wide ? [at] : [at, landing]) {
       for (let index = Math.max(0, about - before); index <= Math.min(albums.length - 1, about + after); index += 1) {
         wanted.add(index);
       }
@@ -993,6 +1071,11 @@ export function CoverFlow({
   */
   const top = albums.length * 2 + 2;
   const zOf = (index: number) => (index === front ? top + 1 : index < front ? index : top - index);
+
+  // The record in front, and whether the song playing is one of its: said by its name, as its row says it.
+  const inFront = albums[Math.min(Math.max(front, 0), albums.length - 1)];
+  const playingHere = useHoldsCurrent(inFront?.tracks);
+  const ink = useColours();
 
   if (albums.length === 0 || width === 0) {
     return (
@@ -1047,9 +1130,12 @@ export function CoverFlow({
       {caption ? (
         <View style={[styles.caption, { height: captionHeight(fontScale) }]} pointerEvents="box-none">
           {/* Its name leads to the record's page and whoever it is by to theirs; the rest of the caption lets a finger through to the rack. */}
-          <Text style={styles.name} numberOfLines={1}>
-            <AlbumLink name={current.name} albumKey={current.key} />
-          </Text>
+          <View style={styles.nameLine} pointerEvents="box-none">
+            {playingHere ? <PlayingIcon size={13} color={ink.accent} /> : null}
+            <Text style={[styles.name, styles.nameShrinks]} numberOfLines={1}>
+              <AlbumLink name={current.name} albumKey={current.key} />
+            </Text>
+          </View>
           <Text style={styles.detail} numberOfLines={1}>
             <AlbumBy artist={current.artist} year={current.year} />
           </Text>
@@ -1267,14 +1353,14 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   stage: { flex: 1, backgroundColor: c.bg },
   // One record's place, in the middle of the frame: the fan puts it out from there.
   berth: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
-  empty: { alignItems: 'center', justifyContent: 'center', padding: 36 },
-  emptyText: { color: c.textFaint, fontSize: 13, lineHeight: 20, textAlign: 'center' },
+  empty: { alignItems: 'center', justifyContent: 'center', padding: SPACE.xl },
+  emptyText: { color: c.textFaint, fontSize: TYPE.small, lineHeight: LEADING.small, textAlign: 'center' },
 
   card: { position: 'absolute', alignItems: 'center' },
   // Flat, as the stage is: the sleeves stand in front of one another, and
   // one of glass would show the next through it until its picture came.
   face: {
-    borderRadius: 4,
+    borderRadius: RADIUS.check,
     overflow: 'hidden',
     backgroundColor: laid(c.surface, c.bg),
   },
@@ -1303,8 +1389,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     bottom: CAPTION_LIFT,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 20,
+    gap: SPACE.xxs,
+    paddingHorizontal: SPACE.l,
   },
   /*
     A shadow under the writing, because it is not written on a background.
@@ -1319,9 +1405,11 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     what sets them off from a sleeve has to be the shade they were chosen to be
     read on, which is black only in a dark theme.
   */
+  nameLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACE.s, alignSelf: 'stretch' },
+  nameShrinks: { flexShrink: 1 },
   name: {
     color: c.text,
-    fontSize: 16,
+    fontSize: TYPE.heading,
     fontWeight: '600',
     textShadowColor: c.bg,
     textShadowOffset: { width: 0, height: 1 },
@@ -1329,7 +1417,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   detail: {
     color: c.textSecondary,
-    fontSize: 12.5,
+    fontSize: TYPE.hint,
     textShadowColor: c.bg,
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 5,

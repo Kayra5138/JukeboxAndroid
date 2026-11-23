@@ -10,6 +10,7 @@ export const settings: Strings['settings'] = {
     look: 'Apparence et toucher',
     sound: 'Son',
     player: 'Lecteur',
+    miniPlayer: 'Mini-lecteur',
     tapes: 'Cassettes',
     library: 'Bibliothèque',
     downloads: 'Téléchargements et Découvrir',
@@ -21,6 +22,7 @@ export const settings: Strings['settings'] = {
     look: 'Le thème, les animations, la vibration et les vues que propose la bibliothèque.',
     sound: 'L’égaliseur et les effets, le volume harmonisé, le fondu enchaîné, la vitesse et la tonalité.',
     player: 'La portée des boutons de saut, ce qui joue quand la file d’attente se termine et la langue dans laquelle les paroles sont traduites.',
+    miniPlayer: 'Ce que montre la barre du titre en cours, ses boutons, son apparence et son maniement.',
     tapes: 'Retour en arrière intelligent, la portée des boutons de saut d’une cassette et le téléchargement des podcasts en Wi‑Fi seulement.',
     library: 'Le dossier de ta musique, les tags et les pochettes, et les fichiers qui sont peut-être le même morceau.',
     waiting: (count) => `${format.number(count)} à trancher`,
@@ -28,6 +30,19 @@ export const settings: Strings['settings'] = {
     data: 'Tout sauvegarder ou importer une sauvegarde, la recherche de nouvelles versions et ListenBrainz (expérimental).',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: 'Barre de défilement', note: 'La barre à côté d’une longue liste, à saisir pour aller loin d’un coup.', always: 'Toujours', moving: 'En défilant', never: 'Jamais' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: 'Suggestions sous une liste', note: 'Sous les titres d’une liste, d’autres de la bibliothèque qui pourraient y avoir leur place, d’après les tags sur lesquels elle s’appuie.' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: 'Annuler après un retrait', note: 'Quelques secondes après qu’un titre a été retiré d’une liste, laissé partir depuis le lecteur ou écarté dans Découvrir, un bouton pour le récupérer.' },
+  search: {
+    open: 'Rechercher dans les réglages',
+    title: 'Rechercher dans les réglages',
+    placeholder: 'Un mot de n’importe quel réglage',
+    none: (query: string) => `Aucun réglage ne contient « ${query} ».`,
+  },
   language: {
     title: 'Langue',
     note: 'La langue de l’app. Elle ne suit pas celle du téléphone.',
@@ -63,7 +78,6 @@ export const settings: Strings['settings'] = {
     saturation: 'Saturation',
     lightness: 'Luminosité',
     degrees: (value) => `${value}°`,
-    percent: (value) => `${value} %`,
     hex: 'Code couleur',
     nudged: (colour) => `Affichée en ${colour} pour que tout ce qui est dessus reste lisible.`,
     note:
@@ -164,13 +178,11 @@ export const settings: Strings['settings'] = {
       sparks: 'Des étincelles jetées de son bord à chaque temps, à travers le lecteur.',
       aurora: 'Des nuages aux couleurs de la pochette derrière tout le lecteur, chacun grandissant avec une partie du son.',
     },
-    beats: 'Vibrer en rythme',
-    beatsNote: 'Un léger coup à chaque temps pendant que le lecteur est ouvert et que la musique joue. Aussi discret que vos réglages de vibration.',
   },
   still: {
     title: 'Figer la décoration',
     note:
-      'Pour les téléphones qui saccadent. Le lecteur apparaît au lieu de glisser vers le haut, et le jeu ne s’illumine plus quand une vie est gagnée ou perdue. Les touches, elles, tombent toujours : c’est le jeu, pas de la décoration.',
+      'Pour les téléphones qui saccadent. Les pages et les fenêtres s’ouvrent sans animation, les pochettes n’apparaissent plus en fondu, le disque et les visualisations restent immobiles, et le verre est dessiné sans flou.',
   },
   scriptNames: { title: 'Noms dans d’autres écritures', latin: 'Lettres latines', original: 'Original', note: 'Quand une recherche a trouvé le nom d’un titre en lettres latines et dans sa propre écriture (japonais, chinois, coréen), lequel la bibliothèque affiche. Les titres cherchés avant se complètent à la prochaine recherche.' },
   haptics: {
@@ -185,7 +197,9 @@ export const settings: Strings['settings'] = {
       custom: "Choisis ci-dessous quels moments vibrent.",
     },
     strength: "Intensité",
-    strengthNote: "Ressentie au relâchement. Les téléphones dont le moteur ne se règle pas gardent leur propre intensité.",
+    strengthNote: "Ressentie au relâchement. 100 % est la valeur recommandée ; au-delà, les mêmes touches deviennent plus fortes, et au-delà de 200 % le moteur tourne aussi fort qu’il peut. Les téléphones dont le moteur ne se règle pas gardent jusque-là leur propre intensité.",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "recommandé",
     groupsHeading: "Ce qui vibre",
     groups: {
       holds: { title: "Appuyer et glisser", note: "Un appui long, une ligne soulevée pour la déplacer, le doigt sur les cases." },
@@ -202,9 +216,81 @@ export const settings: Strings['settings'] = {
     note:
       'Au bout de chaque ligne de morceau ou d’album, ils ouvrent le même menu qu’un appui long. L’appui long fonctionne aussi sans eux.',
   },
+  miniPlayer: {
+    shows: 'Ce qu’elle montre',
+    progress: {
+      title: 'Progression',
+      none: 'Aucune',
+      line: 'Ligne',
+      fill: 'Remplissage',
+      note: 'Où en est le titre : une fine ligne en bas, ou toute la barre qui se remplit au fil du titre.',
+    },
+    line: {
+      title: 'Sous le nom',
+      artist: 'Artiste',
+      album: 'Album',
+      both: 'Artiste et album',
+      left: 'Temps restant',
+      next: 'Ensuite',
+      note: 'Ce que dit la deuxième ligne.',
+    },
+    cover: {
+      title: 'Pochette',
+      square: 'Carrée',
+      round: 'Ronde',
+      record: 'Disque',
+      note: 'Le disque tourne pendant la lecture.',
+    },
+    buttons: {
+      title: 'Boutons',
+      aside: 'Jusqu’à quatre, dans l’ordre affiché ici.',
+      names: {
+        previous: 'Précédent',
+        playPause: 'Lecture et pause',
+        next: 'Suivant',
+        back: 'Reculer',
+        forward: 'Avancer',
+        heart: 'Favori',
+        shuffle: 'Aléatoire',
+        repeat: 'Répéter',
+      },
+    },
+    handling: 'Toucher',
+    swipe: {
+      title: 'Glisser pour changer de titre',
+      note: 'Glissée sur le côté, elle passe au titre précédent ou suivant. Désactivé, elle ouvre seulement le lecteur.',
+    },
+    hold: {
+      title: 'Un appui long ouvre',
+      none: 'Rien',
+      menu: 'Le menu du titre',
+      queue: 'La file d’attente',
+      lyrics: 'Les paroles',
+      note: 'Ce que fait un appui long sur le titre.',
+    },
+    look: 'Apparence',
+    floating: {
+      title: 'Flottante',
+      note: 'Arrondie et à distance des bords, au lieu de toute la largeur.',
+    },
+    tint: {
+      title: 'Couleur de la pochette',
+      note: 'Teintée de la couleur de la pochette du titre en cours.',
+    },
+    leftHanded: {
+      title: 'Gaucher',
+      note: 'Les boutons à gauche et le titre à droite.',
+    },
+  },
   tabs: {
     title: 'Onglets',
-    searchNote: 'Découvrir et les téléchargements YouTube sont dans cet onglet et disparaissent avec lui.',
+    notes: {
+      library: 'Tes titres, albums, artistes, cassettes et dossiers.',
+      lists: 'Tes playlists, listes intelligentes et favoris.',
+      search: 'Découvrir et télécharger depuis YouTube. Masque cet onglet, et les deux disparaissent avec lui.',
+      stats: 'Ce que tu as écouté, et tes bilans d’écoute.',
+      settings: 'L’apparence, le son et le comportement de l’app.',
+    },
     aside: 'Bibliothèque et Paramètres sont toujours là.',
     names: 'Noms sous les icônes',
     namesNote: 'Désactivé, la barre n’affiche que ses icônes et est un peu plus basse. En paysage, c’est toujours le cas.',

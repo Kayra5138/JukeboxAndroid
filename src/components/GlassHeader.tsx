@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { SPACE, RADIUS } from '../lib/theme/measures';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackIcon } from './Icons';
@@ -27,25 +28,33 @@ import { barGlass } from './UnderBars';
  * theme draws edges. [over] lays it over the top of the screen instead of
  * above it, for a screen whose list runs on beneath it (see `UnderBars`);
  * otherwise it takes its room, and the screen begins under it.
+ *
+ * Also the bar of a page that is no screen of the navigator's but stands as
+ * one, so that the two cannot look different: a record opened over the
+ * library (`AlbumListing`). [top] is then how much of it is under the clock,
+ * where what it is drawn in keeps clear of that already.
  */
 export function GlassHeader({
   title,
   onBack,
   over = false,
+  top,
 }: {
   title: string;
   onBack: (() => void) | null;
   over?: boolean;
+  top?: number;
 }) {
   const t = useT();
   const styles = useStyles();
   const pressed = usePressed();
   const insets = useSafeAreaInsets();
+  const clock = top ?? insets.top;
   // What scrolls under it, out of focus behind it: only where it is laid over a list. See `Frosted`.
   const target = useSceneTarget();
   const frosted = useFrosted(over ? target : null);
   return (
-    <View style={[styles.bar, over && styles.over, frosted && styles.clear, { paddingTop: insets.top, height: HEADER_BAR + insets.top }]}>
+    <View style={[styles.bar, over && styles.over, frosted && styles.clear, { paddingTop: clock, height: HEADER_BAR + clock }]}>
       {frosted && target ? <Frost target={target} edge="bottom" /> : null}
       {onBack ? (
         <Pressable
@@ -69,7 +78,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    paddingHorizontal: SPACE.xs,
     ...barGlass(c),
     borderBottomWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderBottomColor: c.border,
@@ -82,7 +91,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   over: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 },
   /** Its fill left to `Frost`, which draws it over the blur. */
   clear: { backgroundColor: 'transparent' },
-  back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 24 },
-  title: { flex: 1, minWidth: 0, color: c.text, fontSize: 20, fontWeight: '500', marginLeft: 20, marginRight: 16 },
-  titleAlone: { marginLeft: 16 },
+  back: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.pill },
+  title: { flex: 1, minWidth: 0, color: c.text, fontSize: 20, fontWeight: '500', marginLeft: SPACE.l, marginRight: SPACE.l },
+  titleAlone: { marginLeft: SPACE.l },
 }));

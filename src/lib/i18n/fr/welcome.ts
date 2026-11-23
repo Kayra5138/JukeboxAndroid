@@ -27,7 +27,7 @@ export const welcome: Strings['welcome'] = {
       jukebox: { label: (folder: string) => `Le dossier de Jukebox (${folder})`, note: "Seulement ce qui est dans ce dossier. Les téléchargements y sont enregistrés, et la musique que d’autres apps rangent dans Music reste à l’écart." },
       music: { label: (folder: string) => `Tout Music (${folder})`, note: "Tout ce qui est dans le dossier Music et ses sous-dossiers, comme avant." },
       current: "Le dossier choisi auparavant.",
-      songs: (count: number) => `${format.number(count)} ${count === 1 ? 'morceau' : 'morceaux'}`,
+      songs: (count: number) => `${format.number(count)} ${one(count, 'morceau', 'morceaux')}`,
       more: "Modifiable à tout moment dans Réglages → Bibliothèque → Dossier de la bibliothèque, où tout autre dossier peut aussi être choisi.",
     },
     look: {
@@ -89,6 +89,8 @@ export const welcome: Strings['welcome'] = {
     note:
       'Montre Jukebox comme au jour de son installation : les premiers réglages, la proposition de trouver les pochettes, et les astuces. Ta musique, tes listes et tes réglages restent tels quels.',
     again: 'Revoir',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: 'Revoir le premier lancement ?', body: 'Les premiers réglages, la proposition de trouver les pochettes et les astuces reviennent. Ta musique, tes listes et tes réglages restent tels quels.' },
   },
 
   discoverEarly:

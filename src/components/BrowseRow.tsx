@@ -1,19 +1,15 @@
 import { memo } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { Pressable } from './Pressable';
+import { useWindowDimensions } from 'react-native';
 
 import { useT } from '../lib/i18n/index';
 import type { Mark } from '../lib/media/selection';
-import { makeStyles, usePressed } from '../lib/theme/index';
-import { haptic } from '../lib/ui/haptics';
+import { useHoldsCurrent } from '../lib/player/current';
+import { ROW_COVER } from '../lib/theme/measures';
 import type { Track } from '../lib/types';
-import { MoreButton } from './MoreButton';
+import { MediaRow } from './MediaRow';
 import { PlaylistCover } from './PlaylistCover';
 import { trackRowHeight } from './TrackRow';
 import { ArtistLinks } from './NameLinks';
-
-/** A track row's cover, in size. */
-const COVER = 46;
 
 /**
  * Declared rather than left to the row, so a list of these can say where every
@@ -88,66 +84,15 @@ export const BrowseRow = memo(function BrowseRow({
   onLongPress?: (id: string) => void;
 }) {
   const t = useT();
-  const styles = useStyles();
-  const pressed = usePressed();
-  const height = useBrowseRowHeight();
   const choosing = mark !== undefined;
+  // The song playing is one of its: said as a track's row says it is the one.
+  const playing = useHoldsCurrent(tracks);
   return (
-    <Pressable
-      android_ripple={pressed}
-      // The whole row is the tick box while tracks are being chosen, not the
-      // square inside it: the square is not separately pressable, and a reader
-      // sent to find a box within a button would not get there.
-      accessibilityRole={choosing ? 'checkbox' : 'button'}
-      accessibilityState={choosing ? { checked: mark } : undefined}
-      // Both lines as one sentence. Left to itself the reader says the two
-      // texts apart, and the second is only a number without the first.
-      accessibilityLabel={`${title}, ${[by, detail].filter(Boolean).join(' · ')}`}
-      accessibilityHint={choosing ? t.library.row.selectsTracks : t.library.row.opensTracks}
-      // Named for the reason a track's long press is: nobody using a screen
-      // reader finds a held row by trying. Left out once choosing has begun,
-      // when holding does nothing a tap does not.
-      accessibilityActions={
-        onLongPress && !choosing
-          ? [{ name: 'longpress', label: held ?? t.library.row.select }]
-          : undefined
-      }
-      onAccessibilityAction={
-        onLongPress &&
-        ((event) => {
-          if (event.nativeEvent.actionName === 'longpress') onLongPress(id);
-        })
-      }
-      style={[
-        styles.row,
-        { height },
-        shared && styles.shared,
-        mark === true && styles.chosen,
-      ]}
-      onPress={() => onPress(id)}
-      onLongPress={
-        onLongPress &&
-        (() => {
-          haptic('holds', 'hold');
-          onLongPress(id);
-        })
-      }>
-      {choosing ? (
-        // The track rows' box, with a third thing to say that theirs never
-        // has: some. Outlined in the accent and barred rather than filled, so
-        // it reads as begun and cannot be taken for either of the other two.
-        <View
-          style={[styles.checkbox, mark === true && styles.checkboxOn, mark === 'mixed' && styles.checkboxSome]}>
-          {mark === true ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
-          {mark === 'mixed' ? <View style={styles.bar} /> : null}
-        </View>
-      ) : null}
-      <PlaylistCover tracks={tracks} chosen={null} sleeve={cover} size={COVER} />
-      <View style={styles.text}>
-        <Text style={styles.title} numberOfLines={1}>
-          {title}
-        </Text>
-        <Text style={styles.detail} numberOfLines={1}>
+    <MediaRow
+      lead={<PlaylistCover tracks={tracks} chosen={null} sleeve={cover} size={ROW_COVER} />}
+      title={title}
+      subtitle={
+        <>
           {/* Not while tracks are being ticked, when a touch on the row chooses it. */}
           {by ? (
             <>
@@ -156,39 +101,20 @@ export const BrowseRow = memo(function BrowseRow({
             </>
           ) : null}
           {detail}
-        </Text>
-      </View>
-      {/* A record's menu, as a track's: only where a hold opens one, and not while tracks are being ticked. */}
-      {onLongPress && held && !choosing ? <MoreButton onPress={() => onLongPress(id)} /> : null}
-    </Pressable>
+        </>
+      }
+      playing={playing}
+      check={mark}
+      selected={mark === true}
+      shared={shared}
+      // Both lines as one sentence. Left to itself the reader says the two texts apart, and the second is only a number without the first.
+      accessibilityLabel={`${title}, ${[by, detail].filter(Boolean).join(' · ')}`}
+      accessibilityHint={choosing ? t.library.row.selectsTracks : t.library.row.opensTracks}
+      onPress={() => onPress(id)}
+      onLongPress={onLongPress && (() => onLongPress(id))}
+      // A record's hold opens its menu, as a track's does; an artist's or a folder's begins choosing.
+      menu={held != null}
+      holdLabel={held ?? t.library.row.select}
+    />
   );
 });
-
-const useStyles = makeStyles((c) => StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    // As `TrackRow` lays its row out.
-    gap: 12,
-    paddingHorizontal: 16,
-  },
-  shared: { flex: 1, minWidth: 0 },
-  chosen: { backgroundColor: c.accentSoft },
-  // As `TrackRow` draws it.
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: c.textDisabled,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
-  checkboxSome: { borderColor: c.accent },
-  checkMark: { color: c.onAccent, fontSize: 13, fontWeight: '700', lineHeight: 15 },
-  bar: { width: 10, height: 2, borderRadius: 1, backgroundColor: c.accent },
-  text: { flex: 1, minWidth: 0, gap: 3 },
-  title: { color: c.text, fontSize: 15.5 },
-  detail: { color: c.textMuted, fontSize: 12.5 },
-}));

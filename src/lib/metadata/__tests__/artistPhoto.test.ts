@@ -203,7 +203,7 @@ describe('lookupArtistPhoto', () => {
 
   it('stops at the relations when the artist has no picture', async () => {
     const asked = chain({ relations: { relations: [{ type: 'wikidata', url: { resource: 'https://wikidata.org/x' } }] } });
-    assert.equal(await withoutWaiting(() => lookupArtistPhoto('Someone')), null);
+    assert.equal(await withoutWaiting(() => lookupArtistPhoto('Şebnem Ferah')), null);
     assert.equal(asked.length, 2);
   });
 
@@ -218,5 +218,12 @@ describe('lookupArtistPhoto', () => {
     // "there is none" from "nobody answered".
     stubFetch(() => ({ fail: 'network' }));
     await assert.rejects(() => withoutWaiting(() => lookupArtistPhoto('Şebnem Ferah')));
+  });
+});
+
+describe('confidentArtistId, asked for a name', () => {
+  it('takes only an artist called that, however it is written', () => {
+    assert.equal(confidentArtistId({ artists: [{ id: 'a', name: 'Sigur Rós', score: 100 }] }, 'sigur ros'), 'a');
+    assert.equal(confidentArtistId({ artists: [{ id: 'a', name: 'Somebody Else', score: 100 }] }, 'Nobody'), null);
   });
 });

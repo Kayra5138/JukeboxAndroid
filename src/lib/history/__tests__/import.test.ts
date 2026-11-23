@@ -254,10 +254,11 @@ describe('planning an import', () => {
 
   it('adds nothing the history already has, nor anything twice', () => {
     const at = APRIL_FIRST_1345;
-    const listens = [listen('Numb', 'Linkin Park', at), listen('numb', 'linkin park', at + 400), listen('Numb', 'Linkin Park', at + 60_000)];
+    // The same listen written a few seconds apart, as two services write one, and another five minutes on.
+    const listens = [listen('Numb', 'Linkin Park', at), listen('numb', 'linkin park', at + 25_000), listen('Numb', 'Linkin Park', at + 300_000)];
     const plan = planImport(listens, library, [{ startedAt: at + 999, title: 'Numb', artist: 'Linkin Park' }]);
     assert.equal(plan.already, 2);
-    assert.deepEqual(plan.rows.map((row) => row.started_at), [at + 60_000]);
+    assert.deepEqual(plan.rows.map((row) => row.started_at), [at + 300_000]);
 
     // The same file a second time, with the first time's rows now held.
     const again = planImport(
@@ -268,12 +269,20 @@ describe('planning an import', () => {
     assert.equal(again.rows.length, 0);
   });
 
+  it('takes a listen of its own sent to ListenBrainz and brought back for the one it was, whatever it is now called', () => {
+    const at = APRIL_FIRST_1345;
+    const back = { ...listen('Numb (Live)', 'Linkin Park', at + 400), source: 'listenbrainz' as const, ownClient: true };
+    const plan = planImport([back], library, [{ startedAt: at, title: 'Numb', artist: 'Linkin Park' }]);
+    assert.equal(plan.rows.length, 0);
+  });
+
   it('says what it found, oldest first', () => {
     const files = [fixture('lastfm.csv'), fixture('StreamingHistory_music_0.json')].flatMap((each) => readHistory(each)!);
     const plan = planImport(files, library, []);
     assert.equal(plan.found, 6);
     assert.equal(plan.short, 1);
-    assert.equal(plan.rows.length, 5);
+    // Paranoid Android is one listen written by both services, begun 37 seconds apart by what they say.
+    assert.equal(plan.rows.length, 4);
     assert.equal(plan.from, Date.UTC(2023, 2, 30, 22, 10));
     assert.equal(plan.until, Date.UTC(2023, 3, 2, 8, 0) - 61000);
     assert.deepEqual(
@@ -281,8 +290,8 @@ describe('planning an import', () => {
       [...plan.rows.map((row) => row.started_at)].sort((a, b) => a - b)
     );
     assert.deepEqual(new Set(plan.rows.map((row) => row.source)), new Set(['lastfm', 'spotify']));
-    // Paranoid Android twice, from the two services, and Numb.
-    assert.equal(plan.matched, 3);
+    // Paranoid Android once, though both services had it, and Numb.
+    assert.equal(plan.matched, 2);
     assert.equal(plan.songs, 2);
   });
 });

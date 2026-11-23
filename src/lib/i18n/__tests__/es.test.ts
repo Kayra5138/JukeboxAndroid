@@ -67,7 +67,7 @@ describe('numbers and dates in Spanish', () => {
   });
 
   it('put a non-breaking space before the per cent sign', () => {
-    assert.equal(es.stats.percent(12), '12 %');
+    assert.equal(es.format.percent(12), '12 %');
     assert.equal(es.stats.screen.changeFigure(-7), '↓ 7 %');
   });
 });

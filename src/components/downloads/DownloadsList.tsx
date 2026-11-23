@@ -403,7 +403,6 @@ export function DownloadsList({
             ) : item.kind === 'waiting' ? (
               <WaitingRow
                 job={item.job}
-                height={sizes.row}
                 next={item.next}
                 lifted={from === index}
                 onLift={lift}
@@ -413,7 +412,7 @@ export function DownloadsList({
                 onCancel={onCancel}
               />
             ) : (
-              <FinishedRow job={item.job} height={sizes.row} advice={advice} busy={adviceBusy} onRetry={onRetry} onAdvice={onAdvice} />
+              <FinishedRow job={item.job} advice={advice} busy={adviceBusy} onRetry={onRetry} onAdvice={onAdvice} />
             )
           }
         />
@@ -428,7 +427,7 @@ export function DownloadsList({
             styles.held,
             { top: liftedTop, left: edge.left, right: edge.right, height: sizes.row, transform: [{ translateY: offset }] },
           ]}>
-          <WaitingRow job={held.job} height={sizes.row} next={held.next} lifted />
+          <WaitingRow job={held.job} next={held.next} lifted />
         </Animated.View>
       ) : null}
     </View>

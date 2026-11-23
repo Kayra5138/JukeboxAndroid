@@ -1,4 +1,5 @@
-import { Modal, ScrollView, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { MenuCard } from './MenuPage';
 import {
   AsideIcon,
   BroughtBackIcon,
@@ -29,8 +30,7 @@ import { isDiscoverTrack, NOT_FOR_DISCOVER } from './discover/show';
 import { useDiscoverActions, useDiscoverTrack } from '../lib/discover/DiscoverProvider';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles, useColours, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 import { setFavorite, useFavoritesShown, useIsFavorite } from '../lib/playlists/favorites';
 import { markTape, useTapePlace } from '../lib/tapes/places';
@@ -41,6 +41,7 @@ import { seriesOf } from '../lib/podcasts/series';
 import { canShare } from '../lib/media/share';
 import { haptic } from '../lib/ui/haptics';
 import { ArtistLinks, LeaveFirst } from './NameLinks';
+import { SPACE } from '../lib/theme/measures';
 
 export type TrackAction =
   | 'playNext'
@@ -191,11 +192,14 @@ const ASIDE_BY = { none: 'setAside', itself: 'bringBack', others: 'asideWith' } 
 export function TrackMenu({
   track,
   hidden,
+  about,
   onSelect,
   onClose,
 }: {
   track: Track | null;
   hidden?: readonly TrackAction[];
+  /** What it says of itself, under its name: see `MenuHeader`. */
+  about?: string | null;
   onSelect: (action: TrackAction, track: Track) => void;
   onClose: () => void;
 }) {
@@ -203,7 +207,6 @@ export function TrackMenu({
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
-  useWindowVeil(track !== null);
   const discover = isDiscoverTrack(track?.id);
   const favorite = useIsFavorite(track?.id);
   const favorites = useFavoritesShown();
@@ -214,17 +217,10 @@ export function TrackMenu({
     track != null && (action === 'markTape' ? !discover : offered(action, track, hidden));
   const layout = tape ? TAPE_MENU : SONG_MENU;
   return (
-    <Modal
-      visible={track !== null}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}>
-      {/* Not a stop for a screen reader, which would otherwise read the whole
-          heading as one button that closes the menu. The back gesture closes it. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
+    // A card over the page, the bars left as they are (`MenuCard`).
+    <MenuCard visible={track !== null} onClose={onClose}>
         {track ? (
-          // Taller than a landscape screen, so the sheet is bounded and scrolls rather than running off the bottom.
-          <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
+          <>
             <MenuHeader
               title={track.title}
               // A tape with nobody named is not a song by an unknown artist: it says nothing there. A song's artists lead to them.
@@ -236,6 +232,7 @@ export function TrackMenu({
                 )
               }
               picture={artwork}
+              about={about}
               accessory={
                 // As the player's: it fills or empties where it is, and the sheet stays for whatever else it was opened for.
                 favorites && !tape && !discover ? (
@@ -288,10 +285,9 @@ export function TrackMenu({
               );
             })}
             {discover ? <DiscoverEntries trackId={track.id} onDone={onClose} /> : null}
-          </ScrollView>
+          </>
         ) : null}
-      </Pressable>
-    </Modal>
+    </MenuCard>
   );
 }
 
@@ -364,20 +360,6 @@ function DiscoverEntries({ trackId, onDone }: { trackId: string; onDone: () => v
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '85%',
-    flexGrow: 0,
-    ...outlined(c),
-  },
-  sheetBody: { paddingBottom: 28 },
-  heart: { padding: 6 },
+const useStyles = makeStyles(() => StyleSheet.create({
+  heart: { padding: SPACE.xs },
 }));

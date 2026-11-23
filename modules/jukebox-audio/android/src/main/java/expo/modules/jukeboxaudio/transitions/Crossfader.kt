@@ -74,6 +74,12 @@ class Crossfader(
    */
   private val MANUAL_WARM_MS = 120L
 
+  /** How long the old song takes to pass from the main player to the tail at the swap, and in how many steps. */
+  private val SPLICE_MS = 40L
+  private val SPLICE_STEPS = 8
+  /** How often a paused overlap looks again whether it is playing, to go on counting. */
+  private val PAUSED_LOOK_MS = 250L
+
   /** The least time the second player can be got running in; under it, no overlap. */
   private val LEAST_WARM_MS = 250L
 
@@ -99,11 +105,19 @@ class Crossfader(
    * How far out of step is close enough, in milliseconds.
    *
    * A player's position is read from its audio track's clock and worked
-   * forward from there, good to a handful of milliseconds; chasing an error
-   * smaller than the reading can see would be correcting the noise, and each
-   * correction is a seek that has to settle again.
+   * forward from there, each reading good to ten milliseconds or so; taken
+   * several together (`READINGS`) they are good to a few, and anything over
+   * that is closed by a nudge, which disturbs nothing. At twelve, which a
+   * single reading could not see past, tails were handed over ten and twenty
+   * milliseconds out and heard to.
    */
-  private val IN_STEP_MS = 12L
+  private val CLOSE_ENOUGH_MS = 4L
+
+  /** How many readings are taken together for one look; see `look`. */
+  private val READINGS = 9
+
+  /** How long a tail found in step is left before it is looked at again. */
+  private val LOOK_AGAIN_IN_STEP_MS = 400L
 
   /** At most this many corrections. Past it the storage is the problem, not the aim. */
   private val MOST_CORRECTIONS = 3
@@ -183,7 +197,10 @@ class Crossfader(
   private var corrections = 0
 
   /** The last look at how far behind the tail is, to be agreed with before it is believed. */
-  private var lastBehind = Long.MIN_VALUE
+  private val readings = ArrayList<Long>()
+
+  /** Whether the look in hand is a look again at a tail already in step. */
+  private var checking = false
 
   /** Set while a handover is being set up, so a second one cannot start. */
   private var handingOver = false
@@ -390,7 +407,8 @@ class Crossfader(
     tailFadeMs = fadeMs
     tailCold = true
     corrections = 0
-    lastBehind = Long.MIN_VALUE
+    readings.clear()
+    checking = false
     settledAt = 0L
     nudged = false
     handler.postDelayed({ look(player) }, LOOK_AFTER_MS)
@@ -429,29 +447,50 @@ class Crossfader(
       return
     }
 
-    val behind = main.currentPosition - player.currentPosition
-    if (lastBehind == Long.MIN_VALUE || abs(behind - lastBehind) > IN_STEP_MS) {
-      lastBehind = behind
+    /*
+      Not one reading, nor two that agree, but several in a row, the highest
+      and lowest let go and the rest averaged: each is good to ten
+      milliseconds or so either way, and acted on one at a time the tail was
+      handed over anywhere up to twenty-five out, which is heard. Together
+      they are good to a few.
+    */
+    readings.add(main.currentPosition - player.currentPosition)
+    if (readings.size < READINGS) {
       again()
       return
     }
-    lastBehind = Long.MIN_VALUE
+    val kept = readings.sorted().drop(READINGS / 4).dropLast(READINGS / 4)
+    readings.clear()
+    val behind = kept.sum() / kept.size
 
     // Remembered on the clock rather than in the track, since it is the
     // phone's time that a start takes, whatever speed the music is at. Half
     // of what was seen, not all of it: a start takes a different time every
     // time, and believing the last one whole swings the next as far the other
-    // way. Not learned from a nudge, which is no start at all.
+    // way. Not learned from a nudge, which is no start at all, nor from a
+    // look again at a tail already in step.
     val late = clockMs(behind, speed)
-    if (!nudged) {
+    if (!nudged && !checking) {
       if (tailCold) Crossfades.coldMs = (Crossfades.coldMs + late / 2).coerceIn(0, 800)
       else Crossfades.warmMs = (Crossfades.warmMs + late / 2).coerceIn(0, 500)
     }
-    val how = if (nudged) "nudged" else if (tailCold) "started" else "moved"
+    val how = if (checking) "checked" else if (nudged) "nudged" else if (tailCold) "started" else "moved"
     nudged = false
+    checking = false
     Log.i(TAG, "tail $how: $behind ms behind, $left ms to go")
 
-    if (abs(late) <= IN_STEP_MS) return
+    /*
+      In step: looked at again, a little later, for as long as there is time
+      before the swap to put right what it finds, since a tail in step a few
+      seconds before has been seen to have wandered by then.
+    */
+    if (abs(late) <= CLOSE_ENOUGH_MS) {
+      if (clockMs(left, speed) > LOOK_AGAIN_IN_STEP_MS + READINGS * LOOK_AGAIN_MS + 200) {
+        checking = true
+        handler.postDelayed({ look(player) }, LOOK_AGAIN_IN_STEP_MS)
+      }
+      return
+    }
 
     if (abs(late) <= NUDGE_UNDER_MS && nudge(player, behind, left, speed)) return
     if (corrections >= MOST_CORRECTIONS) return
@@ -469,6 +508,7 @@ class Crossfader(
     player.seekTo(to)
     tailFrom = to
     settledAt = 0L
+    readings.clear()
     handler.postDelayed({ look(player) }, LOOK_AFTER_MS / 2)
   }
 
@@ -499,7 +539,8 @@ class Crossfader(
       if (tail !== player) return@Runnable
       runCatching { player.playbackParameters = main.playbackParameters }
       nudged = true
-      lastBehind = Long.MIN_VALUE
+      readings.clear()
+      checking = false
       // A change of speed unsettles the reading as a start does.
       settledAt = SystemClock.elapsedRealtime() + SETTLE_MS
       handler.postDelayed({ look(player) }, SETTLE_MS)
@@ -561,10 +602,44 @@ class Crossfader(
       nudgeEnd = null
       runCatching { player.playbackParameters = main.playbackParameters }
     }
-    player.volume = CallQuiet.level
-    mainFade.fadeIn(fadeMs, settings.equalPower)
-    if (automatic) Crossfades.mark()
-    move(direction)
+    /*
+      The old song passed from the main player to the tail over a few
+      hundredths of a second, one turned down as the other comes up, and not
+      in one step: the two are within a few milliseconds of each other, and no
+      closer can be counted on, and a few milliseconds is the music heard to
+      jump at a hard cut, where blended they are not told apart. Each side's
+      volume is the audio track's own, which the mixer applies, so the two
+      move on the one clock the music is heard by. Only then does the main
+      player move on, with nothing of the old song left to cut off.
+
+      In straight lines, the two adding up to one all the way: they are the
+      same music, and the curves of a crossfade between two songs, which keep
+      their power at one, would make one song a third louder half way.
+    */
+    val level = CallQuiet.level
+    // Dropped or skipped away from meanwhile (see `token`), it stops, the main player at its own level again.
+    // A token of its own, so that what was waiting on an earlier one, a press's
+    // limit among them, cannot reach the tail of the next handover.
+    val mine = ++token
+    fun step(at: Int) {
+      if (tail !== player || token != mine) {
+        main.volume = CallQuiet.level
+        return
+      }
+      val share = at.toFloat() / SPLICE_STEPS
+      player.volume = level * share
+      if (at < SPLICE_STEPS) {
+        main.volume = level * (1f - share)
+        handler.postDelayed({ step(at + 1) }, SPLICE_MS / SPLICE_STEPS)
+        return
+      }
+      mainFade.fadeIn(fadeMs, settings.equalPower)
+      if (automatic) Crossfades.mark()
+      move(direction)
+      // Moved on, the main player is the next song's, which its own fade brings in from nothing.
+      main.volume = CallQuiet.level
+    }
+    step(1)
 
     /*
       The fade is counted in samples of the track, upstream of where the speed
@@ -574,16 +649,32 @@ class Crossfader(
       in the middle. Measured once, at the speed the overlap began at: a speed
       changed during those few seconds leaves it a little out, and no more.
     */
-    val heardFor = clockMs(fadeMs, main.playbackParameters.speed)
-    handler.postDelayed({
-      // Only for the tail this was set for. Skipped away from, and skipped
-      // again, the tail by now belongs to a later handover, and letting that
-      // one go would cut its fade off in the middle.
-      if (tail !== player) return@postDelayed
-      releaseTail()
-      handingOver = false
-      reschedule()
-    }, heardFor + TAIL_SLACK_MS)
+    /*
+      Counted only while the music is meant to be playing: paused in the
+      overlap, the tail is paused with it, and a clock that went on would let
+      it go before the rest of its fade had been heard.
+    */
+    var left = clockMs(fadeMs, main.playbackParameters.speed) + TAIL_SLACK_MS
+    var last = SystemClock.elapsedRealtime()
+    val release = object : Runnable {
+      override fun run() {
+        // Only for the tail this was set for. Skipped away from, and skipped
+        // again, the tail by now belongs to a later handover, and letting that
+        // one go would cut its fade off in the middle.
+        if (tail !== player) return
+        val now = SystemClock.elapsedRealtime()
+        if (wanted()) left -= now - last
+        last = now
+        if (left > 0) {
+          handler.postDelayed(this, if (wanted()) left else PAUSED_LOOK_MS)
+          return
+        }
+        releaseTail()
+        handingOver = false
+        reschedule()
+      }
+    }
+    handler.postDelayed(release, left)
   }
 
   private fun move(direction: Direction) {
@@ -776,26 +867,52 @@ class Crossfader(
   override fun onIsPlayingChanged(isPlaying: Boolean) {
     /*
       The tail is not in the session and hears nothing about play and pause, so
-      it is walked along by hand once a handover is under way.
+      it is walked along by hand once a handover is under way: by what was
+      asked of the main player, and not by whether it is making a sound. The
+      main player's move to the next song is a seek, and for the moment a seek
+      spends buffering it is not playing; followed by that, the tail paused the
+      old song for those tens of milliseconds at the very moment the overlap
+      began, with the new one not yet loud enough to cover it, and that was the
+      stutter heard at every crossfade.
     */
     if (handingOver) {
-      if (isPlaying) tail?.play() else tail?.pause()
+      followMain()
       return
     }
     /*
       Before that it is running in silence towards a place the main player has
       now stopped approaching. Kept, it would arrive alone; so it is let go
       along with what was booked for it, and playing again books the whole
-      thing afresh from wherever that is.
+      thing afresh from wherever that is. Not for a moment's buffering, which
+      is no stop: let go then, the handover had nothing to carry the old song
+      and cut it off.
     */
     if (!isPlaying) {
-      if (tailWarm) {
+      if (tailWarm && !wanted()) {
         cancelPending()
         releaseTail()
       }
     } else {
       reschedule()
     }
+  }
+
+  override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+    if (handingOver) followMain()
+  }
+
+  override fun onPlaybackSuppressionReasonChanged(playbackSuppressionReason: Int) {
+    if (handingOver) followMain()
+  }
+
+  /** Whether the main player is meant to be playing, buffering or not: asked to, and not held back by anything. */
+  private fun wanted(): Boolean =
+    main.playWhenReady && main.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_NONE
+
+  private fun followMain() {
+    val play = wanted()
+    Log.i(TAG, "tail follows the main player: ${if (play) "playing" else "paused"}, state ${main.playbackState}")
+    if (play) tail?.play() else tail?.pause()
   }
 }
 

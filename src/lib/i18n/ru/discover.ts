@@ -16,6 +16,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Что послушать дальше',
     refresh: 'Обновить',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Сдвиньте, чтобы обновить',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Отпустите, чтобы обновить',
     updated: (date) => `Обновлено ${date}`,
 
     familiar: (because) => `Ещё от твоих исполнителей · ${because}`,
@@ -55,7 +59,6 @@ export const discover: Strings['discover'] = {
     failed: 'Не удалось скачать · нажми, чтобы повторить',
     needsBuild: 'Нужна обновлённая версия',
     waitingWifi: 'Ждёт Wi-Fi · нажми, чтобы скачать',
-    percent: (percent) => `${n(percent)}%`,
     gettingReady: 'Скачивается',
     hint: 'Включает песню, а если нужно — сначала скачивает её',
     nowPlaying: (title) => `Играет: ${title}`,
@@ -160,7 +163,8 @@ export const discover: Strings['discover'] = {
     findingLater: 'Некоторые песни сейчас не удалось проверить. Позже будет ещё одна попытка.',
     buildingArtists: (done, total) => `Поиск песен · ${n(done)} из ${ofArtists(total)}`,
     preparing: (ready, target) =>
-      `Новая подборка в пути · готово ${n(ready)} из ${ofSongs(target)}.${ready > 0 ? ' Обнови ещё раз, чтобы увидеть её сейчас.' : ''}`,
+      `Новая подборка в пути · готово ${n(ready)} из ${ofSongs(target)}.`,
+    showNow: 'Показать сейчас',
     offline: 'Нет подключения. Подборка сохранена; новые песни найдутся, когда оно появится.',
     offlineEmpty: 'Нет подключения. Подборка будет составлена, когда оно появится.',
     noLibrary: 'Подборка составляется по музыке на этом телефоне, а её пока не нашлось.',

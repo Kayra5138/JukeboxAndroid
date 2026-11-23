@@ -188,7 +188,7 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
   oscilloscope, the line of the sound itself; a spectrogram, the last
   few seconds of every pitch flowing past, wound round a record; sparks thrown
   across the player on each beat; or clouds of the cover's own colours behind
-  the whole player. And, if you want it, a light knock on each beat. No
+  the whole player. No
   recording permission: the app reads the music it is playing. It draws only
   while the music plays and the player is open.
 - A queue you can reorder, trim and jump around in.
@@ -545,8 +545,9 @@ Battery → Background usage limits → Never sleeping apps* (on other phones:
 - **A download that fails is tried once more by itself**, after a short
   wait, when trying again could help: the network, a time-out, the app being
   closed in the middle. The queue says so on the row.
-- **A floating button**, off unless you switch it on, appears while something
-  is being fetched and says what, and how much is left.
+- **A floating button** appears while something is being fetched and says
+  what, and how much is left; it can be switched off under Settings →
+  Downloads.
 - **yt-dlp can be brought up to date from inside the app.** When YouTube
   changes, an old yt-dlp begins to fail. Downloads names the version in use,
   says when there is a newer one, and fetches it when you ask: from yt-dlp's
@@ -723,8 +724,7 @@ from the song itself.
     tap.
 
   The now-playing ones change layout as they are resized, and the cover opens
-  the player. With nothing playing, they offer to carry on with the tape you
-  last listened to, from where you left it, in one tap.
+  the player.
 - **Hold a song and slide.** Held for a moment, a song on any list opens a
   ring of eight slices under the finger: play next, similar songs, add to the
   queue, details, add to a list, the album, Favorites and share. Slide onto

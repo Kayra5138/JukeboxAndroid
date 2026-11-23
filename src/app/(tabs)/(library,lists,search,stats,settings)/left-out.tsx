@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react';
+import { SPACE } from '../../../lib/theme/measures';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { PageNote } from '../../../components/Page';
+import { ScreenState } from '../../../components/ScreenState';
 import { Switch } from '../../../components/Switch';
 
-import { Pressable } from '../../../components/Pressable';
 import { SettingsPage, useRows } from '../../../components/settings/rows';
 import { useT } from '../../../lib/i18n/index';
 import {
@@ -21,7 +23,7 @@ import {
   listFoldersUnder,
   setLeftOutFolders,
 } from '../../../lib/media/library';
-import { makeStyles, outlined, scene, switchColours, useColours, usePressed } from '../../../lib/theme/index';
+import { makeStyles } from '../../../lib/theme/index';
 
 type Screen =
   | { kind: 'loading' }
@@ -46,10 +48,8 @@ const DEEPEST = 4;
  */
 export default function LeftOutScreen() {
   const t = useT();
-  const c = useColours();
   const rows = useRows();
   const styles = useStyles();
-  const pressed = usePressed();
   const [screen, setScreen] = useState<Screen>({ kind: 'loading' });
   const [leftOut, setLeftOut] = useState(() => leftOutFolders());
 
@@ -86,32 +86,27 @@ export default function LeftOutScreen() {
     libraryHidingChanged();
   };
 
-  if (screen.kind === 'loading') {
+  if (screen.kind !== 'folders') {
     return (
-      <View style={[styles.screen, styles.centred]}>
-        <ActivityIndicator color={c.text} />
-      </View>
-    );
-  }
-
-  if (screen.kind === 'denied' || screen.kind === 'error') {
-    return (
-      <View style={[styles.screen, styles.centred]}>
-        <Text style={styles.body}>
-          {screen.kind === 'denied' ? t.library.folders.needsAccess : screen.message}
-        </Text>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void load()}>
-          <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
-        </Pressable>
-      </View>
+      <SettingsPage>
+        {screen.kind === 'loading' ? (
+          <ScreenState kind="loading" />
+        ) : (
+          <ScreenState
+            kind="error"
+            text={screen.kind === 'denied' ? t.library.folders.needsAccess : screen.message}
+            onRetry={() => void load()}
+          />
+        )}
+      </SettingsPage>
     );
   }
 
   return (
     <SettingsPage>
-      <Text style={styles.note}>{t.library.leftOut.note}</Text>
+      <PageNote>{t.library.leftOut.note}</PageNote>
       {screen.rows.length === 0 ? (
-        <Text style={styles.note}>{t.library.leftOut.empty(screen.root)}</Text>
+        <ScreenState kind="empty" text={t.library.leftOut.empty(screen.root)} />
       ) : (
         <View style={rows.card}>
           {screen.rows.map((folder, at) => {
@@ -124,7 +119,7 @@ export default function LeftOutScreen() {
                 <View
                   style={[
                     rows.row,
-                    { paddingLeft: 16 + STEP * (Math.min(folder.depth, DEEPEST) - 1) },
+                    { paddingLeft: SPACE.l + STEP * (Math.min(folder.depth, DEEPEST) - 1) },
                   ]}>
                   <View style={rows.line}>
                     <Text style={[rows.title, !on && styles.off]}>{folder.name}</Text>
@@ -137,7 +132,6 @@ export default function LeftOutScreen() {
                       // one to switch.
                       disabled={within}
                       onValueChange={(wanted) => toggle(folder.path, wanted)}
-                      {...switchColours(c, on)}
                     />
                   </View>
                   <Text style={rows.muted}>
@@ -156,17 +150,5 @@ export default function LeftOutScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...scene(c) },
-  centred: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
-  body: { color: c.text, fontSize: 15, lineHeight: 22, textAlign: 'center' },
-  button: {
-    backgroundColor: c.surfaceRaised,
-    borderRadius: 8,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    ...outlined(c),
-  },
-  buttonLabel: { color: c.text, fontSize: 15 },
-  note: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 14, marginHorizontal: 4 },
   off: { color: c.textMuted },
 }));

@@ -227,7 +227,8 @@ object YouTubeEngine {
         addOption("--skip-download")
         addCommands(listOf("--print-to-file", "%(chapters)j", File(directory, "chapters.json").absolutePath))
       }
-      gate.hold(YouTubeGate.For.FIND, cancelled) { execute(request, cancelled, 60) }
+      // Asked for a tape being played, by somebody waiting on it: not kept behind a download (see [YouTubeGate]).
+      gate.hold(YouTubeGate.For.HAND, cancelled) { execute(request, cancelled, 60) }
       return TapeChapters.read(File(directory, "chapters.json")) ?: org.json.JSONArray()
     } finally {
       directory.deleteRecursively()
@@ -246,7 +247,8 @@ object YouTubeEngine {
       addOption("--skip-download")
       addOption("--dump-single-json")
     }
-    val info = gate.hold(YouTubeGate.For.FIND, cancelled) { JSONObject(execute(request, cancelled, 90)) }
+    // As a tape's chapters are: asked for by somebody waiting on it.
+    val info = gate.hold(YouTubeGate.For.HAND, cancelled) { JSONObject(execute(request, cancelled, 90)) }
     val address = TapeTranscripts.addressIn(info) ?: return org.json.JSONArray()
     return TapeTranscripts.linesOf(TapeTranscripts.fetch(address))
   }

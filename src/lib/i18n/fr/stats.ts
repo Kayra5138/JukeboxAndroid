@@ -38,7 +38,6 @@ const months = [
 const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
 export const stats: Strings['stats'] = {
-  percent: (value) => `${value} %`,
 
   period: {
     labels: { day: 'Jour', week: 'Semaine', month: 'Mois', year: 'Année', all: 'Tout' },

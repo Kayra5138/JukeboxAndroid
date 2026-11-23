@@ -100,7 +100,7 @@ export function rowShows(entry: DiscoverEntryView, t: Strings = strings()): RowS
       if (entry.stage === 'downloading') {
         shows.mark = 'progress';
         shows.progress = Math.min(Math.max(Math.round(entry.progress ?? 0), 0), 100);
-        shows.caption = said.percent(shows.progress);
+        shows.caption = t.format.percent(shows.progress);
       } else {
         shows.mark = 'working';
       }

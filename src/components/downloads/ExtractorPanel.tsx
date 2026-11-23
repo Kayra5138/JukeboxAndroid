@@ -1,10 +1,12 @@
 import { useCallback } from 'react';
+import { LEADING, SPACE, TYPE, RADIUS } from '../../lib/theme/measures';
+import { Note } from '../Note';
+import { ProgressBar } from '../ProgressBar';
 import { useFocusEffect } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { Pressable } from '../Pressable';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, usePressed } from '../../lib/theme/index';
+import { makeStyles, outlined } from '../../lib/theme/index';
 import { isNewer } from '../../lib/youtube/extractor';
 import {
   checkExtractor,
@@ -13,6 +15,7 @@ import {
   updateExtractor,
   useExtractor,
 } from '../../lib/youtube/extractorState';
+import { TextButton, Button } from '../Button';
 
 /**
  * yt-dlp's few lines on the downloads screen: which version is on the phone,
@@ -35,7 +38,6 @@ export function ExtractorPanel() {
   const state = useExtractor();
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.downloads.extractor;
 
   useFocusEffect(
@@ -84,41 +86,35 @@ export function ExtractorPanel() {
           </Text>
         </View>
         {changing ? null : (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
+          <Button
+            label={doing === 'checking' ? said.checking : newer ? said.update : said.check}
+            kind="secondary"
+            size="small"
             disabled={doing === 'checking'}
-            style={styles.button}
             onPress={() => {
               if (newer) void updateExtractor();
               else void checkExtractor(true);
-            }}>
-            <Text style={styles.buttonLabel}>
-              {doing === 'checking' ? said.checking : newer ? said.update : said.check}
-            </Text>
-          </Pressable>
+            }}
+          />
         )}
       </View>
       {doing === 'downloading' ? (
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${Math.min(Math.max(state.percent, 0), 100)}%` }]} />
-        </View>
+        <ProgressBar value={state.percent / 100} style={styles.track} />
       ) : null}
       {reason ? (
-        <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
+        <Note tone="bad" style={styles.bad}>
           {reason}
-        </Text>
+        </Note>
       ) : null}
       {goesBack ? (
-        <Pressable
-          android_ripple={pressed}
-          accessibilityRole="button"
+        <TextButton
+          label={said.restore(goesBack)}
+          tone="plain"
           style={styles.back}
           onPress={() => {
             void restoreExtractor();
-          }}>
-          <Text style={styles.backLabel}>{said.restore(goesBack)}</Text>
-        </Pressable>
+          }}
+        />
       ) : null}
     </View>
   );
@@ -127,26 +123,22 @@ export function ExtractorPanel() {
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
     card: {
-      marginTop: 6,
-      paddingLeft: 14,
-      paddingRight: 8,
-      paddingVertical: 10,
-      gap: 8,
-      borderRadius: 12,
+      marginTop: SPACE.xs,
+      paddingLeft: SPACE.m,
+      paddingRight: SPACE.s,
+      paddingVertical: SPACE.s,
+      gap: SPACE.s,
+      borderRadius: RADIUS.control,
       backgroundColor: c.surface,
       ...outlined(c),
     },
-    line: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    text: { flex: 1, minWidth: 0, gap: 2 },
-    title: { color: c.text, fontSize: 13.5, fontWeight: '600' },
-    status: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-    bad: { color: c.danger, fontSize: 12.5, lineHeight: 18, paddingRight: 6 },
-    button: { minHeight: 40, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-    buttonLabel: { color: c.text, fontSize: 13, fontWeight: '600' },
-    track: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, marginRight: 6, overflow: 'hidden' },
-    fill: { height: 3, backgroundColor: c.accent },
+    line: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
+    text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+    title: { color: c.text, fontSize: TYPE.small, fontWeight: '600' },
+    status: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+    bad: { paddingRight: SPACE.xs },
+    track: { marginRight: SPACE.xs },
     // As quiet as "cancel all" above it: there, and not asked for often.
-    back: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', paddingRight: 8, borderRadius: 8 },
-    backLabel: { color: c.textMuted, fontSize: 12.5 },
+    back: { alignSelf: 'flex-start' },
   })
 );

@@ -33,8 +33,11 @@ internal object BackupArchive {
     Far past anything real, and short of what would fill a phone. A history of
     a hundred thousand listens is a document of a few tens of megabytes; a
     cover is stored at twelve hundred pixels and is a few hundred kilobytes.
+    The document is held three times over on its way to the app -- as bytes,
+    as text, and as the app's own copy -- so its limit is kept to what a
+    phone can hold three of.
   */
-  private const val MOST_DOCUMENT = 256L * 1024 * 1024
+  private const val MOST_DOCUMENT = 128L * 1024 * 1024
   private const val MOST_PICTURE = 16L * 1024 * 1024
   private const val MOST_PICTURES = 20_000
 

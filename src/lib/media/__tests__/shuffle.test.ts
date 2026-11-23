@@ -162,6 +162,15 @@ describe('spreadShuffle', () => {
 });
 
 describe('artistKey', () => {
+  it('is whoever the song is filed under, a guest or a partner in the credit or not', () => {
+    const alone = artistKey({ artist: 'Sertab Erener' });
+    assert.equal(artistKey({ artist: 'Sertab Erener feat. Ozan Çolakoğlu' }), alone);
+    assert.equal(artistKey({ artist: 'Sertab Erener & Demir Demirkan' }), alone);
+    assert.equal(artistKey({ artist: 'Sertab Erener, Sezen Aksu' }), alone);
+    assert.notEqual(artistKey({ artist: 'Sezen Aksu feat. Sertab Erener' }), alone);
+  });
+
+
   it('reads casing and accents as the same artist', () => {
     assert.equal(artistKey({ artist: 'AURORA' }), artistKey({ artist: 'Aurora' }));
     assert.equal(artistKey({ artist: 'Sigur Rós' }), artistKey({ artist: 'Sigur Ros' }));

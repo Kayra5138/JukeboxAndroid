@@ -29,7 +29,6 @@
   <string name="jukebox_widget_up_next">A continuación</string>
   <string name="jukebox_widget_up_next_empty">No hay nada a continuación</string>
   <string name="jukebox_widget_open">Abre el reproductor</string>
-  <string name="jukebox_widget_continue">Continuar: %1$s</string>
 
   <!-- La notificación de reproducción. -->
   <string name="jukebox_playback_channel">Reproduciendo</string>

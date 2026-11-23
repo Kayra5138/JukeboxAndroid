@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import JukeboxAudio, { type AudioEffects } from '../../../modules/jukebox-audio';
 import { useT } from '../i18n/index';
+import { multiplierOf, semitonesOf } from './playback';
+import { usePitch, useSpeed } from './current';
+import { usePlayerActions } from './PlayerProvider';
 
 /**
  * The effects, their ready-made combinations, and the one way of talking to the
@@ -24,6 +27,7 @@ export const BLANK: AudioEffects = {
   rotateSeconds: 12,
   voice: 'off',
   voiceMix: 1,
+  reverb: 0,
 };
 
 /**
@@ -71,6 +75,50 @@ export const PRESETS: { id: EffectPresetId; of: Partial<AudioEffects> }[] = [
  * reaching for a stereo shape silently switched the voice off -- so a preset
  * now describes only its own half, and the two halves are set independently.
  */
+/**
+ * The two that are the song played otherwise rather than the sound treated:
+ * faster and higher, as a record played too fast, or slower and lower, in a
+ * large room. Each is the player's speed and pitch together (`playback.ts`),
+ * which is why a song sounds higher as it is played faster, and the slowed
+ * one the room as well (`Reverb.kt`). Pressed again, each is undone.
+ */
+export type PlayPresetId = 'nightcore' | 'slowed';
+
+export const PLAY_PRESETS: { id: PlayPresetId; speed: number; semitones: number; reverb: number }[] = [
+  { id: 'nightcore', speed: 1.25, semitones: 4, reverb: 0 },
+  { id: 'slowed', speed: 0.8, semitones: -4, reverb: 0.35 },
+];
+
+/** Which of them the player is at, by its speed and its pitch (a multiplier), if either. */
+export function playPresetFor(speed: number, pitch: number): PlayPresetId | null {
+  const semitones = semitonesOf(pitch);
+  return PLAY_PRESETS.find((preset) => Math.abs(preset.speed - speed) < 0.001 && preset.semitones === semitones)?.id ?? null;
+}
+
+/**
+ * Which of [PLAY_PRESETS] is on, and the way to put one on or take it off:
+ * the player's speed and pitch, and through [change] the room of the effects
+ * screen or sheet it is pressed on.
+ */
+export function usePlayPreset(change: (of: Partial<AudioEffects>) => void): {
+  on: PlayPresetId | null;
+  choose: (id: PlayPresetId | null) => void;
+} {
+  const speed = useSpeed();
+  const pitch = usePitch();
+  const { setSpeed, setPitch } = usePlayerActions();
+  const choose = useCallback(
+    (id: PlayPresetId | null) => {
+      const preset = PLAY_PRESETS.find((one) => one.id === id);
+      void setSpeed(preset?.speed ?? 1);
+      void setPitch(multiplierOf(preset?.semitones ?? 0));
+      change({ reverb: preset?.reverb ?? 0 });
+    },
+    [change, setPitch, setSpeed]
+  );
+  return { on: playPresetFor(speed, pitch), choose };
+}
+
 export const SHAPE_KEYS = [
   'preampDb',
   'width',
@@ -94,7 +142,7 @@ export function shapePresetFor(settings: AudioEffects | null): EffectPresetId | 
   const found = PRESETS.find((preset) => {
     const want = shapeOf(preset.of);
     return SHAPE_KEYS.every((key) => {
-      const here = settings[key];
+      const here = settings[key] ?? BLANK[key];
       const there = want[key];
       if (typeof here === 'number' && typeof there === 'number') {
         return Math.abs(here - there) < 0.001;
@@ -121,7 +169,8 @@ export function isBlank(settings: AudioEffects | null): boolean {
 export function matches(settings: AudioEffects, of: Partial<AudioEffects>): boolean {
   const full = { ...BLANK, ...of };
   return (Object.keys(full) as (keyof AudioEffects)[]).every((key) => {
-    const here = settings[key];
+    // A build from before the room was built does not say it has none.
+    const here = settings[key] ?? BLANK[key];
     const there = full[key];
     if (typeof here === 'number' && typeof there === 'number') {
       return Math.abs(here - there) < 0.001;

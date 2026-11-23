@@ -1,19 +1,49 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Switch } from './Switch';
-import { Pressable } from './Pressable';
-import { Segmented } from './Segmented';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
 
+import { TextButton } from './Button';
+import { CoverLookSettings } from './CoverLookSettings';
+import { ResponseCurve, CURVE } from './equalizer/ResponseCurve';
 import { Slider } from './Fader';
+import { NumberStepper } from './NumberStepper';
+import { Pressable } from './Pressable';
+import { Chip, Segmented } from './Segmented';
+import { Text } from './settings/Find';
+import { LinkRow, Rule, SectionLabel, SwitchRow, useRows } from './settings/rows';
+import { TabbedCard } from './TabbedCard';
+import { PageInCard, useInCard } from './CardPages';
+import { EffectsPage } from './sound/EffectsPage';
+import { EqualizerPage } from './sound/EqualizerPage';
+import { TransitionsPage } from './sound/TransitionsPage';
 import { TextPrompt } from './TextPrompt';
 import { readSetting, SETTINGS, writeSetting } from '../lib/db/index';
+import { BUILT_IN, labelOf, matching } from '../lib/equalizer/presets';
+import { useEqualizer } from '../lib/equalizer/useEqualizer';
+import type { AudioEffects } from '../../modules/jukebox-audio';
 import { useT } from '../lib/i18n/index';
+import { usePitch, useSpeed } from '../lib/player/current';
+import {
+  BLANK,
+  PRESETS,
+  VOICES,
+  isBlank,
+  shapeOf,
+  type EffectPresetId,
+  type PlayPresetId,
+  shapePresetFor,
+  useAudioEffects,
+  usePlayPreset,
+} from '../lib/player/effects';
+import type { Box, PanelPlace, PanelTab } from '../lib/player/panelPlace';
+import { formatSemitones, formatSpeed, multiplierOf, PITCH, semitonesOf, snap, SPEED } from '../lib/player/playback';
+import { usePlayerActions, usePlayerState } from '../lib/player/PlayerProvider';
+import { setShakeToExtend, shakeSupported, shakeToExtend } from '../lib/player/shake';
 import {
   MAX_SLEEP_MINUTES,
   SLEEP_PRESETS,
   describeTimer,
+  formatRemaining,
   isPreset,
   minutesFrom,
   preferencesFrom,
@@ -21,119 +51,167 @@ import {
   remainingMs,
   type SleepPreferences,
 } from '../lib/player/sleep';
+import { roundTransition, transitionSeconds, useTransitions } from '../lib/player/useTransitions';
 import { useSleepTimer } from '../lib/player/useSleepTimer';
-import { setShakeToExtend, shakeSupported, shakeToExtend } from '../lib/player/shake';
-import { TAPE_JUMP_RANGE } from '../lib/tapes/settings';
-import { NumberStepper } from './NumberStepper';
-import {
-  formatSemitones,
-  formatSpeed,
-  multiplierOf,
-  PITCH,
-  semitonesOf,
-  snap,
-  SPEED,
-} from '../lib/player/playback';
-import {
-  BLANK,
-  PRESETS,
-  VOICES,
-  isBlank,
-  shapeOf,
-  shapePresetFor,
-  useAudioEffects,
-} from '../lib/player/effects';
-import { makeStyles, outlined, switchColours, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf } from '../lib/theme/Veil';
+import { setOwnTapeJump, TAPE_JUMP_RANGE, tapeJumpsFor } from '../lib/tapes/settings';
+import { setTapeSpeed, tapeKeyOf } from '../lib/tapes/speed';
+import { isTape } from '../lib/tapes/tape';
+import { makeStyles, useColours } from '../lib/theme/index';
+import { CARD_GAP, DISABLED, LEADING, ROW, SPACE, TYPE } from '../lib/theme/measures';
 import { haptic } from '../lib/ui/haptics';
 
+/*
+  Settings that shape playback but are rarely touched, kept behind the gear so
+  the player itself stays down to the controls used every time. Three parts,
+  each one thing to come for: how it sounds ([SoundSettings]), how the player
+  looks ([LookSettings]) and when it stops ([SleepSettings]). From the player,
+  a card over it with a tab for each ([PlayerPanel]); in Settings, the pages
+  Playback and Player look. The same parts in both, so that a setting is one
+  setting wherever it is changed.
+*/
+
+/** The tape playing, if one is, and the key its book's or show's own speed and jumps are kept under. */
+function usePlayingTape(): { tape: boolean; tapeKey: string | null } {
+  const { current } = usePlayerState();
+  const tape = current != null && isTape(current);
+  return { tape, tapeKey: tape ? tapeKeyOf(current) : null };
+}
+
 /**
- * Settings that shape playback but are rarely touched, kept behind the gear so
- * the player itself stays down to the controls used every time.
+ * The player's settings over the player, from its gear or its sleep timer
+ * ([tab]): a card with a tab for each part (`TabbedCard`), of glass over
+ * the player ([behind]), where [place] puts it (`panelPlace`), the player
+ * moved out of its way and nothing of it dimmed.
  *
- * A layer rather than a modal, which used to be because the value pickers
- * inside were modals of their own and stacking one on another is unreliable on
- * Android. The pickers have gone and the reason has not: this sheet is opened
- * from the player, which is itself a layer over the navigator.
+ * A page one of them leads to — the equalizer, every effect, a list of
+ * choices — opens in the card (`PageInCard`), with a way back to where it
+ * was opened from.
  */
-export function PlayerSettings({
-  visible,
-  speed,
-  pitch,
-  onSpeed,
-  onPitch,
+export function PlayerPanel({
+  tab,
+  onTab,
   onClose,
-  sleepOnly = false,
-  tape = false,
-  jumps,
-  onJump,
+  place,
+  behind,
 }: {
-  visible: boolean;
-  /** A tape is playing: the sleep timer speaks of a part, not of the music or a song. */
-  tape?: boolean;
-  /** For a tape: the jumps of its book or show, and which of them are its own rather than the general ones. */
-  jumps?: { back: number; forward: number; ownBack: boolean; ownForward: boolean };
-  /** One of them given a figure of its own, or given back to the general one for null. */
-  onJump?: (which: 'back' | 'forward', seconds: number | null) => void;
-  /** The sleep timer and nothing else: for a tape, whose player has a button of its own for it. */
-  sleepOnly?: boolean;
-  speed: number;
-  pitch: number;
-  onSpeed: (value: number) => void;
-  onPitch: (value: number) => void;
+  tab: PanelTab;
+  onTab: (tab: PanelTab) => void;
   onClose: () => void;
+  place: PanelPlace;
+  behind: RefObject<View | null> | null;
 }) {
-  const insets = useSafeAreaInsets();
+  const t = useT();
+  const named = t.player.settings.tabs;
+  // How long the timer has left, on its tab, to be seen from the other two.
+  const { timer, now } = useSleepTimer();
+  const left = remainingMs(timer, now);
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      {/* Not stops for a screen reader, which closes the card with its own mark, or Back. */}
+      {place.closers.map((box, at) => (
+        <Pressable key={at} accessible={false} style={boxStyle(box)} onPress={onClose} />
+      ))}
+      <TabbedCard
+        style={boxStyle(place.card)}
+        behind={behind}
+        tab={tab}
+        onTab={onTab}
+        onClose={onClose}
+        tabs={[
+          { value: 'sound', label: named.sound },
+          // Read as the tab's name alone: said by the second, it was read out every second.
+          { value: 'sleep', label: left != null ? `${named.sleep} ${formatRemaining(left)}` : named.sleep, accessibilityLabel: named.sleep },
+          { value: 'look', label: named.look },
+        ]}>
+        {tab === 'sound' ? <SoundSettings /> : tab === 'look' ? <LookSettings /> : <SleepSettings />}
+      </TabbedCard>
+    </View>
+  );
+}
+
+const boxStyle = (box: Box): ViewStyle => ({ position: 'absolute', left: box.x, top: box.y, width: box.width, height: box.height });
+
+/**
+ * How the player looks: what stands where the cover is, what moves with the
+ * music round it, a knock on the beat. Settings → Player look, and the
+ * player's own tab of it.
+ */
+export function LookSettings() {
+  const rows = useRows();
+  return (
+    <View style={rows.card}>
+      <CoverLookSettings />
+    </View>
+  );
+}
+
+/**
+ * How it sounds: speed and pitch, a tape's jumps, the effects worth choosing
+ * without leaving the song, and the equalizer and the crossfade, each with
+ * its switch and its few quick choices beside the way to the whole of it.
+ * About what is playing: for a tape, its book's or show's own speed and
+ * jumps, which the player reads again as this is closed.
+ *
+ * The whole of the equalizer, of the crossfade and of the effects is a page
+ * of the tab from Settings, and a page in the card from the player's card
+ * of settings (`PageInCard`), so that nothing opened from it goes anywhere
+ * else.
+ */
+export function SoundSettings() {
+  // Read here rather than handed down, so a slider moving draws this alone: see `playbackSpeed`.
+  const speed = useSpeed();
+  const pitch = usePitch();
+  const { setSpeed, setPitch } = usePlayerActions();
+  const { tape, tapeKey } = usePlayingTape();
+  // Read again when the tape playing is of another book, and when changed here.
+  const [jumps, setJumps] = useState(() => ({ key: tapeKey, ...tapeJumpsFor(tapeKey) }));
+  if (jumps.key !== tapeKey) setJumps({ key: tapeKey, ...tapeJumpsFor(tapeKey) });
   const router = useRouter();
-  const { settings: effects, change: changeEffects } = useAudioEffects(visible);
+  const { settings: effects, change: changeEffects } = useAudioEffects(true);
+  // Nightcore and slowed: speed and pitch together, and the room (`usePlayPreset`). Not offered for a tape.
+  const play = usePlayPreset(changeEffects);
+  const blank = isBlank(effects) && play.on == null;
+  // The rest of the effects, shown: from the first when one of them is on, once it is known which is.
+  const hiddenOn = effects != null && EFFECT_CHIPS.some((chip) => !chip.first && chipOn(chip, effects, play.on));
+  const [more, setMore] = useState(false);
+  const [opened, setOpened] = useState(false);
+  if (effects != null && !opened) {
+    setOpened(true);
+    if (hiddenOn) setMore(true);
+  }
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
+  const rows = useRows();
   const c = useColours();
-  if (!visible) return null;
 
-  /*
-    Left standing, both this and the player behind it.
+  // A tape's speed is its own, kept for it as the player's speed button keeps it.
+  const onSpeed = (value: number) => {
+    if (tapeKey) setTapeSpeed(tapeKey, value);
+    void setSpeed(value);
+  };
+  const onPitch = (value: number) => void setPitch(value);
+  // Kept for the book or show, as its speed is, and handed to the player for presses from outside the app.
+  const onJump = (which: 'back' | 'forward', seconds: number | null) => {
+    if (!tapeKey) return;
+    setOwnTapeJump(tapeKey, which, seconds);
+    setJumps({ key: tapeKey, ...tapeJumpsFor(tapeKey) });
+  };
 
-    They used to be closed on the way out, because the player is a layer over
-    the navigator and the pushed route would otherwise open behind it. The host
-    now hides the layer for exactly as long as one of these routes is up, which
-    fixes the picture without throwing the state away -- so coming back arrives
-    here, at the menu this was opened from, rather than at the library.
-  */
-  const leaveFor = (route: '/equalizer' | '/transitions' | '/effects' | '/player-look') => {
-    router.push(route);
+  const inCard = useInCard();
+  const [inside, setInside] = useState<Route | null>(null);
+  const leaveFor = (route: Route) => {
+    if (inCard) setInside(route);
+    else router.push(route);
   };
 
   const semitones = semitonesOf(pitch);
   const untouched = speed === SPEED.normal && semitones === PITCH.normal;
 
   return (
-    <View style={StyleSheet.absoluteFill}>
-      {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
-          of its own, touching outside it is one of the ways out, and it has to be findable. */}
-      <Pressable
-        style={styles.backdrop}
-        accessibilityRole="button"
-        accessibilityLabel={t.common.close}
-        onPress={onClose}
-      />
-      <ScrollView
-        style={styles.sheet}
-        contentContainerStyle={[
-          styles.sheetBody,
-          {
-            // Sideways the cutout and the gesture bar are down the sides, and
-            // a slider whose last few values sat under either would be a
-            // slider that could not reach its own ends.
-            paddingLeft: insets.left + 20,
-            paddingRight: insets.right + 20,
-            paddingBottom: insets.bottom + 28,
-          },
-        ]}>
-        {sleepOnly ? null : <>
+    <View style={styles.groups}>
+      <View>
         <View style={styles.headingRow}>
-          <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.playback)}</Text>
+          <SectionLabel after={false}>{t.player.settings.playback}</SectionLabel>
           {/*
             Dimmed rather than taken away when there is nothing to undo. It
             lives above two controls that are dragged, and a button appearing
@@ -144,175 +222,184 @@ export function PlayerSettings({
             wants to be told they must come back in two goes. Either slider
             still returns to normal on its own, which is what the notch is for.
           */}
-          <Pressable
-            accessibilityRole="button"
+          <TextButton
+            label={t.player.settings.normal}
             accessibilityLabel={t.player.settings.backToNormal}
             disabled={untouched}
-            hitSlop={12}
             onPress={() => {
               haptic('results', 'confirm');
               onSpeed(SPEED.normal);
               onPitch(multiplierOf(PITCH.normal));
-            }}>
-            <Text style={[styles.reset, untouched && styles.resetOff]}>{t.player.settings.normal}</Text>
-          </Pressable>
+            }}
+          />
         </View>
-
         {/*
           Stacked, and stacked sideways too, where the rest of the app puts
           things side by side. Two columns would halve the travel, and half the
           travel is twice as hard to place a value on — which is the complaint
           this control was rebuilt to answer, not one to reintroduce.
         */}
-        <View style={styles.controls}>
-          <Slider
-            label={t.player.settings.speed}
-            value={speed}
-            min={SPEED.min}
-            max={SPEED.max}
-            centre={SPEED.normal}
-            accent={c.accent}
-            snap={(value) => snap(value, SPEED)}
-            format={(value) => formatSpeed(value, t)}
-            /*
-              The same call on the way past as on the way down, where the other
-              sliders in the app keep a cheap one for dragging. They can send
-              a hundred distinct values across a drag; this one is notched, so
-              it speaks only when the step changes — thirty times over the
-              whole track, and nothing at all while a finger crosses one step.
-            */
-            onDrag={onSpeed}
-            onSettle={onSpeed}
-          />
-
+        <View style={rows.card}>
+          <View style={rows.row}>
+            <Slider
+              label={t.player.settings.speed}
+              value={speed}
+              min={SPEED.min}
+              max={SPEED.max}
+              centre={SPEED.normal}
+              accent={c.accent}
+              snap={(value) => snap(value, SPEED)}
+              format={(value) => formatSpeed(value, t)}
+              /*
+                The same call on the way past as on the way down, where the other
+                sliders in the app keep a cheap one for dragging. They can send
+                a hundred distinct values across a drag; this one is notched, so
+                it speaks only when the step changes — thirty times over the
+                whole track, and nothing at all while a finger crosses one step.
+              */
+              onDrag={onSpeed}
+              onSettle={onSpeed}
+            />
+          </View>
           {/* Not for a tape: a voice is listened to at its own pitch, sped up or not. */}
           {tape ? null : (
-          <>
-          <Slider
-            label={t.player.settings.pitch}
-            value={semitones}
-            min={PITCH.min}
-            max={PITCH.max}
-            centre={PITCH.normal}
-            // Every semitone is felt, since every one is a different key.
-            notchEvery={1}
-            accent={c.accent}
-            snap={(value) => snap(value, PITCH)}
-            format={(value) => formatSemitones(value, t)}
-            onDrag={(value) => onPitch(multiplierOf(value))}
-            onSettle={(value) => onPitch(multiplierOf(value))}
-          />
-          <Text style={styles.hint}>{t.player.settings.pitchHint}</Text>
-          </>
+            <>
+              <Rule />
+              <View style={rows.row}>
+                <Slider
+                  label={t.player.settings.pitch}
+                  value={semitones}
+                  min={PITCH.min}
+                  max={PITCH.max}
+                  centre={PITCH.normal}
+                  // Every semitone is felt, since every one is a different key.
+                  notchEvery={1}
+                  accent={c.accent}
+                  snap={(value) => snap(value, PITCH)}
+                  format={(value) => formatSemitones(value, t)}
+                  onDrag={(value) => onPitch(multiplierOf(value))}
+                  onSettle={(value) => onPitch(multiplierOf(value))}
+                />
+                <Text style={rows.muted}>{t.player.settings.pitchHint}</Text>
+              </View>
+            </>
           )}
         </View>
+      </View>
 
-        {/*
-          A tape's jumps, for its book or show, beside its speed, which is
-          kept the same way: a lecture wants a longer step back than a novel.
-          The general ones until changed here; `General` gives both back.
-        */}
-        {tape && jumps && onJump ? (
-          <>
-            <View style={styles.headingRow}>
-              <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.jumps.heading)}</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t.player.settings.jumps.backToGeneral}
-                disabled={!jumps.ownBack && !jumps.ownForward}
-                hitSlop={12}
-                onPress={() => {
-                  haptic('results', 'confirm');
-                  onJump('back', null);
-                  onJump('forward', null);
-                }}>
-                <Text style={[styles.reset, !jumps.ownBack && !jumps.ownForward && styles.resetOff]}>{t.player.settings.jumps.general}</Text>
-              </Pressable>
-            </View>
-            {(['back', 'forward'] as const).map((which) => (
-              <View key={which} style={styles.switchRow}>
-                <Text style={[styles.rowTitle, styles.switchWords]}>{t.player.settings.jumps[which]}</Text>
-                <NumberStepper
-                  name={t.player.settings.jumps[which]}
-                  range={TAPE_JUMP_RANGE}
-                  value={jumps[which]}
-                  onChange={(seconds) => onJump(which, seconds)}
-                />
+      {/*
+        A tape's jumps, for its book or show, beside its speed, which is
+        kept the same way: a lecture wants a longer step back than a novel.
+        The general ones until changed here; `General` gives both back.
+      */}
+      {tapeKey ? (
+        <View>
+          <View style={styles.headingRow}>
+            <SectionLabel after={false}>{t.player.settings.jumps.heading}</SectionLabel>
+            <TextButton
+              label={t.player.settings.jumps.general}
+              accessibilityLabel={t.player.settings.jumps.backToGeneral}
+              disabled={!jumps.ownBack && !jumps.ownForward}
+              onPress={() => {
+                haptic('results', 'confirm');
+                onJump('back', null);
+                onJump('forward', null);
+              }}
+            />
+          </View>
+          <View style={rows.card}>
+            {(['back', 'forward'] as const).map((which, at) => (
+              <View key={which}>
+                {at > 0 ? <Rule /> : null}
+                <View style={rows.row}>
+                  <View style={rows.line}>
+                    <Text style={rows.title}>{t.player.settings.jumps[which]}</Text>
+                    <NumberStepper
+                      name={t.player.settings.jumps[which]}
+                      range={TAPE_JUMP_RANGE}
+                      value={jumps[which]}
+                      onChange={(seconds) => onJump(which, seconds)}
+                    />
+                  </View>
+                </View>
               </View>
             ))}
-            <Text style={styles.hint}>{t.player.settings.jumps.note}</Text>
-          </>
-        ) : null}
+          </View>
+          <Text style={rows.aside}>{t.player.settings.jumps.note}</Text>
+        </View>
+      ) : null}
 
-        {/*
-          The choices worth making without leaving the song, in one row.
+      {/*
+        The choices worth making without leaving the song, in one row.
 
-          Two headings was an accurate description of the code and a poor one of
-          the thing: somebody reaching for this is picking how the record should
-          sound, and whether the answer happens to be a stereo shape or a
-          treatment of the voice is a distinction about how it is implemented.
-          They do different halves of the settings and so can both be on at
-          once, which is why `Off` is a chip of its own rather than the first of
-          each list -- it is the only one that speaks for both halves.
-        */}
-        <Text accessibilityRole="header" style={styles.heading}>{t.format.upper(t.player.settings.effects)}</Text>
+        Two headings was an accurate description of the code and a poor one of
+        the thing: somebody reaching for this is picking how the record should
+        sound, and whether the answer happens to be a stereo shape or a
+        treatment of the voice is a distinction about how it is implemented.
+        They do different halves of the settings and so can both be on at
+        once, which is why `Off` is a chip of its own rather than the first of
+        each list -- it is the only one that speaks for both halves.
+      */}
+      <View>
+        <SectionLabel after={false}>{t.player.settings.effects}</SectionLabel>
         <View style={styles.chips}>
           {/*
             Off and the stereo shapes are one of a set, of which one is the
             answer; the voices beside them are each on or off by itself, and
             pressed again turn off. Said so to a screen reader, which would
             otherwise hear a row of buttons that are somehow checked.
+
+            The few reached for most first, and the rest behind More, which
+            shows them where they are: open already when one of them is on,
+            so that what is playing is never under a button.
           */}
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: isBlank(effects), disabled: !effects }}
-            disabled={!effects}
-            style={[
-              styles.chip,
-              isBlank(effects) && styles.chipOn,
-              !effects && styles.chipOff,
-            ]}
-            onPress={() => {
-              haptic('choices', 'tick');
-              changeEffects(BLANK);
-            }}>
-            <Text style={isBlank(effects) ? styles.chipLabelOn : styles.chipLabel}>
-              {t.common.off}
-            </Text>
-          </Pressable>
-
-          {PRESETS.filter((preset) => preset.id !== 'off').map((preset) => {
-            const on = shapePresetFor(effects) === preset.id;
+          {(more ? EFFECT_CHIPS : EFFECT_CHIPS.filter((chip) => chip.first)).map((chip) => {
+            if (chip.kind === 'play' && tape) return null;
+            if (chip.kind === 'shape') {
+              const preset = PRESETS.find((one) => one.id === chip.id)!;
+              return (
+                <Chip
+                  key={chip.id}
+                  label={chip.id === 'off' ? t.common.off : t.sound.effects.presets[preset.id].name}
+                  role="radio"
+                  on={chip.id === 'off' ? blank : shapePresetFor(effects) === chip.id}
+                  disabled={!effects}
+                  onPress={() => {
+                    haptic('choices', 'tick');
+                    if (chip.id !== 'off') {
+                      changeEffects(shapeOf(preset.of));
+                      return;
+                    }
+                    changeEffects(BLANK);
+                    if (play.on) play.choose(null);
+                  }}
+                />
+              );
+            }
+            if (chip.kind === 'play') {
+              const on = play.on === chip.id;
+              return (
+                <Chip
+                  key={chip.id}
+                  label={t.sound.effects.presets[chip.id].name}
+                  on={on}
+                  disabled={!effects}
+                  // Pressed again, the song is played as it is again.
+                  onPress={() => {
+                    haptic('choices', on ? 'toggleOff' : 'toggleOn');
+                    play.choose(on ? null : chip.id);
+                  }}
+                />
+              );
+            }
+            const voice = VOICES.find((one) => one.id === chip.id)!;
+            const on = effects?.voice === voice.id;
             return (
-              <Pressable
-                android_ripple={pressed}
-                key={preset.id}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: on, disabled: !effects }}
+              <Chip
+                key={chip.id}
+                label={t.sound.effects.voices[voice.id].name}
+                on={on}
                 disabled={!effects}
-                style={[styles.chip, on && styles.chipOn, !effects && styles.chipOff]}
-                onPress={() => {
-                  haptic('choices', 'tick');
-                  changeEffects(shapeOf(preset.of));
-                }}>
-                <Text style={on ? styles.chipLabelOn : styles.chipLabel}>
-                  {t.sound.effects.presets[preset.id].name}
-                </Text>
-              </Pressable>
-            );
-          })}
-
-          {VOICES.filter((choice) => choice.id !== 'off').map((choice) => {
-            const on = effects?.voice === choice.id;
-            return (
-              <Pressable
-                android_ripple={pressed}
-                key={choice.id}
-                accessibilityRole="togglebutton"
-                accessibilityState={{ checked: on, disabled: !effects }}
-                disabled={!effects}
-                style={[styles.chip, on && styles.chipOn, !effects && styles.chipOff]}
                 /*
                   Tapping the one already chosen turns it off, because there is
                   no longer an `Off` in this half of the row to go back to and
@@ -321,60 +408,204 @@ export function PlayerSettings({
                 */
                 onPress={() => {
                   haptic('choices', on ? 'toggleOff' : 'toggleOn');
-                  changeEffects(
-                    on
-                      ? { voice: 'off', voiceMix: 1 }
-                      : { voice: choice.id, voiceMix: choice.mix }
-                  );
-                }}>
-                <Text style={on ? styles.chipLabelOn : styles.chipLabel}>
-                  {t.sound.effects.voices[choice.id].name}
-                </Text>
-              </Pressable>
+                  changeEffects(on ? { voice: 'off', voiceMix: 1 } : { voice: voice.id, voiceMix: voice.mix });
+                }}
+              />
             );
           })}
+          <Chip
+            label={more ? t.player.settings.fewerEffects : t.player.settings.moreEffects}
+            role="button"
+            on={false}
+            expanded={more}
+            onPress={() => {
+              haptic('choices', 'tick');
+              setMore(!more);
+            }}
+          />
         </View>
         {effects && effects.voice !== 'off' ? (
-          <Text style={styles.hint}>{t.sound.effects.voices[effects.voice].hint}</Text>
+          <Text style={rows.aside}>{t.sound.effects.voices[effects.voice].hint}</Text>
         ) : null}
+        <View style={[rows.card, styles.under]}>
+          <LinkRow
+            title={t.player.settings.allEffects.title}
+            hint={t.player.settings.allEffects.note}
+            onPress={() => leaveFor('/effects')}
+          />
+        </View>
+      </View>
 
-        {/* How the player looks, from the player itself: what stands where the cover is, and what moves with the music. */}
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/player-look')}>
-          <Text style={styles.rowTitle}>{t.settings.playerLook.title}</Text>
-          <Text style={styles.hint}>{t.settings.playerLook.open}</Text>
-        </Pressable>
+      <EqualizerCard open={() => leaveFor('/equalizer')} />
+      {/* Nor this: a tape is never faded into the next thing. */}
+      {tape ? null : <CrossfadeCard open={() => leaveFor('/transitions')} />}
 
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/equalizer')}>
-          <Text style={styles.rowTitle}>{t.nav.equalizer}</Text>
-          <Text style={styles.hint}>{t.player.settings.equalizer.note}</Text>
-        </Pressable>
-
-        {/* Nor this: a tape is never faded into the next thing. */}
-        {tape ? null : (
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/transitions')}>
-            <Text style={styles.rowTitle}>{t.nav.crossfade}</Text>
-            <Text style={styles.hint}>{t.player.settings.crossfade.note}</Text>
-          </Pressable>
-        )}
-
-        {/* Last of the rows, because it is the way out of here rather than a setting. */}
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => leaveFor('/effects')}>
-          <Text style={styles.rowTitle}>{t.player.settings.allEffects.title}</Text>
-          <Text style={styles.hint}>{t.player.settings.allEffects.note}</Text>
-        </Pressable>
-
-        </>}
-
-        {/*
-          Under everything else. The rest of this sheet is about how the music
-          sounds, and this is about when it stops: reached for once, at the end
-          of an evening, and in nobody's way down here the rest of the time.
-        */}
-        <SleepTimerSection tape={tape} />
-
-      </ScrollView>
+      <PageInCard visible={inside === '/equalizer'} title={t.nav.equalizer} bare onClose={() => setInside(null)}>
+        <EqualizerPage />
+      </PageInCard>
+      <PageInCard visible={inside === '/transitions'} title={t.nav.crossfade} bare onClose={() => setInside(null)}>
+        <TransitionsPage />
+      </PageInCard>
+      <PageInCard visible={inside === '/effects'} title={t.nav.effects} bare onClose={() => setInside(null)}>
+        <EffectsPage />
+      </PageInCard>
     </View>
   );
+}
+
+/** The pages of the sound that the quick choices lead to the whole of. */
+type Route = '/equalizer' | '/transitions' | '/effects';
+
+/**
+ * The effects offered beside the player, in the order they are shown: those
+ * [first] always, the rest behind More. A stereo shape (`shape`), a way of
+ * playing that is speed and pitch together (`play`, never for a tape), or a
+ * treatment of the voice (`voice`).
+ */
+const EFFECT_CHIPS: readonly (
+  | { kind: 'shape'; id: EffectPresetId; first: boolean }
+  | { kind: 'play'; id: PlayPresetId; first: boolean }
+  | { kind: 'voice'; id: AudioEffects['voice']; first: boolean }
+)[] = [
+  { kind: 'shape', id: 'off', first: true },
+  { kind: 'shape', id: 'mono', first: true },
+  { kind: 'play', id: 'nightcore', first: true },
+  { kind: 'play', id: 'slowed', first: true },
+  { kind: 'voice', id: 'vintage', first: true },
+  { kind: 'shape', id: 'wide', first: false },
+  { kind: 'shape', id: 'headphones', first: false },
+  { kind: 'shape', id: '8d', first: false },
+  { kind: 'shape', id: 'karaoke', first: false },
+  { kind: 'voice', id: 'robot', first: false },
+  { kind: 'voice', id: 'swirl', first: false },
+  { kind: 'voice', id: 'chipmunk', first: false },
+  { kind: 'voice', id: 'squeak', first: false },
+];
+
+/** Whether [chip] is the effect, or one of the effects, in force. */
+function chipOn(chip: (typeof EFFECT_CHIPS)[number], effects: AudioEffects, playing: PlayPresetId | null | undefined): boolean {
+  if (chip.kind === 'shape') return chip.id !== 'off' && shapePresetFor(effects) === chip.id;
+  if (chip.kind === 'play') return playing === chip.id;
+  return effects.voice === chip.id;
+}
+
+/**
+ * The equalizer's switch, its curve and the curves to choose from, as the
+ * page Equalizer has them; the curve, and the row under it, lead to that
+ * page for the rest. Only the way there while the player has not said what
+ * it has, or cannot (an older build).
+ */
+function EqualizerCard({ open }: { open: () => void }) {
+  const t = useT();
+  const rows = useRows();
+  const styles = useStyles();
+  const c = useColours();
+  const { state, commit, shape } = useEqualizer();
+  const parametric = state?.parametric;
+  const kept = parametric?.presets ?? [];
+  const all = [...BUILT_IN, ...kept];
+  const off = !state?.enabled;
+  return (
+    <View style={rows.card}>
+      {state ? (
+        <>
+          <SwitchRow
+            title={t.sound.equalizer.title}
+            hint={state.attached ? t.sound.equalizer.attached : t.sound.equalizer.saved}
+            value={state.enabled}
+            onChange={(enabled) => void commit({ enabled })}
+          />
+          {parametric ? (
+            // Dimmed rather than taken away when off, as on its page: the shape set up is still there to come back to.
+            <View
+              collapsable={false}
+              style={[styles.equalizer, off && styles.dimmed]}
+              pointerEvents={off ? 'none' : 'auto'}
+              importantForAccessibility={off ? 'no-hide-descendants' : 'auto'}>
+              <Pressable style={styles.curve} accessibilityRole="button" accessibilityLabel={t.nav.equalizer} onPress={open}>
+                <ResponseCurve bands={parametric.bands} height={CURVE.quick} accent={c.accent} />
+              </Pressable>
+              {/* Without a mark when the curve is none of them, having been shaped by hand. */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.presets}>
+                <Segmented
+                  variant="outline"
+                  wrap={false}
+                  options={all.map((preset) => ({ value: preset.name, label: labelOf(preset.name, t) }))}
+                  value={matching(parametric.bands, parametric.preampDb, all)}
+                  onChange={(name) => {
+                    const preset = all.find((candidate) => candidate.name === name);
+                    if (preset) shape({ bands: preset.bands, preampDb: preset.preampDb }, true);
+                  }}
+                />
+              </ScrollView>
+            </View>
+          ) : null}
+          <Rule />
+        </>
+      ) : null}
+      <LinkRow title={t.player.settings.equalizer.note} onPress={open} />
+    </View>
+  );
+}
+
+/**
+ * The crossfade's switch and how far one track runs over the next, as the
+ * page Crossfade has them first; the row under them leads there for the
+ * other transitions.
+ */
+function CrossfadeCard({ open }: { open: () => void }) {
+  const t = useT();
+  const say = t.sound.transitions;
+  const rows = useRows();
+  const styles = useStyles();
+  const c = useColours();
+  const { state, push, commit } = useTransitions();
+  const off = !state?.enabled;
+  return (
+    <View style={rows.card}>
+      {state ? (
+        <>
+          <SwitchRow title={say.title} hint={say.about} value={state.enabled} onChange={(enabled) => void commit({ enabled })} />
+          <Rule />
+          <View
+            collapsable={false}
+            style={[rows.row, off && styles.dimmed]}
+            pointerEvents={off ? 'none' : 'auto'}
+            importantForAccessibility={off ? 'no-hide-descendants' : 'auto'}>
+            <Slider
+              label={say.overlap}
+              value={state.autoMs}
+              min={0}
+              max={state.maxAutoMs}
+              notches={NOTHING}
+              snap={(value) => roundTransition(value, state.maxAutoMs)}
+              accent={c.accent}
+              format={(milliseconds) => transitionSeconds(milliseconds, t)}
+              onDrag={(value) => push({ autoMs: roundTransition(value, state.maxAutoMs) })}
+              onSettle={(value) => void commit({ autoMs: roundTransition(value, state.maxAutoMs) })}
+            />
+          </View>
+          <Rule />
+        </>
+      ) : null}
+      <LinkRow title={say.more} onPress={open} />
+    </View>
+  );
+}
+
+/** Where the overlap is felt: at nothing, which is no crossfade. */
+const NOTHING = [0] as const;
+
+/**
+ * When it stops: the sleep timer, for a song or for a tape's part. Settings
+ * → Playback, and the player's own tab of it.
+ */
+export function SleepSettings() {
+  const { tape } = usePlayingTape();
+  return <SleepTimerSection tape={tape} />;
 }
 
 /**
@@ -394,7 +625,7 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
   // A part's words for a tape, a song's for everything else; the rest is the same.
   const said = tape ? { ...t.player.sleepTimer, ...t.player.sleepTimer.tape } : t.player.sleepTimer;
   const styles = useStyles();
-  const c = useColours();
+  const rows = useRows();
   const [preferences, setPreferences] = useState(() =>
     preferencesFrom(readSetting(SETTINGS.sleepTimer))
   );
@@ -427,7 +658,9 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
   */
   const letTrackFinish = (finishTrack: boolean) => {
     remember({ ...preferences, finishTrack });
-    const left = remainingMs(timer, Date.now());
+    // Only a timer counting the clock: one for the end of a chapter counts
+    // the tape, and set again as a duration it would stop at the wrong place.
+    const left = timer.kind === 'duration' ? remainingMs(timer, Date.now()) : null;
     // Under a second is less than the service will keep a timer for, and
     // asking would cancel the one that is about to fire.
     if (left !== null && left > 1_000) {
@@ -444,21 +677,19 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
   const typed = isPreset(preferences.minutes) ? null : preferences.minutes;
 
   return (
-    <>
+    <View style={styles.sleep}>
       <View style={styles.headingRow}>
-        <Text style={styles.heading}>{t.format.upper(t.player.sleepTimer.title)}</Text>
+        <SectionLabel after={false}>{t.player.sleepTimer.title}</SectionLabel>
         {/* Dimmed rather than taken away, for the reason `Normal` above is. */}
-        <Pressable
-          accessibilityRole="button"
+        <TextButton
+          label={t.common.cancel}
           accessibilityLabel={t.player.sleepTimer.cancel}
           disabled={!running}
-          hitSlop={12}
           onPress={() => {
             haptic('choices', 'tick');
             void cancel();
-          }}>
-          <Text style={[styles.reset, !running && styles.resetOff]}>{t.common.cancel}</Text>
-        </Pressable>
+          }}
+        />
       </View>
 
       <Text style={running ? styles.status : styles.hint}>
@@ -502,41 +733,36 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
         }}
       />
 
-      <View style={styles.switchRow}>
-        <View style={styles.switchWords}>
-          <Text style={styles.rowTitle}>{said.finish.title}</Text>
-          <Text style={styles.hint}>{said.finish.note}</Text>
-        </View>
-        <Switch
+      <View style={rows.card}>
+        <SwitchRow
+          title={said.finish.title}
+          hint={said.finish.note}
           accessibilityLabel={said.finish.label}
           value={preferences.finishTrack}
           disabled={!supported}
-          onValueChange={letTrackFinish}
-          {...switchColours(c, preferences.finishTrack)}
+          onChange={letTrackFinish}
         />
+        {/* Kept by the player, which listens for the shake, and in force at once on a timer already near its end. */}
+        {shakeSupported() ? (
+          <>
+            <Rule />
+            <SwitchRow
+              title={t.player.sleepTimer.shake.title}
+              hint={t.player.sleepTimer.shake.note}
+              accessibilityLabel={t.player.sleepTimer.shake.label}
+              value={shake}
+              disabled={!supported}
+              onChange={(on) => {
+                setShakeToExtend(on);
+                setShake(on);
+              }}
+            />
+          </>
+        ) : null}
       </View>
 
-      {/* Kept by the player, which listens for the shake, and in force at once on a timer already near its end. */}
-      {shakeSupported() ? (
-        <View style={styles.switchRow}>
-          <View style={styles.switchWords}>
-            <Text style={styles.rowTitle}>{t.player.sleepTimer.shake.title}</Text>
-            <Text style={styles.hint}>{t.player.sleepTimer.shake.note}</Text>
-          </View>
-          <Switch
-            accessibilityLabel={t.player.sleepTimer.shake.label}
-            value={shake}
-            disabled={!supported}
-            onValueChange={(on) => {
-              setShakeToExtend(on);
-              setShake(on);
-            }}
-            {...switchColours(c, shake)}
-          />
-        </View>
-      ) : null}
-
       <TextPrompt
+        page
         visible={asking}
         /*
           The heading is where a refusal is said, because the dialog has
@@ -565,53 +791,25 @@ function SleepTimerSection({ tape }: { tape: boolean }) {
         }}
         onClose={() => setAsking(false)}
       />
-    </>
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: scrimOf(c),
-  },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '80%',
-    ...outlined(c),
-  },
-  sheetBody: { paddingTop: 18, gap: 16 },
+  // One part from the next a card's distance apart, as on any page of Settings.
+  groups: { gap: CARD_GAP },
+  sleep: { gap: SPACE.m },
   headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  heading: {
-    color: c.textMuted,
-    fontSize: 12,
-    letterSpacing: 1,
-  },
-  reset: { color: c.accent, fontSize: 13 },
-  resetOff: { color: c.textDisabled },
-  controls: { gap: 18 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
+  hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.small },
   // Figures of one width, so the line does not shuffle sideways as it counts.
-  status: { color: c.text, fontSize: 13, lineHeight: 18, fontVariant: ['tabular-nums'] },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  switchWords: { flex: 1, gap: 3 },
+  status: { color: c.text, fontSize: TYPE.small, lineHeight: LEADING.small, fontVariant: ['tabular-nums'] },
   // Wrapping rather than a sideways scroller: a row that scrolls hides how
   // many there are, and six chips is few enough to simply show.
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { backgroundColor: c.surfaceRaised, borderRadius: 999, paddingVertical: 9, paddingHorizontal: 14, ...outlined(c) },
-  chipOn: { backgroundColor: c.primary, ...outlined(c, c.primary) },
-  chipOff: { opacity: 0.4 },
-  chipLabel: { color: c.textSecondary, fontSize: 13 },
-  chipLabelOn: { color: c.onPrimary, fontSize: 13 },
-  row: { backgroundColor: c.surfaceRaised, borderRadius: 12, padding: 16, gap: 5, marginTop: 6, ...outlined(c) },
-  rowTitle: { color: c.text, fontSize: 15 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
+  under: { marginTop: SPACE.m },
+  equalizer: { gap: SPACE.m, paddingBottom: ROW.vertical },
+  curve: { marginHorizontal: ROW.horizontal },
+  // In from the card's sides as its rows are, and scrolled out under them.
+  presets: { paddingHorizontal: ROW.horizontal },
+  dimmed: { opacity: DISABLED },
 }));

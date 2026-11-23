@@ -1,5 +1,8 @@
 import type { EnrichedTrack } from './enriched.ts';
-import { compareNames, latestOf } from './sort.ts';
+import { compareNames, latestOf, rankKey } from './sort.ts';
+import { canonicalLabel } from '../metadata/text.ts';
+
+const byKey = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 
 /**
  * The library by where its files are kept.
@@ -96,11 +99,11 @@ export function foldersOf(tracks: readonly EnrichedTrack[], root: string): Folde
       key,
       path: relativeTo(base, key),
       name: key.slice(key.lastIndexOf('/') + 1),
-      tracks: members.sort(
-        (left, right) =>
-          compareNames(left.filename ?? left.title, right.filename ?? right.title) ||
-          (left.id < right.id ? -1 : left.id > right.id ? 1 : 0)
-      ),
+      // Each name folded and ranked once, rather than twice for every pair the sort compares.
+      tracks: members
+        .map((track) => ({ track, name: rankKey(canonicalLabel(track.filename ?? track.title)) }))
+        .sort((left, right) => byKey(left.name, right.name) || byKey(left.track.id, right.track.id))
+        .map((entry) => entry.track),
     });
   }
 

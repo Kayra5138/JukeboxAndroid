@@ -5,6 +5,9 @@ import type { Strings } from '../en/index.ts';
 export const player: Strings['player'] = {
   bar: {
     opensPlayer: 'Ouvre le lecteur',
+    upNext: (title: string) => `Ensuite : ${title}`,
+    lastInQueue: 'Dernier de la file',
+    timeLeft: (clock: string) => `Encore ${clock}`,
   },
   sheet: {
     nothingPlaying: 'Aucune lecture en cours.',
@@ -51,6 +54,9 @@ export const player: Strings['player'] = {
     },
   },
   settings: {
+    tabs: { sound: 'Son', look: 'Apparence', sleep: 'Veille' },
+    moreEffects: 'Plus',
+    fewerEffects: 'Moins',
     playback: 'Lecture',
     backToNormal: 'Revenir à la vitesse et à la tonalité normales',
     normal: 'Normal',
@@ -60,7 +66,6 @@ export const player: Strings['player'] = {
       'En demi-tons, vers le haut ou vers le bas, l’enregistrement gardant la vitesse réglée au-dessus.',
     effects: 'Effets',
     equalizer: { note: 'Bandes, basses et loudness' },
-    crossfade: { note: 'Comment un titre laisse place au suivant' },
     allEffects: { title: 'Tous les effets', note: 'Largeur, crossfeed, rotation et niveau' },
     jumps: {
       heading: 'Sauts pour ce livre ou cette émission',

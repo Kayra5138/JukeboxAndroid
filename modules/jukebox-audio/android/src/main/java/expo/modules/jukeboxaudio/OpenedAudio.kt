@@ -59,6 +59,15 @@ internal object OpenedAudio {
    */
   fun read(context: Context, address: String): Map<String, Any?> {
     val uri = Uri.parse(address)
+    /*
+      A path handed over by another app is taken only where it is a plain
+      file and not one of this app's own: a device, which never ends, was
+      copied until the disk was full, and a path into the app's own folder
+      would have it open its own database as a song.
+    */
+    if (uri.scheme == "file") {
+      require(opensAsFile(uri.path, context.applicationInfo.dataDir)) { "Not a file that can be opened" }
+    }
     val name = displayName(context, uri)
     // A file of the store's is read with the app's own right to the music, for good, wherever it lies; any other is copied.
     val id = mediaId(context, uri)
@@ -105,19 +114,59 @@ internal object OpenedAudio {
     }.getOrNull() ?: -1L
     if (size > MOST_COPIED) return null
     val folder = File(context.cacheDir, "opened").apply { mkdirs() }
-    val ending = name?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.length in 1..5 && it.all(Char::isLetterOrDigit) } ?: "audio"
-    val hash = MessageDigest.getInstance("SHA-256").digest("$uri|$size|$name".toByteArray()).take(10).joinToString("") { "%02x".format(it) }
+    val (hash, ending) = copyName(uri.toString(), size, name)
     val target = File(folder, "$hash.$ending")
     if (!target.exists() || target.length() == 0L) {
       val part = File(folder, "$hash.part")
-      context.contentResolver.openInputStream(uri)?.use { input -> part.outputStream().use { input.copyTo(it) } } ?: return null
+      // Counted as it goes: a length that was not said, or was said wrong, is no limit at all.
+      val whole = context.contentResolver.openInputStream(uri)?.use { input ->
+        part.outputStream().use { output ->
+          val buffer = ByteArray(64 * 1024)
+          var copied = 0L
+          while (true) {
+            val read = input.read(buffer)
+            if (read < 0) break
+            copied += read
+            if (copied > MOST_COPIED) return@use false
+            output.write(buffer, 0, read)
+          }
+          true
+        }
+      } ?: return null
+      if (!whole) {
+        part.delete()
+        return null
+      }
       if (!part.renameTo(target)) return null
     }
     target.setLastModified(System.currentTimeMillis())
     // The oldest let go, past the few kept.
-    folder.listFiles()?.filter { it.isFile && it != target }?.sortedByDescending { it.lastModified() }?.drop(COPIES_KEPT - 1)?.forEach { it.delete() }
+    folder.listFiles()?.let { past(it.toList(), target) }?.forEach { it.delete() }
     Uri.fromFile(target)
   }.getOrNull()
+
+  /** Whether [path], handed over as a plain path, is a file of its own and outside [ownDir], the app's own folder. */
+  internal fun opensAsFile(path: String?, ownDir: String?): Boolean {
+    val file = runCatching { File(path ?: "").canonicalFile }.getOrNull() ?: return false
+    val own = ownDir?.let { runCatching { File(it).canonicalPath }.getOrNull() }
+    return file.isFile && (own == null || !file.path.startsWith("$own/"))
+  }
+
+  /**
+   * The name a copy of [address] is kept under, without and with its ending:
+   * a hash of where it came from, how long it is and what it was called, so
+   * that the same file opened again is the one copy; and the ending of
+   * [name] where it is a plain one, for what plays it to know it by.
+   */
+  internal fun copyName(address: String, size: Long, name: String?): Pair<String, String> {
+    val ending = name?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.length in 1..5 && it.all(Char::isLetterOrDigit) } ?: "audio"
+    val hash = MessageDigest.getInstance("SHA-256").digest("$address|$size|$name".toByteArray()).take(10).joinToString("") { "%02x".format(it) }
+    return hash to ending
+  }
+
+  /** Of the files in the copies' folder, those to let go once [kept] has been made: all but the latest few, [kept] among them. */
+  internal fun past(files: List<File>, kept: File): List<File> =
+    files.filter { it.isFile && it != kept }.sortedByDescending { it.lastModified() }.drop(COPIES_KEPT - 1)
 
   /** What [uri]'s file says it is: its title, artist, album and length in milliseconds, where it says. */
   private fun tags(context: Context, uri: Uri): Map<String, String?> = runCatching {

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SPACE, TYPE } from '../lib/theme/measures';
 import {
   Animated,
   PanResponder,
@@ -358,9 +359,9 @@ function longLabel(bucket: Bucket, t: Strings): string {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  readout: { flexDirection: 'row', alignItems: 'baseline', gap: 8, paddingBottom: 10 },
+  readout: { flexDirection: 'row', alignItems: 'baseline', gap: SPACE.s, paddingBottom: 10 },
   readoutValue: { color: c.text, fontSize: 19, fontWeight: '600' },
-  readoutLabel: { color: c.textMuted, fontSize: 13, flex: 1 },
+  readoutLabel: { color: c.textMuted, fontSize: TYPE.small, flex: 1 },
   plot: {
     flexDirection: 'row',
     alignItems: 'flex-end',

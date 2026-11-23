@@ -25,6 +25,12 @@ internal object TapeTranscripts {
   fun get(context: Context, trackId: String): JSONArray? =
     runCatching { JSONArray(fileOf(context, trackId).readText()) }.getOrNull()
 
+  /**
+   * Whether [trackId] has any lines kept, without reading them: a tape found
+   * to have none is kept as `[]`, and one with any is longer than that.
+   */
+  fun kept(context: Context, trackId: String): Boolean = fileOf(context, trackId).length() > "[]".length
+
   fun put(context: Context, trackId: String, lines: JSONArray) {
     fileOf(context, trackId).writeText(lines.toString())
   }

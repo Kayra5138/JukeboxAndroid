@@ -104,6 +104,7 @@ export const library: Strings['library'] = {
     lookSwitch: '将此视图切换为另一种显示方式',
     view: '视图',
     looks: { list: '列表', shelves: '书架', rack: '唱片架', map: '地图' },
+    shelf: { added: '最近添加', around: (hour: string) => `${hour} 前后`, repeat: '本月单曲循环', while: '许久未听', never: '从未播放', all: '全部歌曲', play: (name: string) => `播放${name}`, shuffle: (name: string) => `随机播放${name}`, queue: (name: string) => `将${name}加入播放队列` },
     artistMap: { drawing: '正在绘制地图…', shuffle: '随机播放其歌曲', open: '打开', with: '合作', lasso: '圈选艺人并随机播放', lassoHint: '圈出要随机播放的艺人', lassoChosen: '已圈选', putBackAll: '将手动移动的艺人放回原处', movedByHand: '手动移动', putBack: '放回' },
     groupSortShort: { name: '名称', tracks: '歌曲数', played: '播放量', added: '最新' },
     groupSortedBy: {
@@ -320,9 +321,6 @@ export const library: Strings['library'] = {
     note: '这些文件看起来是同一段录音保存了不止一次：文件名相同，或艺术家和标题相同，并且时长相差不超过两秒。每首歌保留一份副本。删除其他副本之前，会先把它们的收听记录、标签、歌词以及在歌单中的位置转移到保留的那一份。',
     empty: '音乐库中没有存了不止一份的歌。',
     cleanAll: (count) => `全部清理（${format.number(count)} 首）`,
-    confirmAll: (files, songs) =>
-      `删除 ${format.number(files)} 个文件？这 ${format.number(songs)} 首歌各保留一份副本，每个被删除文件的收听记录、标签、歌词以及在歌单中的位置会先转移到保留的副本。删除前 Android 还会再确认一次。`,
-    confirm: (files) => `删除 ${format.number(files)} 个文件`,
     deleteOthers: (count) => (count === 1 ? '删除另一份副本' : `删除其他 ${format.number(count)} 份副本`),
     different: '这些是不同的歌',
     choose: '保留哪一份',

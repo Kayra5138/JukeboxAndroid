@@ -1,14 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link, useFocusEffect } from 'expo-router';
-import { Text, View } from 'react-native';
-import { Switch } from '../../../components/Switch';
+import { useFocusEffect } from 'expo-router';
+import { View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 
 import { OptionSheet } from '../../../components/OptionSheet';
 import { Pressable } from '../../../components/Pressable';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
+import { SettingsPage, useRows, SwitchRow, LinkRow, Chevron } from '../../../components/settings/rows';
 import { ShuffleSettingsRows } from '../../../components/ShuffleSettings';
 import { useT } from '../../../lib/i18n/index';
-import { sameSongs } from '../../../lib/identity/index';
+import { pendingPairCount } from '../../../lib/identity/index';
 import { useCopies } from '../../../lib/library/copiesStore';
 import { useWrongDownloads } from '../../../lib/library/wrongDownloadsStore';
 import { SHORTEST_CHOICES, type Shortest } from '../../../lib/library/hiding';
@@ -24,7 +24,8 @@ import {
   useWriteEdits,
   useWriteLookups,
 } from '../../../lib/filetags/auto';
-import { switchColours, useColours, usePressed } from '../../../lib/theme/index';
+import { usePressed } from '../../../lib/theme/index';
+import { setListSuggestions, useListSuggestions } from '../../../lib/ui/listSuggestions';
 
 /**
  * Where the music is and what is written in it: the folder, what is left out
@@ -38,7 +39,7 @@ export default function LibrarySettingsScreen() {
   const t = useT();
   const styles = useRows();
   const pressed = usePressed();
-  const c = useColours();
+  const suggesting = useListSuggestions();
   const writeEdits = useWriteEdits();
   const writeLookups = useWriteLookups();
   /*
@@ -74,7 +75,7 @@ export default function LibrarySettingsScreen() {
     // Counted here and not kept anywhere, so the row is gone the moment the
     // last pair has been answered and this screen is come back to.
     try {
-      setPairs(sameSongs().length);
+      setPairs(pendingPairCount());
     } catch {
       setPairs(0);
     }
@@ -89,6 +90,7 @@ export default function LibrarySettingsScreen() {
     <SettingsPage
       sheets={
         <OptionSheet
+          page
           visible={choosingShortest}
           heading={t.library.shortFiles.title}
           note={t.library.shortFiles.note}
@@ -104,47 +106,31 @@ export default function LibrarySettingsScreen() {
         />
       }>
       <View style={styles.card}>
-        <Link href="/folders" asChild>
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{t.nav.libraryFolder}</Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-            </View>
-            <Text style={styles.muted}>{folder}</Text>
-          </Pressable>
-        </Link>
+        <LinkRow
+          title={t.nav.libraryFolder}
+          hint={folder}
+          href="/folders"
+        />
         <View style={styles.rule} />
         {/*
           Under the folder, since it narrows what the folder holds; and a
           page of its own, since it is a switch for every folder in it.
         */}
-        <Link href="/left-out" asChild>
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{t.library.leftOut.title}</Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-            </View>
-            <Text style={styles.muted}>
-              {leftOut > 0 ? t.library.leftOut.some(leftOut) : t.library.leftOut.none}
-            </Text>
-          </Pressable>
-        </Link>
+        <LinkRow
+          title={t.library.leftOut.title}
+          hint={leftOut > 0 ? t.library.leftOut.some(leftOut) : t.library.leftOut.none}
+          href="/left-out"
+        />
         <View style={styles.rule} />
         {/*
           Beside what is left out, as the lighter of the two: kept in the
           library, out of Tracks and of shuffling everything.
         */}
-        <Link href="/set-aside" asChild>
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{t.library.setAside.title}</Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-            </View>
-            <Text style={styles.muted}>
-              {asideCount > 0 ? t.library.setAside.some(asideCount) : t.library.setAside.none}
-            </Text>
-          </Pressable>
-        </Link>
+        <LinkRow
+          title={t.library.setAside.title}
+          hint={asideCount > 0 ? t.library.setAside.some(asideCount) : t.library.setAside.none}
+          href="/set-aside"
+        />
         <View style={styles.rule} />
         {/*
           Four choices, which would fit as chips; but each needs a unit to
@@ -165,21 +151,17 @@ export default function LibrarySettingsScreen() {
               <Text style={styles.value} numberOfLines={1}>
                 {shortLabel(shortest)}
               </Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+              <Chevron />
             </View>
           </View>
           <Text style={styles.muted}>{t.library.shortFiles.note}</Text>
         </Pressable>
         <View style={styles.rule} />
-        <Link href="/metadata" asChild>
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{t.nav.tags}</Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-            </View>
-            <Text style={styles.muted}>{t.settings.tags.note}</Text>
-          </Pressable>
-        </Link>
+        <LinkRow
+          title={t.nav.tags}
+          hint={t.settings.tags.note}
+          href="/metadata"
+        />
         {/*
           Only there when there is something to decide. Most of the time
           there is not, and a row that opens an empty screen is a row
@@ -188,15 +170,11 @@ export default function LibrarySettingsScreen() {
         {pairs > 0 ? (
           <>
             <View style={styles.rule} />
-            <Link href="/samesongs" asChild>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-                <View style={styles.line}>
-                  <Text style={styles.title}>{t.nav.sameSong}</Text>
-                  <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-                </View>
-                <Text style={styles.muted}>{t.settings.sameSong.note(pairs)}</Text>
-              </Pressable>
-            </Link>
+            <LinkRow
+              title={t.nav.sameSong}
+              hint={t.settings.sameSong.note(pairs)}
+              href="/samesongs"
+            />
           </>
         ) : null}
         {/*
@@ -207,30 +185,22 @@ export default function LibrarySettingsScreen() {
         {copies > 0 ? (
           <>
             <View style={styles.rule} />
-            <Link href="/duplicates" asChild>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-                <View style={styles.line}>
-                  <Text style={styles.title}>{t.library.copies.title}</Text>
-                  <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-                </View>
-                <Text style={styles.muted}>{t.library.copies.some(copies)}</Text>
-              </Pressable>
-            </Link>
+            <LinkRow
+              title={t.library.copies.title}
+              hint={t.library.copies.some(copies)}
+              href="/duplicates"
+            />
           </>
         ) : null}
         {/* The same, for files that may be another song altogether: there only while there are any. */}
         {wrong > 0 ? (
           <>
             <View style={styles.rule} />
-            <Link href="/wrong-downloads" asChild>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-                <View style={styles.line}>
-                  <Text style={styles.title}>{t.library.wrong.title}</Text>
-                  <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-                </View>
-                <Text style={styles.muted}>{t.library.wrong.some(wrong)}</Text>
-              </Pressable>
-            </Link>
+            <LinkRow
+              title={t.library.wrong.title}
+              hint={t.library.wrong.some(wrong)}
+              href="/wrong-downloads"
+            />
           </>
         ) : null}
         {/*
@@ -238,15 +208,11 @@ export default function LibrarySettingsScreen() {
           is worth a look whether or not anything is here twice.
         */}
         <View style={styles.rule} />
-        <Link href="/free-space" asChild>
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{t.space.title}</Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-            </View>
-            <Text style={styles.muted}>{t.space.rowNote}</Text>
-          </Pressable>
-        </Link>
+        <LinkRow
+          title={t.space.title}
+          hint={t.space.rowNote}
+          href="/free-space"
+        />
       </View>
 
       {/* The shuffle button over the tracks, and the widget's and the car's with it. */}
@@ -257,6 +223,19 @@ export default function LibrarySettingsScreen() {
         <ShuffleSettingsRows />
       </View>
 
+      {/* The lists' pages: whether each says, under its songs, what else might belong in it. */}
+      <Text accessibilityRole="header" style={[styles.section, styles.sectionAfter]}>
+        {t.format.upper(t.nav.lists)}
+      </Text>
+      <View style={styles.card}>
+        <SwitchRow
+          title={t.settings.listSuggestions.title}
+          hint={t.settings.listSuggestions.note}
+          value={suggesting}
+          onChange={setListSuggestions}
+        />
+      </View>
+
       {/*
         Writing into the files without the button for it. Only where the
         phone can write to files at all.
@@ -265,31 +244,19 @@ export default function LibrarySettingsScreen() {
         <>
           <Text style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.library.autoWrite.heading)}</Text>
           <View style={styles.card}>
-            <View style={styles.row}>
-              <View style={styles.line}>
-                <Text style={styles.title}>{t.library.autoWrite.edits.title}</Text>
-                <Switch
-                  accessibilityLabel={t.library.autoWrite.edits.title}
-                  value={writeEdits}
-                  onValueChange={setWriteEdits}
-                  {...switchColours(c, writeEdits)}
-                />
-              </View>
-              <Text style={styles.muted}>{t.library.autoWrite.edits.note}</Text>
-            </View>
+            <SwitchRow
+              title={t.library.autoWrite.edits.title}
+              hint={t.library.autoWrite.edits.note}
+              value={writeEdits}
+              onChange={setWriteEdits}
+            />
             <View style={styles.rule} />
-            <View style={styles.row}>
-              <View style={styles.line}>
-                <Text style={styles.title}>{t.library.autoWrite.lookups.title}</Text>
-                <Switch
-                  accessibilityLabel={t.library.autoWrite.lookups.title}
-                  value={writeLookups}
-                  onValueChange={setWriteLookups}
-                  {...switchColours(c, writeLookups)}
-                />
-              </View>
-              <Text style={styles.muted}>{t.library.autoWrite.lookups.note}</Text>
-            </View>
+            <SwitchRow
+              title={t.library.autoWrite.lookups.title}
+              hint={t.library.autoWrite.lookups.note}
+              value={writeLookups}
+              onChange={setWriteLookups}
+            />
           </View>
         </>
       ) : null}

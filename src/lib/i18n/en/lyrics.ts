@@ -3,6 +3,8 @@ import { oneOrMany } from '../write.ts';
 
 /** The lyrics, and their translation. */
 export const lyrics = {
+  /** Over the words scrolled by hand, which then stop following the song: to have them follow it again. */
+  follow: 'Back to the song',
   none: 'No lyrics found.',
   translating: 'Translating…',
   /** [seconds] is where in the song, already written out: `83.5`. */

@@ -14,6 +14,7 @@ import {
   notePairs,
   readdress,
   readFiles,
+  openPairs,
   suggestions,
   writeFiles,
   type Suggestion,
@@ -124,13 +125,18 @@ export function sameSongs(): Suggestion[] {
   return suggestions(open());
 }
 
+/** How many of them there are, for a row to say so: without describing each. */
+export function pendingPairCount(): number {
+  return openPairs(open()).length;
+}
+
 /**
  * Joins the two: everything filed under the first is filed under the second.
  *
  * All of it or none. The first file's description is kept only while the file
  * itself is still in the library, where it is a file like any other.
  */
-export function mergeSongs(from: string, to: string): void {
+export function mergeSongs(from: string, to: string, follow = true): void {
   const database = open();
   // Before any scan has been taken in there is no saying whether the file is
   // here, and keeping a description that is not needed costs nothing.
@@ -141,8 +147,14 @@ export function mergeSongs(from: string, to: string): void {
   });
   memory.files = null;
   memory.pairs = null;
-  if (last) void followDownloads(last, [{ from, to }]);
-  void followPlaces([{ from, to }]);
+  if (follow) followAll([{ from, to }]);
+}
+
+/** The downloads and the places in tapes of files joined, sent after them, all in one go. */
+function followAll(moves: { from: string; to: string }[]): void {
+  if (moves.length === 0) return;
+  if (last) void followDownloads(last, moves);
+  void followPlaces(moves);
 }
 
 /**
@@ -160,26 +172,30 @@ export function answerPairs(
 ): { done: number; skipped: number; failed: string | null; joined: string[] } {
   /** The first file of each pair joined, whose history has gone to the second. */
   const joined: string[] = [];
+  const moved: { from: string; to: string }[] = [];
   let done = 0;
   let skipped = 0;
   let failed: string | null = null;
   const key = (pair: { from: { id: string }; to: { id: string } }) => `${pair.from.id}\u0000${pair.to.id}`;
   for (const pair of pairs) {
-    const open = new Set(sameSongs().map(key));
-    if (!open.has(key(pair))) {
+    const still = new Set(openPairs(open()).map((open) => `${open.from}\u0000${open.to}`));
+    if (!still.has(key(pair))) {
       skipped += 1;
       continue;
     }
     try {
       if (join) {
-        mergeSongs(pair.from.id, pair.to.id);
+        mergeSongs(pair.from.id, pair.to.id, false);
         joined.push(pair.from.id);
+        moved.push({ from: pair.from.id, to: pair.to.id });
       } else keepApart(pair.from.id, pair.to.id);
       done += 1;
     } catch (error) {
       failed ??= String(error);
     }
   }
+  // Once for all of them: the downloads' record is read and written whole each time.
+  followAll(moved);
   return { done, skipped, failed, joined };
 }
 

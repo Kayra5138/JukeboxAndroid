@@ -211,10 +211,17 @@ class SleepTimer(
    */
   private fun updateShake() {
     val shake = shake ?: return
+    val now = SystemClock.elapsedRealtime()
+    // Run out and letting a track finish, only for a while: a tape's chapter can be an hour of the sensor awake.
+    val late = now >= deadline + SHAKE_AFTER_MS
     val wanted = kind == Kind.DURATION && main.isPlaying &&
-      SystemClock.elapsedRealtime() >= deadline - SHAKE_WINDOW_MS &&
+      now >= deadline - SHAKE_WINDOW_MS && !late &&
       context?.let { ShakeToExtend.enabled(it) } == true
     if (wanted) shake.start() else shake.stop()
+    if (wanted && finishing) {
+      handler.removeCallbacks(listen)
+      handler.postDelayed(listen, deadline + SHAKE_AFTER_MS - now)
+    }
   }
 
   /**
@@ -282,9 +289,12 @@ class SleepTimer(
   }
 
   /**
-   * Looks at where the tape has got to, four times a second while it plays:
-   * paused there once it has got to the end of the chapter. Not looked at
-   * while paused; [onIsPlayingChanged] starts it again.
+   * Looks at where the tape has got to as it plays: paused there once it has
+   * got to the end of the chapter. Looked at again when the chapter should
+   * end, at the speed the tape plays, rather than four times a second the
+   * whole chapter long; never more than half a minute on, in case the clock
+   * and the tape part company. Not looked at while paused;
+   * [onIsPlayingChanged] starts it again.
    */
   private fun watchChapter() {
     handler.removeCallbacks(watch)
@@ -294,7 +304,9 @@ class SleepTimer(
       main.pause()
       return finish()
     }
-    if (main.isPlaying) handler.postDelayed(watch, 250)
+    if (!main.isPlaying) return
+    val speed = main.playbackParameters.speed.coerceAtLeast(0.25f)
+    handler.postDelayed(watch, ((chapterEndMs - main.currentPosition) / speed).toLong().coerceIn(CHAPTER_SOONEST_MS, CHAPTER_LATEST_MS))
   }
 
   /** Asked to play, with something to play; see [atExpiry] for why not `isPlaying`. */
@@ -400,7 +412,15 @@ class SleepTimer(
     // Sound coming back without anybody having pressed play: a call ending,
     // after a timer that ran out while the phone slept through it.
     if (isPlaying && kind == Kind.DURATION && !finishing) {
-      if (SystemClock.elapsedRealtime() >= deadline) expire()
+      val now = SystemClock.elapsedRealtime()
+      if (now >= deadline) expire()
+      else {
+        // Booked again from the clock that counts sleep: the message was
+        // booked on one that stops while the phone sleeps paused, and would
+        // come as late as the phone slept.
+        handler.removeCallbacks(due)
+        handler.postDelayed(due, deadline - now)
+      }
     }
     // A shake is listened for only while there is music to keep going.
     updateShake()
@@ -418,10 +438,15 @@ class SleepTimer(
     // Gone past it by hand, or on to something else: there is no end of this chapter to wait for.
     if (past || newPosition.mediaItemIndex != chapterItem) return finish()
     announce()
+    // Somewhere else in the chapter: its end is as far off as that leaves it.
+    watchChapter()
   }
 
   override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) {
-    if (kind == Kind.END_OF_CHAPTER) announce()
+    if (kind != Kind.END_OF_CHAPTER) return
+    announce()
+    // Faster or slower, its end comes sooner or later.
+    watchChapter()
   }
 
   override fun onPlaybackStateChanged(playbackState: Int) {
@@ -516,3 +541,8 @@ object SleepTimers {
     }
   }
 }
+
+/** Not sooner than this after a look at the end of a chapter, which is wanted to the moment. */
+private const val CHAPTER_SOONEST_MS = 50L
+/** Nor later than this, whatever the clock says. */
+private const val CHAPTER_LATEST_MS = 30_000L

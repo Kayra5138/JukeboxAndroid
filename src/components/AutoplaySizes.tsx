@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { LEADING, SPACE, TYPE, TOUCH } from '../lib/theme/measures';
+import { Text } from './settings/Find';
 
 import { NumberStepper } from './NumberStepper';
 import { useT } from '../lib/i18n/index';
@@ -47,10 +49,10 @@ export function AutoplaySizes() {
 
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    row: { paddingHorizontal: 16, paddingVertical: 14, gap: 8 },
-    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-    title: { color: c.text, fontSize: 15.5 },
-    label: { color: c.textSecondary, fontSize: 14, flexShrink: 1 },
-    muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
+    row: { paddingHorizontal: SPACE.l, paddingVertical: SPACE.m, gap: SPACE.s },
+    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.row },
+    title: { color: c.text, fontSize: TYPE.body },
+    label: { color: c.textSecondary, fontSize: TYPE.small, flexShrink: 1 },
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
   })
 );

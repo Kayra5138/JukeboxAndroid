@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Note } from '../Note';
+import { RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
+import { Button, TextButton } from '../Button';
 import { Image } from '../Picture';
 import {
-  ActivityIndicator,
   StyleSheet,
   Text,
   View,
@@ -9,7 +11,7 @@ import {
 import { Pressable } from '../Pressable';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
-import { FormScroll, TextField } from '../FormScroll';
+import { Field, FormScroll } from '../FormScroll';
 import { saveCredit } from '../../lib/db/credits';
 import { listeningFor, type TrackListening } from '../../lib/db/history';
 import {
@@ -26,10 +28,12 @@ import { useUnsavedBack } from './unsaved';
 import { formatDateTime } from '../../lib/format/date';
 import { useT, type Strings } from '../../lib/i18n/index';
 import { useTrackArtwork } from '../../lib/media/artwork';
+import { isStandIn } from '../../lib/media/standIns';
 import { artworkChanged } from '../../lib/media/artworkEvents';
 import { spreadCovers } from '../../lib/media/coverSpread';
 import { recordCover } from '../../lib/media/siblingCover';
 import type { EnrichedTrack } from '../../lib/media/enriched';
+import { oneWithMetadata } from '../../lib/media/merge';
 import { fieldsOf, manualEntry, type Fields } from '../../lib/metadata/edit';
 import { isStoredCover } from '../../lib/metadata/covers';
 import { isAbortError } from '../../lib/metadata/http';
@@ -142,7 +146,9 @@ export function GeneralTab({
   /** What became of the last Write to file, kept apart from what Save says. */
   const [fileNote, setFileNote] = useState<{ text: string; bad?: boolean } | null>(null);
   const { current: playing } = usePlayerState();
-  const current = useTrackArtwork(track);
+  // Its cover, if it has one: the paper sleeve standing in for none is not one to choose over or take off.
+  const drawn = useTrackArtwork(track);
+  const current = isStandIn(drawn) ? null : drawn;
   const search = useRef<AbortController | null>(null);
   const t = useT();
   const c = useColours();
@@ -378,7 +384,7 @@ export function GeneralTab({
   const asSaved = fieldsOf(track, stored);
   const unsaved =
     cover.kind !== 'kept' || FIELDS.some((field) => fields[field.key] !== asSaved[field.key]);
-  useUnsavedBack(unsaved, reset);
+  useUnsavedBack(unsaved, reset, 'general');
 
   /**
    * Writes what the app shows for this track into the file.
@@ -390,7 +396,10 @@ export function GeneralTab({
     setWriting(true);
     setFileNote(null);
     try {
-      const outcomes = await writeToFiles([merged], { playingId: playing?.id ?? null });
+      // Read again rather than taken from what this screen was given: pressed
+      // right after Save, that is still the track from before it.
+      const now = oneWithMetadata(track);
+      const outcomes = await writeToFiles([now], { playingId: playing?.id ?? null });
       const result = outcomes?.[0]?.result;
       if (!result) {
         setFileNote({ text: said.nothingWritten });
@@ -410,14 +419,15 @@ export function GeneralTab({
     } finally {
       setWriting(false);
     }
-  }, [merged, playing?.id, onChanged, t, said]);
+  }, [track, merged, playing?.id, onChanged, t, said]);
 
   return (
     <FormScroll contentContainerStyle={shared.content}>
       <View style={styles.coverRow}>
         <Pressable accessibilityRole="button" onPress={() => void pick()} accessibilityLabel={said.chooseCoverLabel}>
-          {shown ? (
-            <Image source={{ uri: shown }} style={styles.cover} contentFit="cover" />
+          {/* The paper sleeve where there is none: never a blank, but not a cover to take off. */}
+          {shown || isStandIn(drawn) ? (
+            <Image source={{ uri: (shown || drawn)! }} style={styles.cover} contentFit="cover" />
           ) : (
             <View style={[styles.cover, styles.coverEmpty]}>
               <Text style={styles.coverEmptyLabel}>{said.noCover}</Text>
@@ -425,41 +435,19 @@ export function GeneralTab({
           )}
         </Pressable>
         <View style={styles.coverActions}>
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={shared.button} onPress={() => void pick()}>
-            <Text style={shared.buttonLabel}>{said.chooseFromGallery}</Text>
-          </Pressable>
-          {removable ? (
-            <Pressable accessibilityRole="button" android_ripple={pressed} style={shared.button} onPress={() => setCover({ kind: 'removed' })}>
-              <Text style={shared.buttonLabel}>{said.removeCover}</Text>
-            </Pressable>
-          ) : null}
-          {cover.kind !== 'kept' ? (
-            <Pressable accessibilityRole="button" onPress={() => setCover({ kind: 'kept' })}>
-              <Text style={shared.link}>{said.keepCover}</Text>
-            </Pressable>
-          ) : null}
+          <Button kind="secondary" label={said.chooseFromGallery} onPress={() => void pick()} />
+          {removable ? <Button kind="secondary" label={said.removeCover} onPress={() => setCover({ kind: 'removed' })} /> : null}
+          {cover.kind !== 'kept' ? <TextButton label={said.keepCover} onPress={() => setCover({ kind: 'kept' })} /> : null}
         </View>
       </View>
 
-      <Pressable
-        accessibilityRole="button"
-        android_ripple={pressed}
-        style={[shared.action, looking && shared.actionOff]}
-        disabled={looking}
-        onPress={() => void lookUp()}>
-        {looking ? (
-          <ActivityIndicator color={c.onPrimary} />
-        ) : (
-          <Text style={shared.actionLabel}>{t.details.lookUp}</Text>
-        )}
-      </Pressable>
+      <Button label={t.details.lookUp} busy={looking} onPress={() => void lookUp()} />
       <Text style={shared.hint}>{said.lookUpHint}</Text>
 
       {FIELDS.map((field, index) => (
         <View key={field.key} style={shared.field}>
           <Text style={shared.label}>{t.format.upper(said.fields[field.key])}</Text>
-          <TextField
-            style={shared.input}
+          <Field
             // The name over the box is a line of its own to the eye; a screen
             // reader on the box would otherwise say only what is in it.
             accessibilityLabel={said.fields[field.key]}
@@ -469,26 +457,17 @@ export function GeneralTab({
             autoCapitalize="words"
             autoCorrect={false}
           />
-          {complaints[index] ? <Text style={shared.complaint}>{complaints[index]}</Text> : null}
+          {complaints[index] ? <Note tone="warn">{complaints[index]}</Note> : null}
         </View>
       ))}
 
-      {note ? <Text style={note.bad ? shared.noteBad : shared.note}>{note.text}</Text> : null}
+      {note ? <Note tone={note.bad ? 'bad' : 'good'}>{note.text}</Note> : null}
 
       <View style={shared.actions}>
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={[shared.action, shared.actionWide, !valid && shared.actionOff]}
-          disabled={!valid}
-          onPress={save}>
-          <Text style={shared.actionLabel}>{t.common.save}</Text>
-        </Pressable>
-        {stored?.status === 'manual' ? (
-          <Pressable accessibilityRole="button" android_ripple={pressed} style={shared.button} onPress={discard}>
-            <Text style={shared.buttonLabel}>{said.discard}</Text>
-          </Pressable>
-        ) : null}
+        {/* Nothing changed, nothing to save: saving it anyway would mark the
+            track as corrected by hand and keep lookups off it for good. */}
+        <Button label={t.common.save} wide disabled={!valid || !unsaved} onPress={save} />
+        {stored?.status === 'manual' ? <Button kind="secondary" label={said.discard} onPress={discard} /> : null}
       </View>
       <Text style={shared.hint}>{said.saveHint}</Text>
 
@@ -499,29 +478,24 @@ export function GeneralTab({
           <Text style={shared.section}>{t.format.upper(said.inFile)}</Text>
           {writable(track) ? (
             <>
-              <Pressable
-                android_ripple={pressed}
-                style={[shared.button, styles.fileButton, (writing || unsaved) && shared.actionOff]}
-                disabled={writing || unsaved}
-                accessibilityRole="button"
+              <Button
+                kind="secondary"
+                label={said.writeToFile}
                 accessibilityLabel={said.writeLabel}
-                accessibilityState={{ disabled: writing || unsaved, busy: writing }}
-                onPress={() => void writeFile()}>
-                {writing ? (
-                  <ActivityIndicator color={c.text} />
-                ) : (
-                  <Text style={shared.buttonLabel}>{said.writeToFile}</Text>
-                )}
-              </Pressable>
+                busy={writing}
+                disabled={unsaved}
+                style={styles.fileButton}
+                onPress={() => void writeFile()}
+              />
               <Text style={shared.hint}>{unsaved ? said.saveFirst : said.writeHint}</Text>
             </>
           ) : (
             <Text style={shared.hint}>{said.cannotWrite}</Text>
           )}
           {fileNote ? (
-            <Text style={fileNote.bad ? shared.noteBad : shared.note} accessibilityLiveRegion="polite">
+            <Note tone={fileNote.bad ? 'bad' : 'good'}>
               {fileNote.text}
-            </Text>
+            </Note>
           ) : null}
         </>
       ) : null}
@@ -547,8 +521,8 @@ export function GeneralTab({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  coverRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  cover: { width: 124, height: 124, borderRadius: 10 },
+  coverRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.l },
+  cover: { width: 124, height: 124, borderRadius: RADIUS.control },
   coverEmpty: {
     backgroundColor: c.surfaceRaised,
     alignItems: 'center',
@@ -556,10 +530,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
   },
-  coverEmptyLabel: { color: c.textFaint, fontSize: 12 },
-  coverActions: { flex: 1, gap: 10, alignItems: 'flex-start' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 20, paddingVertical: 7 },
-  rowLabel: { color: c.textMuted, fontSize: 13.5 },
-  rowValue: { color: c.text, fontSize: 13.5, flexShrink: 1, textAlign: 'right' },
+  coverEmptyLabel: { color: c.textMuted, fontSize: TYPE.small },
+  coverActions: { flex: 1, gap: SPACE.s, alignItems: 'flex-start' },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: SPACE.l, paddingVertical: SPACE.s },
+  rowLabel: { color: c.textMuted, fontSize: TYPE.small },
+  rowValue: { color: c.text, fontSize: TYPE.small, flexShrink: 1, textAlign: 'right' },
   fileButton: { alignSelf: 'flex-start', alignItems: 'center', minWidth: 132 },
 }));

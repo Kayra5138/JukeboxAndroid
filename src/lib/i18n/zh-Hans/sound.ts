@@ -2,7 +2,6 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const sound: Strings['sound'] = {
-  percent: (value) => `${format.number(value)}%`,
 
   effects: {
     failures: {
@@ -18,6 +17,8 @@ export const sound: Strings['sound'] = {
       headphones: { name: '耳机', hint: '让极端声像的混音不再“钻进脑袋”' },
       '8d': { name: '8D', hint: '声音缓缓环绕着你旋转' },
       karaoke: { name: '类卡拉 OK', hint: '削弱中间的人声' },
+      nightcore: { name: 'Nightcore', hint: '更快更高，像转速过快的唱片' },
+      slowed: { name: 'Slowed + reverb', hint: '更慢更低，像在大房间里播放' },
     },
     voices: {
       off: { name: '关闭', hint: '原汁原味的录音' },
@@ -40,6 +41,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `偏左 ${percent}%`,
     right: (percent) => `偏右 ${percent}%`,
     swap: { title: '交换声道', note: '左右声道互换。适用于接错线的情况。' },
+
+    room: '空间',
+
+    reverb: '混响',
+
+    reverbNote: '为音乐加入多少大房间的混响。0 表示没有。',
+
 
     headphones: '耳机',
     crossfeed: '交叉馈送',

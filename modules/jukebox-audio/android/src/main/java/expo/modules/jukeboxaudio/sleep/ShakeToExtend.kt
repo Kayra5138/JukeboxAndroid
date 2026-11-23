@@ -37,8 +37,14 @@ class ShakeToExtend(private val context: Context, private val onShake: () -> Uni
     if (listening) return
     val sensor = sensors?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) ?: return
     detector.reset()
-    // Readings delivered on the main thread, which is the timer's and the player's.
-    listening = sensors.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME, handler)
+    /*
+      Readings delivered on the main thread, which is the timer's and the
+      player's. Twenty-five a second, which a shake of a few a second is
+      plain in, and let gather for a fifth of a second where the phone can
+      hold them: fifty a second, each one waking the processor, for the whole
+      of a timer's last minutes was a good deal of battery for a gesture.
+    */
+    listening = sensors.registerListener(this, sensor, SAMPLE_US, GATHER_US, handler)
   }
 
   fun stop() {
@@ -67,6 +73,9 @@ class ShakeToExtend(private val context: Context, private val onShake: () -> Uni
   }
 
   companion object {
+    private const val SAMPLE_US = 40_000
+    private const val GATHER_US = 200_000
+
     private const val BUZZ_MS = 80L
     private const val FILE = "jukebox.sleep"
     private const val ON = "shakeToExtend"

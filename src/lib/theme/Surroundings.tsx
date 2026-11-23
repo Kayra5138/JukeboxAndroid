@@ -7,7 +7,7 @@ import { readSystemPalette } from './systemPalette.ts';
 import { useThemeNeeds } from './index';
 import { artworkFor } from '../media/artwork';
 import { artworkRevision, subscribeArtwork } from '../media/artworkEvents';
-import { usePlayerState } from '../player/PlayerProvider';
+import { useCurrentId } from '../player/current';
 import { whenStill } from '../ui/moving.ts';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
@@ -39,7 +39,7 @@ const SKY_WAITS_MS = 600;
 
 export function ThemeSurroundings() {
   const wantsCover = useThemeNeeds().includes('cover');
-  const trackId = usePlayerState().current?.id ?? null;
+  const trackId = useCurrentId();
   // A cover replaced from the Tags screen is a new cover for the same track.
   const revision = useSyncExternalStore(subscribeArtwork, artworkRevision);
 
@@ -74,9 +74,15 @@ export function ThemeSurroundings() {
         });
       }, SKY_WAITS_MS);
     };
+    const stop = () => {
+      alive = false;
+      clearTimeout(pause);
+      letGo?.();
+    };
     if (!trackId) {
       settle(null);
-      return;
+      // Undone like any other: left waiting, it took the colours away from the song put on next, a cover alike or not.
+      return stop;
     }
     artworkFor(trackId)
       // The reading that says what the cover's colour really was, where the
@@ -90,11 +96,7 @@ export function ThemeSurroundings() {
       )
       .then(settle)
       .catch(() => settle(null));
-    return () => {
-      alive = false;
-      clearTimeout(pause);
-      letGo?.();
-    };
+    return stop;
   }, [wantsCover, trackId, revision]);
 
   useEffect(() => {

@@ -135,8 +135,20 @@ object CoverColour {
     var step = 1
     while (widest / (step * 2) >= SAMPLE) step *= 2
 
-    return runCatching {
+    val read = runCatching {
       BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = step })
-    }.getOrNull()
+    }.getOrNull() ?: return null
+    /*
+      A paper sleeve standing in for a cover ([StandIn]) is mostly paper,
+      which is no colour, and every one of them came out the theme's own blue.
+      Its colour is its label's, in the middle, and only that is read.
+    */
+    if (!file.path.contains("/stand-ins/")) return read
+    val side = (minOf(read.width, read.height) * 0.3f).toInt().coerceAtLeast(1)
+    val label = runCatching {
+      Bitmap.createBitmap(read, (read.width - side) / 2, (read.height - side) / 2, side, side)
+    }.getOrNull() ?: return read
+    if (label !== read) read.recycle()
+    return label
   }
 }

@@ -35,6 +35,15 @@ export type HapticSettings = {
   strength: number;
 };
 
+/**
+ * How strong a touch is felt, as a share of the recommended (1): up to three
+ * times it, past which a motor has nothing more to give. Past 1 the same
+ * feels are made heavier and then the motor driven at its fullest, in
+ * `JukeboxAudioModule.kt` (`composed`, `forced`).
+ */
+export const RECOMMENDED_STRENGTH = 1;
+export const STRONGEST = 3;
+
 export const DEFAULT_HAPTICS: HapticSettings = {
   mode: 'all',
   groups: { holds: true, choices: true, notches: true, results: true, player: true, fun: true },
@@ -68,7 +77,7 @@ export function hapticsFrom(words: string | null): HapticSettings {
     }
     const strength =
       typeof kept?.strength === 'number' && Number.isFinite(kept.strength)
-        ? Math.min(1, Math.max(0.1, kept.strength))
+        ? Math.min(STRONGEST, Math.max(0.1, kept.strength))
         : DEFAULT_HAPTICS.strength;
     return { mode, groups, strength };
   } catch {

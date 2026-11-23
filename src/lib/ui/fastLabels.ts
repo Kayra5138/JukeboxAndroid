@@ -20,7 +20,11 @@ export function letterLabel(name: string | null | undefined): string {
   const first = [...canonicalLabel(name ?? '')][0];
   if (!first || !/\p{L}/u.test(first)) return '#';
   const bare = first.normalize('NFD')[0] ?? first;
-  return (OWN.test(first) || !OWN.test(bare) ? first : bare).toUpperCase();
+  const letter = OWN.test(first) || !OWN.test(bare) ? first : bare;
+  // The two i's are two letters, filed apart, and are given apart: both made `I` by the engine, they were two headings of one name.
+  if (letter === 'i') return 'İ';
+  if (letter === 'ı') return 'I';
+  return letter.toUpperCase();
 }
 
 /** `Mar 2025` for a time in milliseconds, in the months given; a dash for none. */

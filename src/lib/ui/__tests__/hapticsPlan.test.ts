@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { DEFAULT_HAPTICS, feels, HAPTIC_GROUPS, hapticsFrom } from '../hapticsPlan.ts';
+import { DEFAULT_HAPTICS, feels, HAPTIC_GROUPS, hapticsFrom, STRONGEST } from '../hapticsPlan.ts';
 
 test('everything is felt as the app comes, and nothing when switched off', () => {
   for (const group of HAPTIC_GROUPS) {
@@ -31,6 +31,8 @@ test('a stored setting is read back, and anything wrong in it is as the app come
   assert.equal(read.mode, 'custom');
   assert.equal(read.groups.fun, false);
   assert.equal(read.groups.holds, true);
-  assert.equal(read.strength, 1);
+  // As strong as a motor goes, and no stronger: three times the recommended.
+  assert.equal(read.strength, STRONGEST);
+  assert.equal(hapticsFrom(JSON.stringify({ strength: 2.5 })).strength, 2.5);
   assert.equal(hapticsFrom(JSON.stringify({ mode: 'loud' })).mode, 'all');
 });

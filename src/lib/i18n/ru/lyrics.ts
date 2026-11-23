@@ -2,6 +2,7 @@ import { counted, plural } from './plural.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lyrics: Strings['lyrics'] = {
+  follow: 'Вернуться к песне',
   none: 'Текст не найден.',
   translating: 'Перевод…',
   /*

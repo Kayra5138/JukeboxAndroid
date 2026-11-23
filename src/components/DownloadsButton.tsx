@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { LEADING, RADIUS, SPACE, TYPE, TOUCH } from '../lib/theme/measures';
+import { ProgressBar } from './ProgressBar';
 import { usePathname, useRouter } from 'expo-router';
 import { Animated, AppState, Easing, Keyboard, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,25 +15,28 @@ import { useT } from '../lib/i18n/index';
 import { usePlayerState } from '../lib/player/PlayerProvider';
 import { laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { useSheetOpen } from '../lib/theme/Veil';
+import { usePlayerUp } from '../lib/player/NowPlayingSheet';
+import { FLOATING_MARGIN, miniFloating } from '../lib/ui/miniPlayer';
 import { downloadsLookedAt, useDownloadsButtonWanted } from '../lib/ui/downloadsButton';
 import { announce } from '../lib/ui/announce';
 import { haptic } from '../lib/ui/haptics';
 import { useLandscape } from '../lib/ui/layout';
-import { motionReduced } from '../lib/ui/motion';
+import { useMotionReduced } from '../lib/ui/motion';
 import { useDownloads } from '../lib/youtube/DownloadsProvider';
 import { namesOf, type Batch } from '../lib/youtube/queueView';
 import { statusLabel } from '../lib/youtube/types';
 import { useBack } from '../lib/ui/back';
+import { Chevron } from './settings/rows';
 
 /** Across the button, which is a finger's width and no more. */
 const SIZE = 48;
 /** How thick the ring round it is, that fills as the download goes. */
 const RING = 3;
 /** How far it keeps from an edge of the screen, and from whatever it sits above. */
-const MARGIN = 14;
+/** How far what floats along the foot keeps from the edges: this button, and what lies beside it (`Snack`). */
+export const FLOAT_MARGIN = 14;
+const MARGIN = FLOAT_MARGIN;
 
-/** The screens that draw the bar of what is playing at their foot, or down their right. */
-const WITH_PLAYER = new Set(['/', '/lists', '/search', '/stats', '/settings', '/playlist']);
 /**
  * Where the button would be in the way: the game, which is the whole screen
  * and played with both thumbs, and the downloads' own screen, which says
@@ -44,7 +49,7 @@ const NOT_HERE = new Set(['/tiles', '/downloads']);
  * downloaded, for somebody who would like to see how it is going without
  * leaving what they are doing.
  *
- * Off unless switched on in Settings, and there at all only while there is
+ * On unless switched off in Settings, and there at all only while there is
  * something to say: a download under way or waiting, or a run of them that
  * ended in the last few minutes. With nothing to say it is not drawn dimmed
  * or small. It is not drawn.
@@ -117,7 +122,9 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
   const left = batch.underWay + batch.waiting;
   const finished = left === 0;
   const moving = batch.underWay > 0 && !paused;
-  const drift = useDrift(moving);
+  // Not under the player, which covers it: a frame drawn under the player for each of its own, and blurred again in glass.
+  const playerUp = usePlayerUp();
+  const drift = useDrift(moving && !playerUp);
 
   useBack(open, () => setOpen(false));
 
@@ -176,9 +183,7 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
                 <Text style={styles.muted} numberOfLines={1}>
                   {statusLabel(current, t)}
                 </Text>
-                <View style={styles.track}>
-                  <View style={[styles.fill, { width: `${Math.min(Math.max(current.progress, 0), 100)}%` }]} />
-                </View>
+                <ProgressBar value={current.progress / 100} style={styles.track} />
               </View>
             ) : (
               <Text style={styles.title}>{paused ? said.paused : finished ? said.allDone : said.idle}</Text>
@@ -198,7 +203,7 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
                 router.push('/downloads');
               }}>
               <Text style={styles.openLabel}>{said.open}</Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+              <Chevron />
             </Pressable>
           </View>
         </>
@@ -249,17 +254,19 @@ function Floating({ batch, pathname }: { batch: Batch; pathname: string }) {
  * them, because this is drawn over the navigator and they inside its
  * screens, and neither can see the other.
  */
-function useSpot(pathname: string): { right: number; bottom: number } {
+export function useSpot(pathname: string): { right: number; bottom: number } {
   const insets = useSafeAreaInsets();
   const landscape = useLandscape();
   const { fontScale } = useWindowDimensions();
   // A preview of a Discover song has the bar too, with nothing in the player.
   const previewing = useDiscoverPreview() != null;
-  const playing = (usePlayerState().current != null || previewing) && WITH_PLAYER.has(pathname);
+  const floating = miniFloating.useOn();
+  // Every page of every tab has the bar beside it (see the tabs' layout); the game is not in a tab.
+  const playing = (usePlayerState().current != null || previewing) && pathname !== '/tiles';
   if (landscape) {
     return {
       // The panel reaches the edge of the glass itself, cutout and all.
-      right: (playing ? NOW_PLAYING_WIDTH : insets.right) + MARGIN,
+      right: (playing ? NOW_PLAYING_WIDTH + (floating ? FLOATING_MARGIN * 2 : 0) : insets.right) + MARGIN,
       bottom: insets.bottom + MARGIN,
     };
   }
@@ -269,7 +276,8 @@ function useSpot(pathname: string): { right: number; bottom: number } {
       insets.bottom +
       // The tab bar is along the foot of every page it is shown over: each is opened inside a tab.
       tabBarHeight(fontScale) +
-      (playing ? nowPlayingHeight(fontScale) : 0) +
+      // Floating, the bar stands that much clear of the tab bar (`ui/miniPlayer.ts`).
+      (playing ? nowPlayingHeight(fontScale) + (floating ? FLOATING_MARGIN : 0) : 0) +
       MARGIN,
   };
 }
@@ -301,17 +309,19 @@ const DRIFT_MS = 1500;
  * finished, or when Settings has asked for the decoration to hold still.
  * The ring says the same thing without moving.
  *
- * The setting is read as the movement is about to start. It can only have
- * changed on a screen this button was drawn afresh for on the way back from.
+ * The setting is watched: the button stands over every screen, and is
+ * drawn afresh for none of them.
  */
 function useDrift(moving: boolean) {
+  // Watched, so that holding the decoration still stops a drift already going: a batch can run for hours.
+  const still = useMotionReduced();
   const [along] = useState(() => new Animated.Value(0));
   const [style] = useState(() => ({
     opacity: along.interpolate({ inputRange: [0, 0.2, 0.7, 1], outputRange: [0, 1, 1, 0] }),
     transform: [{ translateY: along.interpolate({ inputRange: [0, 1], outputRange: [-3, 3] }) }],
   }));
   useEffect(() => {
-    if (!moving || motionReduced()) {
+    if (!moving || still) {
       // At rest in the middle of its travel, where it is fully drawn.
       along.setValue(0.5);
       return;
@@ -322,7 +332,7 @@ function useDrift(moving: boolean) {
     );
     loop.start();
     return () => loop.stop();
-  }, [moving, along]);
+  }, [moving, still, along]);
   return style;
 }
 
@@ -396,47 +406,45 @@ const useStyles = makeStyles((c) => {
       right: -4,
       minWidth: 20,
       height: 20,
-      paddingHorizontal: 5,
-      borderRadius: 10,
+      paddingHorizontal: SPACE.xs,
+      borderRadius: RADIUS.control,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: ground,
       borderWidth: 1,
       borderColor: c.borderStrong,
     },
-    badgeText: { color: c.text, fontSize: 11, fontWeight: '700', fontVariant: ['tabular-nums'] },
-    badgeGood: { color: c.success, fontSize: 11, fontWeight: '700' },
-    badgeBad: { color: c.danger, fontSize: 12, fontWeight: '700' },
+    badgeText: { color: c.text, fontSize: TYPE.label, fontWeight: '700', fontVariant: ['tabular-nums'] },
+    badgeGood: { color: c.success, fontSize: TYPE.label, fontWeight: '700' },
+    badgeBad: { color: c.danger, fontSize: TYPE.hint, fontWeight: '700' },
 
     bubble: {
       position: 'absolute',
       backgroundColor: ground,
-      borderRadius: 14,
-      paddingTop: 14,
-      paddingHorizontal: 16,
-      paddingBottom: 4,
-      gap: 10,
+      borderRadius: RADIUS.card,
+      paddingTop: SPACE.m,
+      paddingHorizontal: SPACE.l,
+      paddingBottom: SPACE.xs,
+      gap: SPACE.s,
       ...outlined(c),
     },
-    heading: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8 },
-    current: { gap: 3 },
-    title: { color: c.text, fontSize: 14.5, lineHeight: 20 },
-    muted: { color: c.textMuted, fontSize: 12, lineHeight: 16 },
-    track: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, marginTop: 5, overflow: 'hidden' },
-    fill: { height: 3, backgroundColor: c.accent },
-    counts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 2 },
-    count: { color: c.textSecondary, fontSize: 13, fontVariant: ['tabular-nums'] },
-    countBad: { color: c.danger, fontSize: 13, fontVariant: ['tabular-nums'] },
+    heading: { color: c.textFaint, fontSize: TYPE.label, fontWeight: '600', letterSpacing: 0.8 },
+    current: { gap: SPACE.xxs },
+    title: { color: c.text, fontSize: TYPE.body, lineHeight: LEADING.body },
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+    track: { marginTop: SPACE.xs },
+    counts: { flexDirection: 'row', flexWrap: 'wrap', columnGap: SPACE.m, rowGap: SPACE.xxs },
+    count: { color: c.textSecondary, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
+    countBad: { color: c.danger, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
     open: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      minHeight: 44,
-      marginHorizontal: -8,
-      paddingHorizontal: 8,
-      borderRadius: 10,
+      minHeight: TOUCH.normal,
+      marginHorizontal: -SPACE.s,
+      paddingHorizontal: SPACE.s,
+      borderRadius: RADIUS.control,
     },
-    openLabel: { color: c.text, fontSize: 14, fontWeight: '500' },
-    chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
+    openLabel: { color: c.text, fontSize: TYPE.small, fontWeight: '500' },
   });
 });

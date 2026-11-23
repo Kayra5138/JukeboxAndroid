@@ -1,4 +1,4 @@
-import type { DownloadJob } from '../youtube/types.ts';
+import { isListenJob, type DownloadJob } from '../youtube/types.ts';
 
 /**
  * The rules of listening without keeping, apart from the asking so that they
@@ -27,6 +27,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 export function listenDue(jobs: readonly DownloadJob[], days: number, now: number): string[] {
   return jobs
-    .filter((job) => job.video.listen === true && job.status === 'done' && job.finishedAt != null && now - job.finishedAt > days * DAY_MS)
+    .filter((job) => isListenJob(job) && job.status === 'done' && job.finishedAt != null && now - job.finishedAt > days * DAY_MS)
     .map((job) => job.id);
 }

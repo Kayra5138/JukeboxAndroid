@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../settings/Find';
 import { Pressable } from '../Pressable';
 
-import { TextField } from '../FormScroll';
+import { Field } from '../FormScroll';
 import { TrackSlider, type TrackColours } from './TrackSlider';
 import { useT } from '../../lib/i18n/index';
 import { fromLch, toLch, type Lch } from '../../lib/theme/colour.ts';
 import { SEED_PRESETS, seedColour, type SeedRole } from '../../lib/theme/custom.ts';
 import { hintKey, makeStyles, useColours, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
+import { RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
 
 /**
  * As strong as the slider goes. About the strongest colour a screen can
@@ -165,7 +167,7 @@ export function ColourEditor({
         step={STRONGEST / 20}
         track={strip(4, (part) => ({ l: lch.l, c: part * STRONGEST, h: lch.h }))}
         thumb={value}
-        written={(strength) => say.percent(String(Math.round((strength / STRONGEST) * 100)))}
+        written={(strength) => t.format.percent(Math.round((strength / STRONGEST) * 100))}
         onChange={(strength) => slide({ c: strength }, false)}
         onSettle={(strength) => slide({ c: strength }, true)}
       />
@@ -177,14 +179,14 @@ export function ColourEditor({
         step={0.05}
         track={strip(8, (part) => ({ l: part, c: lch.c, h: lch.h }))}
         thumb={value}
-        written={(lightness) => say.percent(String(Math.round(lightness * 100)))}
+        written={(lightness) => t.format.percent(Math.round(lightness * 100))}
         onChange={(l) => slide({ l }, false)}
         onSettle={(l) => slide({ l }, true)}
       />
 
       <View style={styles.code}>
         <Text style={styles.codeLabel}>{say.hex}</Text>
-        <TextField
+        <Field
           // Made again when its colours change, which on this screen is often; see `hintKey`.
           key={hintKey(c, HEX_HINT)}
           style={styles.field}
@@ -192,7 +194,6 @@ export function ColourEditor({
           onChangeText={type}
           onEndEditing={finish}
           placeholder={HEX_HINT}
-          placeholderTextColor={c.textFaint}
           accessibilityLabel={say.hex}
           autoCapitalize="none"
           autoCorrect={false}
@@ -205,38 +206,31 @@ export function ColourEditor({
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  editor: { gap: 10, paddingHorizontal: 16, paddingBottom: 16 },
+/** How wide the box a colour's code is typed in stands. */
+const HEX_BOX = 120;
 
-  presets: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 4 },
+const useStyles = makeStyles((c) => StyleSheet.create({
+  editor: { gap: SPACE.s, paddingHorizontal: SPACE.l, paddingBottom: SPACE.l },
+
+  presets: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs, marginBottom: SPACE.xs },
   /*
     The mark of the one in use, and room for it round the ones that are not,
     so that choosing does not move anything: as the picker rings its themes.
   */
-  ring: { borderRadius: 19, borderWidth: 2, borderColor: 'transparent', padding: 2 },
+  ring: { borderRadius: RADIUS.pill, borderWidth: 2, borderColor: 'transparent', padding: SPACE.xxs },
   ringOn: { borderColor: c.accent },
   // An edge in this theme's colours, for the suggestion that is the colour of the card it is offered on.
   preset: {
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: RADIUS.pill,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.borderStrong,
   },
 
-  code: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 2 },
-  codeLabel: { color: c.textSecondary, fontSize: 13.5 },
+  code: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, marginTop: SPACE.xxs },
+  codeLabel: { color: c.textSecondary, fontSize: TYPE.small },
   // Set into a card, and so the colour of the page.
-  field: {
-    minWidth: 120,
-    color: c.text,
-    backgroundColor: c.bg,
-    borderRadius: 9,
-    fontSize: 15,
-    fontVariant: ['tabular-nums'],
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.borderStrong,
-  },
+  // The app's box, as wide as a colour's code and its figures in line.
+  field: { minWidth: HEX_BOX, fontVariant: ['tabular-nums'] },
 }));

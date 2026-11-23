@@ -119,7 +119,6 @@ class JukeboxAudioModule : Module() {
       Prop("shade") { view: SpectrumView, on: Boolean -> view.setShade(on) }
       Prop("strength") { view: SpectrumView, share: Float -> view.setStrength(share) }
       Prop("target") { view: SpectrumView, place: List<Float> -> view.setTarget(place) }
-      Prop("feel") { view: SpectrumView, on: Boolean -> view.setFeel(on) }
       Prop("colours") { view: SpectrumView, colours: List<String> -> view.setColours(colours) }
       Prop("round") { view: SpectrumView, on: Boolean -> view.setRound(on) }
       Prop("corner") { view: SpectrumView, points: Float -> view.setCorner(points) }
@@ -632,6 +631,21 @@ class JukeboxAudioModule : Module() {
       Snapshot.take(context, appContext.currentActivity, x, y, width, height)
     }
 
+    /*
+      Holds the screen upright, or lets it turn with the phone again, for a
+      screen that is only made to be upright: the game, whose board is laid
+      out for a tall screen and is not drawn again for a wide one. On the
+      thread that draws, which is the only one the window may be told on.
+    */
+    Function("holdUpright") { upright: Boolean ->
+      val activity = appContext.currentActivity ?: return@Function
+      activity.runOnUiThread {
+        activity.requestedOrientation =
+          if (upright) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+          else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+      }
+    }
+
     Function("copyText") { text: String ->
       val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
       clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Jukebox", text))
@@ -649,6 +663,15 @@ class JukeboxAudioModule : Module() {
 
     AsyncFunction("thumbAsync") { source: String, name: String ->
       Thumbs.make(context, source, name)
+    }.runOnQueue(thumbing)
+
+    // The paper sleeves that stand in for covers there are none of: see StandIn.
+    AsyncFunction("standInsMadeAsync") { ->
+      StandIn.list(context)
+    }.runOnQueue(io)
+
+    AsyncFunction("standInAsync") { album: String?, albumArtist: String?, title: String?, artist: String?, genre: String? ->
+      StandIn.make(context, album, albumArtist, title, artist, genre)
     }.runOnQueue(thumbing)
 
     AsyncFunction("downloadArtworkAsync") { url: String ->
@@ -757,7 +780,7 @@ class JukeboxAudioModule : Module() {
     /** Whether a tape has a transcript kept, to follow without asking anything. */
     Function("tapeTranscriptKept") { trackId: String ->
       val context = appContext.reactContext ?: return@Function false
-      (expo.modules.jukeboxaudio.downloads.TapeTranscripts.get(context, trackId)?.length() ?: 0) > 0
+      expo.modules.jukeboxaudio.downloads.TapeTranscripts.kept(context, trackId)
     }
 
     /**
@@ -946,6 +969,19 @@ class JukeboxAudioModule : Module() {
      *
      * Answers with the state that resulted.
      */
+    /** The same in force and not stored, for each step of a drag: see [AudioEffects.preview]. */
+    AsyncFunction("previewEqualizerAsync") { settings: Map<String, Any?> ->
+      AudioEffects.preview(
+        EffectsStore.Settings(
+          enabled = settings["enabled"] as? Boolean ?: false,
+          bass = (settings["bass"] as? Number)?.toInt() ?: 0,
+          virtualizer = (settings["virtualizer"] as? Number)?.toInt() ?: 0,
+          loudness = (settings["loudness"] as? Number)?.toInt() ?: 0
+        ),
+        (settings["parametric"] as? Map<*, *>)?.let(ParametricSettings::fromMap)
+      )
+    }
+
     AsyncFunction("setEqualizerAsync") { settings: Map<String, Any?> ->
       AudioEffects.update(
         context,
@@ -1050,7 +1086,7 @@ class JukeboxAudioModule : Module() {
      * since it has no life of its own in which to listen.
      */
     Function("setAppLanguage") { tag: String ->
-      if (Localised.set(context, tag)) JukeboxWidget.refresh(context)
+      if (Localised.set(context, tag)) JukeboxWidget.redrawSoon(context)
     }
 
     // ---- sleep timer ----
@@ -1194,6 +1230,17 @@ class JukeboxAudioModule : Module() {
       else controller.queue { promise.resolve(it) }
     }
 
+    /*
+      The songs of the queue as it was last kept, which the player puts back
+      when it is woken: for what deletes files with no player running -- a
+      background task -- to leave alone what the widget or a headset would
+      play next. Read off the main thread, as module calls are.
+    */
+    AsyncFunction("getSavedQueueIdsAsync") {
+      val context = appContext.reactContext ?: return@AsyncFunction emptyList<String>()
+      QueueStore.load(context)?.items?.map { it.mediaId } ?: emptyList<String>()
+    }
+
   }
 }
 
@@ -1283,7 +1330,9 @@ private object Feel {
 private fun feel(context: android.content.Context, kind: String, strength: Float) {
   if (!touchFeedbackOn(context)) return
   val found = vibrator(context) ?: return
-  val shape = composed(found, kind, strength) ?: predefined(kind) ?: return
+  // Past twice the recommended strength, the motor at its fullest, which no primitive goes to: see [forced].
+  val shape = (if (strength > HEAVIER_STILL) forced(kind, strength) else null)
+    ?: composed(found, kind, strength) ?: predefined(kind) ?: return
   buzzer.execute {
     runCatching {
       if (Build.VERSION.SDK_INT >= 33) {
@@ -1295,15 +1344,30 @@ private fun feel(context: android.content.Context, kind: String, strength: Float
   }
 }
 
+/**
+ * The strength chosen is 1 at the recommended, and goes on past it to three
+ * times that (`ui/hapticsPlan.ts`): up to [HEAVIER], each primitive brought
+ * up towards its fullest; past it, each the next heavier one as well; past
+ * [HEAVIER_STILL], the motor itself at full amplitude for longer than any
+ * primitive lasts ([forced]). A primitive at its fullest is as strong as that
+ * primitive goes, which on many motors was not strong at all.
+ */
+private const val HEAVIER = 1.5f
+private const val HEAVIER_STILL = 2f
+
 /** [kind] from primitives, where the motor has every one it takes; null where it has not, or before Android 11. */
 private fun composed(motor: android.os.Vibrator, kind: String, strength: Float): android.os.VibrationEffect? {
   if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return null
-  val tick = android.os.VibrationEffect.Composition.PRIMITIVE_TICK
-  val click = android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
-  val rise = android.os.VibrationEffect.Composition.PRIMITIVE_QUICK_RISE
+  val heavier = strength > HEAVIER
   // The two that came a version later, and what stands in for them before it.
-  val thud = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.os.VibrationEffect.Composition.PRIMITIVE_THUD else click
-  val lowTick = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.os.VibrationEffect.Composition.PRIMITIVE_LOW_TICK else tick
+  val realThud = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.os.VibrationEffect.Composition.PRIMITIVE_THUD else android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
+  val realLowTick = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) android.os.VibrationEffect.Composition.PRIMITIVE_LOW_TICK else android.os.VibrationEffect.Composition.PRIMITIVE_TICK
+  // Past [HEAVIER], each one the next heavier: a tick a click, a click a thud.
+  val tick = if (heavier) android.os.VibrationEffect.Composition.PRIMITIVE_CLICK else android.os.VibrationEffect.Composition.PRIMITIVE_TICK
+  val click = if (heavier) realThud else android.os.VibrationEffect.Composition.PRIMITIVE_CLICK
+  val rise = if (heavier) android.os.VibrationEffect.Composition.PRIMITIVE_CLICK else android.os.VibrationEffect.Composition.PRIMITIVE_QUICK_RISE
+  val thud = realThud
+  val lowTick = if (heavier) realThud else realLowTick
   // Each step: the primitive, how strong a share of [strength], and the pause before it in milliseconds.
   val steps: List<Triple<Int, Float, Int>> = when (kind) {
     Feel.TICK, Feel.STEP -> listOf(Triple(tick, 0.7f, 0))
@@ -1322,6 +1386,24 @@ private fun composed(motor: android.os.Vibrator, kind: String, strength: Float):
   val composition = android.os.VibrationEffect.startComposition()
   for ((primitive, share, delay) in steps) composition.addPrimitive(primitive, (share * strength).coerceIn(0f, 1f), delay)
   return runCatching { composition.compose() }.getOrNull()
+}
+
+/**
+ * [kind] as the motor at its full amplitude, the strongest anything can make
+ * it, for [strength] past [HEAVIER_STILL]: one pulse, or two for the feels
+ * that are two, each longer as the strength goes on up to three times the
+ * recommended.
+ */
+private fun forced(kind: String, strength: Float): android.os.VibrationEffect? {
+  val pulse = (12f + (strength.coerceIn(HEAVIER_STILL, 3f) - HEAVIER_STILL) * 28f).toLong()
+  val twice = kind == Feel.DOUBLE || kind == Feel.REJECT || kind == Feel.CONFIRM
+  return runCatching {
+    if (twice) {
+      android.os.VibrationEffect.createWaveform(longArrayOf(0, pulse, 60, pulse), intArrayOf(0, 255, 0, 255), -1)
+    } else {
+      android.os.VibrationEffect.createOneShot(pulse, 255)
+    }
+  }.getOrNull()
 }
 
 /** The platform's named effect nearest [kind], for a motor without primitives. */

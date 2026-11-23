@@ -122,10 +122,23 @@ class VeilView(context: Context, appContext: AppContext) : ExpoView(context, app
       super.dispatchDraw(canvas)
       return
     }
-    all.setPosition(0, 0, width, height)
-    super.dispatchDraw(all.beginRecording())
+    /*
+      Drawn at half its size to be softened from, and that twice as big: the
+      whole screen as a picture at its full size was the largest thing drawn
+      on 10 and 11 whenever what was under a sheet moved, and what is out of
+      focus has nothing in it that half the pixels would lose.
+    */
+    val halfWide = (width + 1) / 2
+    val halfHigh = (height + 1) / 2
+    all.setPosition(0, 0, halfWide, halfHigh)
+    val record = all.beginRecording()
+    record.scale(0.5f, 0.5f)
+    super.dispatchDraw(record)
     all.endRecording()
-    softener!!.draw(canvas, all, width, height, blur * resources.displayMetrics.density, dimmed)
+    canvas.save()
+    canvas.scale(width / halfWide.toFloat(), height / halfHigh.toFloat())
+    softener!!.draw(canvas, all, halfWide, halfHigh, blur * resources.displayMetrics.density / 2f, dimmed)
+    canvas.restore()
   }
 
   /*

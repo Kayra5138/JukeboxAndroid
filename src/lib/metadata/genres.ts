@@ -5,8 +5,18 @@ import { canonicalLabel as canonical } from './text.ts';
 
 export type WeightedGenre = { name: string; count: number };
 
-/** Both sides go through `canonical`, or the comparison is not one. */
-const VOCABULARY = new Set(MUSICBRAINZ_GENRES.map(canonical));
+/**
+ * Both sides go through `canonical`, or the comparison is not one.
+ *
+ * Made the first time it is asked, not as the app starts: two thousand names
+ * put through `canonical` were paid for at every start, and at every wake in
+ * the background, for something asked only when songs are looked up.
+ */
+let vocabulary: ReadonlySet<string> | null = null;
+function vocabularyNow(): ReadonlySet<string> {
+  vocabulary ??= new Set(MUSICBRAINZ_GENRES.map(canonical));
+  return vocabulary;
+}
 
 /**
  * Whether a label is a genre rather than a description of one.
@@ -17,7 +27,7 @@ const VOCABULARY = new Set(MUSICBRAINZ_GENRES.map(canonical));
  * because they are populated far more often than the curated `genres` field.
  */
 export function isGenre(label: string): boolean {
-  return VOCABULARY.has(canonical(label));
+  return vocabularyNow().has(canonical(label));
 }
 
 /**
@@ -66,13 +76,13 @@ const ITUNES_ALIASES: Record<string, string[]> = {
  */
 export function fromItunesGenre(label: string): string[] {
   const whole = canonical(label);
-  const direct = ITUNES_ALIASES[whole] ?? (VOCABULARY.has(whole) ? [whole] : null);
+  const direct = ITUNES_ALIASES[whole] ?? (vocabularyNow().has(whole) ? [whole] : null);
   if (direct) return direct;
 
   const parts = whole
     .split('/')
     .flatMap((part) => ITUNES_ALIASES[part.trim()] ?? [part.trim()])
-    .filter((part) => VOCABULARY.has(part));
+    .filter((part) => vocabularyNow().has(part));
   return [...new Set(parts)];
 }
 

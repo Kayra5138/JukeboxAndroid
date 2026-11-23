@@ -174,30 +174,6 @@ export function SpectrumStage({
   );
 }
 
-/**
- * Nothing drawn, only a knock on each beat: for when that is asked for, which
- * a view that listens for the beats has to do whatever else moves.
- */
-export function BeatFeel({ active }: { active: boolean }) {
-  return (
-    <NativeSpectrum
-      pointerEvents="none"
-      mode="beats"
-      active={active}
-      feel
-      colour="#ffffffff"
-      room={[0, 1]}
-      ring={[0, 1]}
-      inset={[0, 0]}
-      shade={false}
-      strength={1}
-      round={false}
-      corner={0}
-      style={styles.none}
-    />
-  );
-}
-
 /** The colours of the cover of [trackId], as the cover is read for them: null until they are read, or for none. */
 function useCoverStops(trackId: string | null): readonly string[] | null {
   const [stops, setStops] = useState<{ of: string; stops: readonly string[] } | null>(null);
@@ -341,6 +317,5 @@ const NativeSpectrum = requireNativeViewManager<{
   round: boolean;
   corner: number;
   target?: number[];
-  feel?: boolean;
   colours?: string[];
 }>('JukeboxAudio', 'SpectrumView');

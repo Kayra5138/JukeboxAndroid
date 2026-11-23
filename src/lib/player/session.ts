@@ -34,6 +34,32 @@ export function beginSession(track: Track, playing: boolean, now: number): Sessi
   return { track, startedAt: now, accumulatedMs: 0, resumedAt: playing ? now : null };
 }
 
+/** How long after a queue is set the player may take to say it has landed on its first song. */
+const LANDING_MS = 5000;
+
+/**
+ * Whether the player saying a song has come on is only the queue just set
+ * landing on the song its listen was opened for, and not a song left.
+ *
+ * The player says so when a queue is set as when one song follows another,
+ * and says the one before was not finished: taken as such, every queue begun
+ * wrote down its first song skipped after nought seconds, and "Often skipped",
+ * the songs picked to follow and Discover all counted them.
+ */
+export function isLanding(
+  session: Session | null,
+  change: { trackId: string | null; completedPrevious: boolean; repeated?: boolean },
+  now: number
+): boolean {
+  return (
+    session != null &&
+    !change.completedPrevious &&
+    !change.repeated &&
+    session.track.id === change.trackId &&
+    now - session.startedAt < LANDING_MS
+  );
+}
+
 /** Fold the stretch just ended into the total, or open a new one. */
 export function setSessionPlaying(session: Session, playing: boolean, now: number): Session {
   if (playing) {

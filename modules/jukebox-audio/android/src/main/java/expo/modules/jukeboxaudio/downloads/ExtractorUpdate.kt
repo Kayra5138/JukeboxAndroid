@@ -224,7 +224,11 @@ object ExtractorUpdate {
         said("downloading", 0)
         val fresh = File(place.directory, "jukebox-download")
         try {
-          val sums = fetch(asset(version, "SHA2-256SUMS"), SUMS_LIMIT, cancelled).first.decodeToString()
+          val listed = fetch(asset(version, "SHA2-256SUMS"), SUMS_LIMIT, cancelled).first
+          // Signed by yt-dlp's own key, or not believed: a list from where the file is is no word on the file (see [ExtractorSignature]).
+          val signed = fetch(asset(version, "SHA2-256SUMS.sig"), SUMS_LIMIT, cancelled).first
+          if (!ExtractorSignature.verifies(listed, signed)) throw ExtractorTrouble(ExtractorTrouble.Kind.CHECKSUM)
+          val sums = listed.decodeToString()
           val expected = ExtractorVersion.checksum(sums) ?: throw ExtractorTrouble(ExtractorTrouble.Kind.ANSWER)
           val (_, hash) = fetch(asset(version, "yt-dlp"), FILE_LIMIT, cancelled, fresh) { said("downloading", it) }
           if (hash != expected) throw ExtractorTrouble(ExtractorTrouble.Kind.CHECKSUM)

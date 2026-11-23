@@ -29,7 +29,6 @@
   <string name="jukebox_widget_up_next">Als Nächstes</string>
   <string name="jukebox_widget_up_next_empty">Als Nächstes kommt nichts</string>
   <string name="jukebox_widget_open">Öffnet den Player</string>
-  <string name="jukebox_widget_continue">Weiterhören: %1$s</string>
 
   <string name="jukebox_playback_channel">Aktuelle Wiedergabe</string>
 

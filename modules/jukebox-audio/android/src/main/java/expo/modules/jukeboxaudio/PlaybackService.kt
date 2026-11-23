@@ -1,5 +1,6 @@
 package expo.modules.jukeboxaudio
 
+import android.app.ActivityManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -30,6 +31,8 @@ import androidx.media3.session.SessionResult
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.MoreExecutors
+import com.google.common.util.concurrent.SettableFuture
 import expo.modules.jukeboxaudio.auto.BrowseTree
 import expo.modules.jukeboxaudio.loudness.Loudness
 import expo.modules.jukeboxaudio.loudness.Normaliser
@@ -46,7 +49,9 @@ import expo.modules.jukeboxaudio.widget.JukeboxWidget
 import expo.modules.jukeboxaudio.widget.NowPlaying
 import expo.modules.jukeboxaudio.widget.WidgetCommands
 import expo.modules.jukeboxaudio.widget.WidgetShape
+import java.util.concurrent.Callable
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -56,6 +61,9 @@ import java.util.concurrent.atomic.AtomicReference
  */
 private const val MAX_RECOVERY_TRIES = 2
 
+/** How far past where a track last failed it has to have played for a fault to be a new one. */
+private const val PLAYED_ON_MS = 5_000L
+
 /**
  * How long a media button is given to bring the service into the foreground by
  * playing before the service does it for itself; see `foregroundOwed`. Well
@@ -63,6 +71,16 @@ private const val MAX_RECOVERY_TRIES = 2
  * does start the music has always done so first.
  */
 private const val FOREGROUND_OWED_AFTER_MS = 2_000L
+
+/** How long the app is kept waiting for its queue to be read back before it is told there was none. */
+private const val RESTORE_ANSWER_MS = 5_000L
+
+/** The keys that, pressed with nothing loaded, put the queue back and play it. */
+private val STARTS_PLAYING = setOf(
+  KeyEvent.KEYCODE_MEDIA_PLAY,
+  KeyEvent.KEYCODE_MEDIA_NEXT,
+  KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+)
 
 /** Not Media3's own notification id, so removing this one leaves that one be. */
 private const val FOREGROUND_OWED_ID = 1002
@@ -85,6 +103,12 @@ private const val PLACE_EVERY_MS = 10_000L
 private const val NOTIFICATION_DISMISSED = "androidx.media3.session.NOTIFICATION_DISMISSED_EVENT_KEY"
 
 /**
+ * How long the songs a car's search found are kept for it to come back for;
+ * see `lastSearch`. It asks straight after it is told how many there are.
+ */
+private const val SEARCH_KEPT_MS = 60_000L
+
+/**
  * Asked by the app as it opens onto a player holding nothing -- the app was
  * closed, and the service with it: the queue it was last playing put back,
  * where it was, paused, as a press on the widget or a turn of the car puts it
@@ -93,40 +117,6 @@ private const val NOTIFICATION_DISMISSED = "androidx.media3.session.NOTIFICATION
  */
 internal const val RESTORE_QUEUE = "expo.modules.jukeboxaudio.RESTORE_QUEUE"
 internal const val RESTORED = "restored"
-
-/**
- * The surfaces a media app is expected to appear in, and the only callers
- * outside this app allowed to browse the library.
- *
- * Short on purpose. A name that is not here is not refused because it is
- * suspect but because nothing else has any business reading somebody's
- * listening history, and a list of what a player might plausibly be asked by
- * is far easier to be sure of than a list of what it should fear.
- */
-private val BROWSERS = setOf(
-  // The car.
-  "com.google.android.projection.gearhead",
-  // The watch.
-  "com.google.android.wearable.app",
-  "com.google.android.wearable.media.sessions",
-  // The assistant, which is also what a squeezed phone or a headset button
-  // reaches when it is asked to play something.
-  "com.google.android.googlequicksearchbox",
-  // The shade and the lock screen.
-  "com.android.systemui",
-  /*
-    Samsung's lock screen, which is not the system's. The card that opens
-    there, and the always-on display, are drawn by a package of their own,
-    and it is that package that asks for a place in the track when the bar
-    on the card is dragged. Play, pause and skip reached the player all the
-    same, since those are sent as key presses and a key press is not asked
-    whose it is; the bar alone was turned away, moved under the finger and
-    went back.
-  */
-  "com.samsung.android.app.aodservice",
-  // A head unit or a pair of headphones talking over Bluetooth.
-  "com.android.bluetooth"
-)
 
 /**
  * A note that the queue was just set by something other than the app.
@@ -179,14 +169,48 @@ class PlaybackService : MediaLibraryService() {
   private var callQuiet: CallQuiet? = null
 
   private val widgetHandler = Handler(Looper.getMainLooper())
+
+  /**
+   * Moves the widgets' progress bars once a second while playing, and only
+   * while there are widgets to move: it is started again when one is placed
+   * (see [JukeboxWidget.placementChanged]). Drawn beside the player, where
+   * the rest of the widgets' drawing is.
+   */
   private val widgetTick = object : Runnable {
     override fun run() {
       val player = mediaSession?.player ?: return
-      if (!player.isPlaying) return
-      if (getSystemService(PowerManager::class.java).isInteractive && JukeboxWidget.hasWidgets(this@PlaybackService)) {
-        JukeboxWidget.progress(this@PlaybackService, player.currentPosition, player.duration)
+      if (!player.isPlaying || !JukeboxWidget.hasWidgets(this@PlaybackService)) return
+      // Not at all with the screen off: started again as it comes on (see [screenOn]), and not woken every second for nobody.
+      if (!getSystemService(PowerManager::class.java).isInteractive) return
+      // Not while the app itself is in front, which the home screen the widgets are on is then not.
+      if (!appInFront()) {
+        val position = player.currentPosition
+        val duration = player.duration
+        aside { JukeboxWidget.progress(this@PlaybackService, position, duration) }
       }
       widgetHandler.postDelayed(this, 1000)
+    }
+  }
+
+  /** Whether one of the app's own screens is on show: its process is then in front, not only playing in the background. */
+  private fun appInFront(): Boolean {
+    val state = ActivityManager.RunningAppProcessInfo()
+    ActivityManager.getMyMemoryState(state)
+    return state.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+  }
+
+  private fun startWidgetTick() {
+    widgetHandler.removeCallbacks(widgetTick)
+    val player = mediaSession?.player ?: return
+    if (player.isPlaying && JukeboxWidget.hasWidgets(this)) widgetHandler.postDelayed(widgetTick, 1000)
+  }
+
+  private val widgetsPlaced: () -> Unit = { widgetHandler.post { startWidgetTick() } }
+
+  /** The screen coming on: the widgets' bars moved again, from where the song is now. */
+  private val screenOn = object : android.content.BroadcastReceiver() {
+    override fun onReceive(context: android.content.Context, intent: Intent) {
+      startWidgetTick()
     }
   }
 
@@ -218,6 +242,35 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /**
+   * Where a car's questions about the library are answered, and not on the
+   * thread playback runs on.
+   *
+   * Each was answered there, and each is the whole library read from the
+   * media store and the copy opened a few times over: on an older phone,
+   * long enough for a song to stutter, and a car asks several at once as a
+   * tab opens. Media3 takes an answer that comes later as well as one that
+   * comes at once. One thread, so they are answered in the order asked, and
+   * not the reader of covers' thread, which a skip should not queue behind a
+   * car's search.
+   */
+  private val browseReader = MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor())
+
+  /** The main thread, as something an answer can be finished on. */
+  private val onMain by lazy { androidx.core.content.ContextCompat.getMainExecutor(this) }
+
+  /**
+   * [work] on the browsing thread. Asked after that thread was shut down --
+   * the service going as a car asked -- it is answered with [fallback].
+   */
+  private fun <T> browsed(fallback: T, work: () -> T): ListenableFuture<T> =
+    runCatching { browseReader.submit(Callable(work)) }.getOrElse { Futures.immediateFuture(fallback) }
+
+  /** The songs the last search found, kept for the car coming back for them: see [SEARCH_KEPT_MS]. */
+  private class Search(val query: String, val items: List<MediaItem>, val at: Long)
+
+  private var lastSearch: Search? = null
+
+  /**
    * Keeps the home screen widget in step with playback.
    *
    * The widget is drawn by the launcher from a written-down snapshot, so
@@ -225,6 +278,29 @@ class PlaybackService : MediaLibraryService() {
    * knows. Both events matter and neither implies the other: a track can change
    * while paused, and play/pause moves without the track changing.
    */
+  /**
+   * Draws the widgets again from what was last written down, beside the
+   * player rather than on its thread.
+   *
+   * A new song's cover is decoded for them, twice over for two sizes, and its
+   * colours picked out for the gradient, which on an older phone was a
+   * stumble at every change of song. Drawn from what is written down when the
+   * drawing starts, so one waiting already draws whatever is asked for after
+   * it, and a second is not queued behind it.
+   */
+  private val widgetsOwed = AtomicBoolean(false)
+
+  /** [redrawWidgets], for what draws the widgets from outside the service: see [JukeboxWidget.redraw]. */
+  private val widgetsRedrawn: () -> Unit = { redrawWidgets() }
+
+  private fun redrawWidgets() {
+    if (widgetsOwed.getAndSet(true)) return
+    aside {
+      widgetsOwed.set(false)
+      JukeboxWidget.refresh(this)
+    }
+  }
+
   /**
    * Writes the queue down when it changes, and not on the thread playback runs
    * on.
@@ -235,11 +311,19 @@ class PlaybackService : MediaLibraryService() {
    * looper: the same thread Media3 and every transport command use. Only a
    * timeline change can alter what is in the queue, so that is the only thing
    * worth writing for.
+   *
+   * Even so, a shuffle is two or three of those, and turning the queue into
+   * JSON was still done here, on the player's thread. Only the items are
+   * taken here now, and only the newest waits to be written, as with the
+   * place below.
    */
+  private val pendingQueue = AtomicReference<QueueStore.Snapshot?>(null)
+
   private fun saveQueue() {
     val player = mediaSession?.player ?: return
-    val snapshot = QueueStore.snapshot(player)
-    aside { QueueStore.save(this, snapshot) }
+    val snapshot = QueueStore.snapshot(player) ?: return
+    if (pendingQueue.getAndSet(snapshot) != null) return
+    aside { pendingQueue.getAndSet(null)?.let { QueueStore.save(this, QueueStore.serialise(it)) } }
   }
 
   /**
@@ -358,27 +442,44 @@ class PlaybackService : MediaLibraryService() {
   private val faultRecovery = object : Player.Listener {
     private var tries = 0
     private var triedFor = -1
+    /** Where in the track the last fault was. */
+    private var failedAt = 0L
+    /** Tracks gone past one after another for faults, so that a queue of nothing playable is not gone round for ever. */
+    private var passed = 0
 
     override fun onPlayerError(error: PlaybackException) {
       val player = mediaSession?.player ?: return
+      val at = player.currentPosition.coerceAtLeast(0)
 
-      if (player.currentMediaItemIndex != triedFor) {
+      // Another track, or this one played on well past where it last failed:
+      // a new fault, with its tries to come. Being ready again is not enough,
+      // or a fault that comes back each time it is would be tried for ever.
+      if (player.currentMediaItemIndex != triedFor || at > failedAt + PLAYED_ON_MS) {
         triedFor = player.currentMediaItemIndex
         tries = 0
       }
-      if (tries >= MAX_RECOVERY_TRIES) return
+      failedAt = at
+      val wasPlaying = player.playWhenReady
+      if (tries >= MAX_RECOVERY_TRIES) {
+        // Given up on: on to the next, if it was playing and there is one.
+        if (wasPlaying && player.hasNextMediaItem() && passed < player.mediaItemCount) {
+          passed += 1
+          player.seekToNextMediaItem()
+          player.prepare()
+          player.playWhenReady = true
+        }
+        return
+      }
       tries += 1
 
-      val resumeAt = player.currentPosition.coerceAtLeast(0)
-      val wasPlaying = player.playWhenReady
       player.prepare()
-      if (resumeAt > 0) player.seekTo(resumeAt)
+      if (at > 0) player.seekTo(at)
       player.playWhenReady = wasPlaying
     }
 
     override fun onPlaybackStateChanged(state: Int) {
-      // Whatever it was, it is playing again; the next fault starts afresh.
-      if (state == Player.STATE_READY) tries = 0
+      // Something would play: the run of tracks that would not is over.
+      if (state == Player.STATE_READY) passed = 0
     }
   }
 
@@ -388,9 +489,6 @@ class PlaybackService : MediaLibraryService() {
     val trackId = player.currentMediaItem?.mediaId
     val before = NowPlaying.read(this)
     val loaded = player.mediaItemCount > 0
-    // The tape last listened to, kept through the songs played after it, for the widget to offer carrying on with.
-    val current = player.currentMediaItem
-    val tape = current != null && Tapes.isTape(this, current)
 
     val state = NowPlaying(
       trackId = trackId,
@@ -413,16 +511,11 @@ class PlaybackService : MediaLibraryService() {
       */
       repeatMode = if (loaded) player.repeatMode else NowPlaying.repeatMode(this),
       upcoming = upcoming(player),
-      tapeId = if (tape) Tapes.idOf(current!!) else before.tapeId,
-      tapeTitle = if (tape) {
-        metadata.title?.toString() ?: current!!.mediaMetadata.extras?.getString("jukebox.filename")
-      } else before.tapeTitle
     )
 
     NowPlaying.write(this, state)
-    JukeboxWidget.refresh(this)
-    widgetHandler.removeCallbacks(widgetTick)
-    if (player.isPlaying) widgetHandler.postDelayed(widgetTick, 1000)
+    redrawWidgets()
+    startWidgetTick()
 
     if (trackId != null && state.artworkPath == null) {
       resolveArtwork(trackId, metadata.artworkUri)
@@ -471,6 +564,8 @@ class PlaybackService : MediaLibraryService() {
         ?.let { runCatching { Uri.parse(it).path }.getOrNull() }
         ?: downloaded?.takeIf { it.scheme == "file" }?.path?.takeIf { java.io.File(it).isFile }
         ?: expo.modules.jukeboxaudio.downloads.DownloadStore.artwork(this, trackId)?.let { Uri.parse(it).path }
+        // None of its own: the record's paper sleeve, as the app shows it.
+        ?: runCatching { StandIn.forTrack(this, trackId)?.path }.getOrNull()
         ?: return@aside
 
       // The track may have moved on while the file was being read; a cover
@@ -482,7 +577,7 @@ class PlaybackService : MediaLibraryService() {
         NowPlaying.write(this, current.copy(artworkPath = path,
           positionMs = mediaSession!!.player.currentPosition.coerceAtLeast(0),
           durationMs = mediaSession!!.player.duration.coerceAtLeast(0)))
-        JukeboxWidget.refresh(this)
+        redrawWidgets()
       }
     }
   }
@@ -503,6 +598,7 @@ class PlaybackService : MediaLibraryService() {
   @OptIn(UnstableApi::class)
   override fun onCreate() {
     super.onCreate()
+    runCatching { registerReceiver(screenOn, android.content.IntentFilter(Intent.ACTION_SCREEN_ON)) }
 
     /*
       Let go of the foreground as soon as the music is paused.
@@ -566,6 +662,9 @@ class PlaybackService : MediaLibraryService() {
       )
       // Pause when headphones are unplugged instead of blasting the speaker.
       .setHandleAudioBecomingNoisy(true)
+      // The processor kept awake while it plays, screen off and all: Media3
+      // holds the lock only while playing and lets it go on a pause.
+      .setWakeMode(C.WAKE_MODE_LOCAL)
       .build()
       .also { it.audioSessionId = audioSessionId }
 
@@ -629,6 +728,8 @@ class PlaybackService : MediaLibraryService() {
     chapterLine = ChapterLine(this, player) { fading.chapterChanged() }.also { player.addListener(it) }
     // The jumps changed in the app while a tape plays: its buttons say the new seconds at once.
     Tapes.jumpsChanged = { widgetHandler.post { showTapeButtons() } }
+    JukeboxWidget.placementChanged = widgetsPlaced
+    JukeboxWidget.redraw = widgetsRedrawn
     showTapeButtons()
     speak()
     Localised.watch(languageChanged)
@@ -725,10 +826,7 @@ class PlaybackService : MediaLibraryService() {
    * notification shade, a Bluetooth head unit. Anything else is told no.
    */
   private fun mayBrowse(controller: MediaSession.ControllerInfo): Boolean =
-    controller.uid == android.os.Process.myUid() ||
-      controller.uid == android.os.Process.SYSTEM_UID ||
-      controller.packageName == packageName ||
-      controller.packageName in BROWSERS
+    Callers.mayRead(controller.uid, controller.packageName, android.os.Process.myUid(), packageName)
 
   /**
    * The library as something that browses it can see.
@@ -794,8 +892,22 @@ class PlaybackService : MediaLibraryService() {
       args: Bundle
     ): ListenableFuture<SessionResult> {
       if (customCommand.customAction == RESTORE_QUEUE && controller.packageName == packageName) {
-        val restored = restoreQueueIfEmpty()
-        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS, Bundle().apply { putBoolean(RESTORED, restored) }))
+        // Read off the main thread, where two thousand songs of JSON held up
+        // the app's first frames, and put on the player back on it.
+        val answer = SettableFuture.create<SessionResult>()
+        fun reply(restored: Boolean) =
+          answer.set(SessionResult(SessionResult.RESULT_SUCCESS, Bundle().apply { putBoolean(RESTORED, restored) }))
+        if ((mediaSession?.player?.mediaItemCount ?: 0) > 0) {
+          reply(false)
+        } else {
+          aside {
+            val saved = QueueStore.load(this@PlaybackService)
+            widgetHandler.post { reply(saved != null && restoreQueueIfEmpty(saved)) }
+          }
+          // The reader gone with the service, the question still has an answer.
+          widgetHandler.postDelayed({ if (!answer.isDone) reply(false) }, RESTORE_ANSWER_MS)
+        }
+        return answer
       }
       val forward = when (customCommand.customAction) {
         TapeButtons.BACK -> false
@@ -834,16 +946,17 @@ class PlaybackService : MediaLibraryService() {
         not have been asked for yet. An empty folder is a far better answer than
         a dead connection.
       */
-      val items = runCatching { BrowseTree.children(this@PlaybackService, parentId) }
-        .getOrElse { emptyList() }
-      // An order was just chosen for a shelf, and the car is still holding the
-      // shelf's own tab the way it was. Told, it asks for it again.
-      BrowseTree.refreshes(parentId)?.let { tab ->
-        runCatching { session.notifyChildrenChanged(tab, Int.MAX_VALUE, null) }
+      val node = browsed(emptyList<MediaItem>()) {
+        runCatching { BrowseTree.children(this@PlaybackService, parentId) }.getOrElse { emptyList() }
       }
-      return Futures.immediateFuture(
+      return Futures.transform(node, { items ->
+        // An order was just chosen for a shelf, and the car is still holding the
+        // shelf's own tab the way it was. Told, it asks for it again.
+        BrowseTree.refreshes(parentId)?.let { tab ->
+          runCatching { session.notifyChildrenChanged(tab, Int.MAX_VALUE, null) }
+        }
         LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
-      )
+      }, onMain)
     }
 
     override fun onGetItem(
@@ -853,13 +966,13 @@ class PlaybackService : MediaLibraryService() {
     ): ListenableFuture<LibraryResult<MediaItem>> {
       // Guarded for the same reason as the children above: the lookup reads the
       // media store, and a throw here would take the whole browser down with it.
-      val (items, index) = runCatching { BrowseTree.resolve(this@PlaybackService, mediaId) }
-        .getOrElse { emptyList<MediaItem>() to 0 }
-      val found = items.getOrNull(index)
-      return Futures.immediateFuture(
+      return browsed(LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)) {
+        val (items, index) = runCatching { BrowseTree.resolve(this@PlaybackService, mediaId) }
+          .getOrElse { emptyList<MediaItem>() to 0 }
+        val found = items.getOrNull(index)
         if (found == null) LibraryResult.ofError(LibraryResult.RESULT_ERROR_BAD_VALUE)
         else LibraryResult.ofItem(found, null)
-      )
+      }
     }
 
     /**
@@ -870,6 +983,9 @@ class PlaybackService : MediaLibraryService() {
      * Answering the first is what puts a search button on the screen at all.
      * A throw is an empty answer here for the same reason as everywhere else
      * in this callback: it would otherwise take the whole connection down.
+     *
+     * What was found is kept for the second step, which used to search the
+     * whole library again for the songs the first had just counted.
      */
     override fun onSearch(
       session: MediaLibrarySession,
@@ -877,9 +993,14 @@ class PlaybackService : MediaLibraryService() {
       query: String,
       params: LibraryParams?
     ): ListenableFuture<LibraryResult<Void>> {
-      val count = runCatching { BrowseTree.search(this@PlaybackService, query).size }.getOrDefault(0)
-      runCatching { session.notifySearchResultChanged(browser, query, count, params) }
-      return Futures.immediateFuture(LibraryResult.ofVoid())
+      val found = browsed(emptyList<MediaItem>()) {
+        runCatching { BrowseTree.search(this@PlaybackService, query) }.getOrElse { emptyList() }
+      }
+      return Futures.transform(found, { items ->
+        lastSearch = Search(query, items, android.os.SystemClock.elapsedRealtime())
+        runCatching { session.notifySearchResultChanged(browser, query, items.size, params) }
+        LibraryResult.ofVoid()
+      }, onMain)
     }
 
     override fun onGetSearchResult(
@@ -890,8 +1011,14 @@ class PlaybackService : MediaLibraryService() {
       pageSize: Int,
       params: LibraryParams?
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-      val items = runCatching { BrowseTree.search(this@PlaybackService, query) }.getOrElse { emptyList() }
-      return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(items), params))
+      val kept = lastSearch?.takeIf {
+        it.query == query && android.os.SystemClock.elapsedRealtime() - it.at < SEARCH_KEPT_MS
+      }
+      if (kept != null) return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.copyOf(kept.items), params))
+      return browsed(LibraryResult.ofItemList(ImmutableList.of(), params)) {
+        val items = runCatching { BrowseTree.search(this@PlaybackService, query) }.getOrElse { emptyList() }
+        LibraryResult.ofItemList(ImmutableList.copyOf(items), params)
+      }
     }
 
     /**
@@ -910,10 +1037,8 @@ class PlaybackService : MediaLibraryService() {
       startPositionMs: Long
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
       val chosen = mediaItems.firstOrNull()?.mediaId
-      val passThrough = Futures.immediateFuture(
-        MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
-      )
-      if (mediaItems.size != 1 || chosen == null) return passThrough
+      val asked = MediaSession.MediaItemsWithStartPosition(mediaItems, startIndex, startPositionMs)
+      if (mediaItems.size != 1 || chosen == null) return Futures.immediateFuture(asked)
 
       /*
         "Continue": whatever was playing, from where it was left.
@@ -934,11 +1059,22 @@ class PlaybackService : MediaLibraryService() {
             )
           )
         }
-        QueueStore.load(this@PlaybackService)?.let { saved ->
+      }
+
+      // The rest reads the library, or the queue from its file, and is answered beside the player.
+      return browsed(asked) { chosenFromTree(chosen, mediaItems.first(), asked) }
+    }
+
+    /** What a car's choice of [chosen] plays, where the player is not asked for it: see [onSetMediaItems]. */
+    private fun chosenFromTree(
+      chosen: String,
+      item: MediaItem,
+      asked: MediaSession.MediaItemsWithStartPosition
+    ): MediaSession.MediaItemsWithStartPosition {
+      if (chosen == BrowseTree.CONTINUE) {
+        runCatching { QueueStore.load(this@PlaybackService) }.getOrNull()?.let { saved ->
           QueueReplaced.mark()
-          return Futures.immediateFuture(
-            MediaSession.MediaItemsWithStartPosition(saved.items, saved.index, saved.positionMs)
-          )
+          return MediaSession.MediaItemsWithStartPosition(saved.items, saved.index, saved.positionMs)
         }
       }
 
@@ -948,7 +1084,7 @@ class PlaybackService : MediaLibraryService() {
         those words find, the likeliest first. Said with no words at all it is
         "play some music", which the same tile as above already means.
       */
-      val spoken = mediaItems.first().requestMetadata.searchQuery
+      val spoken = item.requestMetadata.searchQuery
       if (chosen.isEmpty() && spoken != null) {
         /*
           A tape found first is played as it would be from the tapes, with
@@ -967,9 +1103,7 @@ class PlaybackService : MediaLibraryService() {
         }.getOrElse { emptyList<MediaItem>() to 0 }
         if (found.isNotEmpty()) {
           QueueReplaced.mark()
-          return Futures.immediateFuture(
-            MediaSession.MediaItemsWithStartPosition(found.map(BrowseTree::queued), at, 0)
-          )
+          return MediaSession.MediaItemsWithStartPosition(found.map(BrowseTree::queued), at, 0)
         }
       }
 
@@ -987,7 +1121,7 @@ class PlaybackService : MediaLibraryService() {
         BrowseTree.resolve(this@PlaybackService, chosen)
       }.getOrElse { emptyList<MediaItem>() to 0 }
 
-      if (items.isEmpty()) return passThrough
+      if (items.isEmpty()) return asked
       /*
         Into the queue under the tracks' own ids, not the ones the tree gave
         the car. Those carry the shelf a row was found on, which was needed to
@@ -996,9 +1130,7 @@ class PlaybackService : MediaLibraryService() {
         the app was told that was what had started playing.
       */
       QueueReplaced.mark()
-      return Futures.immediateFuture(
-        MediaSession.MediaItemsWithStartPosition(items.map(BrowseTree::queued), index, 0)
-      )
+      return MediaSession.MediaItemsWithStartPosition(items.map(BrowseTree::queued), index, 0)
     }
   }
 
@@ -1066,15 +1198,23 @@ class PlaybackService : MediaLibraryService() {
     if (intent?.action == Intent.ACTION_MEDIA_BUTTON) {
       @Suppress("DEPRECATION")
       val key = intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
-      if (restoreQueueIfEmpty() && key != KeyEvent.KEYCODE_MEDIA_PAUSE) {
+      // Play, or a skip, plays. The one button of a headset is play and pause
+      // in one, and is left to Media3: started playing here, it would turn
+      // that round and pause what it had just put back.
+      if (restoreQueueIfEmpty() && key in STARTS_PLAYING) {
         mediaSession?.player?.playWhenReady = true
       }
       oweForeground()
     }
     if (intent?.action in WidgetCommands.ALL) {
-      runCatching { widgetCommand(intent!!) }
-        .onFailure { android.util.Log.w("JukeboxPlayback", "widget command failed", it) }
-      // Started in the foreground like a key, and owing the same.
+      // Done only for this app's own widget: the service is open to every app, for the car.
+      if (WidgetCommands.isOurs(this, intent!!)) {
+        runCatching { widgetCommand(intent) }
+          .onFailure { android.util.Log.w("JukeboxPlayback", "widget command failed", it) }
+      } else {
+        android.util.Log.w("JukeboxPlayback", "a widget command from somewhere else, ignored")
+      }
+      // Started in the foreground like a key, and owing the same, whoever started it.
       oweForeground()
     }
     return super.onStartCommand(intent, flags, startId)
@@ -1121,8 +1261,7 @@ class PlaybackService : MediaLibraryService() {
           one that was pressed is looked for instead; gone altogether, the
           press does nothing rather than play something nobody chose.
         */
-        val index = if (asked in 0 until player.mediaItemCount && player.getMediaItemAt(asked).mediaId == id) asked
-          else (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == id } ?: return
+        val index = WidgetCommands.jumpTo(asked, id, player.mediaItemCount) { player.getMediaItemAt(it).mediaId } ?: return
         player.seekTo(index, 0L)
         player.playWhenReady = true
       }
@@ -1130,17 +1269,6 @@ class PlaybackService : MediaLibraryService() {
         val shelf = intent.getStringExtra(WidgetCommands.EXTRA_SHELF)
           ?.takeIf { it == BrowseTree.SHUFFLE || it == BrowseTree.SHUFFLE_RECENT } ?: return
         playFromTree(shelf)
-      }
-      WidgetCommands.TAPE -> {
-        val id = intent.getStringExtra(WidgetCommands.EXTRA_ID) ?: return
-        // Loaded already, and only paused: played on from where it is.
-        if (player.currentMediaItem?.let(Tapes::idOf) == id) {
-          player.playWhenReady = true
-          return
-        }
-        // Otherwise as the car's home tab carries a tape on: with the rest of
-        // its show or book after it, from where it was left.
-        playFromTree(BrowseTree.tapeToContinue(id))
       }
     }
   }
@@ -1155,12 +1283,16 @@ class PlaybackService : MediaLibraryService() {
    * foregroundOwed pays it anyway if they are not.
    */
   private fun playFromTree(mediaId: String) {
-    aside {
+    treePending = true
+    // A thread of its own rather than the reader's, where it could wait
+    // behind a run of covers past the moment the foreground is owed.
+    Thread({
       val (items, index) = runCatching { BrowseTree.resolve(this, mediaId) }
         .getOrElse { emptyList<MediaItem>() to 0 }
-      if (items.isEmpty()) return@aside
       val queued = items.map(BrowseTree::queued)
       widgetHandler.post {
+        treePending = false
+        if (queued.isEmpty()) return@post
         val target = mediaSession?.player ?: return@post
         // Not the app's doing, so the app is told to read the queue again,
         // as it is when a car chooses something.
@@ -1169,18 +1301,24 @@ class PlaybackService : MediaLibraryService() {
         target.prepare()
         target.playWhenReady = true
       }
-    }
+    }, "jukebox-widget-play").start()
   }
+
+  /** A widget's shelf or tape being read, which will start the music once it is. */
+  @Volatile private var treePending = false
+  /** Whether the foreground owed has been put off once already for [treePending]. */
+  private var owedPutOff = false
 
   /**
    * Shuffles the queue as the player's button does, keeping the song that
    * is playing where it is and playing on.
    *
-   * The same moves as `PlayerController.shuffleQueue`, without the order the
-   * app works out so that one artist does not come round twice in a row:
-   * that is JavaScript's judgement, and no JavaScript need be running for a
-   * widget to be pressed. A plain shuffle is what is left, as it is there
-   * when nobody asks for an order.
+   * The same moves as `PlayerController.shuffleQueue`, in the order the app
+   * deals a shuffle in, so that one artist does not come round twice in a
+   * row: worked out here (`SpreadShuffle`, as the car has it), since no
+   * JavaScript need be running for a widget to be pressed. It was a plain
+   * shuffle, and the same artist came back to back from the widget as it
+   * did not from the app.
    *
    * The app has not seen this queue, so it is marked as replaced and the app
    * reads it back, as it does for a car's.
@@ -1189,7 +1327,9 @@ class PlaybackService : MediaLibraryService() {
     val count = player.mediaItemCount
     val current = player.currentMediaItemIndex
     if (count < 3 || current !in 0 until count) return
-    val rest = (0 until count).filter { it != current }.map { player.getMediaItemAt(it) }.shuffled()
+    val rest = expo.modules.jukeboxaudio.auto.SpreadShuffle.shuffled((0 until count).filter { it != current }.map { player.getMediaItemAt(it) }) {
+      expo.modules.jukeboxaudio.auto.SpreadShuffle.artistKey(it.mediaMetadata.artist?.toString())
+    }
     QueueReplaced.mark()
     // After the current item, then before it — in that order, so the second
     // removal is the only one that shifts the index being kept.
@@ -1225,9 +1365,24 @@ class PlaybackService : MediaLibraryService() {
    * refused, it has lost nothing.
    */
   @OptIn(UnstableApi::class)
-  private val foregroundOwed = Runnable {
+  private val foregroundOwed: Runnable = Runnable {
     // In the foreground already, which is to say playing. Nothing is owed.
-    if (mediaSession == null || isPlaybackOngoing) return@Runnable
+    if (mediaSession == null || isPlaybackOngoing) {
+      owedPutOff = false
+      return@Runnable
+    }
+    /*
+      A shelf still being read is about to play, and playing brings the
+      service into the foreground as Android wants. Paid now, and let go
+      again, it could not be brought back from the background when the music
+      did start; so it waits once more, well inside Android's limit.
+    */
+    if (treePending && !owedPutOff) {
+      owedPutOff = true
+      widgetHandler.postDelayed(foregroundOwed, FOREGROUND_OWED_AFTER_MS)
+      return@Runnable
+    }
+    owedPutOff = false
     runCatching {
       // Media3's channel, made here in case this arrives before it has had a
       // notification of its own to make it for. A second one would be a second
@@ -1253,11 +1408,11 @@ class PlaybackService : MediaLibraryService() {
   }
 
   /** True when there was nothing loaded and the last queue was put back. */
-  private fun restoreQueueIfEmpty(): Boolean {
+  private fun restoreQueueIfEmpty(read: QueueStore.Saved? = null): Boolean {
     val player = mediaSession?.player ?: return false
     if (player.mediaItemCount > 0) return false
 
-    val saved = QueueStore.load(this) ?: return false
+    val saved = read ?: QueueStore.load(this) ?: return false
     QueueReplaced.mark()
     player.setMediaItems(saved.items, saved.index, saved.positionMs)
     /*
@@ -1300,12 +1455,16 @@ class PlaybackService : MediaLibraryService() {
   @OptIn(UnstableApi::class)
   override fun onTaskRemoved(rootIntent: Intent?) {
     val player = mediaSession?.player
-    if (player != null && player.playWhenReady && player.mediaItemCount > 0) return
+    // Meant to play, and with something to: a queue played to its end, or
+    // stopped by a fault, has nothing more coming out of it to keep going for.
+    val stopped = player?.playbackState == Player.STATE_ENDED || player?.playbackState == Player.STATE_IDLE
+    if (player != null && player.playWhenReady && player.mediaItemCount > 0 && !stopped) return
 
     pauseAllPlayersAndStopSelf()
   }
 
   override fun onDestroy() {
+    runCatching { unregisterReceiver(screenOn) }
     // Written before the player goes, so the widget stops offering controls for
     // a service that is about to stop existing.
     widgetHandler.removeCallbacksAndMessages(null)
@@ -1317,6 +1476,7 @@ class PlaybackService : MediaLibraryService() {
     chapterLine?.release()
     chapterLine = null
     Tapes.jumpsChanged = null
+    if (JukeboxWidget.placementChanged === widgetsPlaced) JukeboxWidget.placementChanged = null
     exoPlayer = null
     // The last word on where playback was. The writer is shut down below, and
     // shutting it down lets what it has already been given finish.
@@ -1326,7 +1486,10 @@ class PlaybackService : MediaLibraryService() {
         durationMs = player.duration.coerceAtLeast(0)))
     }
     NowPlaying.markStopped(this)
-    JukeboxWidget.refresh(this)
+    // In line with the drawings already handed aside, and before the reader is shut down below, which lets it
+    // finish what it has: drawn here and now, one of those could still come after it and say it was playing.
+    redrawWidgets()
+    if (JukeboxWidget.redraw === widgetsRedrawn) JukeboxWidget.redraw = null
     Localised.unwatch(languageChanged)
 
     // Both let go before the player: the effects hold a native handle on that
@@ -1347,6 +1510,7 @@ class PlaybackService : MediaLibraryService() {
     AudioEffects.release()
 
     artworkReader.shutdown()
+    browseReader.shutdown()
     mediaSession?.run {
       player.removeListener(widgetWatcher)
       player.release()

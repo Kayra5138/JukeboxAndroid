@@ -5,6 +5,7 @@ import {
   beginSession,
   countsAsPlay,
   finishSession,
+  isLanding,
   minimumSecondsFor,
   setSessionPlaying,
 } from '../session.ts';
@@ -137,5 +138,19 @@ describe('a listening session', () => {
 
     assert.equal(session.resumedAt, 0);
     assert.equal(session.accumulatedMs, 0);
+  });
+});
+
+describe('isLanding', () => {
+  const opened = beginSession(song, true, 1_000);
+  it('is a queue just set coming on at the song its listen was opened for', () => {
+    assert.equal(isLanding(opened, { trackId: '1', completedPrevious: false }, 1_200), true);
+  });
+  it('is not a song left, finished, looped, another song, or long after', () => {
+    assert.equal(isLanding(opened, { trackId: '2', completedPrevious: false }, 1_200), false);
+    assert.equal(isLanding(opened, { trackId: '1', completedPrevious: true }, 1_200), false);
+    assert.equal(isLanding(opened, { trackId: '1', completedPrevious: false, repeated: true }, 1_200), false);
+    assert.equal(isLanding(opened, { trackId: '1', completedPrevious: false }, 60_000), false);
+    assert.equal(isLanding(null, { trackId: '1', completedPrevious: false }, 1_200), false);
   });
 });

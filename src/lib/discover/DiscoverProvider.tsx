@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { useLanguage } from '../i18n/index';
 import { usePlayerActions, usePlayerState } from '../player/PlayerProvider';
@@ -64,9 +64,11 @@ export function DiscoverProvider({ children }: { children: ReactNode }) {
   const { playQueue, addToQueue, removeTrackFromQueue } = usePlayerActions();
   const currentId = current?.id ?? null;
 
+  // Made again only for another queue: with the whole library shuffled, each play and pause went through every song of it.
+  const queueIds = useMemo(() => queue.map((track) => track.id), [queue]);
   useEffect(() => {
-    playerChanged(currentId, queue.map((track) => track.id), isPlaying);
-  }, [currentId, queue, isPlaying]);
+    playerChanged(currentId, queueIds, isPlaying);
+  }, [currentId, queueIds, isPlaying]);
 
   useEffect(() => {
     const detach = attachPlayer({

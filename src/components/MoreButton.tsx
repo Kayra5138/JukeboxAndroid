@@ -1,3 +1,4 @@
+import { TOUCH, SPACE } from '../lib/theme/measures';
 import { StyleSheet, View } from 'react-native';
 
 import { Pressable } from './Pressable';
@@ -43,6 +44,7 @@ export function MoreButton({ onPress }: { onPress: () => void }) {
 const SLOP = { top: 14, bottom: 14, left: 6, right: 10 };
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  hit: { width: 24, height: 32, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  // As wide as every other mark at the end of a row (`RowControl`), so that it needs no box of its own round it.
+  hit: { width: TOUCH.row, height: TOUCH.small, alignItems: 'center', justifyContent: 'center', gap: SPACE.xxs },
   dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.textMuted },
 }));

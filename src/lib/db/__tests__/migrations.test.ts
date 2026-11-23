@@ -705,3 +705,17 @@ describe('album artists, covers taken off, and covers shared by a record', () =>
     );
   });
 });
+
+describe('opening a database that is up to date', () => {
+  it('leaves the tables alone, and puts them back once the text of them is not what was last put in place', () => {
+    const database = open();
+    migrate(database);
+    database.exec('DROP TABLE settings');
+    migrate(database);
+    const there = () => database.prepare(`SELECT name FROM sqlite_master WHERE name = 'settings'`).get() != null;
+    assert.equal(there(), false, 'up to date and marked: the statements are not run');
+    database.exec('PRAGMA application_id = 0');
+    migrate(database);
+    assert.equal(there(), true, 'marked otherwise: they are');
+  });
+});

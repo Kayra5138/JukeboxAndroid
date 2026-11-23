@@ -1,16 +1,18 @@
 import { memo, useEffect, useRef } from 'react';
-import { AccessibilityInfo, ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native';
+import { Busy } from '../Busy';
 
 import { AlertIcon, MinusIcon, PlayIcon, PlayingIcon, PlusIcon, TickIcon } from '../Icons';
-import { Image } from '../Picture';
-import { Pressable } from '../Pressable';
+import { Artwork } from '../Artwork';
+import { MediaRow, RowControl } from '../MediaRow';
 import { SwipeRow } from '../SwipeRow';
 import { trackRowHeight, useTrackRowHeight } from '../TrackRow';
 import { ProgressRing } from './ProgressRing';
 import { rowLabel, rowShows, watchRow, type RowShows, type RowWatch } from './show';
 import { useDiscoverActions, useDiscoverEntry, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, useColours } from '../../lib/theme/index';
+import { ICON_SMALL, SPACE, TYPE } from '../../lib/theme/measures';
 import { haptic } from '../../lib/ui/haptics';
 
 /**
@@ -71,8 +73,6 @@ function Song({
   const t = useT();
   const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  const height = useDiscoverRowHeight();
   const said = t.discover.row;
   const shows = rowShows(entry, t);
   const { id } = entry;
@@ -89,9 +89,7 @@ function Song({
     exclude(id);
   };
 
-  const busy = shows.mark === 'queued' || shows.mark === 'working' || shows.mark === 'progress';
-  const lineStyle =
-    shows.tone === 'danger' ? styles.lineBad : shows.tone === 'accent' ? styles.lineChosen : styles.line;
+  const lineStyle = shows.tone === 'danger' ? styles.lineBad : shows.tone === 'accent' ? styles.lineChosen : null;
 
   return (
     <SwipeRow
@@ -108,111 +106,62 @@ function Song({
           : { label: said.swipeKeep, colour: c.successSoft, tint: c.success, onAct: keepFelt }
       }
       right={{ label: said.swipeExclude, colour: c.dangerSoft, tint: c.danger, onAct: excludeFelt }}>
-      <View style={[styles.row, { height }, shows.chosen && styles.rowChosen, shows.gone && styles.rowGone]}>
-        {/*
-          The song is the button, and the two beside it are not inside it: a
-          press on either would otherwise be the row's as well, and its wash
-          would spread under them.
-        */}
-        <Pressable
-          android_ripple={pressed}
-          style={styles.song}
-          disabled={shows.gone}
-          onPress={() => play(id)}
-          onLongPress={() => {
-            haptic('holds', 'hold');
-            onMenu(id);
-          }}
-          accessibilityRole="button"
-          /*
-            Everything the row shows, as words. A label takes the place of
-            what is inside a button, so one that was only the title left the
-            artist, the reason and the state unsaid.
-          */
-          accessibilityLabel={rowLabel(entry, t)}
-          accessibilityHint={shows.gone ? undefined : said.hint}
-          accessibilityState={{ busy, selected: entry.isPlaying, disabled: shows.gone }}
-          /*
-            A long press and a pull aside are not things a screen reader's
-            user can be expected to find by trying. Named, they are in the
-            reader's own list of what can be done here.
-          */
-          accessibilityActions={
-            shows.gone
-              ? undefined
-              : [
-                  { name: 'longpress', label: said.menu },
-                  { name: 'keep', label: said.keep },
-                  { name: 'exclude', label: said.exclude },
-                  { name: 'neverArtist', label: t.discover.taste.neverArtistLabel(entry.artist) },
-                ]
-          }
-          onAccessibilityAction={(event) => {
-            const name = event.nativeEvent.actionName;
-            if (name === 'longpress') onMenu(id);
-            else if (name === 'keep') keep(id);
-            else if (name === 'exclude') exclude(id);
-            else if (name === 'neverArtist') excludeArtist(id);
-          }}>
-          {/*
-            The cover the list came with, for as long as the song is on it.
-            The file that is fetched brings a picture of its own — a still
-            from the video — and a row that changed to it showed one sleeve
-            until the download landed and another after.
-          */}
-          {entry.coverUrl ? (
-            <Image source={{ uri: entry.coverUrl }} style={styles.art} contentFit="cover" transition={120} />
-          ) : (
-            <View style={[styles.art, styles.artEmpty]} />
-          )}
-
-          <View style={styles.text}>
-            <Text style={[styles.title, entry.isPlaying && styles.titlePlaying]} numberOfLines={1}>
-              {entry.title}
-            </Text>
-            <Text style={lineStyle} numberOfLines={1}>
-              {shows.line}
-            </Text>
-          </View>
-
-          <View style={styles.state}>
-            <Mark shows={shows} />
-            {shows.caption ? (
-              <Text style={styles.caption} numberOfLines={1}>
-                {shows.caption}
-              </Text>
-            ) : null}
-          </View>
-        </Pressable>
-
-        {/*
-          For whoever has not found that a row can be pulled aside, which is
-          most people the first week. Left out of what a screen reader goes
-          through: the song already offers both as actions of its own, and
-          three stops for every song is a list three times as long.
-        */}
-        {shows.gone ? null : (
+      <MediaRow
+        /*
+          The cover the list came with, for as long as the song is on it.
+          The file that is fetched brings a picture of its own -- a still
+          from the video -- and a row that changed to it showed one sleeve
+          until the download landed and another after.
+        */
+        lead={<Artwork uri={entry.coverUrl} />}
+        title={entry.title}
+        subtitle={lineStyle ? <Text style={lineStyle}>{shows.line}</Text> : shows.line}
+        playing={entry.isPlaying}
+        selected={shows.chosen}
+        off={shows.gone}
+        onPress={() => play(id)}
+        onLongPress={() => onMenu(id)}
+        holdLabel={said.menu}
+        // Everything the row shows, as words: a label takes the place of what is inside a button.
+        accessibilityLabel={rowLabel(entry, t)}
+        accessibilityHint={shows.gone ? undefined : said.hint}
+        actions={[
+          { name: 'keep', label: said.keep, run: () => keep(id) },
+          { name: 'exclude', label: said.exclude, run: () => exclude(id) },
+          { name: 'neverArtist', label: t.discover.taste.neverArtistLabel(entry.artist), run: () => excludeArtist(id) },
+        ]}
+        trailing={
           <>
-            <Pressable
-              android_ripple={pressed}
-              style={styles.act}
-              disabled={shows.keeping}
-              onPress={keepFelt}
-              accessible={false}
-              importantForAccessibility="no-hide-descendants">
-              {shows.keeping ? <ActivityIndicator size={16} color={c.textMuted} /> : <PlusIcon size={18} />}
-            </Pressable>
-            <Pressable
-              android_ripple={pressed}
-              style={styles.act}
-              onPress={excludeFelt}
-              accessible={false}
-              importantForAccessibility="no-hide-descendants">
-              <MinusIcon size={18} color={c.textMuted} />
-            </Pressable>
+            {/*
+              The mark over the length, both to the right edge, so that the
+              lengths stand in a column down the list as they do in the Library.
+            */}
+            <View style={styles.state}>
+              <Mark shows={shows} />
+              {shows.caption ? (
+                <Text style={styles.caption} numberOfLines={1}>
+                  {shows.caption}
+                </Text>
+              ) : null}
+            </View>
+            {/*
+              For whoever has not found that a row can be pulled aside, which
+              is most people the first week. Left out of what a screen reader
+              goes through: the song already offers both as actions of its own.
+            */}
+            {shows.gone ? null : (
+              <>
+                <RowControl hidden disabled={shows.keeping} onPress={keepFelt}>
+                  {shows.keeping ? <Busy size={ICON_SMALL} color={c.textMuted} /> : <PlusIcon size={MARK} />}
+                </RowControl>
+                <RowControl hidden onPress={excludeFelt}>
+                  <MinusIcon size={MARK} color={c.textMuted} />
+                </RowControl>
+              </>
+            )}
           </>
-        )}
-      </View>
+        }
+      />
     </SwipeRow>
   );
 }
@@ -237,7 +186,7 @@ function Mark({ shows }: { shows: RowShows }) {
       );
     case 'working':
       // Turned by the phone and not from here, like every spinner: nothing is done a frame at a time.
-      return <ActivityIndicator size={MARK} color={shows.chosen ? c.accent : c.textMuted} />;
+      return <Busy size={MARK} color={shows.chosen ? c.accent : c.textMuted} />;
     case 'ready':
       return <TickIcon size={MARK - 3} color={c.success} />;
     case 'playing':
@@ -266,48 +215,14 @@ function useAnnounced(entry: DiscoverEntryView): void {
   }, [entry, t]);
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 4,
-  },
-  shared: { flex: 1, minWidth: 0 },
-  // The wash a chosen row has in the Library, for the one somebody chose here.
-  rowChosen: { backgroundColor: c.accentSoft },
-  rowGone: { opacity: 0.5 },
-  song: {
-    flex: 1,
-    minWidth: 0,
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingLeft: 16,
-    paddingRight: 4,
-  },
-  // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  art: { width: 46, height: 46, borderRadius: 6 },
-  artEmpty: { backgroundColor: c.surface, ...outlined(c) },
-  text: { flex: 1, minWidth: 0, gap: 3 },
-  title: { color: c.text, fontSize: 15.5 },
-  // Heavier as well as coloured, as in the Library: not everybody is shown a colour.
-  titlePlaying: { color: c.accent, fontWeight: '600' },
-  line: { color: c.textMuted, fontSize: 12.5 },
-  lineChosen: { color: c.accent, fontSize: 12.5 },
-  lineBad: { color: c.danger, fontSize: 12.5 },
-  /*
-    The mark over the length, both to the right edge, so that the lengths
-    stand in a column down the list as they do in the Library. Wide enough
-    for `100%` and for a song an hour long, and no wider: what this takes,
-    the title loses.
-  */
-  state: { minWidth: 32, alignItems: 'flex-end', justifyContent: 'center', gap: 4 },
-  caption: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
-  /*
-    The full height of the row and most of a finger wide: narrow to look
-    at, because a title has to fit beside two of them, and as tall as there
-    is to aim at.
-  */
-  act: { width: 38, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' },
-}));
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    row: { height: DISCOVER_ROW_HEIGHT },
+    shared: { flex: 1, minWidth: 0 },
+    lineChosen: { color: c.accent },
+    lineBad: { color: c.danger },
+    // Wide enough for `100%` and for a song an hour long, and no wider: what this takes, the title loses.
+    state: { minWidth: SPACE.xl + SPACE.s, alignItems: 'flex-end', justifyContent: 'center', gap: SPACE.xs },
+    caption: { color: c.textMuted, fontSize: TYPE.hint, fontVariant: ['tabular-nums'] },
+  })
+);

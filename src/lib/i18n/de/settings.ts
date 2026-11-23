@@ -10,6 +10,7 @@ export const settings: Strings['settings'] = {
     look: 'Aussehen & Gefühl',
     sound: 'Klang',
     player: 'Player',
+    miniPlayer: 'Mini-Player',
     tapes: 'Kassetten',
     library: 'Bibliothek',
     downloads: 'Downloads & Entdecken',
@@ -21,6 +22,7 @@ export const settings: Strings['settings'] = {
     look: 'Design, Bewegung, Vibration und welche Ansichten die Bibliothek bietet.',
     sound: 'Equalizer und Effekte, Lautstärkeangleichung, Überblenden sowie Tempo und Tonhöhe.',
     player: 'Wie weit die Sprungtasten springen, was nach dem Ende der Warteschlange läuft und in welche Sprache Songtexte übersetzt werden.',
+    miniPlayer: 'Was die Leiste des laufenden Titels zeigt, ihre Tasten, ihr Aussehen und ihre Bedienung.',
     tapes: 'Intelligentes Zurückspulen, wie weit die Sprungtasten einer Kassette springen, und Podcasts nur über WLAN laden.',
     library: 'Der Ordner mit deiner Musik, Tags und Cover sowie Dateien, die derselbe Song sein könnten.',
     waiting: (count) => `${format.number(count)} offen`,
@@ -28,6 +30,19 @@ export const settings: Strings['settings'] = {
     data: 'Alles sichern oder ein Backup einspielen, Update-Suche und ListenBrainz (experimentell).',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: 'Scrollleiste', note: 'Die Leiste neben einer langen Liste, an der du sie greifen und weit springen kannst.', always: 'Immer', moving: 'Beim Scrollen', never: 'Nie' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: 'Vorschläge unter einer Liste', note: 'Unter den Titeln einer Liste weitere aus der Mediathek, die hineinpassen könnten, nach den Tags, auf die sich die Liste stützt.' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: 'Rückgängig nach dem Entfernen', note: 'Ein paar Sekunden lang, nachdem ein Titel aus einer Liste genommen, im Player losgelassen oder in Entdecken abgelehnt wurde, eine Taste, um ihn zurückzuholen.' },
+  search: {
+    open: 'Einstellungen durchsuchen',
+    title: 'Einstellungen durchsuchen',
+    placeholder: 'Ein Wort aus einer Einstellung',
+    none: (query: string) => `Keine Einstellung enthält „${query}“.`,
+  },
   language: {
     title: 'Sprache',
     note: 'Die Sprache der App. Sie richtet sich nicht nach der des Geräts.',
@@ -63,7 +78,6 @@ export const settings: Strings['settings'] = {
     saturation: 'Sättigung',
     lightness: 'Helligkeit',
     degrees: (value) => `${value}°`,
-    percent: (value) => `${value}${NNBSP}%`,
     hex: 'Farbcode',
     nudged: (colour) => `Wird als ${colour} angezeigt, damit alles darauf lesbar bleibt.`,
     note:
@@ -164,13 +178,11 @@ export const settings: Strings['settings'] = {
       sparks: 'Funken, die bei jedem Schlag von seinem Rand über den Player fliegen.',
       aurora: 'Wolken in den Farben des Covers hinter dem ganzen Player, jede wächst mit einem Teil des Klangs.',
     },
-    beats: 'Im Takt vibrieren',
-    beatsNote: 'Ein leichtes Klopfen bei jedem Schlag, solange der Player offen ist und Musik läuft. So leise, wie deine Vibrationseinstellungen es machen.',
   },
   still: {
     title: 'Weniger Bewegung',
     note:
-      'Für Geräte, bei denen Animationen ruckeln. Der Player erscheint, statt hochzugleiten, und das Spiel leuchtet nicht mehr auf, wenn ein Leben gewonnen oder verloren wird. Die Tasten selbst fallen weiter – das ist das Spiel, keine Dekoration.',
+      'Für Geräte, bei denen es ruckelt. Seiten und Fenster öffnen sich ohne Animation, Cover werden nicht eingeblendet, Schallplatte und Visualisierungen stehen still, und Glas wird ohne Unschärfe gezeichnet.',
   },
   scriptNames: { title: 'Namen in anderen Schriften', latin: 'Lateinisch', original: 'Original', note: 'Wenn eine Suche den Namen eines Titels in lateinischer Schrift und in seiner eigenen (Japanisch, Chinesisch, Koreanisch) gefunden hat, welchen die Bibliothek zeigt. Früher gesuchte Titel füllen sich bei der nächsten Suche.' },
   haptics: {
@@ -185,7 +197,9 @@ export const settings: Strings['settings'] = {
       custom: "Wähle unten, welche Momente vibrieren.",
     },
     strength: "Stärke",
-    strengthNote: "Zu spüren beim Loslassen. Telefone, deren Motor sich nicht abstufen lässt, behalten ihre eigene Stärke.",
+    strengthNote: "Zu spüren beim Loslassen. 100 % ist die Empfehlung; darüber werden dieselben Berührungen kräftiger, und über 200 % läuft der Motor so stark, wie er kann. Telefone, deren Motor sich nicht abstufen lässt, behalten bis dahin ihre eigene Stärke.",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "empfohlen",
     groupsHeading: "Was vibriert",
     groups: {
       holds: { title: "Halten und Ziehen", note: "Ein langes Drücken, eine angehobene Zeile, ein Finger über die Kästchen." },
@@ -202,9 +216,81 @@ export const settings: Strings['settings'] = {
     note:
       'Sie stehen am Ende jeder Titel- und Albumzeile und öffnen dasselbe Menü wie langes Drücken. Gedrückthalten funktioniert auch ohne sie.',
   },
+  miniPlayer: {
+    shows: 'Was sie zeigt',
+    progress: {
+      title: 'Fortschritt',
+      none: 'Keiner',
+      line: 'Linie',
+      fill: 'Füllung',
+      note: 'Wie weit der Titel ist: eine feine Linie am unteren Rand oder die ganze Leiste, die sich im Lauf des Titels füllt.',
+    },
+    line: {
+      title: 'Unter dem Namen',
+      artist: 'Künstler',
+      album: 'Album',
+      both: 'Künstler und Album',
+      left: 'Restzeit',
+      next: 'Als Nächstes',
+      note: 'Was in der zweiten Zeile steht.',
+    },
+    cover: {
+      title: 'Cover',
+      square: 'Eckig',
+      round: 'Rund',
+      record: 'Schallplatte',
+      note: 'Die Schallplatte dreht sich, während der Titel läuft.',
+    },
+    buttons: {
+      title: 'Tasten',
+      aside: 'Bis zu vier, in der hier gezeigten Reihenfolge.',
+      names: {
+        previous: 'Zurück',
+        playPause: 'Wiedergabe und Pause',
+        next: 'Weiter',
+        back: 'Zurückspringen',
+        forward: 'Vorspringen',
+        heart: 'Favorit',
+        shuffle: 'Zufällig',
+        repeat: 'Wiederholen',
+      },
+    },
+    handling: 'Bedienung',
+    swipe: {
+      title: 'Wischen für einen anderen Titel',
+      note: 'Seitlich gezogen geht sie zum vorigen oder nächsten Titel. Aus öffnet sie nur den Player.',
+    },
+    hold: {
+      title: 'Gedrückt halten öffnet',
+      none: 'Nichts',
+      menu: 'Das Menü des Titels',
+      queue: 'Die Warteschlange',
+      lyrics: 'Den Songtext',
+      note: 'Was langes Drücken auf den Titel in ihr tut.',
+    },
+    look: 'Aussehen',
+    floating: {
+      title: 'Schwebend',
+      note: 'Abgerundet und mit Abstand zu den Rändern statt über die ganze Breite.',
+    },
+    tint: {
+      title: 'Cover-Farbe',
+      note: 'In der Farbe des Covers des laufenden Titels getönt.',
+    },
+    leftHanded: {
+      title: 'Linkshändig',
+      note: 'Die Tasten links, der Titel rechts.',
+    },
+  },
   tabs: {
     title: 'Tabs',
-    searchNote: 'Entdecken und YouTube-Downloads sind auf diesem Tab und verschwinden mit ihm.',
+    notes: {
+      library: 'Deine Titel, Alben, Künstler, Kassetten und Ordner.',
+      lists: 'Deine Playlists, smarten Listen und Favoriten.',
+      search: 'Entdecken und Herunterladen von YouTube. Blendest du diesen Tab aus, verschwinden beide mit ihm.',
+      stats: 'Was du gehört hast, und deine Hörberichte.',
+      settings: 'Wie die App aussieht, klingt und sich verhält.',
+    },
     aside: 'Bibliothek und Einstellungen sind immer da.',
     names: 'Namen unter den Symbolen',
     namesNote: 'Aus zeigt die Leiste nur ihre Symbole und ist etwas niedriger. Im Querformat immer.',

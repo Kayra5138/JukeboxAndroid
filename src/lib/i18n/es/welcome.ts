@@ -88,6 +88,8 @@ export const welcome: Strings['welcome'] = {
     note:
       'Vuelve a mostrar Jukebox como el día en que lo instalaste: los primeros ajustes, la propuesta de buscar portadas y los consejos. Tu música, tus listas y tus ajustes se quedan como están.',
     again: 'Mostrar de nuevo',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: '¿Mostrar de nuevo el primer inicio?', body: 'Vuelven los primeros ajustes, la propuesta de buscar portadas y los consejos. Tu música, tus listas y tus ajustes se quedan como están.' },
   },
 
   discoverEarly:

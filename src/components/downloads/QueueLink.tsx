@@ -1,4 +1,5 @@
 import { Link } from 'expo-router';
+import { RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { useBatch } from './useBatch';
@@ -7,6 +8,7 @@ import { useT } from '../../lib/i18n/index';
 import { makeStyles, outlinedClip, usePressed } from '../../lib/theme/index';
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
 import { tallyOf } from '../../lib/youtube/queueView';
+import { Chevron } from '../settings/rows';
 
 /**
  * One row under the search results that says how the downloads stand and
@@ -43,7 +45,7 @@ export function QueueLink() {
           <Text style={styles.state} numberOfLines={1}>
             {state}
           </Text>
-          <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+          <Chevron />
         </View>
       </Pressable>
     </Link>
@@ -56,19 +58,18 @@ const useStyles = makeStyles((c) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: SPACE.m,
       minHeight: 52,
-      paddingHorizontal: 16,
-      marginTop: 26,
-      marginBottom: 24,
+      paddingHorizontal: SPACE.l,
+      marginTop: SPACE.xl,
+      marginBottom: SPACE.xl,
       backgroundColor: c.surface,
-      borderRadius: 14,
+      borderRadius: RADIUS.card,
       overflow: 'hidden',
       ...outlinedClip(c),
     },
-    title: { color: c.text, fontSize: 14.5, fontWeight: '500' },
-    value: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
-    state: { color: c.textSecondary, fontSize: 13.5, flexShrink: 1 },
-    chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
+    title: { color: c.text, fontSize: TYPE.body, fontWeight: '500' },
+    value: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, flexShrink: 1 },
+    state: { color: c.textSecondary, fontSize: TYPE.small, flexShrink: 1 },
   })
 );

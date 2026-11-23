@@ -52,14 +52,15 @@ class JukeboxShortcutWidget : AppWidgetProvider() {
      * the cover and two names, so it is left alone until one of those moves.
      */
     fun refresh(context: Context, state: NowPlaying = NowPlaying.read(context)) {
-      val shuffle = LibraryDatabase.shuffle(context)
-      val key = "${state.artworkPath}|${Localised.tag(context)}|${shuffle?.carTitle}|${shuffle?.widgetText}"
-      if (key == drawnFor) return
-      drawnFor = key
+      // Asked first, and the copy not opened at all, for the phones with no tile on them.
       val manager = AppWidgetManager.getInstance(context) ?: return
       val ids = runCatching {
         manager.getAppWidgetIds(ComponentName(context, JukeboxShortcutWidget::class.java))
-      }.getOrNull() ?: return
+      }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return
+      val shuffle = LibraryDatabase.shuffleWords(context)
+      val key = "${state.artworkPath}|${Localised.tag(context)}|${shuffle?.carTitle}|${shuffle?.widgetText}"
+      if (key == drawnFor) return
+      drawnFor = key
       for (id in ids) update(context, manager, state, id)
     }
 
@@ -108,7 +109,7 @@ class JukeboxShortcutWidget : AppWidgetProvider() {
       val all = words.getString(R.string.jukebox_auto_shuffle_all)
       val recent = words.getString(R.string.jukebox_auto_shuffle_recent)
       // What the app's shuffle button plays and says: the name of the list, the user's words, or only the icon.
-      val shuffle = LibraryDatabase.shuffle(context)
+      val shuffle = LibraryDatabase.shuffleWords(context)
       val shown = if (shuffle == null) all else shuffle.widgetText
       views.setTextViewText(R.id.jukebox_shortcut_all_label, shown ?: "")
       views.setViewVisibility(R.id.jukebox_shortcut_all_label, if (shown == null) View.GONE else View.VISIBLE)

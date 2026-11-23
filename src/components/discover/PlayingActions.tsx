@@ -1,14 +1,19 @@
 import { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { SPACE, TYPE } from '../../lib/theme/measures';
+import { View } from 'react-native';
+import { Busy } from '../Busy';
 
 import { AlertIcon, MinusIcon, PlusIcon, TickIcon } from '../Icons';
+import { SideButton, SideKept } from '../PlayerSide';
 import { Pressable } from '../Pressable';
 import { useDiscoverNotice } from './hooks';
 import { noticeAbout } from './show';
 import { useDiscoverActions, useDiscoverTrack, type DiscoverEntryView } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { useColours, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
+import { useUndoOffers } from '../../lib/ui/undo';
+import { Button } from '../Button';
 
 /**
  * Keep and exclude where a song is heard.
@@ -100,67 +105,38 @@ export function PlayerDiscoverSide({
   const { keep, exclude } = useDiscoverActions();
   const t = useT();
   const c = useColours();
-  const styles = useStyles();
-  const pressed = usePressed();
   const said = t.discover;
   if (!entry && !kept) return null;
-  const box = small ? styles.sideSmall : styles.side;
-  // Drawn at 44, or 40 on its side; reaching this much further is the 48 a
-  // finger is owed, without the name beside it giving up any room.
-  const slop = small ? 4 : 2;
-
-  if (!entry) {
-    // Kept: a tick where the button was, for as long as the song plays, and its room kept at the other end.
-    return side === 'keep' ? (
-      <View accessible accessibilityRole="text" accessibilityLabel={said.player.kept} style={box}>
-        <TickIcon size={18} color={c.success} />
-      </View>
-    ) : (
-      <View style={box} />
-    );
-  }
+  // Kept: a tick where the button was, for as long as the song plays, and its room kept at the other end.
+  if (!entry) return <SideKept small={small} label={side === 'keep' ? said.player.kept : undefined} />;
 
   if (side === 'exclude') {
     return (
-      <Pressable
-        android_ripple={pressed}
-        style={[box, styles.button]}
-        hitSlop={slop}
-        accessibilityRole="button"
-        accessibilityLabel={said.row.exclude}
+      <SideButton
+        small={small}
+        label={said.row.exclude}
         onPress={() => {
           haptic('results', 'reject');
           exclude(entry.id);
         }}>
         <MinusIcon size={18} />
-      </Pressable>
+      </SideButton>
     );
   }
 
-  const keeping = entry.keeping;
   return (
-    <Pressable
-      android_ripple={pressed}
-      style={[box, styles.button]}
-      hitSlop={slop}
-      accessibilityRole="button"
+    <SideButton
+      small={small}
       // A keep that failed is said here, where it was asked for; pressing again is trying again. So is
       // a file found to be another song when keep was pressed, while the right one is fetched.
-      accessibilityLabel={told ?? said.row.keep}
-      accessibilityState={{ busy: keeping, disabled: keeping }}
-      disabled={keeping}
+      label={told ?? said.row.keep}
+      busy={entry.keeping}
       onPress={() => {
         haptic('results', 'confirm');
         keep(entry.id);
       }}>
-      {keeping ? (
-        <ActivityIndicator size={16} color={c.textMuted} />
-      ) : failed ? (
-        <AlertIcon size={18} color={c.danger} />
-      ) : (
-        <PlusIcon size={18} />
-      )}
-    </Pressable>
+      {failed ? <AlertIcon size={18} color={c.danger} /> : <PlusIcon size={18} />}
+    </SideButton>
   );
 }
 
@@ -175,23 +151,23 @@ export function PlayerDiscoverUndo() {
   const notice = useDiscoverNotice();
   const { undo } = useDiscoverActions();
   const t = useT();
-  const styles = useStyles();
-  const pressed = usePressed();
-  if (!notice || notice.kind !== 'excluded' || !notice.canUndo) return null;
+  // Not where offers to have something back were turned off: Settings → Look & feel.
+  const offers = useUndoOffers();
+  if (!offers || !notice || notice.kind !== 'excluded' || !notice.canUndo) return null;
   return (
-    <Pressable
-      android_ripple={pressed}
-      accessibilityRole="button"
+    // A pill of its own under the player's row of buttons, laid over what is below it: nothing moves for it.
+    <Button
+      kind="secondary"
+      shape="pill"
+      size="small"
+      label={t.discover.notice.undo}
       // Which song, for somebody who cannot see that the one playing has changed.
       accessibilityLabel={`${notice.text} ${t.discover.notice.undo}`}
-      hitSlop={2}
-      style={styles.undo}
       onPress={() => {
         haptic('choices', 'tick');
         undo();
-      }}>
-      <Text style={styles.undoLabel}>{t.discover.notice.undo}</Text>
-    </Pressable>
+      }}
+    />
   );
 }
 
@@ -237,29 +213,8 @@ export function PlayingKeep({
         haptic('results', 'confirm');
         keep(entry.id);
       }}>
-      {entry.keeping ? <ActivityIndicator size={16} color={c.textMuted} /> : <PlusIcon size={18} />}
+      {entry.keeping ? <Busy size={16} color={c.textMuted} /> : <PlusIcon size={18} />}
     </Pressable>
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  // The box the player's own small buttons have, so these are two more of them.
-  side: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  sideSmall: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  /*
-    Filled, where those are bare. A bare sign is a state, lit or not; these
-    are things to do, and are drawn as something to press.
-  */
-  button: { backgroundColor: c.surfaceRaised, ...outlined(c) },
-  // A pill of its own under the player's row of buttons, laid over what is below it: nothing moves for it.
-  undo: {
-    minHeight: 36,
-    paddingHorizontal: 16,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.surfaceRaised,
-    ...outlined(c),
-  },
-  undoLabel: { color: c.accent, fontSize: 13.5, fontWeight: '700' },
-}));

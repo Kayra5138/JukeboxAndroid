@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { LEADING, RADIUS, SPACE, TYPE } from '../lib/theme/measures';
 import { StyleSheet, Text } from 'react-native';
 
 import { Pressable } from './Pressable';
@@ -45,7 +46,7 @@ export function WrongDownloadsLine({ confirmed }: { confirmed: boolean }) {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  line: { paddingVertical: 2, borderRadius: 6 },
-  text: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
+  line: { paddingVertical: SPACE.xxs, borderRadius: RADIUS.cover },
+  text: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
   link: { color: c.accent, fontWeight: '600' },
 }));

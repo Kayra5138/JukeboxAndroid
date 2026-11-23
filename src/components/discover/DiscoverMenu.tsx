@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { LEADING, SPACE, TYPE } from '../../lib/theme/measures';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { CrossIcon, MinusIcon, PlayOutlineIcon, PlusIcon } from '../Icons';
@@ -32,7 +33,7 @@ export function DiscoverMenu({ id, onClose }: { id: string | null; onClose: () =
     if (gone) onClose();
   }, [gone, onClose]);
   return (
-    <Sheet visible={entry !== null} onClose={onClose}>
+    <Sheet visible={entry !== null} title={entry?.title ?? ''} onClose={onClose}>
       {entry ? <Entries entry={entry} onClose={onClose} /> : null}
     </Sheet>
   );
@@ -99,16 +100,16 @@ function Entries({ entry, onClose }: { entry: DiscoverEntryView; onClose: () => 
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  state: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
-  stateBad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+  state: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: SPACE.xs },
+  stateBad: { color: c.danger, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: SPACE.xs },
   why: {
-    gap: 4,
-    marginTop: 8,
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    gap: SPACE.xs,
+    marginTop: SPACE.s,
+    paddingHorizontal: SPACE.l,
+    paddingTop: SPACE.l,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: c.border,
   },
-  whyHeading: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginBottom: 2 },
-  whyLine: { color: c.textSecondary, fontSize: 13.5, lineHeight: 19 },
+  whyHeading: { color: c.textFaint, fontSize: TYPE.label, fontWeight: '600', letterSpacing: 0.8, marginBottom: SPACE.xxs },
+  whyLine: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small },
 }));

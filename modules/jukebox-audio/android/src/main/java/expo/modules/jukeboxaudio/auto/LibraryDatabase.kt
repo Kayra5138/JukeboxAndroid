@@ -58,12 +58,45 @@ internal object LibraryDatabase {
     return next.renameTo(file(context))
   }
 
+  /**
+   * Which copy is in place, in a few characters: it is replaced whole (see
+   * [adopt]), so a new one has a new date. For what is worked out from it
+   * and kept, to know when to work it out again.
+   */
+  fun version(context: Context): String {
+    val target = file(context)
+    return "${target.lastModified()}:${target.length()}"
+  }
+
   private fun <T> read(context: Context, fallback: T, body: (SQLiteDatabase) -> T): T =
     runCatching {
       val target = file(context)
       if (!target.isFile) return fallback
       SQLiteDatabase.openDatabase(target.path, null, SQLiteDatabase.OPEN_READONLY).use(body)
     }.getOrDefault(fallback)
+
+  /** What the app knows of a song beyond what its file says: see [described]. */
+  data class Described(val title: String?, val artist: String?, val album: String?, val albumArtist: String?, val genre: String?)
+
+  /**
+   * A song as a lookup or a hand left it, and its genre the way the app has
+   * it: the one written down for it, or else the first of its tags. Null
+   * where the copy has nothing on it.
+   */
+  fun described(context: Context, trackId: String): Described? = read(context, null as Described?) { database ->
+    fun row(columns: String) = database.rawQuery(
+      "SELECT $columns FROM track_metadata WHERE track_id = ? AND status != 'not_found'",
+      arrayOf(trackId)
+    ).use { cursor -> if (cursor.moveToFirst()) Array(cursor.columnCount) { cursor.getString(it) } else null }
+    // A copy made before the genre went across has no such column.
+    val found = runCatching { row("title, artist, album, album_artist, genre") }.getOrElse { row("title, artist, album, album_artist") }
+    val tag = database.rawQuery("SELECT tag FROM track_tags WHERE track_id = ? ORDER BY position LIMIT 1", arrayOf(trackId))
+      .use { if (it.moveToFirst()) it.getString(0) else null }
+    if (found == null && tag == null) return@read null
+    fun given(text: String?) = text?.takeIf { it.isNotBlank() }
+    Described(given(found?.getOrNull(0)), given(found?.getOrNull(1)), given(found?.getOrNull(2)), given(found?.getOrNull(3)),
+      given(found?.getOrNull(4)) ?: given(tag))
+  }
 
   /** The folder the library is read from, defaulting the way the app does. */
   fun libraryRoot(context: Context): String = read(context, "Music") { database ->
@@ -155,14 +188,22 @@ internal object LibraryDatabase {
   data class Shuffle(val ids: List<String>, val carTitle: String, val widgetText: String?)
 
   fun shuffle(context: Context): Shuffle? = read(context, null) { database ->
-    val words = database.rawQuery("SELECT car_title, widget_text FROM shuffle_words", null).use { cursor ->
-      if (cursor.moveToFirst()) (cursor.getString(0) ?: "") to (if (cursor.isNull(1)) null else cursor.getString(1)) else null
-    } ?: return@read null
+    val words = wordsOf(database) ?: return@read null
     val ids = database.rawQuery("SELECT track_id FROM shuffle_tracks ORDER BY position", null).use { cursor ->
       buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
     }
-    Shuffle(ids, words.first, words.second)
+    Shuffle(ids, words.carTitle, words.widgetText)
   }
+
+  /** What the shuffle button says, without the songs it plays: [Shuffle], for what shows only its words. */
+  data class ShuffleWords(val carTitle: String, val widgetText: String?)
+
+  fun shuffleWords(context: Context): ShuffleWords? = read(context, null) { wordsOf(it) }
+
+  private fun wordsOf(database: SQLiteDatabase): ShuffleWords? =
+    database.rawQuery("SELECT car_title, widget_text FROM shuffle_words", null).use { cursor ->
+      if (cursor.moveToFirst()) ShuffleWords(cursor.getString(0) ?: "", if (cursor.isNull(1)) null else cursor.getString(1)) else null
+    }
 
   /**
    * The songs set aside on the phone, by id: kept out of the car's Tracks and

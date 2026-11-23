@@ -9,7 +9,7 @@ import { subscriptions, type Subscription } from './store.ts';
  * fetched by itself or by hand, and before it was followed too.
  */
 export function seriesFolderOf(show: Pick<Subscription, 'title'> & { folder?: string }, root = libraryRoot()): string {
-  return folderKey(tapeFolderOf(root, show.folder ?? show.title)).toLocaleLowerCase();
+  return folderKey(tapeFolderOf(root, show.folder ?? show.title)).toLowerCase();
 }
 
 /** The followed podcasts, by the folder their episodes are in. */
@@ -20,7 +20,7 @@ export function seriesByFolder(followed: readonly Subscription[] = subscriptions
 
 /** The followed podcast [track] is an episode of, or null. */
 export function seriesOf(track: { folder?: string | null }, followed?: ReadonlyMap<string, Subscription>): Subscription | null {
-  const key = folderKey(track.folder ?? '').toLocaleLowerCase();
+  const key = folderKey(track.folder ?? '').toLowerCase();
   if (!key) return null;
   return (followed ?? seriesByFolder()).get(key) ?? null;
 }

@@ -9,7 +9,7 @@ import {
 } from '../../db/playlists.ts';
 import { libraryRoot, scanEverything } from '../../media/library.ts';
 import { withMetadata, type EnrichedTrack } from '../../media/merge.ts';
-import { listMemberIds, type ListSource } from '../../lists/memberIds.ts';
+import { listMemberIds, statsOnce, type ListSource } from '../../lists/memberIds.ts';
 import { songFinder, type LibrarySong, type NamedSong } from '../../history/import.ts';
 import { readAppleXml } from '../appleXml.ts';
 import { readSpotifyLists } from '../spotify.ts';
@@ -327,8 +327,9 @@ export async function exportAllLists(
   const names = fileNamesFor(all.map((list) => list.name), untitled);
   const texts: string[] = [];
   let left = 0;
+  const stats = statsOnce();
   for (const list of all) {
-    const members = listMemberIds({ kind: 'list', id: list.id }, library.tracks);
+    const members = listMemberIds({ kind: 'list', id: list.id }, library.tracks, stats);
     const out = written(list.name, members?.ids ?? [], library, style);
     texts.push(out.text);
     left += out.left;

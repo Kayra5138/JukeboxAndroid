@@ -1,4 +1,4 @@
-import { useMemo, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 
 import { readSetting, SETTINGS, writeSetting } from '../db/index';
 import type { EnrichedTrack } from '../media/enriched';
@@ -60,7 +60,8 @@ let kept: { tracks: readonly EnrichedTrack[]; apart: ReadonlySet<string>; groups
 /** The copies in [tracks], worked out again only when the tracks or the answers are not the ones last asked about. */
 function copiesIn(tracks: readonly EnrichedTrack[], said: ReadonlySet<string>): EnrichedTrack[][] {
   if (kept && kept.tracks === tracks && kept.apart === said) return kept.groups;
-  const groups = findCopies(tracks, said);
+  // Songs only: a tape is no song's copy, and none is offered to be deleted as one.
+  const groups = findCopies(tracks.filter((track) => !isTape(track)), said);
   kept = { tracks, apart: said, groups };
   return groups;
 }
@@ -72,7 +73,6 @@ function copiesIn(tracks: readonly EnrichedTrack[], said: ReadonlySet<string>): 
 export function useCopies(): EnrichedTrack[][] {
   const tracks = useLibraryTracks();
   const said = useSyncExternalStore(subscribe, apartNow);
-  // Songs only: a tape is no song's copy, and none is offered to be deleted as one.
-  const music = useMemo(() => tracks.filter((track) => !isTape(track)), [tracks]);
-  return copiesIn(music, said);
+  // Kept by the library every screen holds, the same array for all who ask: each with its own, they put each other out.
+  return copiesIn(tracks, said);
 }

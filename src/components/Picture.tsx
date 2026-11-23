@@ -4,6 +4,7 @@ import type { Ref } from 'react';
 import { useCoverAt } from '../lib/media/thumbs';
 
 import { useTheme } from '../lib/theme/index';
+import { useMotionReduced } from '../lib/ui/motion';
 
 /**
  * The app's `Image`: expo-image's, made afresh when the theme becomes a
@@ -33,11 +34,17 @@ import { useTheme } from '../lib/theme/index';
   the small copy of it (see lib/media/thumbs), not read whole for a few
   dozen points of screen.
 */
-export function Image({ drawnAt, ...props }: ImageProps & { ref?: Ref<Plain>; drawnAt?: number }) {
+/*
+  Nor does it fade in while the decoration is held still: a wall of covers
+  flung along is dozens of pictures fading in at once, every frame of each.
+*/
+export function Image({ drawnAt, transition, ...props }: ImageProps & { ref?: Ref<Plain>; drawnAt?: number }) {
   const id = useTheme().id;
+  const still = useMotionReduced();
+  const fade = still ? 0 : transition;
   const given = typeof props.source === 'object' && props.source && !Array.isArray(props.source) && 'uri' in props.source ? props.source.uri : undefined;
   const uri = useCoverAt(given, drawnAt);
-  if (drawnAt == null || given == null) return <Plain key={id} {...props} />;
+  if (drawnAt == null || given == null) return <Plain key={id} {...props} transition={fade} />;
   // Its place kept, empty, while the copy is being made.
-  return <Plain key={id} {...props} source={uri ? { uri } : null} />;
+  return <Plain key={id} {...props} transition={fade} source={uri ? { uri } : null} />;
 }

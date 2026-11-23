@@ -1,7 +1,7 @@
 import { splitCredit } from '../metadata/credit.ts';
 import { canonicalLabel, foldForMatch } from '../metadata/text.ts';
 import type { EnrichedTrack } from './enriched.ts';
-import { compareFolded, compareNames } from './sort.ts';
+import { compareNames, rankKey } from './sort.ts';
 
 /**
  * Records, assembled from what the tracks say about themselves.
@@ -226,14 +226,12 @@ export function albumsOf(tracks: readonly EnrichedTrack[]): Album[] {
   */
   const filed = albums.map((album) => ({
     album,
-    artist: canonicalLabel(album.artist ?? ''),
-    name: canonicalLabel(album.name),
+    artist: rankKey(canonicalLabel(album.artist ?? '')),
+    name: rankKey(canonicalLabel(album.name)),
   }));
+  const byKey = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
   filed.sort(
-    (left, right) =>
-      compareFolded(left.artist, right.artist) ||
-      compareFolded(left.name, right.name) ||
-      (left.album.key < right.album.key ? -1 : left.album.key > right.album.key ? 1 : 0)
+    (left, right) => byKey(left.artist, right.artist) || byKey(left.name, right.name) || byKey(left.album.key, right.album.key)
   );
   return filed.map((entry) => entry.album);
 }
@@ -425,9 +423,9 @@ export function orderWithin(tracks: EnrichedTrack[]): EnrichedTrack[] {
   // Every one of these is compared by name, so each is folded once and kept.
   const unplaced = rest.map((track) => ({
     track,
-    name: canonicalLabel(track.filename ?? track.title),
+    name: rankKey(canonicalLabel(track.filename ?? track.title)),
   }));
-  unplaced.sort((left, right) => compareFolded(left.name, right.name));
+  unplaced.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 
   return [...numbered, ...unplaced.map((entry) => entry.track)];
 }

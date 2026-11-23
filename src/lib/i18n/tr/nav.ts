@@ -19,4 +19,10 @@ export const nav: Strings['nav'] = {
   albumRest: 'Albümün geri kalanı',
   customTheme: 'Özel tema',
   downloads: 'İndirmeler',
+  album: 'Albüm',
+  artist: 'Sanatçı',
+  folder: 'Klasör',
+  list: 'Liste',
+  smartList: 'Akıllı liste',
+  tag: 'Etiket',
 };

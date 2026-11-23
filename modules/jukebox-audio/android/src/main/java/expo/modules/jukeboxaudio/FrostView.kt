@@ -131,20 +131,33 @@ class FrostView(context: Context, appContext: AppContext) : ExpoView(context, ap
     invalidate()
   }
 
+  /*
+    Told of every drawing of the window through this view's own observer,
+    which is the window's while it is in one and is the one it is taken off
+    again: the target's could be another by the time this was let go of,
+    one the listener was never taken off, holding this view for good.
+  */
+  private var listening = false
+
+  private fun listen(on: Boolean) {
+    if (on == listening) return
+    listening = on
+    if (on) viewTreeObserver.addOnPreDrawListener(redraw) else viewTreeObserver.removeOnPreDrawListener(redraw)
+  }
+
   private fun attachTarget() {
-    target?.viewTreeObserver?.removeOnPreDrawListener(redraw)
     target = targetId?.let { runCatching { appContext.findView<FrostTargetView>(it) }.getOrNull() }
-    if (isAttachedToWindow) target?.viewTreeObserver?.addOnPreDrawListener(redraw)
+    listen(isAttachedToWindow && target != null)
     invalidate()
   }
 
   override fun onAttachedToWindow() {
     super.onAttachedToWindow()
-    if (target == null) attachTarget() else target?.viewTreeObserver?.addOnPreDrawListener(redraw)
+    if (target == null) attachTarget() else listen(true)
   }
 
   override fun onDetachedFromWindow() {
-    target?.viewTreeObserver?.removeOnPreDrawListener(redraw)
+    listen(false)
     super.onDetachedFromWindow()
   }
 
@@ -162,8 +175,14 @@ class FrostView(context: Context, appContext: AppContext) : ExpoView(context, ap
       // Room round the strip for the blur to draw from, as it would have had in the whole of the list.
       val reach = radius
       val full = Build.VERSION.SDK_INT < 31
-      // On 10 and 11 the strip at its full size, to be softened from ([Softener]); from 12 at half, to be halved.
-      val scale = if (full) 1f else 2f
+      /*
+        The strip at half its size, to be halved further from 12 and softened
+        on 10 and 11 ([Softener]). Those two once had it at its full size, a
+        picture four times the pixels, and with the softening's own pictures
+        about it some three times what 12 draws for the same bar, every frame
+        of a scroll, on the phones least able to.
+      */
+      val scale = 2f
       val wideAt = ceil((width + reach * 2) / scale).toInt()
       val highAt = ceil((height + reach * 2) / scale).toInt()
       strip.setPosition(0, 0, wideAt, highAt)
@@ -200,7 +219,9 @@ class FrostView(context: Context, appContext: AppContext) : ExpoView(context, ap
       canvas.clipRect(0, 0, width, height)
       canvas.translate(-reach, -reach)
       if (full) {
-        softener!!.draw(canvas, strip, wideAt, highAt, radius, null)
+        // Drawn at its own size, which is half the bar's: twice that here, and half as far out of focus there.
+        canvas.scale(scale, scale)
+        softener!!.draw(canvas, strip, wideAt, highAt, radius / scale, null)
       } else {
         strip.setUseCompositingLayer(true, smooth)
         val small = halve(eighth!!, halve(quarter!!, strip, wideAt, highAt), ceil(wideAt / 2f).toInt(), ceil(highAt / 2f).toInt())

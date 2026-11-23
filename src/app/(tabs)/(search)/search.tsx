@@ -1,24 +1,30 @@
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../../../components/Frosted';
+import { Note } from '../../../components/Note';
+import { ScreenState } from '../../../components/ScreenState';
+import { SectionLabel } from '../../../components/settings/rows';
 import { SearchField, type SearchBox } from '../../../components/SearchField';
+import { Button, TextButton } from '../../../components/Button';
+import { jobState, Searching, VideoRow } from '../../../components/downloads/VideoResults';
+import { DownloadIcon, PlayIcon } from '../../../components/Icons';
 import { usePageSides, WithNowPlaying } from '../../../components/NowPlayingBar';
 import { BarsOver, topGlass, useLaidOver, useUnderBars } from '../../../components/UnderBars';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { DiscoverPanel } from '../../../components/DiscoverPanel';
 import { QueueLink } from '../../../components/downloads/QueueLink';
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { Image } from '../../../components/Picture';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
-import { Pressable } from '../../../components/Pressable';
+import { FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { Segmented } from '../../../components/Segmented';
 import { useT } from '../../../lib/i18n/index';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../../../lib/theme/index';
-import { useColumnsInSight } from '../../../lib/ui/tabOpen';
+import { makeStyles, scene } from '../../../lib/theme/index';
+import { LEADING, SPACE, TYPE } from '../../../lib/theme/measures';
+import { useLandscape } from '../../../lib/ui/layout';
+import { useColumnsInSight, useTabOpen } from '../../../lib/ui/tabOpen';
 import { youtubeError } from '../../../lib/youtube/errors';
 import { noteError } from '../../../lib/support/errorLogStore';
 import { downloads } from '../../../lib/youtube/native';
 import { useDownloads } from '../../../lib/youtube/DownloadsProvider';
-import { durationLabel, isActive, jobForVideo, statusLabel, type AudioFormat, type YouTubeVideo, type YouTubeResult } from '../../../lib/youtube/types';
+import { isActive, isListenJob, jobForVideo, statusLabel, type AudioFormat, type YouTubeVideo, type YouTubeResult } from '../../../lib/youtube/types';
 import { ownedVideos } from '../../../lib/youtube/owned';
 import { useLibraryTracks } from '../../../lib/library/useLibrary';
 import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../../lib/ui/lists';
@@ -34,28 +40,37 @@ const lookUp = (playlist: boolean, text: string, id: string) =>
   playlist ? downloads!.playlistAsync(text, id) : downloads!.searchAsync(text, id);
 
 export default function YouTubeScreen() {
-  const { jobs, error, refresh, enqueue, enqueueBatch } = useDownloads();
-  const downloadJobs = jobs.filter((job) => !job.video.listen);
-  const listenJobs = jobs.filter((job) => job.video.listen === true);
+  const { jobs: jobsNow, error, refresh, enqueue, enqueueBatch } = useDownloads();
+  /*
+    The downloads as they were when the tab was last open, while it is not:
+    told of them every second something downloads, the whole tab was drawn
+    again behind whichever one was in sight.
+  */
+  const open = useTabOpen();
+  const [jobsSeen, setJobsSeen] = useState(jobsNow);
+  if (open && jobsSeen !== jobsNow) setJobsSeen(jobsNow);
+  const jobs = open ? jobsNow : jobsSeen;
+  const downloadJobs = jobs.filter((job) => !isListenJob(job));
+  const listenJobs = jobs.filter((job) => isListenJob(job));
   const listeningTo = useSyncExternalStore(listening.subscribe, listening.get);
   const libraryTracks = useLibraryTracks();
   const insets = useSafeAreaInsets();
+  const landscape = useLandscape();
   const sides = usePageSides();
   /*
     In a theme of glass the switches along the top are laid over what is
     below them, which runs on under them, and the bars at the foot over the
     foot of it: both lists keep clear of the two by that much.
   */
-  const top = useLaidOver();
+  // Upright, on up behind the clock: see `useLaidOver`.
+  const top = useLaidOver({ clock: true });
   // The results out of focus behind the row of modes, where it is laid over them: see `Frosted`.
   const scene = useOwnScene();
   const frosted = useFrosted(top.laid ? scene.target : null);
   const under = useUnderBars({ player: true });
   const columns = useColumnsInSight();
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.search;
   const params = useLocalSearchParams<{ mode?: string; q?: string; run?: string }>();
   const [mode, setMode] = useState<'discover' | 'videos' | 'playlist'>('discover');
@@ -94,7 +109,8 @@ export default function YouTubeScreen() {
   */
   const [openedFrom, setOpenedFrom] = useState<{ query: string; results: YouTubeResult[] } | null>(null);
 
-  const search = async (override?: string, fromResults = false) => {
+  // [as]: the mode searched in, where it is being set in the same breath and this drawing still has the one before.
+  const search = async (override?: string, fromResults = false, as: typeof mode = mode) => {
     const text = (override ?? query).trim();
     if (override) setQuery(override);
     if (!fromResults) setOpenedFrom(null);
@@ -105,7 +121,7 @@ export default function YouTubeScreen() {
     setSearched(false);
     setResults([]);
     // By what is searched for and not by the tab: a search asked for from the library may come while Discover is the one open.
-    const cacheKey = `${mode === 'playlist' ? 'playlist' : 'videos'}:${text}`;
+    const cacheKey = `${as === 'playlist' ? 'playlist' : 'videos'}:${text}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.at < 5 * 60_000) {
       setResults(cached.videos); setSearched(true); return;
@@ -115,7 +131,7 @@ export default function YouTubeScreen() {
     setSearching(true);
     // Chosen out here: the React Compiler cannot yet read a choice made
     // inside a `try`, and leaves the whole screen alone for one.
-    const playlist = mode === 'playlist';
+    const playlist = as === 'playlist';
     try {
       const videos = await lookUp(playlist, text, id);
       // Superseded or stopped, and whoever did that has already tidied up.
@@ -146,7 +162,7 @@ export default function YouTubeScreen() {
     if (!params.q) return;
     setMode('videos');
     setQuery(params.q);
-    if (params.run) void search(params.q);
+    if (params.run) void search(params.q, false, 'videos');
   }, [params.q, params.run]);
 
   /** Back to the results [was], which the open list came from. */
@@ -223,29 +239,38 @@ export default function YouTubeScreen() {
 
   if (!downloads) return (
     <View style={styles.unavailable}>
-      <Text style={styles.heading}>{said.unavailable.heading}</Text>
-      <Text style={styles.muted}>{said.unavailable.body}</Text>
+      <ScreenState kind="empty" title={said.unavailable.heading} text={said.unavailable.body} />
     </View>
   );
 
   return (
     <WithNowPlaying style={styles.screen}>
-    <View style={[styles.inside, { paddingTop: insets.top, paddingLeft: sides.left, paddingRight: sides.right }]}>
+    <View style={[styles.inside, { paddingTop: landscape || top.clock > 0 ? 0 : insets.top, paddingLeft: sides.left, paddingRight: sides.right }]}>
       <GlassScene scene={scene}>
       <View
-        style={[styles.modeRow, top.laid && [styles.modeRowOver, { top: insets.top, left: sides.left, right: sides.right }], frosted && styles.clear]}
+        style={[
+          styles.modeRow,
+          // Sideways, hard under the strip across the top, with the little room under it inside: no band of another colour between.
+          landscape && { paddingTop: insets.top + SPACE.s },
+          top.clock > 0 && { paddingTop: top.clock + SPACE.m },
+          top.laid && [styles.modeRowOver, { top: landscape || top.clock > 0 ? 0 : insets.top, left: sides.left, right: sides.right }],
+          frosted && styles.clear,
+        ]}
         onLayout={top.onLayout}>
         {frosted && scene.target ? <Frost target={scene.target} edge="bottom" /> : null}
         {/*
           A tab apart from the two beside it, standing for a screen of its own
-          rather than a way of searching: filled while it is open, and no wash
-          under the finger, like the two it stands with.
+          rather than a way of searching: a tray of its own, marked while it is
+          open, the size of the two it stands with.
         */}
-        <Pressable accessibilityRole="tab" accessibilityState={{ selected: mode === 'discover' }}
-          style={[styles.discoverTab, mode === 'discover' && styles.discoverOn]}
-          onPress={() => { stopSearch(); setOpenedFrom(null); setMode('discover'); }}>
-          <Text style={mode === 'discover' ? styles.discoverLabelOn : styles.discoverLabel}>{said.modes.discover}</Text>
-        </Pressable>
+        <Segmented
+          role="tab"
+          // As wide as its word: alone in its tray, sharing the row would have it take all of it.
+          layout="fit"
+          options={[{ value: 'discover', label: said.modes.discover }]}
+          value={mode === 'discover' ? 'discover' : null}
+          onChange={() => { stopSearch(); setOpenedFrom(null); setMode('discover'); }}
+        />
         <View style={styles.downloadModes}>
           <Text style={styles.downloadHeading}>{said.modes.download}</Text>
           {/*
@@ -281,31 +306,22 @@ export default function YouTubeScreen() {
         columnWrapperStyle={columns > 1 ? styles.resultColumns : undefined}
         keyExtractor={(video) => video.id}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.content, { paddingTop: 20 + top.height, paddingBottom: 32 + under.bottom }]}
+        contentContainerStyle={[styles.content, { paddingTop: SPACE.l + top.height, paddingBottom: 32 + under.bottom }]}
         ListHeaderComponent={<>
           {openedFrom ? (
-            <Pressable android_ripple={pressed} accessibilityRole="button" hitSlop={8} style={styles.backLink} onPress={() => backTo(openedFrom)}>
-              <Text style={styles.link}>{`‹ ${said.backToResults}`}</Text>
-            </Pressable>
+            <TextButton label={`‹ ${said.backToResults}`} size="body" onPress={() => backTo(openedFrom)} style={styles.backLink} />
           ) : null}
           <Text style={styles.intro}>{mode === 'playlist' ? said.intro.playlist : said.intro.videos}</Text>
-          <View style={styles.searchRow}>
-            {/* The library's own box, cross and all. */}
-            <SearchField
-              ref={searchBox}
-              style={styles.input}
-              accessibilityLabel={mode === 'playlist' ? said.inputLabel.playlist : said.inputLabel.videos}
-              value={query}
-              onChangeText={setQuery}
-              placeholder={mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos}
-              maxLength={500}
-              onSubmitEditing={() => void search()}
-            />
-            <Pressable android_ripple={pressed} accessibilityRole="button" style={[styles.searchButton, !query.trim() && styles.searchButtonOff]}
-              disabled={!query.trim()} onPress={() => void search()}>
-              <Text style={!query.trim() ? styles.darkTextOff : styles.darkText}>{t.common.search}</Text>
-            </Pressable>
-          </View>
+          {/* The library's own box, cross and all. */}
+          <SearchField
+            ref={searchBox}
+            accessibilityLabel={mode === 'playlist' ? said.inputLabel.playlist : said.inputLabel.videos}
+            value={query}
+            onChangeText={setQuery}
+            placeholder={mode === 'playlist' ? said.placeholder.playlist : said.placeholder.videos}
+            maxLength={500}
+            go={{ label: t.common.search, onPress: () => void search() }}
+          />
           <Segmented
             style={styles.formats}
             options={(['mp3', 'original'] as const).map((choice) => ({ value: choice, label: said.formats[choice] }))}
@@ -313,79 +329,53 @@ export default function YouTubeScreen() {
             onChange={setFormat}
           />
           <Text style={styles.hint}>{said.formatHint[format]}</Text>
-          {message || error ? <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>{message ?? youtubeError(error, said.failed.readReopen, t)}</Text> : null}
-          {searching ? <View style={styles.searching}>
-            <ActivityIndicator color={c.text} /><Text style={styles.muted}>{said.searching}</Text>
-            <Pressable android_ripple={pressed} accessibilityRole="button" onPress={stopSearch} style={styles.smallButton}><Text style={styles.link}>{t.common.cancel}</Text></Pressable>
-          </View> : null}
-          {results.length ? <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.results(Math.min(results.length, 500)))}</Text> : null}
+          {message || error ? <Note tone="bad" style={styles.bad}>{message ?? youtubeError(error, said.failed.readReopen, t)}</Note> : null}
+          {searching ? <Searching onCancel={stopSearch} /> : null}
+          {results.length ? <SectionLabel>{said.results(Math.min(results.length, 500))}</SectionLabel> : null}
           {mode === 'playlist' && results.length > 0 && results[0].kind !== 'playlist' ? <>
-            <Pressable android_ripple={pressed} accessibilityRole="button" disabled={adding !== null}
-              style={[styles.batch, adding !== null && styles.disabled]} onPress={() => void addPlaylist()}>
-              <Text style={styles.batchLabel}>{adding === 'playlist' ? said.addingPlaylist : said.downloadListed[format]}</Text>
-            </Pressable>
+            <Button kind="secondary" label={adding === 'playlist' ? said.addingPlaylist : said.downloadListed[format]} disabled={adding !== null} onPress={() => void addPlaylist()} style={styles.batch} />
             <Text style={styles.hint}>{said.listedHint}</Text>
           </> : null}
         </>}
         // The queue has a screen of its own; this is the way to it.
         ListFooterComponent={<QueueLink />}
-        ListEmptyComponent={!searching ? <View style={styles.empty}>
-          <Text style={styles.emptyText}>{searched ? said.empty.none : mode === 'playlist' ? said.empty.playlist : said.empty.videos}</Text>
-        </View> : null}
+        ListEmptyComponent={!searching ? <ScreenState kind="empty" text={searched ? said.empty.none : mode === 'playlist' ? said.empty.playlist : said.empty.videos} /> : null}
         renderItem={({ item }) => {
           const playlist = item.kind === 'playlist';
           // A song listened to has a job of its own, which says nothing of whether it is in the library.
           const job = playlist ? undefined : jobForVideo(downloadJobs, item.id);
-          const heard = playlist ? undefined : listenJobs.findLast((one) => one.video.id === item.id);
+          // The newest: the jobs come newest first, and a Listen asked for again is the one getting ready.
+          const heard = playlist ? undefined : listenJobs.find((one) => one.video.id === item.id);
           const readying = heard != null && (isActive(heard) || listeningTo?.jobId === heard.id);
           // In the library already, by a file that came some other way: see `owned.ts`.
           const have = !playlist && !job && owned.has(item.id);
           const locked = have || (job && (isActive(job) || job.status === 'done'));
-          const thumbnail = item.thumbnail ? <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} contentFit="cover" /> : <View style={[styles.thumbnail, styles.thumbnailEmpty]} />;
-          const named = <>
-            <Text style={styles.title} numberOfLines={2}>{item.title}</Text>
-            <Text style={styles.muted} numberOfLines={1}>{[item.channel, playlist ? said.playlist : durationLabel(item.duration)].filter(Boolean).join(' · ')}</Text>
-          </>;
-          /*
-            A list is opened from anywhere on its row: opening it only shows
-            what is in it, so there is nothing a stray tap can set off. A video's
-            row is not, since the one thing it does is start a download.
-          */
           if (playlist) {
-            return <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.openPlaylistLabel(item.title)}
-              disabled={adding !== null} style={[styles.result, columns > 1 && styles.resultShared]}
-              onPress={() => {
+            return <VideoRow video={item} shared={columns > 1} openDisabled={adding !== null}
+              onOpen={() => {
                 setOpenedFrom({ query, results });
                 void search(item.url, true);
-              }}>
-              {thumbnail}
-              <View style={styles.flex}>
-                {named}
-                <View style={styles.downloadButton}><Text style={styles.link}>{said.openPlaylist}</Text></View>
-              </View>
-            </Pressable>;
+              }} />;
           }
-          return <View style={[styles.result, columns > 1 && styles.resultShared]}>
-            {thumbnail}
-            <View style={styles.flex}>
-              {named}
-              <View style={styles.actions}>
-                {/* Heard at once, kept only if kept: see `lib/listen`. Not for one in the library already. */}
-                {have ? null : (
-                  <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.listenLabel(item.title)}
-                    disabled={readying} style={[styles.downloadButton, readying && styles.disabled]}
-                    onPress={() => void listen(item)}>
-                    <Text style={styles.link}>{readying ? (heard && heard.status === 'downloading' ? statusLabel(heard, t) : said.readying) : said.listen}</Text>
-                  </Pressable>
-                )}
-                <Pressable android_ripple={pressed} accessibilityRole="button" accessibilityLabel={said.downloadLabel(item.title)}
-                  disabled={!!locked || adding !== null} style={[styles.downloadButton, locked && styles.disabled]}
-                  onPress={() => void add(item)}>
-                  <Text style={styles.link}>{adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : said.download[format]}</Text>
-                </Pressable>
-              </View>
-            </View>
-          </View>;
+          // How each stands, said after what it is: the marks alone say only what can be done.
+          const listening = readying ? (heard && heard.status === 'downloading' ? statusLabel(heard, t) : said.readying) : null;
+          const fetching = adding === item.id ? said.adding : have ? said.inLibrary : locked && job ? statusLabel(job, t) : null;
+          return <VideoRow video={item} shared={columns > 1} actions={[
+            // Heard at once, kept only if kept: see `lib/listen`. Not for one in the library already.
+            ...(have ? [] : [{
+              icon: PlayIcon,
+              accessibilityLabel: listening ? `${said.listenLabel(item.title)} · ${listening}` : said.listenLabel(item.title),
+              ...(readying ? { state: 'busy' as const, percent: heard?.status === 'downloading' ? heard.progress : undefined } : {}),
+              onPress: () => void listen(item),
+            }]),
+            {
+              icon: DownloadIcon,
+              accessibilityLabel: fetching ? `${said.downloadLabel(item.title)} · ${fetching}` : said.downloadLabel(item.title),
+              ...(adding === item.id ? { state: 'busy' as const } : have ? { state: 'done' as const } : locked ? jobState(job) : {}),
+              disabled: !!locked || adding !== null,
+              onPress: () => void add(item),
+            },
+          ]} />;
         }}
       />}
       </BarsOver>
@@ -397,57 +387,23 @@ export default function YouTubeScreen() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  modeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 4 },
+  modeRow: { flexDirection: 'row', alignItems: 'flex-end', gap: SPACE.xl, paddingHorizontal: SPACE.l, paddingTop: SPACE.m, paddingBottom: SPACE.xs },
   // Laid over the list in a theme of glass, with a little more room above its edge.
-  modeRowOver: { ...topGlass(c), paddingBottom: 10 },
+  modeRowOver: { ...topGlass(c), paddingBottom: SPACE.s },
   /** Its fill left to `Frost`, which draws it over the blur. */
   clear: { backgroundColor: 'transparent' },
   fill: { flex: 1 },
-  downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: 5 },
-  downloadHeading: { color: c.textFaint, fontSize: 10, textAlign: 'center', letterSpacing: 1 },
+  downloadModes: { flex: 1, maxWidth: 270, marginLeft: 'auto', gap: SPACE.xs },
+  downloadHeading: { color: c.textFaint, fontSize: TYPE.label, textAlign: 'center', letterSpacing: 1 },
   screen: { flex: 1, ...scene(c) },
   inside: { flex: 1 },
-  resultColumns: { gap: 8 },
-  // Without this a row keeps its full width and the pair overflows the screen.
-  resultShared: { flex: 1, minWidth: 0 },
-  content: { padding: 20, paddingBottom: 32 },
-  flex: { flex: 1, gap: 5 },
-  heading: { color: c.text, fontSize: 25, fontWeight: '600', marginBottom: 8 },
-  intro: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginTop: 12, marginBottom: 16 },
-  title: { color: c.text, fontSize: 14, fontWeight: '500' },
-  muted: { color: c.textMuted, fontSize: 12, lineHeight: 18 },
-  hint: { color: c.textFaint, fontSize: 11.5, lineHeight: 17, marginTop: 10, marginBottom: 4 },
-  bad: { color: c.danger, fontSize: 12, lineHeight: 18, marginVertical: 8 },
-  searchRow: { flexDirection: 'row', gap: 8 },
-  backLink: { alignSelf: 'flex-start', paddingVertical: 4, marginBottom: 8 },
-  input: { flex: 1, minWidth: 0, borderRadius: 12, minHeight: 48 },
-  searchButton: { backgroundColor: c.primary, paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', minHeight: 48, ...outlined(c, c.primary) },
-  // Dimmed rather than faded: a translucent white slab is still the brightest
-  // thing on the screen, which is the wrong thing for a button that cannot
-  // be pressed yet.
-  searchButtonOff: { backgroundColor: c.surfaceRaised, ...outlined(c) },
-  darkTextOff: { color: c.textDisabled, fontWeight: '600' },
-  darkText: { color: c.onPrimary, fontWeight: '600' },
-  disabled: { opacity: 0.45 },
-  formats: { marginTop: 14 },
-  // As tall as the tray beside it, whose chosen fill this is when Discover is open.
-  discoverTab: { paddingHorizontal: 16, minHeight: 50, justifyContent: 'center', borderRadius: 12, ...outlined(c) },
-  discoverOn: { backgroundColor: c.selected },
-  discoverLabel: { color: c.textMuted, fontSize: 13.5 },
-  discoverLabelOn: { color: c.onSelected, fontSize: 13.5, fontWeight: '600' },
-  batch: { backgroundColor: c.surface, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16, alignItems: 'center', marginTop: 4, ...outlined(c) },
-  batchLabel: { color: c.text, fontSize: 13.5, fontWeight: '600' },
-  searching: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 16 },
-  smallButton: { padding: 12, minHeight: 44, justifyContent: 'center' },
-  link: { color: c.text, fontSize: 13, fontWeight: '500' },
-  section: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginTop: 16, marginBottom: 10, marginLeft: 4 },
-  result: { flexDirection: 'row', gap: 12, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-  // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  thumbnail: { width: 112, height: 76, borderRadius: 8 },
-  thumbnailEmpty: { backgroundColor: c.surfaceRaised },
-  downloadButton: { alignSelf: 'flex-start', paddingVertical: 12, minHeight: 44 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
-  empty: { paddingTop: 22, paddingBottom: 4, alignItems: 'center' },
-  emptyText: { color: c.textFaint, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-  unavailable: { flex: 1, ...scene(c), padding: 24, justifyContent: 'center', gap: 10 },
+  resultColumns: { gap: SPACE.s },
+  content: { padding: SPACE.l, paddingBottom: 32 },
+  intro: { color: c.textMuted, fontSize: TYPE.small, lineHeight: LEADING.small, marginTop: SPACE.m, marginBottom: SPACE.l },
+  hint: { color: c.textFaint, fontSize: TYPE.label, lineHeight: 17, marginTop: SPACE.s, marginBottom: SPACE.xs },
+  bad: { marginVertical: SPACE.s },
+  backLink: { marginBottom: SPACE.s },
+  formats: { marginTop: SPACE.m },
+  batch: { marginTop: SPACE.xs },
+  unavailable: { flex: 1, ...scene(c), padding: SPACE.xl, justifyContent: 'center', gap: SPACE.s },
 }));

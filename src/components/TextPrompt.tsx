@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Pressable } from './Pressable';
+import { LEADING, SPACE, TYPE } from '../lib/theme/measures';
+import { DialogCard } from './Dialog';
+import { Field } from './FormScroll';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Floating } from './Floating';
+import { OnAPage } from './OnAPage';
+import { CardAnswers } from './CardAnswers';
+import { useRows } from './settings/rows';
 
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles } from '../lib/theme/index';
 import { haptic } from '../lib/ui/haptics';
 
 /**
@@ -13,19 +18,7 @@ import { haptic } from '../lib/ui/haptics';
  * Was the tag prompt, generalised when lists needed naming and renaming: the
  * dialog was never about tags, only its wording was.
  */
-export function TextPrompt({
-  visible,
-  heading,
-  hint,
-  placeholder,
-  confirmLabel,
-  initial = '',
-  keyboardType,
-  secret,
-  optional = false,
-  onSubmit,
-  onClose,
-}: {
+type Prompt = {
   visible: boolean;
   heading: string;
   /** A line under the heading, for what the answer has to be: a range, a unit. */
@@ -50,35 +43,125 @@ export function TextPrompt({
   optional?: boolean;
   onSubmit: (value: string) => void;
   onClose: () => void;
-}) {
+};
+
+/**
+ * Asked in a sheet over the screen, or with [page] on a page of its own in the
+ * tab (`OnAPage`), as Settings asks everything now.
+ */
+export function TextPrompt({ page = false, ...prompt }: Prompt & { page?: boolean }) {
+  return page ? <PromptOnAPage {...prompt} /> : <PromptInASheet {...prompt} />;
+}
+
+function PromptOnAPage({ visible, heading, onClose, ...rest }: Prompt) {
+  return (
+    <OnAPage visible={visible} title={heading} onClose={onClose}>
+      <PromptFields heading={heading} onClose={onClose} {...rest} />
+    </OnAPage>
+  );
+}
+
+/**
+ * The field and its buttons on a page: what is typed kept here, the page
+ * drawing this same field each time whoever asked is drawn again.
+ */
+function PromptFields({
+  heading,
+  hint,
+  placeholder,
+  confirmLabel,
+  initial = '',
+  keyboardType,
+  secret,
+  optional = false,
+  onSubmit,
+  onClose,
+}: Omit<Prompt, 'visible'>) {
   const [value, setValue] = useState(initial);
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  useWindowVeil(visible);
+  const rows = useRows();
+  const submit = () => {
+    const cleaned = value.trim();
+    if (cleaned.length === 0 && !optional) {
+      haptic('results', 'reject');
+      return;
+    }
+    onSubmit(cleaned);
+  };
+  return (
+    <>
+      <View style={[rows.card, styles.onPage]}>
+        <Field
+          // A page and not a window still appearing: the keyboard comes up with it.
+          autoFocus
+          value={value}
+          onChangeText={setValue}
+          placeholder={placeholder}
+          accessibilityLabel={heading}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType={keyboardType}
+          secureTextEntry={secret}
+          autoComplete={secret ? 'off' : undefined}
+          importantForAutofill={secret ? 'no' : undefined}
+          selectTextOnFocus
+          returnKeyType="done"
+          onSubmitEditing={submit}
+        />
+        <CardAnswers
+          answers={[
+            { label: t.common.cancel, kind: 'quiet', onPress: onClose },
+            { label: confirmLabel ?? t.common.save, disabled: !optional && !value.trim(), onPress: submit },
+          ]}
+        />
+      </View>
+      {hint ? <Text style={rows.aside}>{hint}</Text> : null}
+    </>
+  );
+}
 
-  // Reset as it opens rather than as it closes, so the field is right from the
-  // first frame instead of holding the last thing typed into it.
-  useEffect(() => {
-    if (visible) setValue(initial);
-  }, [visible, initial]);
+function PromptInASheet({ visible, onClose, ...rest }: Prompt) {
+  // The card is made afresh each time it opens, and keeps what is typed in itself: see [PromptCard].
+  return (
+    <Floating visible={visible} onClose={onClose}>
+      <PromptCard onClose={onClose} {...rest} />
+    </Floating>
+  );
+}
+
+/**
+ * The card: the heading, the box and its buttons, over a scrim to touch for
+ * never mind. What is typed is kept here, in the card, which is drawn in the
+ * tab's layer (`Floating`) and not where it was asked for: kept by whoever
+ * asked, every letter would have gone round by them to come back.
+ */
+function PromptCard({
+  heading,
+  hint,
+  placeholder,
+  confirmLabel,
+  initial = '',
+  keyboardType,
+  secret,
+  optional = false,
+  onSubmit,
+  onClose,
+}: Omit<Prompt, 'visible'>) {
+  const [value, setValue] = useState(initial);
+  const t = useT();
+  const styles = useStyles();
 
   /*
-    Into the box and the keyboard up once the sheet's window is showing.
+    Into the box and the keyboard up a moment after the card is there.
     Focused as it was made, inside a window still appearing, Android gave it
-    the cursor and no keyboard, and a focus asked again of a box that has it
-    already does nothing: so it is asked once, when the window says it is up.
+    the cursor and no keyboard.
   */
   const box = useRef<TextInput>(null);
-  const later = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => {
-    if (later.current) clearTimeout(later.current);
+  useEffect(() => {
+    const later = setTimeout(() => box.current?.focus(), 120);
+    return () => clearTimeout(later);
   }, []);
-  const shown = () => {
-    if (later.current) clearTimeout(later.current);
-    later.current = setTimeout(() => box.current?.focus(), 80);
-  };
 
   const submit = () => {
     const cleaned = value.trim();
@@ -90,88 +173,42 @@ export function TextPrompt({
     onSubmit(cleaned);
   };
 
+  // Cancel and the back gesture are the ways out.
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} onShow={shown}>
-      {/* Neither the backdrop nor the sheet is a stop for a screen reader; see
-          `OptionSheet`. Cancel and the back gesture are the ways out. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
-        {/* Swallows taps so touching the sheet does not count as touching the
-            backdrop behind it. */}
-        <Pressable style={styles.sheet} onPress={() => {}} accessible={false}>
-          <Text accessibilityRole="header" style={styles.heading}>{heading}</Text>
-          {hint ? <Text style={styles.hint}>{hint}</Text> : null}
-          <TextInput
-            ref={box}
-            style={styles.input}
-            value={value}
-            onChangeText={setValue}
-            placeholder={placeholder}
-            placeholderTextColor={c.textFaint}
-            // Named by the heading for a screen reader: the hint is gone as
-            // soon as there is anything in the box, a name given to rename
-            // included, and the box would be only "edit box".
-            accessibilityLabel={heading}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType={keyboardType}
-            secureTextEntry={secret}
-            autoComplete={secret ? 'off' : undefined}
-            importantForAutofill={secret ? 'no' : undefined}
-            selectTextOnFocus
-            returnKeyType="done"
-            onSubmitEditing={submit}
-          />
-          <View style={styles.actions}>
-            <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-              <Text style={styles.buttonLabel}>{t.common.cancel}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={pressed}
-              style={[styles.button, styles.confirm, !optional && !value.trim() && styles.disabled]}
-              disabled={!optional && !value.trim()}
-              onPress={submit}>
-              <Text style={styles.confirmLabel}>{confirmLabel ?? t.common.save}</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <DialogCard
+      onClose={onClose}
+      title={heading}
+      answers={[
+        { label: t.common.cancel, kind: 'quiet', onPress: onClose },
+        { label: confirmLabel ?? t.common.save, disabled: !optional && !value.trim(), onPress: submit },
+      ]}>
+      {hint ? <Text style={styles.hint}>{hint}</Text> : null}
+      <Field
+        ref={box}
+        value={value}
+        onChangeText={setValue}
+        placeholder={placeholder}
+        // Named by the heading for a screen reader: the hint is gone as
+        // soon as there is anything in the box, a name given to rename
+        // included, and the box would be only "edit box".
+        accessibilityLabel={heading}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType={keyboardType}
+        secureTextEntry={secret}
+        autoComplete={secret ? 'off' : undefined}
+        importantForAutofill={secret ? 'no' : undefined}
+        selectTextOnFocus
+        returnKeyType="done"
+        onSubmitEditing={submit}
+      />
+    </DialogCard>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 28,
-  },
-  sheet: {
-    backgroundColor: c.surface,
-    borderRadius: 14,
-    padding: 18,
-    gap: 14,
-    alignSelf: 'stretch',
-    ...outlined(c),
-  },
-  heading: { color: c.text, fontSize: 15, fontWeight: '600' },
   // Pulled up towards the heading it belongs to, against the sheet's own gap.
-  hint: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: -8 },
-  input: {
-    color: c.text,
-    fontSize: 15,
-    backgroundColor: c.bg,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    ...outlined(c),
-  },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-  button: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 8 },
-  buttonLabel: { color: c.textSecondary, fontSize: 14 },
-  confirm: { backgroundColor: c.primary },
-  confirmLabel: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
-  disabled: { opacity: 0.35 },
+  hint: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: -SPACE.s },
+  // On a page: the field and its buttons in a card of Settings, with room inside it.
+  onPage: { padding: SPACE.l, gap: SPACE.m },
 }));

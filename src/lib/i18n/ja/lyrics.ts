@@ -2,6 +2,7 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lyrics: Strings['lyrics'] = {
+  follow: '曲に戻る',
   none: '歌詞が見つかりませんでした。',
   translating: '翻訳中…',
   seekTo: (seconds) => `${seconds}秒の位置へ移動`,

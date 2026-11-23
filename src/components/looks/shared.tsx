@@ -2,6 +2,7 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 
 import { Image } from '../Picture';
 import { useTrackArtwork } from '../../lib/media/artwork';
+import { useColours } from '../../lib/theme/index';
 import type { EnrichedTrack } from '../../lib/media/merge';
 
 /**
@@ -41,8 +42,10 @@ export type LookProps = {
 /** A track's cover, square, or a plain tile where it has none. */
 export function TrackCover({ track, size, style }: { track: EnrichedTrack | null; size: number; style?: ViewStyle }) {
   const uri = useTrackArtwork(track);
+  // The tile in the theme's own raised colour, as an empty cover is everywhere else: a fixed grey stood out on a light page.
+  const c = useColours();
   return (
-    <View style={[styles.cover, { width: size, height: size, borderRadius: Math.max(3, size * 0.06) }, style]}>
+    <View style={[styles.cover, { width: size, height: size, borderRadius: Math.max(3, size * 0.06), backgroundColor: c.surfaceRaised }, style]}>
       {uri ? <Image source={{ uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={100} drawnAt={size} /> : null}
     </View>
   );
@@ -61,5 +64,5 @@ export function mix(a: string, b: string, t: number): string {
 }
 
 const styles = StyleSheet.create({
-  cover: { overflow: 'hidden', backgroundColor: '#3a3a3a' },
+  cover: { overflow: 'hidden' },
 });

@@ -1,18 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-import { Image } from '../../../components/Picture';
-import { Pressable } from '../../../components/Pressable';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Button, TextButton } from '../../../components/Button';
+import { Segmented } from '../../../components/Segmented';
+import { ConfirmSheet } from '../../../components/ConfirmSheet';
+import { ContinueCard, HeadCover, HeadNote, MediaHead, MediaPage, SectionLabel } from '../../../components/MediaPage';
+import { MediaRow } from '../../../components/MediaRow';
+import { MenuCard } from '../../../components/MenuPage';
+import { MenuEntry, MenuHeader } from '../../../components/MenuSheet';
+import { DownloadIcon } from '../../../components/Icons';
+import { useRows } from '../../../components/settings/rows';
 import { NumberStepper } from '../../../components/NumberStepper';
 import { Switch } from '../../../components/Switch';
 import { useT } from '../../../lib/i18n/index';
 import { episodeId, newestFirst, type Episode, type Show } from '../../../lib/podcasts/episodes';
 import { fetchShow } from '../../../lib/podcasts/feed';
+import { hostOf, isPrivateAddress } from '../../../lib/links/late';
 import { dropWaiting, fetchEpisodes, follow, refreshShow } from '../../../lib/podcasts/refresh';
 import { KEEP_RANGE, savedEpisodes, setAutoDownload, setFetchNext, setKeep, setNextCount, subscription, unsubscribe, type Subscription } from '../../../lib/podcasts/store';
-import { makeStyles, outlined, outlinedClip, scene, switchColours, useColours, usePressed } from '../../../lib/theme/index';
+import { makeStyles } from '../../../lib/theme/index';
+import { LEADING, SPACE, TYPE } from '../../../lib/theme/measures';
 import { haptic } from '../../../lib/ui/haptics';
 import { useTrackMenu } from '../../../components/useTrackMenu';
 import { PressRing } from '../../../components/PressMenu';
@@ -27,9 +34,7 @@ import { fetchNextAfter } from '../../../lib/podcasts/next';
 import { seriesFolderOf } from '../../../lib/podcasts/series';
 import { episodesWhen, yearsOf, type Order, type When } from '../../../lib/podcasts/when';
 import { inSeriesOrder, nextToPlay } from '../../../lib/tapes/order';
-import { PauseIcon, PlayIcon } from '../../../components/Icons';
 import { progressOf, useTapePlaces } from '../../../lib/tapes/places';
-import { CLIP_SUBVIEWS } from '../../../lib/ui/lists';
 import { useDownloadLibraryRevision, useDownloads } from '../../../lib/youtube/DownloadsProvider';
 import { durationLabel, isActive, jobForVideo, statusLabel } from '../../../lib/youtube/types';
 
@@ -44,14 +49,13 @@ import { durationLabel, isActive, jobForVideo, statusLabel } from '../../../lib/
  * was last read of it is shown meanwhile, and stands in for it offline.
  */
 export default function PodcastScreen() {
-  const { feed } = useLocalSearchParams<{ feed: string }>();
+  const { feed, outside } = useLocalSearchParams<{ feed: string; outside?: string }>();
   const feedUrl = feed ?? '';
+  const router = useRouter();
   const { jobs, refresh } = useDownloads();
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  const insets = useSafeAreaInsets();
+  const rows = useRows();
   const said = t.search.tapes.podcasts;
   const [followed, setFollowed] = useState<Subscription | null>(() => subscription(feedUrl));
   const [show, setShow] = useState<Show | null>(() => subscription(feedUrl));
@@ -77,13 +81,24 @@ export default function PodcastScreen() {
   const places = useTapePlaces();
   const { playQueue, toggle } = usePlayerActions();
   const { current, playWhenReady } = usePlayerState();
-  const menu = useTrackMenu({});
+  // What each episode here says of itself, by its tape, for the top of the tape's menu: the row has no room for it.
+  const summaries = useMemo(() => {
+    const by = new Map<string, string>();
+    for (const episode of episodes) {
+      const job = jobForVideo(jobs, episodeId(feedUrl, episode.guid));
+      if (episode.summary && job?.trackId) by.set(job.trackId, episode.summary);
+    }
+    return by;
+  }, [episodes, jobs, feedUrl]);
+  const menu = useTrackMenu({ aboutOf: (track) => summaries.get(track.id) ?? null });
+  // An episode not here, held: its own menu, what it says of itself and the way to fetch it.
+  const [held, setHeld] = useState<Episode | null>(null);
   // A part held and slid from, with the finger never lifted: see `pressMenu.ts`.
   const ring = useTrackRing(menu);
   // The folder it was followed under, should the show have renamed itself since.
   const folder = followed ? seriesFolderOf(followed) : show ? seriesFolderOf(show) : null;
   const here = useMemo(
-    () => (folder ? library.filter((track) => folderKey(track.folder ?? '').toLocaleLowerCase() === folder) : []),
+    () => (folder ? library.filter((track) => folderKey(track.folder ?? '').toLowerCase() === folder) : []),
     [folder, library]
   );
   const byId = useMemo(() => new Map(here.map((track) => [track.id, track])), [here]);
@@ -92,7 +107,6 @@ export default function PodcastScreen() {
   const next = nextToPlay(inOrder, places);
   const nextPlace = next ? (places.get(next.id) ?? null) : null;
   const nextProgress = progressOf(nextPlace);
-  const [more, setMore] = useState(false);
   // Which episodes the list shows, by when they came out, and which end first.
   const [when, setWhen] = useState<When>('all');
   const [order, setOrder] = useState<Order>('newest');
@@ -112,7 +126,36 @@ export default function PodcastScreen() {
     void playQueue(tracks, index);
   };
 
+  /*
+    Whether an episode is being fetched, or has just been: just fetched, the
+    library has yet to be read again, and it is not asked for twice meanwhile.
+  */
+  const lockedFor = (episode: Episode): boolean => {
+    const job = jobForVideo(jobs, episodeId(feedUrl, episode.guid));
+    return job != null && (isActive(job) || (job.status === 'done' && (job.finishedAt ?? 0) > Date.now() - 30_000));
+  };
+
+  /*
+    Opened by a link from outside the app (`links/late.ts`), for a show not
+    followed: the feed is not read until whoever is holding the phone says
+    so, and one on the phone or its own network is not read at all.
+  */
+  const [fromLink] = useState(() => outside === '1' && subscription(feedUrl) == null);
+  const refused = fromLink && isPrivateAddress(feedUrl);
+  const [allowed, setAllowed] = useState(!fromLink);
+  const allowedNow = useRef(!fromLink);
+  const leaveUnread = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/');
+  };
+
   useEffect(() => {
+    if (refused) {
+      setFailed(true);
+      setLoading(false);
+      return;
+    }
+    if (!allowed) return;
     let gone = false;
     void (async () => {
       try {
@@ -128,7 +171,7 @@ export default function PodcastScreen() {
     return () => {
       gone = true;
     };
-  }, [feedUrl]);
+  }, [allowed, feedUrl, refused]);
 
   const reread = () => setFollowed(subscription(feedUrl));
 
@@ -196,90 +239,95 @@ export default function PodcastScreen() {
     setBusy(null);
   };
 
-  const dateOf = (ms: number | null) => (ms == null ? '' : new Date(ms).toLocaleDateString());
+  // In the app's own way of writing a date, in the language chosen, as everywhere else: the phone's own was neither.
+  const dateOf = (ms: number | null) => (ms == null ? '' : t.format.date(new Date(ms)));
+
+  /** One line of a show's settings: its name and its switch. */
+  const switchRow = (label: string, value: boolean, onChange: (on: boolean) => void) => (
+    <View style={rows.line}>
+      <Text style={rows.title}>{label}</Text>
+      <Switch accessibilityLabel={label} value={value} onValueChange={onChange} />
+    </View>
+  );
+
+  const chips = (
+    // Sideways, as the years run on as far back as the show does: which end first, then the latest weeks and months, then each year it has episodes in.
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+      {/* Which way round, a press turning it over: a button, the chips beside it one of a set. */}
+      <Button
+        kind="secondary"
+        size="small"
+        shape="pill"
+        label={`⇅ ${order === 'newest' ? said.newest : said.oldest}`}
+        onPress={() => setOrder(order === 'newest' ? 'oldest' : 'newest')}
+      />
+      <Segmented
+        variant="chips"
+        wrap={false}
+        options={[
+          { value: 'all', label: said.when.all },
+          { value: 'week', label: said.when.week },
+          { value: 'month', label: said.when.month },
+          { value: 'quarter', label: said.when.quarter },
+          ...years.map((year) => ({ value: `year:${year}`, label: String(year) })),
+        ]}
+        value={when}
+        onChange={(value: string) => setWhen(value as When)}
+      />
+    </ScrollView>
+  );
 
   return (
-    <View style={styles.screen}>
-      <FlatList
-        removeClippedSubviews={CLIP_SUBVIEWS}
-        data={shown}
-        keyExtractor={(episode) => episode.guid}
-        contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
-        ListHeaderComponent={
-          <>
-            <View style={styles.head}>
-              {show?.image ? <Image source={{ uri: show.image }} style={styles.cover} contentFit="cover" /> : <View style={[styles.cover, styles.coverEmpty]} />}
-              <View style={styles.headText}>
-                <Text style={styles.title} numberOfLines={3}>{show?.title ?? feedUrl}</Text>
-                {show?.author ? <Text style={styles.muted} numberOfLines={2}>{show.author}</Text> : null}
-                {episodes.length > 0 ? <Text style={styles.stats}>{said.stats(episodes.length, here.length)}</Text> : null}
-              </View>
-            </View>
-            {show?.summary ? (
-              // The whole of what the show says of itself, a press away.
-              <Pressable accessibilityRole="button" onPress={() => setMore(!more)} disabled={show.summary.length < 160}>
-                <Text style={styles.summary} numberOfLines={more ? undefined : 3}>{show.summary}</Text>
-                {show.summary.length >= 160 ? <Text style={styles.more}>{more ? said.less : said.more}</Text> : null}
-              </Pressable>
-            ) : null}
-            {/*
-              Carried on at one press: the episode part way through, or the
-              newest not heard, with how far in it is and how long is left.
-            */}
-            {next ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
+    <MediaPage
+      head={(side) => (
+        <MediaHead
+          side={side}
+          cover={<HeadCover uri={show?.image} />}
+          title={show?.title ?? feedUrl}
+          lines={[show?.author, episodes.length > 0 ? said.stats(episodes.length, here.length) : null]}
+          // The whole of what the show says of itself, a press away.
+          about={show?.summary}
+          carryOn={
+            // Carried on at one press: the episode part way through, or the newest not heard, with how far in it is and how long is left.
+            next ? (
+              <ContinueCard
+                label={nextProgress != null ? said.continue : said.start}
+                title={next.title}
+                progress={nextProgress != null && nextPlace ? nextProgress : null}
+                line={
+                  nextProgress != null && nextPlace
+                    ? t.library.tapes.left(Math.max(1, Math.round((nextPlace.durationSec - nextPlace.positionSec) / 60)))
+                    : durationLabel(next.durationSec)
+                }
+                playing={nextIsOn && playWhenReady}
                 accessibilityLabel={`${nextIsOn && playWhenReady ? t.common.pause : nextProgress != null ? said.continue : said.start}, ${next.title}`}
-                style={styles.continue}
-                onPress={() => (nextIsOn ? void toggle() : play(next))}>
-                <View style={styles.continueText}>
-                  <Text style={styles.continueLabel}>{t.format.upper(nextProgress != null ? said.continue : said.start)}</Text>
-                  <Text style={styles.continueTitle} numberOfLines={2}>{next.title}</Text>
-                  {nextProgress != null && nextPlace ? (
-                    <>
-                      <View style={styles.continueTrack}>
-                        <View style={[styles.continueDone, { width: `${Math.round(nextProgress * 100)}%` }]} />
-                      </View>
-                      <Text style={styles.muted}>{t.library.tapes.left(Math.max(1, Math.round((nextPlace.durationSec - nextPlace.positionSec) / 60)))}</Text>
-                    </>
-                  ) : (
-                    <Text style={styles.muted}>{durationLabel(next.durationSec)}</Text>
-                  )}
-                </View>
-                <View style={styles.continuePlay}>
-                  {nextIsOn && playWhenReady ? <PauseIcon size={26} color={c.onPrimary} /> : <PlayIcon size={26} color={c.onPrimary} />}
-                </View>
-              </Pressable>
-            ) : null}
-            {show ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                disabled={busy === 'follow'}
-                style={[styles.follow, followed && styles.followOn]}
-                onPress={() => void toggleFollow()}>
-                <Text style={followed ? styles.followLabelOn : styles.followLabel}>{followed ? said.unfollow : said.follow}</Text>
-              </Pressable>
-            ) : null}
-            {show && !followed && episodes.length > 0 ? <Text style={styles.without}>{said.withoutFollowing}</Text> : null}
-            {followed ? (
-              <View style={styles.card}>
-                <View style={styles.line}>
-                  <Text style={styles.rowTitle}>{said.autoDownload}</Text>
-                  <Switch
-                    accessibilityLabel={said.autoDownload}
-                    value={followed.autoDownload}
-                    onValueChange={(on) => {
-                      setAutoDownload(feedUrl, on);
-                      if (!on && !followed.fetchNext) void dropWaiting(followed.folder);
-                      reread();
-                      void schedulePodcasts();
-                      if (on) catchUp('newest');
-                    }}
-                    {...switchColours(c, followed.autoDownload)}
-                  />
-                </View>
+                onPress={() => (nextIsOn ? void toggle() : play(next))}
+              />
+            ) : null
+          }
+          actions={
+            show
+              ? [
+                  {
+                    label: followed ? said.unfollow : said.follow,
+                    kind: followed ? 'secondary' : 'primary',
+                    disabled: busy === 'follow',
+                    onPress: () => void toggleFollow(),
+                  },
+                ]
+              : undefined
+          }>
+          {show && !followed && episodes.length > 0 ? <HeadNote>{said.withoutFollowing}</HeadNote> : null}
+          {followed ? (
+            <View style={rows.card}>
+              <View style={rows.row}>
+                {switchRow(said.autoDownload, followed.autoDownload, (on) => {
+                  setAutoDownload(feedUrl, on);
+                  if (!on && !followed.fetchNext) void dropWaiting(followed.folder);
+                  reread();
+                  void schedulePodcasts();
+                  if (on) catchUp('newest');
+                })}
                 {followed.autoDownload ? (
                   <>
                     <NumberStepper
@@ -292,24 +340,20 @@ export default function PodcastScreen() {
                         catchUp('newest');
                       }}
                     />
-                    <Text style={styles.muted}>{said.autoDownloadNote(followed.keep)}</Text>
+                    <Text style={rows.muted}>{said.autoDownloadNote(followed.keep)}</Text>
                   </>
                 ) : null}
-                {/* Beside it: the ones after the episode being heard, for working through the show from older ones. */}
-                <View style={styles.cardRule} />
-                <View style={styles.line}>
-                  <Text style={styles.rowTitle}>{said.fetchNext}</Text>
-                  <Switch
-                    accessibilityLabel={said.fetchNext}
-                    value={followed.fetchNext}
-                    onValueChange={(on) => {
-                      setFetchNext(feedUrl, on);
-                      reread();
-                      if (on) catchUp('next');
-                    }}
-                    {...switchColours(c, followed.fetchNext)}
-                  />
-                </View>
+              </View>
+              {/* Beside it: the ones after the episode being heard, for working through the show from older ones. */}
+              <View style={rows.rule} />
+              <View style={rows.row}>
+                {switchRow(said.fetchNext, followed.fetchNext, (on) => {
+                  setFetchNext(feedUrl, on);
+                  // As the switch beside it does: with neither on, what was waiting to be fetched is not fetched later after all.
+                  if (!on && !followed.autoDownload) void dropWaiting(followed.folder);
+                  reread();
+                  if (on) catchUp('next');
+                })}
                 {followed.fetchNext ? (
                   <NumberStepper
                     name={said.fetchNext}
@@ -322,167 +366,117 @@ export default function PodcastScreen() {
                     }}
                   />
                 ) : null}
-                <Text style={styles.muted}>{said.fetchNextNote(followed.nextCount)}</Text>
+                <Text style={rows.muted}>{said.fetchNextNote(followed.nextCount)}</Text>
               </View>
-            ) : null}
-            {loading && episodes.length === 0 ? <ActivityIndicator style={styles.loading} color={c.text} /> : null}
-            {failed && episodes.length === 0 ? <Text style={styles.bad}>{said.feedFailed}</Text> : null}
-            {episodes.length > 0 ? (
+            </View>
+          ) : null}
+        </MediaHead>
+      )}
+      above={
+        episodes.length > 0 ? (
+          <>
+            <SectionLabel>{said.episodes(shown.length)}</SectionLabel>
+            {chips}
+          </>
+        ) : null
+      }
+      items={loading && episodes.length === 0 ? null : shown}
+      keyOf={(episode) => episode.guid}
+      error={failed && episodes.length === 0 ? (refused ? said.linkRefused : said.feedFailed) : null}
+      empty={episodes.length > 0 ? said.noneThen : said.noEpisodes}
+      renderItem={(item) => {
+        const job = jobForVideo(jobs, episodeId(feedUrl, item.guid));
+        const track = job?.status === 'done' && job.trackId ? byId.get(job.trackId) : undefined;
+        const line = said.line(dateOf(item.publishedAt), durationLabel(item.durationSec));
+        if (track) {
+          const place = places.get(track.id) ?? null;
+          const progress = progressOf(place);
+          const state = place?.finished
+            ? t.library.tapes.played
+            : progress != null && place
+              ? t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))
+              : durationLabel(track.durationSec);
+          return (
+            <PressRing ring={ring} item={track}>
+              <MediaRow
+                title={item.title}
+                subtitle={line}
+                playing={current?.id === track.id}
+                meta={state}
+                metaOn={place?.finished === true}
+                onPress={() => play(track)}
+                onLongPress={() => menu.open(track)}
+              />
+            </PressRing>
+          );
+        }
+        // Fetched and here is the row above, to play; fetched and deleted since, or never, it can be fetched (again).
+        const locked = lockedFor(item);
+        return (
+          <MediaRow
+            title={item.title}
+            subtitle={line}
+            onLongPress={() => setHeld(item)}
+            trailing={
+              <TextButton
+                label={busy === item.guid ? said.download : locked && job ? statusLabel(job, t) : said.download}
+                tone="plain"
+                accessibilityLabel={said.downloadNamed(item.title)}
+                disabled={locked || busy != null}
+                onPress={() => void fetchOne(item)}
+              />
+            }
+          />
+        );
+      }}
+      sheets={
+        <>
+          {menu.element}
+          <MenuCard visible={held != null} onClose={() => setHeld(null)}>
+            {held ? (
               <>
-                <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.episodes(shown.length))}</Text>
-                {/*
-                  Sideways, as the years run on as far back as the show
-                  does: which end first, then the latest weeks and months,
-                  then each year it has episodes in.
-                */}
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsOut} contentContainerStyle={styles.chips}>
-                  <Pressable
-                    android_ripple={pressed}
-                    accessibilityRole="button"
-                    style={styles.chip}
-                    onPress={() => setOrder(order === 'newest' ? 'oldest' : 'newest')}>
-                    <Text style={styles.chipLabel}>{`⇅ ${order === 'newest' ? said.newest : said.oldest}`}</Text>
-                  </Pressable>
-                  {([
-                    ['all', said.when.all],
-                    ['week', said.when.week],
-                    ['month', said.when.month],
-                    ['quarter', said.when.quarter],
-                    ...years.map((year) => [`year:${year}`, String(year)] as const),
-                  ] as const).map(([value, label]) => (
-                    <Pressable
-                      key={value}
-                      android_ripple={pressed}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: when === value }}
-                      style={[styles.chip, when === value && styles.chipOn]}
-                      onPress={() => setWhen(value as When)}>
-                      <Text style={when === value ? styles.chipLabelOn : styles.chipLabel}>{label}</Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
+                <MenuHeader
+                  title={held.title}
+                  detail={said.line(dateOf(held.publishedAt), durationLabel(held.durationSec))}
+                  picture={held.image ?? show?.image ?? null}
+                  about={held.summary}
+                />
+                <MenuEntry
+                  icon={DownloadIcon}
+                  label={said.download}
+                  disabled={lockedFor(held) || busy != null}
+                  onPress={() => {
+                    const episode = held;
+                    setHeld(null);
+                    void fetchOne(episode);
+                  }}
+                />
               </>
             ) : null}
-          </>
-        }
-        ListEmptyComponent={
-          !loading && !failed ? <Text style={styles.muted}>{episodes.length > 0 ? said.noneThen : said.noEpisodes}</Text> : null
-        }
-        renderItem={({ item }) => {
-          const job = jobForVideo(jobs, episodeId(feedUrl, item.guid));
-          const track = job?.status === 'done' && job.trackId ? byId.get(job.trackId) : undefined;
-          if (track) {
-            const place = places.get(track.id) ?? null;
-            const progress = progressOf(place);
-            const state = place?.finished
-              ? t.library.tapes.played
-              : progress != null && place
-                ? t.library.tapes.left(Math.max(1, Math.round((place.durationSec - place.positionSec) / 60)))
-                : durationLabel(track.durationSec);
-            return (
-              <PressRing ring={ring} item={track}>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                style={styles.episode}
-                onPress={() => play(track)}
-                onLongPress={() => {
-                  haptic('holds', 'hold');
-                  menu.open(track);
-                }}>
-                <View style={styles.episodeText}>
-                  <Text style={styles.episodeTitle} numberOfLines={2}>{item.title}</Text>
-                  <Text style={styles.muted}>{said.line(dateOf(item.publishedAt), durationLabel(item.durationSec))}</Text>
-                  {item.summary ? <Text style={styles.episodeSummary} numberOfLines={2}>{item.summary}</Text> : null}
-                </View>
-                <Text style={[styles.state, place?.finished && styles.stateHeard]}>{state}</Text>
-              </Pressable>
-              </PressRing>
-            );
-          }
-          // Fetched and here is the row above, to play; fetched and deleted since, or never, it can be fetched (again).
-          // Just fetched, the library has yet to be read again, and it is not asked for twice meanwhile.
-          const locked = job != null && (isActive(job) || (job.status === 'done' && (job.finishedAt ?? 0) > Date.now() - 30_000));
-          return (
-            <View style={styles.episode}>
-              <View style={styles.episodeText}>
-                <Text style={styles.episodeTitle} numberOfLines={2}>{item.title}</Text>
-                <Text style={styles.muted}>{said.line(dateOf(item.publishedAt), durationLabel(item.durationSec))}</Text>
-                {item.summary ? <Text style={styles.episodeSummary} numberOfLines={2}>{item.summary}</Text> : null}
-              </View>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                accessibilityLabel={`${said.download} ${item.title}`}
-                disabled={locked || busy != null}
-                style={[styles.download, locked && styles.disabled]}
-                onPress={() => void fetchOne(item)}>
-                <Text style={styles.link}>{busy === item.guid ? said.download : locked && job ? statusLabel(job, t) : said.download}</Text>
-              </Pressable>
-            </View>
-          );
-        }}
-      />
-      {menu.element}
-    </View>
+          </MenuCard>
+          <ConfirmSheet
+            visible={!allowed && !refused}
+            title={said.linkAsk}
+            body={said.linkAskBody(hostOf(feedUrl))}
+            confirmLabel={said.linkOpen}
+            onConfirm={() => {
+              allowedNow.current = true;
+              setAllowed(true);
+            }}
+            onCancel={() => {
+              // Told after Open as well (`ConfirmSheet`): left only where it was not that.
+              if (!allowedNow.current) leaveUnread();
+            }}
+          />
+        </>
+      }
+    />
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...scene(c) },
-  content: { padding: 20, gap: 0 },
-  head: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  cover: { width: 112, height: 112, borderRadius: 12 },
-  coverEmpty: { backgroundColor: c.surfaceRaised },
-  headText: { flex: 1, minWidth: 0, gap: 4 },
-  title: { color: c.text, fontSize: 19, fontWeight: '600' },
-  muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-  summary: { color: c.textSecondary, fontSize: 13, lineHeight: 19, marginTop: 14 },
-  stats: { color: c.textFaint, fontSize: 12, marginTop: 2 },
-  more: { color: c.accent, fontSize: 12.5, fontWeight: '600', marginTop: 4 },
-  continue: {
-    marginTop: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 16,
-    borderRadius: 16,
-    overflow: 'hidden',
-    backgroundColor: c.surface,
-    ...outlinedClip(c),
-  },
-  continueText: { flex: 1, minWidth: 0, gap: 4 },
-  continueLabel: { color: c.accent, fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
-  continueTitle: { color: c.text, fontSize: 15.5, fontWeight: '600' },
-  continueTrack: { height: 4, borderRadius: 2, backgroundColor: c.border, overflow: 'hidden', marginTop: 4 },
-  continueDone: { height: 4, backgroundColor: c.accent },
-  continuePlay: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primary },
-  episodeSummary: { color: c.textFaint, fontSize: 12, lineHeight: 17 },
-  follow: { marginTop: 16, alignSelf: 'flex-start', paddingHorizontal: 20, minHeight: 44, borderRadius: 22, justifyContent: 'center', backgroundColor: c.primary, ...outlined(c, c.primary) },
-  without: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 8, marginLeft: 4 },
-  followOn: { backgroundColor: c.surfaceRaised, ...outlined(c) },
-  followLabel: { color: c.onPrimary, fontSize: 14.5, fontWeight: '600' },
-  followLabelOn: { color: c.text, fontSize: 14.5, fontWeight: '600' },
-  card: { marginTop: 16, padding: 16, gap: 10, borderRadius: 14, backgroundColor: c.surface, ...outlined(c) },
-  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  rowTitle: { color: c.text, fontSize: 15, flexShrink: 1 },
-  loading: { marginTop: 24 },
-  bad: { color: c.danger, fontSize: 13, marginTop: 16 },
-  chipsOut: { marginHorizontal: -20, marginBottom: 6 },
-  chips: { gap: 8, paddingHorizontal: 20, paddingVertical: 4 },
-  chip: { backgroundColor: c.surfaceRaised, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, overflow: 'hidden', ...outlinedClip(c) },
-  chipOn: { backgroundColor: c.primary, ...outlinedClip(c, c.primary) },
-  chipLabel: { color: c.textSecondary, fontSize: 13 },
-  chipLabelOn: { color: c.onPrimary, fontSize: 13 },
-  cardRule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginVertical: 6 },
-  section: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginTop: 24, marginBottom: 6, marginLeft: 4 },
-  episode: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-  episodeText: { flex: 1, minWidth: 0, gap: 3 },
-  episodeTitle: { color: c.text, fontSize: 14.5 },
-  download: { paddingHorizontal: 4, minHeight: 44, justifyContent: 'center' },
-  disabled: { opacity: 0.45 },
-  link: { color: c.text, fontSize: 13, fontWeight: '500' },
-  state: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
-  stateHeard: { color: c.accent },
-}));
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+    chips: { gap: SPACE.s, paddingBottom: SPACE.s, alignItems: 'center' },
+  })
+);

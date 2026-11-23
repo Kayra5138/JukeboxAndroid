@@ -7,7 +7,7 @@ import { playlists, type Playlist } from '../db/playlists.ts';
 import type { Strings } from '../i18n/en/index.ts';
 import { isTape } from '../tapes/tape.ts';
 import { createStore } from '../ui/store.ts';
-import { listMemberIds } from './memberIds.ts';
+import { listMemberIds, statsOnce } from './memberIds.ts';
 import type { SmartTrack } from './smart.ts';
 
 export { labelOfSetting, SHUFFLE_ALL, sourceKey, sourceOfKey } from './shuffleKinds.ts';
@@ -101,8 +101,9 @@ export function shuffleChoices<T extends SmartTrack & { folder?: string | null }
     ...lists.filter((list) => list.kind === 'favorites' && favoritesShown),
     ...lists.filter((list) => list.kind !== 'favorites'),
   ];
+  const stats = statsOnce();
   for (const list of ordered) {
-    const members = listMemberIds({ kind: 'list', id: list.id }, songs);
+    const members = listMemberIds({ kind: 'list', id: list.id }, songs, stats);
     const count = members ? songsOf(members.ids, byId).length : 0;
     if (count === 0) continue;
     const sort = list.kind === 'favorites' ? 'favorites' : list.kind === 'smart' ? 'smart' : 'list';

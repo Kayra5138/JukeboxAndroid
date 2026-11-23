@@ -30,7 +30,6 @@
   <string name="jukebox_widget_up_next">Далее</string>
   <string name="jukebox_widget_up_next_empty">Дальше ничего нет</string>
   <string name="jukebox_widget_open">Открывает плеер</string>
-  <string name="jukebox_widget_continue">Продолжить: %1$s</string>
 
   <!-- Уведомление о воспроизведении. -->
   <string name="jukebox_playback_channel">Сейчас играет</string>

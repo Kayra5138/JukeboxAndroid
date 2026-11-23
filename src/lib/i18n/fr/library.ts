@@ -108,6 +108,7 @@ export const library: Strings['library'] = {
     lookSwitch: 'Passe cette vue à son autre affichage',
     view: 'Vue',
     looks: { list: 'Liste', shelves: 'Rayons', rack: 'Bac', map: 'Carte' },
+    shelf: { added: 'Ajoutés récemment', around: (hour: string) => `Vers ${hour}`, repeat: 'En boucle ce mois-ci', while: 'Pas écoutés depuis un moment', never: 'Jamais écoutés', all: 'Tous les titres', play: (name: string) => `Lire ${name}`, shuffle: (name: string) => `Lire ${name} en aléatoire`, queue: (name: string) => `Ajouter ${name} à la file d’attente` },
     artistMap: { drawing: 'Dessin de la carte…', shuffle: 'Lire ses titres au hasard', open: 'Ouvrir', with: 'Avec', lasso: 'Entourer des artistes pour les lire au hasard', lassoHint: 'Entoure les artistes à lire au hasard', lassoChosen: 'Entourés', putBackAll: 'Remettre en place les artistes déplacés à la main', movedByHand: 'Déplacés à la main', putBack: 'Remettre' },
     groupSortShort: { name: 'A–Z', tracks: 'Titres', played: 'Écoutes', added: 'Récents' },
     groupSortedBy: {
@@ -329,9 +330,6 @@ export const library: Strings['library'] = {
     note: 'Ces fichiers ressemblent à un même enregistrement sauvegardé plusieurs fois : le même nom, ou le même artiste et le même titre, et la même durée à deux secondes près. Une copie de chacun est gardée. Avant que les autres soient supprimées, leurs écoutes, tags, paroles et places dans les listes lui sont transférés.',
     empty: 'Aucun morceau n’est en plusieurs exemplaires dans ta bibliothèque.',
     cleanAll: (count) => `Tout nettoyer (${format.number(count)})`,
-    confirmAll: (files, songs) =>
-      `Supprimer ${format.number(files)} ${one(files, 'fichier', 'fichiers')} ? Une copie ${one(songs, 'du morceau', `de chacun des ${format.number(songs)} morceaux`)} est gardée, et les écoutes, tags, paroles et places dans les listes de chaque fichier supprimé lui sont d’abord transférés. Android redemande avant toute suppression.`,
-    confirm: (files) => `Supprimer ${format.number(files)} ${one(files, 'fichier', 'fichiers')}`,
     deleteOthers: (count) =>
       one(count, 'Supprimer l’autre copie', `Supprimer les ${format.number(count)} autres copies`),
     different: 'Ce sont des morceaux différents',

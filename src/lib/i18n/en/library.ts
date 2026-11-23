@@ -123,6 +123,8 @@ export const library = {
     /** Over the picture of the view's look on the button beside the switch, as `sort` is over the order. */
     view: 'View',
     looks: { list: 'List', shelves: 'Shelves', rack: 'Rack', map: 'Map' },
+    /** The shelves of the library's Shelves look, over their covers; [hour] as the clock writes it, `21:00`. */
+    shelf: { added: 'Recently added', around: (hour: string) => `Around ${hour}`, repeat: 'On repeat this month', while: 'Not heard in a while', never: 'Never played', all: 'All songs', play: (name: string) => `Play ${name}`, shuffle: (name: string) => `Shuffle ${name}`, queue: (name: string) => `Add ${name} to the queue` },
     /** The artists' map: while it is first laid out, the button that shuffles the chosen artist, the one to their page, and before the artists they share songs with. */
     artistMap: { drawing: 'Drawing the map…', shuffle: 'Shuffle their songs', open: 'Open', with: 'With', lasso: 'Draw round artists to shuffle them', lassoHint: 'Draw round the artists to shuffle', lassoChosen: 'Drawn round', putBackAll: 'Put back the artists moved by hand', movedByHand: 'Moved by hand', putBack: 'Put back' },
     /**
@@ -445,11 +447,6 @@ export const library = {
     empty: 'No song is in your library more than once.',
     /** The button over the list; [count] is how many songs. */
     cleanAll: (count: number) => `Clean up all ${format.number(count)}`,
-    /** Asked in the screen before that: [files] is how many are deleted, [songs] how many keep one copy. */
-    confirmAll: (files: number, songs: number) =>
-      `Delete ${filesCounted(files)}? One copy of each of the ${format.number(songs)} ${oneOrMany(songs, 'song', 'songs')} is kept, and every deleted file’s listens, tags, lyrics and places in lists are moved to it first. Android asks once more before anything is deleted.`,
-    /** The button that says yes to that. */
-    confirm: (files: number) => `Delete ${filesCounted(files)}`,
     /** Under each song's copies; [count] is how many go. */
     deleteOthers: (count: number) =>
       oneOrMany(count, 'Delete the other copy', `Delete the other ${format.number(count)} copies`),

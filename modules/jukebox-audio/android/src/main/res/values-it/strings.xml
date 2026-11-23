@@ -29,7 +29,6 @@
   <string name="jukebox_widget_up_next">In coda</string>
   <string name="jukebox_widget_up_next_empty">Nient’altro in coda</string>
   <string name="jukebox_widget_open">Apre il lettore</string>
-  <string name="jukebox_widget_continue">Continua: %1$s</string>
 
   <!-- The media notification. -->
   <string name="jukebox_playback_channel">In riproduzione</string>

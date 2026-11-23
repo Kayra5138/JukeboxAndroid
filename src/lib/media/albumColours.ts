@@ -4,6 +4,7 @@ import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import type { Album } from './albums.ts';
 import { albumArtworkFor } from './artwork.ts';
+import { standInFor } from './standIns.ts';
 
 /**
  * The colour of each record's cover, for the rack's order by colour
@@ -12,7 +13,8 @@ import { albumArtworkFor } from './artwork.ts';
  *
  * Read once for each record and kept, by the record's key, in a setting, so
  * that only a record new to the library is read again; an empty string for
- * one with no cover, which is not asked about again either. Reading a cover
+ * one that could not be read, and a sleeve's colour for one with no cover,
+ * each looked at again once in a run of the app. Reading a cover
  * opens it, so the ones not known are read a few at a time behind the
  * screen, and the colours are handed out together when they have all been
  * read: handed out one by one, the rack would reorder itself under the
@@ -39,27 +41,44 @@ function colours(): Map<string, string> {
   } catch {
     // Read again from the covers, then.
   }
-  shown = new Map(known);
+  shown = plain(known);
   return known;
 }
 
+/*
+  A colour taken from a record's paper sleeve, having no cover, is kept with
+  a mark, so that the record is looked at again once in each run of the app:
+  given a cover since, by a lookup or in its files, it took the sleeve's
+  colour for good. Without the mark for what is handed out.
+*/
+const SLEEVE = '~';
+const plain = (all: ReadonlyMap<string, string>) =>
+  new Map([...all].map(([key, hex]) => [key, hex.startsWith(SLEEVE) ? hex.slice(SLEEVE.length) : hex] as const));
+/** The records looked at again this run, a sleeve's colour or none found: not again until the next. */
+const lookedAgain = new Set<string>();
+
 function handOut(): void {
   const all = colours();
-  shown = new Map(all);
+  shown = plain(all);
   writeSetting(SETTINGS.albumColours, JSON.stringify(Object.fromEntries(all)));
   for (const watcher of watchers) watcher();
 }
 
 async function colourOf(album: Album): Promise<string> {
   try {
-    const path = await albumArtworkFor(album.tracks);
+    const cover = await albumArtworkFor(album.tracks);
+    // A record with no cover is the colour of its paper sleeve's label: its genre's.
+    const path = cover ?? (album.tracks[0] ? await standInFor(album.tracks[0]) : null);
     if (!path) return '';
+    let hex = '';
     if (JukeboxAudio.coverReadingAsync) {
       const read = await JukeboxAudio.coverReadingAsync(path);
-      return read?.main ?? read?.stops[1] ?? '';
+      hex = read?.main ?? read?.stops[1] ?? '';
+    } else {
+      const stops = await JukeboxAudio.coverColoursAsync?.(path);
+      hex = stops?.[1] ?? '';
     }
-    const stops = await JukeboxAudio.coverColoursAsync?.(path);
-    return stops?.[1] ?? '';
+    return hex && !cover ? `${SLEEVE}${hex}` : hex;
   } catch {
     return '';
   }
@@ -72,7 +91,13 @@ async function readAll(albums: readonly Album[]): Promise<void> {
     return;
   }
   const all = colours();
-  const wanted = albums.filter((album) => !all.has(album.key));
+  // Those found without a colour, or with only their sleeve's, asked again once a run: a cover may have come since.
+  const wanted = albums.filter((album) => {
+    const hex = all.get(album.key);
+    if (hex && !hex.startsWith(SLEEVE)) return false;
+    if (hex === undefined) return true;
+    return !lookedAgain.has(album.key);
+  });
   if (wanted.length === 0) return;
   reading = true;
   let next = 0;
@@ -80,7 +105,10 @@ async function readAll(albums: readonly Album[]): Promise<void> {
     while (next < wanted.length) {
       const album = wanted[next];
       next += 1;
-      if (album) all.set(album.key, await colourOf(album));
+      if (album) {
+        lookedAgain.add(album.key);
+        all.set(album.key, await colourOf(album));
+      }
     }
   };
   try {
@@ -105,6 +133,7 @@ async function readAll(albums: readonly Album[]): Promise<void> {
  */
 export function forgetAlbumColour(key: string): void {
   colours().delete(key);
+  lookedAgain.delete(key);
   if (shown.has(key)) {
     const left = new Map(shown);
     left.delete(key);

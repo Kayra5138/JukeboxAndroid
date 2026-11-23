@@ -4,6 +4,9 @@ import type { Strings } from '../en/index.ts';
 
 export const common: Strings['common'] = {
   cancel: 'Annuler',
+  /** For a moment after something is taken out, the way to have it back (`ui/undo.ts`). */
+  undo: 'Annuler',
+  undone: { reset: 'Réinitialisé', removedFromList: (title: string) => `Retiré de la liste : ${title}`, letGo: (title: string) => `Laissé partir : ${title}` },
   save: 'Enregistrer',
   done: 'Terminé',
   ok: 'OK',

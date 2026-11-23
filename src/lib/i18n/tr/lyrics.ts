@@ -2,6 +2,7 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lyrics: Strings['lyrics'] = {
+  follow: 'Şarkıya dön',
   none: 'Şarkı sözü bulunamadı.',
   translating: 'Çevriliyor…',
   seekTo: (seconds) => `Şu ana git: ${seconds} sn`,

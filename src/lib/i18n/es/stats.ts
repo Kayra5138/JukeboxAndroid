@@ -61,7 +61,6 @@ const capitalised = (word: string) => word.charAt(0).toUpperCase() + word.slice(
 const percent = (value: number) => `${value} %`;
 
 export const stats: Strings['stats'] = {
-  percent,
 
   period: {
     labels: { day: 'Día', week: 'Semana', month: 'Mes', year: 'Año', all: 'Todo' },

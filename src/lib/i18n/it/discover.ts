@@ -7,6 +7,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Pensato per il tuo prossimo ascolto',
     refresh: 'Aggiorna',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Scorri per aggiornare',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Rilascia per aggiornare',
     updated: (date) => `Aggiornato il ${date}`,
 
     familiar: (because) => `Altro dai tuoi artisti · ${because}`,
@@ -46,7 +50,6 @@ export const discover: Strings['discover'] = {
     failed: 'Download non riuscito · tocca per riprovare',
     needsBuild: 'Serve l’app aggiornata',
     waitingWifi: 'In attesa del Wi-Fi · tocca per scaricare',
-    percent: (percent) => `${n(percent)}%`,
     gettingReady: 'Download in corso',
     hint: 'Riproduce la canzone, scaricandola prima se necessario',
     nowPlaying: (title) => `In riproduzione: ${title}`,
@@ -153,7 +156,8 @@ export const discover: Strings['discover'] = {
     buildingArtists: (done, total) =>
       `Ricerca di canzoni · ${n(done)} di ${n(total)} ${total === 1 ? 'artista' : 'artisti'}`,
     preparing: (ready, target) =>
-      `Una nuova lista sta arrivando · ${n(ready)} di ${n(target)} ${target === 1 ? 'canzone pronta' : 'canzoni pronte'}.${ready > 0 ? ' Aggiorna di nuovo per vederla subito.' : ''}`,
+      `Una nuova lista sta arrivando · ${n(ready)} di ${n(target)} ${target === 1 ? 'canzone pronta' : 'canzoni pronte'}.`,
+    showNow: 'Mostra ora',
     offline: 'Nessuna connessione. La tua lista resta; le nuove canzoni verranno cercate quando ci sarà.',
     offlineEmpty: 'Nessuna connessione. Scopri creerà la tua lista quando ci sarà.',
     noLibrary: 'Scopri parte dalla musica su questo telefono, e non ne ha ancora trovata.',

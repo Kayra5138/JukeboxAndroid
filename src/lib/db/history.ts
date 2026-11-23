@@ -1,4 +1,4 @@
-import { creditReader } from './credits.ts';
+import { currentCreditReader } from './credits.ts';
 import { db } from './index.ts';
 import { countsAsPlay, type Play } from '../player/session.ts';
 import { countArtists, tallyArtists, type CreditListens } from '../stats/artists.ts';
@@ -85,14 +85,18 @@ export type ListeningSummary = {
 };
 
 /*
+  The readings for the statistics are asked of the database on its own
+  thread, and waited for: a whole history of listens, read on the thread that
+  draws, held the screen still for most of a second on a phone.
+
   Every query below takes a half-open range and compares it the same way:
   `started_at >= since AND started_at < until`. Half open is what lets two
   neighbouring periods be asked about without a listen falling into both, and
   the same comparison everywhere is what keeps the chart's columns adding up to
   the summary above them.
 */
-export function summarize(range: Range = ALL_TIME): ListeningSummary {
-  const row = db().getFirstSync<{
+export async function summarize(range: Range = ALL_TIME): Promise<ListeningSummary> {
+  const row = await db().getFirstAsync<{
     play_count: number;
     total_seconds: number | null;
     distinct_tracks: number;
@@ -113,7 +117,7 @@ export function summarize(range: Range = ALL_TIME): ListeningSummary {
     beside the two of them, and somebody who had only ever heard Rihanna as a
     guest had not heard her at all.
   */
-  const credits = db().getAllSync<{ artist: string; title: string | null }>(
+  const credits = await db().getAllAsync<{ artist: string; title: string | null }>(
     `SELECT DISTINCT artist, title FROM plays
      WHERE started_at >= ? AND started_at < ? AND artist IS NOT NULL`,
     range.since,
@@ -124,7 +128,7 @@ export function summarize(range: Range = ALL_TIME): ListeningSummary {
     playCount: row?.play_count ?? 0,
     totalSeconds: row?.total_seconds ?? 0,
     distinctTracks: row?.distinct_tracks ?? 0,
-    distinctArtists: countArtists(credits, creditReader()),
+    distinctArtists: countArtists(credits, currentCreditReader()),
     completedCount: row?.completed_count ?? 0,
   };
 }
@@ -139,8 +143,8 @@ export function summarize(range: Range = ALL_TIME): ListeningSummary {
  * be checked. Only three columns, and only one period's worth, so what comes
  * back is a few thousand numbers at the very outside.
  */
-export function listens(range: Range = ALL_TIME): Listen[] {
-  return db().getAllSync<Listen>(
+export function listens(range: Range = ALL_TIME): Promise<Listen[]> {
+  return db().getAllAsync<Listen>(
     `SELECT started_at AS at, seconds_played AS seconds, completed
      FROM plays WHERE started_at >= ? AND started_at < ?
      ORDER BY started_at`,
@@ -168,6 +172,16 @@ export function playCounts(): Map<string, { plays: number; completed: number }> 
     counts.set(row.track_id, { plays: row.plays, completed: row.completed ?? 0 });
   }
   return counts;
+}
+
+/** How often each track was listened to and when last, in one reading of the history. */
+export function listenedTo(): Map<string, { plays: number; lastAt: number }> {
+  const rows = db().getAllSync<{ track_id: string; plays: number; at: number }>(
+    `SELECT track_id, COUNT(*) AS plays, MAX(started_at) AS at FROM plays GROUP BY track_id`
+  );
+  const heard = new Map<string, { plays: number; lastAt: number }>();
+  for (const row of rows) heard.set(row.track_id, { plays: row.plays, lastAt: row.at });
+  return heard;
 }
 
 /**
@@ -229,8 +243,8 @@ export function skipCounts(): Map<string, number> {
 }
 
 /** When the history starts, which is how wide a chart of all of it has to be. */
-export function firstPlayAt(): number | null {
-  const row = db().getFirstSync<{ first: number | null }>(
+export async function firstPlayAt(): Promise<number | null> {
+  const row = await db().getFirstAsync<{ first: number | null }>(
     `SELECT MIN(started_at) AS first FROM plays`
   );
   return row?.first ?? null;
@@ -293,8 +307,8 @@ export type TopEntry = {
   sample?: string | null;
 };
 
-export function topTracks(limit = 20, range: Range = ALL_TIME): TopEntry[] {
-  return db().getAllSync<TopEntry>(
+export function topTracks(limit = 20, range: Range = ALL_TIME): Promise<TopEntry[]> {
+  return db().getAllAsync<TopEntry>(
     // A track renamed part way through its history has more than one title in
     // the table, and which of them a bare `title` returns is SQLite's choice.
     // The most recent is the defensible one: it is what the track is called now.
@@ -327,8 +341,8 @@ export function topTracks(limit = 20, range: Range = ALL_TIME): TopEntry[] {
  * listen and `Eminem, Rihanna` is not an artist. The title comes along because
  * a guest is as often named there as in the credit.
  */
-export function topArtists(limit = 20, range: Range = ALL_TIME): TopEntry[] {
-  const rows = db().getAllSync<CreditListens>(
+export async function topArtists(limit = 20, range: Range = ALL_TIME): Promise<TopEntry[]> {
+  const rows = await db().getAllAsync<CreditListens>(
     `SELECT artist,
             title,
             track_id AS trackId,
@@ -339,5 +353,5 @@ export function topArtists(limit = 20, range: Range = ALL_TIME): TopEntry[] {
     range.since,
     range.until
   );
-  return tallyArtists(rows, creditReader(), limit).map((artist) => ({ ...artist, detail: null }));
+  return tallyArtists(rows, currentCreditReader(), limit).map((artist) => ({ ...artist, detail: null }));
 }

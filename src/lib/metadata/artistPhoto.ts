@@ -1,5 +1,6 @@
 import { request, USER_AGENT } from './http.ts';
-import { MIN_ARTIST_SCORE, musicBrainzGet } from './musicbrainz.ts';
+import { escapeLucene, MIN_ARTIST_SCORE, musicBrainzGet } from './musicbrainz.ts';
+import { foldForMatch } from './text.ts';
 
 /**
  * A picture of the person, which no music catalogue will give you.
@@ -60,9 +61,13 @@ type CommonsAnswer = { query?: { pages?: Record<string, { imageinfo?: ImageInfo[
  * question about a name the user's own files carry, so the answer is either the
  * top hit or nobody.
  */
-export function confidentArtistId(search: ArtistSearch): string | null {
+export function confidentArtistId(search: ArtistSearch, wanted?: string): string | null {
   const best = search.artists?.[0];
-  return best && best.score >= MIN_ARTIST_SCORE ? best.id : null;
+  if (!best || best.score < MIN_ARTIST_SCORE) return null;
+  // And called what was asked for. The score is only how the hits stand to one another: the best of a search
+  // for a name nobody has was scored a hundred, and was somebody else's face beside the name.
+  if (wanted != null && foldForMatch(best.name) !== foldForMatch(wanted)) return null;
+  return best.id;
 }
 
 /**
@@ -185,11 +190,12 @@ export async function lookupArtistPhoto(
   const wanted = name.trim();
   if (!wanted) return null;
 
+  // The plain name, unfielded (see the tests), less what the query language would read as its own: a `/` or a `-` in a name failed the search or turned it into another.
   const search = await musicBrainzGet<ArtistSearch>(
-    `/artist/?query=${encodeURIComponent(wanted)}&fmt=json&limit=1`,
+    `/artist/?query=${encodeURIComponent(escapeLucene(wanted))}&fmt=json&limit=1`,
     signal
   );
-  const id = confidentArtistId(search);
+  const id = confidentArtistId(search, wanted);
   if (!id) return null;
 
   const artist = await musicBrainzGet<ArtistRelations>(`/artist/${id}?inc=url-rels&fmt=json`, signal);

@@ -1,6 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Modal, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Pressable } from '../Pressable';
+import { useState } from 'react';
+import { LEADING, SPACE, TYPE } from '../../lib/theme/measures';
+import { Note } from '../Note';
+import { StyleSheet, Text, View } from 'react-native';
+import { OnAPage } from '../OnAPage';
+import { TextButton } from '../Button';
+import { CardAnswers } from '../CardAnswers';
+import { Field } from '../FormScroll';
+import { useRows } from '../settings/rows';
 
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import {
@@ -10,8 +16,7 @@ import {
   type AutoEqResult,
 } from '../../lib/equalizer/autoeq';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../../lib/theme/Veil';
+import { makeStyles } from '../../lib/theme/index';
 
 /**
  * Asks for a headphone correction, as text.
@@ -27,31 +32,32 @@ import { scrimOf, useWindowVeil } from '../../lib/theme/Veil';
  * Text that does not is answered here, with the box still open and what was
  * pasted still in it.
  */
-export function ImportSheet({
-  visible,
-  onImport,
-  onClose,
-}: {
-  visible: boolean;
+type Importing = {
   /** `name` is a suggestion from the file's name, or empty where there was none. */
   onImport: (result: AutoEqResult, said: string, name: string) => void;
   onClose: () => void;
-}) {
+};
+
+export function ImportSheet({ visible, onImport, onClose }: Importing & { visible: boolean }) {
+  const t = useT();
+  // On a page of its own in the tab, as Settings asks everything now (`OnAPage`).
+  return (
+    <OnAPage visible={visible} title={t.sound.autoEq.title} onClose={onClose}>
+      <ImportFields onImport={onImport} onClose={onClose} />
+    </OnAPage>
+  );
+}
+
+/**
+ * What is pasted or read, kept here: the page draws this same field each time
+ * the equalizer is drawn again, and a new one, empty, each time it is opened.
+ */
+function ImportFields({ onImport, onClose }: Importing) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
-  const c = useColours();
-  useWindowVeil(visible);
+  const rows = useRows();
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
-
-  // Emptied as it opens rather than as it closes, like the text prompt.
-  useEffect(() => {
-    if (visible) {
-      setText('');
-      setProblem(null);
-    }
-  }, [visible]);
 
   const read = (source: string, fileName: string | null) => {
     const result = parseAutoEq(source);
@@ -64,8 +70,11 @@ export function ImportSheet({
   };
 
   const pick = async () => {
+    // Asked outside the try, which the React Compiler cannot take a question mark inside of.
+    const picker = JukeboxAudio.pickTextFileAsync;
+    if (!picker) return;
     try {
-      const picked = await JukeboxAudio.pickTextFileAsync?.();
+      const picked = await picker();
       // Backed out of the picker, which is not a failure and says nothing.
       if (!picked) return;
       setText(picked.text);
@@ -76,16 +85,9 @@ export function ImportSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Neither the backdrop nor the sheet is a stop for a screen reader; see
-          `OptionSheet`. Cancel and the back gesture are the ways out. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
-        {/* Swallows taps so touching the sheet does not count as touching the
-            backdrop behind it. */}
-        <Pressable style={styles.sheet} onPress={() => {}} accessible={false}>
-          <Text accessibilityRole="header" style={styles.heading}>{t.sound.autoEq.title}</Text>
+    <View style={[rows.card, styles.onPage]}>
           <Text style={styles.hint}>{t.sound.autoEq.about}</Text>
-          <TextInput
+          <Field
             style={styles.input}
             value={text}
             onChangeText={(next) => {
@@ -93,7 +95,6 @@ export function ImportSheet({
               setProblem(null);
             }}
             placeholder={'Preamp: -6.2 dB\nFilter 1: ON PK Fc 105 Hz Gain -3.4 dB Q 0.70'}
-            placeholderTextColor={c.textFaint}
             accessibilityLabel={t.sound.autoEq.textLabel}
             autoCapitalize="none"
             autoCorrect={false}
@@ -101,80 +102,30 @@ export function ImportSheet({
             textAlignVertical="top"
           />
           {problem ? (
-            <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.bad}>
+            <Note tone="bad">
               {problem}
-            </Text>
+            </Note>
           ) : null}
-          <View style={styles.actions}>
-            {/* Not offered where the native side cannot do it; pasting needs
-                nothing from it. */}
-            {JukeboxAudio.pickTextFileAsync ? (
-              <Pressable android_ripple={pressed} style={styles.button} onPress={() => void pick()} accessibilityRole="button">
-                <Text style={styles.linkLabel}>{t.sound.autoEq.chooseFile}</Text>
-              </Pressable>
-            ) : null}
-            <View style={styles.gap} />
-            <Pressable android_ripple={pressed} style={styles.button} onPress={onClose} accessibilityRole="button">
-              <Text style={styles.buttonLabel}>{t.common.cancel}</Text>
-            </Pressable>
-            <Pressable
-              android_ripple={pressed}
-              style={[styles.button, styles.confirm, !text.trim() && styles.disabled]}
-              disabled={!text.trim()}
-              onPress={() => read(text, null)}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: !text.trim() }}>
-              <Text style={styles.confirmLabel}>{t.common.import}</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          {/* Not offered where the native side cannot do it; pasting needs nothing from it. */}
+          {JukeboxAudio.pickTextFileAsync ? <TextButton label={t.sound.autoEq.chooseFile} onPress={() => void pick()} /> : null}
+          <CardAnswers
+            answers={[
+              { label: t.common.cancel, kind: 'quiet', onPress: onClose },
+              { label: t.common.import, disabled: !text.trim(), onPress: () => read(text, null) },
+            ]}
+          />
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  sheet: {
-    backgroundColor: c.surface,
-    borderRadius: 14,
-    padding: 18,
-    gap: 12,
-    alignSelf: 'stretch',
-    // Leaves the keyboard room on a phone held sideways, where a sheet as
-    // tall as it liked would put its own buttons underneath it.
-    maxHeight: '100%',
-    ...outlined(c),
-  },
-  heading: { color: c.text, fontSize: 15, fontWeight: '600' },
-  hint: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-  input: {
-    color: c.text,
-    fontSize: 12.5,
-    fontFamily: 'monospace',
-    backgroundColor: c.bg,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    // About six lines, and scrolling inside itself past that: a correction
-    // is eleven, and the buttons have to stay on the screen with it.
-    height: 132,
-    flexShrink: 1,
-    ...outlined(c),
-  },
-  bad: { color: c.danger, fontSize: 12.5, lineHeight: 18 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  gap: { flex: 1 },
-  button: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8 },
-  buttonLabel: { color: c.textSecondary, fontSize: 14 },
-  linkLabel: { color: c.accent, fontSize: 14 },
-  confirm: { backgroundColor: c.primary },
-  confirmLabel: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
-  disabled: { opacity: 0.35 },
+  // In a card of Settings, with room inside it, on its page.
+  onPage: { padding: SPACE.l, gap: SPACE.m },
+  hint: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+  // The app's box, in letters of one width, the way a correction's columns line up; about six lines, and scrolling
+  // inside itself past that: a correction is eleven, and the buttons have to stay on the screen with it.
+  input: { fontSize: TYPE.hint, fontFamily: 'monospace', height: CORRECTION_BOX, flexShrink: 1 },
 }));
+
+/** How tall the box a correction is pasted into stands: see `input`. */
+const CORRECTION_BOX = 132;

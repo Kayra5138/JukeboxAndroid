@@ -9,6 +9,9 @@ const minutes = (count: number) => `${count} ${plural(count, 'минуту', 'м
 export const player: Strings['player'] = {
   bar: {
     opensPlayer: 'Открывает плеер',
+    upNext: (title: string) => `Далее: ${title}`,
+    lastInQueue: 'Последний в очереди',
+    timeLeft: (clock: string) => `Осталось ${clock}`,
   },
   sheet: {
     nothingPlaying: 'Ничего не играет.',
@@ -56,6 +59,9 @@ export const player: Strings['player'] = {
     },
   },
   settings: {
+    tabs: { sound: 'Звук', look: 'Вид', sleep: 'Сон' },
+    moreEffects: 'Ещё',
+    fewerEffects: 'Меньше',
     playback: 'Воспроизведение',
     backToNormal: 'Вернуть обычные скорость и высоту тона',
     /* Both скорость and высота are feminine, so one word serves for either. */
@@ -65,7 +71,6 @@ export const player: Strings['player'] = {
     pitchHint: 'В полутонах, вверх или вниз; запись при этом играет со скоростью, заданной выше.',
     effects: 'Эффекты',
     equalizer: { note: 'Полосы, бас и усиление громкости' },
-    crossfade: { note: 'Как один трек сменяется следующим' },
     allEffects: { title: 'Все эффекты', note: 'Ширина, кроссфид, вращение и уровень' },
     jumps: {
       heading: 'Перемотка для этой книги или передачи',

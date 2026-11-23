@@ -5,6 +5,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: '次に聴く曲のおすすめ',
     refresh: '更新',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'スライドして更新',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: '離して更新',
     updated: (date) => `更新：${date}`,
 
     familiar: (because) => `よく聴くアーティストの曲 · ${because}`,
@@ -44,7 +48,6 @@ export const discover: Strings['discover'] = {
     failed: 'ダウンロード失敗 · タップして再試行',
     needsBuild: 'アプリの更新が必要です',
     waitingWifi: 'Wi-Fi待ち · タップしてダウンロード',
-    percent: (percent) => `${format.number(percent)}%`,
     gettingReady: 'ダウンロード中',
     hint: '曲を再生します。必要ならまずダウンロードします',
     nowPlaying: (title) => `再生中：${title}`,
@@ -150,7 +153,8 @@ export const discover: Strings['discover'] = {
     buildingArtists: (done, total) =>
       `曲を探しています · アーティスト${format.number(total)}人中${format.number(done)}人`,
     preparing: (ready, target) =>
-      `新しいリストを準備中 · ${format.number(target)}曲中${format.number(ready)}曲の準備完了。${ready > 0 ? 'もう一度更新すると今すぐ表示できます。' : ''}`,
+      `新しいリストを準備中 · ${format.number(target)}曲中${format.number(ready)}曲の準備完了。`,
+    showNow: '今すぐ表示',
     offline: '接続がありません。リストはそのまま残ります。新しい曲は接続が戻ったときに探します。',
     offlineEmpty: '接続がありません。接続が戻ったら、ディスカバーがリストを作成します。',
     noLibrary: 'ディスカバーはこの端末にある音楽をもとにおすすめを探しますが、まだ音楽が見つかっていません。',

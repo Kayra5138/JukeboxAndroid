@@ -88,6 +88,8 @@ export const welcome: Strings['welcome'] = {
     note:
       'Jukebox’ı kurulduğu gündeki gibi gösterir: ilk ayarlar, kapakları bulma önerisi ve ipuçları. Müziğin, listelerin ve ayarların olduğu gibi kalır.',
     again: 'Yeniden göster',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: 'İlk açılış yeniden gösterilsin mi?', body: 'İlk ayarlar, kapakları bulma önerisi ve ipuçları yeniden gelir. Müziğin, listelerin ve ayarların olduğu gibi kalır.' },
   },
 
   discoverEarly:

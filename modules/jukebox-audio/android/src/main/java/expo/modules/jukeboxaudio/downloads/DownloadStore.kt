@@ -49,6 +49,8 @@ object DownloadStore {
     // still running. What was only waiting still is, and nothing is started
     // from here: that is for whoever opens the app, or asks for something.
     queue.recover { runCatching { recoverPublication(context, it) }.getOrDefault(false) }
+    // What was cleared away long ago and came to nothing, let go of, the record being written whole at every change.
+    queue.compact()
     queue.changed = false
     // Written again at the next change, if the disk will not take it now.
     runCatching { persist() }
@@ -58,6 +60,8 @@ object DownloadStore {
   }
 
   private fun persist() {
+    // Whatever is written down is a change worth reading the whole list again for.
+    revision += 1
     val stream = storage.startWrite()
     try {
       stream.write(queue.written().toByteArray(Charsets.UTF_8))
@@ -86,6 +90,7 @@ object DownloadStore {
       queue.changed = false
       queue.stateChanged = false
       // Whoever stands in [awaitFind] is waiting for exactly this.
+      if (jobsChanged || stateChanged) revision += 1
       if (jobsChanged || stateChanged) monitor.notifyAll()
       if (jobsChanged || stateChanged) runCatching { told?.invoke() }
       /*
@@ -169,6 +174,25 @@ object DownloadStore {
    */
   @Synchronized
   fun list(): List<Map<String, Any?>> = jobs.asReversed().map(::said)
+
+  /**
+   * Counted up at every change worth writing down: a job added, ended,
+   * cleared or moved, the queue paused. Not for a percentage. Whoever read
+   * [list] at one count and finds it the same has only percentages to catch
+   * up on, which [listActive] has.
+   */
+  @Volatile var revision = 0L
+    private set
+
+  /**
+   * The jobs still to be done or under way, newest first as in [list], and
+   * the [revision] they were read at: for the reading every second while
+   * something is fetched, which went through the whole history of downloads,
+   * thousands of them, to show one percentage.
+   */
+  @Synchronized
+  fun listActive(): Pair<Long, List<Map<String, Any?>>> =
+    revision to jobs.asReversed().filter { it.optString("status") in activeStates }.map(::said)
 
   /*
     A job on its second try says so, as `retrying`, for as long as the try
@@ -271,6 +295,8 @@ object DownloadStore {
       .put("trackId", trackId).put("folder", folder).put("status", "done").put("progress", 100)
       .put("described", false).put("artworkUri", artworkUri ?: JSONObject.NULL)
       .put("createdAt", now).put("finishedAt", now).put("automatic", false).put("cleared", false)
+    // Kept, it is not listened to any more: a library song, looked up as any is, and not let go again.
+    receipt.optJSONObject("video")?.remove("listen")
     jobs.add(receipt); persist()
   }
 
@@ -317,7 +343,8 @@ object DownloadStore {
 
   private fun exists(context: Context, job: JSONObject): Boolean { return try {
     if (!job.isNull("discoverKey")) return DiscoverFiles.track(context, job.getString("id")) != null
-    val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY), job.getString("trackId").toLong())
+    // Asked of every volume: a download somebody moved to a memory card is still there.
+    val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL), job.getString("trackId").toLong())
     context.contentResolver.query(uri, arrayOf(MediaStore.Audio.Media._ID), null, null, null)?.use { it.moveToFirst() } ?: false
   } catch (_: Exception) { false } }
 
@@ -373,7 +400,8 @@ object DownloadStore {
   /** Which of [ids] the media store still has; null where it could not be asked. */
   private fun presentTracks(context: Context, ids: List<Long>): Set<Long>? {
     val found = HashSet<Long>()
-    val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    // Every volume, as `exists` asks.
+    val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
     for (batch in ids.distinct().chunked(400)) {
       val cursor = try {
         context.contentResolver.query(

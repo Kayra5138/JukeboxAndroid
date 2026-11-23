@@ -3,8 +3,6 @@ import { oneOrMany } from '../write.ts';
 
 /** The equalizer, the effects and the crossfade. */
 export const sound = {
-  /** What the sliders on all three screens read. */
-  percent: (value: number) => `${format.number(value)}%`,
 
   /** The effects screen, and the chips for the same effects in the player; see `player/effects.ts`. */
   effects: {
@@ -22,6 +20,8 @@ export const sound = {
       headphones: { name: 'Headphones', hint: 'Takes hard-panned mixes out of your skull' },
       '8d': { name: '8D', hint: 'The sound turns slowly around you' },
       karaoke: { name: 'Karaoke-ish', hint: 'Pushes the middle away' },
+      nightcore: { name: 'Nightcore', hint: 'Faster and higher, as a record played too fast' },
+      slowed: { name: 'Slowed + reverb', hint: 'Slower and lower, played into a large room' },
     },
     /** The treatments of the voice, by their id. */
     voices: {
@@ -47,6 +47,13 @@ export const sound = {
     left: (percent: number) => `${percent}% left`,
     right: (percent: number) => `${percent}% right`,
     swap: { title: 'Swap channels', note: 'Left becomes right. For a miswired cable.' },
+
+    room: 'Room',
+
+    reverb: 'Reverb',
+
+    reverbNote: 'How much of a large room the music is played into. Nought is none.',
+
 
     headphones: 'Headphones',
     crossfeed: 'Crossfeed',

@@ -1,7 +1,10 @@
 import { useCallback, useRef, useState } from 'react';
+import { LEADING, RADIUS, SPACE, TYPE, PAGE } from '../../lib/theme/measures';
+import { Note } from '../Note';
+import { SectionLabel } from '../settings/rows';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlatList, Keyboard, StyleSheet, Text, View } from 'react-native';
+import { Busy } from '../Busy';
 
 import { Image } from '../Picture';
 import { Pressable } from '../Pressable';
@@ -12,8 +15,9 @@ import { isChannelAddress, isFeedAddress } from '../../lib/podcasts/episodes';
 import { channelFeedOf, searchChannels, searchShows, type FoundShow } from '../../lib/podcasts/feed';
 import { podcastsWifiOnly, setPodcastsWifiOnly } from '../../lib/podcasts/refresh';
 import { subscriptions, type Subscription } from '../../lib/podcasts/store';
-import { makeStyles, outlined, switchColours, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
 import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../lib/ui/lists';
+import { usePageRoom } from '../Page';
 
 /** A search's results, or the podcasts followed: one row either way. */
 type Row = { feedUrl: string; title: string; author: string | null; image: string | null; followers?: number | null };
@@ -31,15 +35,24 @@ const CHANNELS_SHOWN = 5;
  * shown above the podcasts, few as they are. A podcast or a channel opens a
  * screen of its own, where it is followed and its episodes fetched.
  */
-export function PodcastsPane() {
+/**
+ * [query] and [onQuery], where given, are the words typed kept by the screen
+ * round it, so that they are still there when another source is chosen and
+ * this one again: the same words looked for in each.
+ */
+export function PodcastsPane({ query: shared, onQuery }: { query?: string; onQuery?: (query: string) => void } = {}) {
   const t = useT();
   const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
-  const insets = useSafeAreaInsets();
+  // The tab bar and the bar of what is playing, in a theme of glass laid over the foot of the list.
+  // The page's room, under the choice of where tapes come from, which stands over it (see `PageScroll`'s [head]).
+  const room = usePageRoom();
   const router = useRouter();
   const said = t.search.tapes.podcasts;
-  const [query, setQuery] = useState('');
+  const [own, setOwn] = useState('');
+  const query = shared ?? own;
+  const setQuery = onQuery ?? setOwn;
   const [found, setFound] = useState<FoundShow[] | null>(null);
   /** The channels found for the same words: null while looked for, or where nothing was searched for. */
   const [channels, setChannels] = useState<Row[] | null>(null);
@@ -137,34 +150,27 @@ export function PodcastsPane() {
       data={items}
       keyExtractor={(item) => (item.kind === 'row' ? item.feedUrl : item.key)}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+      contentContainerStyle={{ ...room, paddingTop: PAGE.top }}
       ListHeaderComponent={
         <>
           <Text style={styles.intro}>{said.intro}</Text>
           {/* Where podcasts can be had from, for whoever wonders where to look. */}
           <Text style={styles.sources}>{said.sources}</Text>
-          <View style={styles.searchRow}>
-            <SearchField
-              style={styles.input}
-              accessibilityLabel={said.placeholder}
-              value={query}
-              onChangeText={(text) => {
-                setQuery(text);
-                if (!text.trim()) clear();
-              }}
-              placeholder={said.placeholder}
-              maxLength={500}
-              onSubmitEditing={() => void search()}
-            />
-            <Pressable android_ripple={pressed} accessibilityRole="button" style={[styles.searchButton, !query.trim() && styles.searchButtonOff]}
-              disabled={!query.trim()} onPress={() => void search()}>
-              <Text style={!query.trim() ? styles.darkTextOff : styles.darkText}>{t.common.search}</Text>
-            </Pressable>
-          </View>
-          {searching && found == null && channels == null ? <ActivityIndicator style={styles.searching} color={c.text} /> : null}
-          {message ? <Text accessibilityRole="alert" style={styles.note}>{message}</Text> : null}
+          <SearchField
+            accessibilityLabel={said.placeholder}
+            value={query}
+            onChangeText={(text) => {
+              setQuery(text);
+              if (!text.trim()) clear();
+            }}
+            placeholder={said.placeholder}
+            maxLength={500}
+            go={{ label: t.common.search, onPress: () => void search() }}
+          />
+          {searching && found == null && channels == null ? <Busy style={styles.searching} color={c.text} /> : null}
+          {message ? <Note style={styles.noteRoom}>{message}</Note> : null}
           {channelsTrouble ? <Text style={styles.note}>{said.channelsFailed}</Text> : null}
-          {nothing ? <Text accessibilityRole="alert" style={styles.note}>{said.nothingFound}</Text> : null}
+          {nothing ? <Note style={styles.noteRoom}>{said.nothingFound}</Note> : null}
           {!searched ? (
             <>
               <View style={styles.card}>
@@ -177,20 +183,19 @@ export function PodcastsPane() {
                       setPodcastsWifiOnly(on);
                       setWifiOnly(on);
                     }}
-                    {...switchColours(c, wifiOnly)}
                   />
                 </View>
                 <Text style={styles.muted}>{said.wifiOnlyNote}</Text>
               </View>
-              <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.yours)}</Text>
+              <SectionLabel>{said.yours}</SectionLabel>
               {followed.length === 0 ? <Text style={styles.muted}>{said.noneYet}</Text> : null}
             </>
           ) : null}
         </>
       }
       renderItem={({ item }) => {
-        if (item.kind === 'heading') return <Text accessibilityRole="header" style={styles.section}>{t.format.upper(item.label)}</Text>;
-        if (item.kind === 'looking') return <ActivityIndicator style={styles.looking} color={c.textMuted} />;
+        if (item.kind === 'heading') return <SectionLabel>{item.label}</SectionLabel>;
+        if (item.kind === 'looking') return <Busy style={styles.looking} color={c.textMuted} />;
         const channel = item.followers !== undefined;
         const line = [item.author, item.followers != null ? said.subscribers(item.followers) : null].filter(Boolean).join(' · ');
         return (
@@ -212,29 +217,22 @@ export function PodcastsPane() {
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  content: { padding: 20 },
-  intro: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 8 },
-  sources: { color: c.textFaint, fontSize: 12, lineHeight: 17, marginBottom: 16 },
-  searchRow: { flexDirection: 'row', gap: 8 },
-  input: { flex: 1, minWidth: 0, borderRadius: 12, minHeight: 48 },
-  searchButton: { backgroundColor: c.primary, paddingHorizontal: 18, borderRadius: 12, justifyContent: 'center', minHeight: 48, ...outlined(c, c.primary) },
-  searchButtonOff: { backgroundColor: c.surfaceRaised, ...outlined(c) },
-  darkTextOff: { color: c.textDisabled, fontWeight: '600' },
-  darkText: { color: c.onPrimary, fontWeight: '600' },
-  searching: { marginVertical: 16 },
-  note: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 12 },
-  card: { marginTop: 16, padding: 16, gap: 8, borderRadius: 14, backgroundColor: c.surface, ...outlined(c) },
-  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  rowTitle: { color: c.text, fontSize: 15, flexShrink: 1 },
-  muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-  section: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginTop: 24, marginBottom: 8, marginLeft: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  intro: { color: c.textMuted, fontSize: TYPE.small, lineHeight: LEADING.small, marginBottom: SPACE.s },
+  sources: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginBottom: SPACE.l },
+  searching: { marginVertical: SPACE.l },
+  note: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: SPACE.m },
+  noteRoom: { marginTop: SPACE.m },
+  card: { marginTop: SPACE.l, padding: SPACE.l, gap: SPACE.s, borderRadius: RADIUS.card, backgroundColor: c.surface, ...outlined(c) },
+  line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m },
+  rowTitle: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+  muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingVertical: SPACE.s },
   // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  cover: { width: 56, height: 56, borderRadius: 8 },
+  cover: { width: 56, height: 56, borderRadius: RADIUS.cover },
   coverEmpty: { backgroundColor: c.surfaceRaised },
   // A channel's picture, round as YouTube shows it, to tell it from a podcast's.
-  round: { borderRadius: 28 },
-  looking: { marginVertical: 14, alignSelf: 'flex-start', marginLeft: 18 },
-  rowText: { flex: 1, minWidth: 0, gap: 3 },
-  title: { color: c.text, fontSize: 14.5, fontWeight: '500' },
+  round: { borderRadius: RADIUS.pill },
+  looking: { marginVertical: SPACE.m, alignSelf: 'flex-start', marginLeft: SPACE.l },
+  rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  title: { color: c.text, fontSize: TYPE.body, fontWeight: '500' },
 }));

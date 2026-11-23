@@ -671,7 +671,16 @@ class PlayerController(
       "title" to (metadata.title?.toString() ?: ""),
       "artist" to metadata.artist?.toString(),
       "album" to metadata.albumTitle?.toString(),
-      "artworkUri" to null,
+      /*
+        The cover it was handed, for what is not a track of the library: a
+        song of Discover's or one listened to, whose sleeve is a file of the
+        app's and is found nowhere else. Left out, such a song came back from
+        the player with none whenever the app was opened again, and wore a
+        paper sleeve where it had had its cover. A library track's is the
+        address the car is given (`CoverProvider`), not what the app draws it
+        with, which the app finds again for itself.
+      */
+      "artworkUri" to metadata.artworkUri?.toString()?.takeIf { item.mediaId.toLongOrNull() == null },
       "durationSec" to extras?.getDouble(EXTRA_DURATION, -1.0)?.takeIf { it >= 0.0 },
       "trackNumber" to extras?.getInt(EXTRA_TRACK_NUMBER, -1)?.takeIf { it >= 0 },
       "filename" to extras?.getString(EXTRA_FILENAME),

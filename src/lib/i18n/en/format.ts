@@ -12,6 +12,8 @@ const date = (value: Date) =>
 
 export const format = {
   /** A whole number: `12,345`. */
+  /** A share of a hundred, as the language writes one: `42%`. */
+  percent: (value: number) => `${format.number(value)}%`,
   number: (value: number) => grouped(value, ','),
   /** A number with decimal places, one unless told otherwise: `1,234.5`. */
   decimal: (value: number, places: number = 1) => fixed(value, places, '.', ','),

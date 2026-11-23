@@ -1,7 +1,11 @@
 import { memo } from 'react';
+import { ICON, LEADING, RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
+import { ProgressBar } from '../ProgressBar';
 import { StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 
-import { ToFrontIcon } from '../Icons';
+import { TextButton } from '../Button';
+import { TickIcon, ToFrontIcon } from '../Icons';
+import { MediaRow, mediaRowHeight, RowControl } from '../MediaRow';
 import { Image } from '../Picture';
 import { Pressable } from '../Pressable';
 import { useT } from '../../lib/i18n/index';
@@ -31,7 +35,8 @@ export function sizesFor(fontScale: number): Sizes {
   const scale = Math.min(Math.max(fontScale, 1), 2);
   return {
     heading: Math.round(22 + 22 * scale),
-    row: Math.round(20 + 52 * scale),
+    // As tall as every row of three lines (`MediaRow` `tall`), which is what these are.
+    row: mediaRowHeight('tall', fontScale),
     now: Math.round(36 + 92 * scale),
   };
 }
@@ -114,7 +119,6 @@ export const NowRow = memo(
   }) {
     const t = useT();
     const styles = useStyles();
-    const pressed = usePressed();
     const { title } = namesOf(job);
     const stoppable = canCancel(job);
     return (
@@ -131,23 +135,18 @@ export const NowRow = memo(
             <Text style={styles.meta} numberOfLines={1}>
               {t.search.jobLine(statusLabel(job, t), job.format === 'mp3')}
             </Text>
-            <View style={styles.track}>
-              <View style={[styles.fill, { width: `${Math.min(Math.max(job.progress, 0), 100)}%` }]} />
-            </View>
+            <ProgressBar value={job.progress / 100} style={styles.track} />
           </View>
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
+          {/* Too late to stop, for the moment it takes to put the file away. */}
+          <TextButton
+            label={stoppable ? t.common.cancel : '…'}
             accessibilityLabel={t.downloads.cancelLabel(title)}
             disabled={!stoppable}
-            style={styles.textButton}
             onPress={() => {
               haptic('choices', 'tick');
               onCancel(job.id);
-            }}>
-            {/* Too late to stop, for the moment it takes to put the file away. */}
-            <Text style={styles.link}>{stoppable ? t.common.cancel : '…'}</Text>
-          </Pressable>
+            }}
+          />
         </View>
       </View>
     );
@@ -168,7 +167,6 @@ export const NowRow = memo(
 export const WaitingRow = memo(
   function WaitingRow({
     job,
-    height,
     next,
     lifted,
     onLift,
@@ -178,7 +176,6 @@ export const WaitingRow = memo(
     onCancel,
   }: {
     job: DownloadJob;
-    height: number;
     /** The one that will be fetched next, which cannot be put any further forward. */
     next: boolean;
     lifted: boolean;
@@ -193,7 +190,6 @@ export const WaitingRow = memo(
     const t = useT();
     const c = useColours();
     const styles = useStyles();
-    const pressed = usePressed();
     const said = t.downloads;
     const { title } = namesOf(job);
     const movable = canMove(job);
@@ -204,95 +200,80 @@ export const WaitingRow = memo(
     const state = again ? said.retrying(again.why) : automatic ? said.automatic : statusLabel(job, t);
 
     return (
-      <View
-        style={[styles.row, { height }, lifted && styles.rowLifted]}
-        accessible
+      <MediaRow
+        size="tall"
+        style={lifted ? styles.rowLifted : undefined}
+        lead={<Thumbnail job={job} />}
+        title={title}
+        subtitle={metaLine(job, t)}
+        detail={state}
+        menu={false}
         accessibilityLabel={[title, metaLine(job, t), state].join(', ')}
-        // Dragging is not something a screen reader's user can do. The same
-        // moves are in the reader's own list of actions, a place at a time.
-        accessibilityActions={
-          movable
-            ? [
-                { name: 'increment', label: said.moveUp },
-                { name: 'decrement', label: said.moveDown },
-              ]
-            : undefined
-        }
-        onAccessibilityAction={
+        // Dragging is not something a screen reader's user can do. The same moves are in the reader's own list of
+        // actions, a place at a time.
+        actions={
           movable && onStep
-            ? (event) => {
-                if (event.nativeEvent.actionName === 'increment') onStep(job.id, -1);
-                if (event.nativeEvent.actionName === 'decrement') onStep(job.id, 1);
-              }
-            : undefined
-        }>
-        <Thumbnail job={job} />
-        <View style={styles.text}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {metaLine(job, t)}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {state}
-          </Text>
-        </View>
-        {/*
+            ? [
+                { name: 'increment', label: said.moveUp, run: () => onStep(job.id, -1) },
+                { name: 'decrement', label: said.moveDown, run: () => onStep(job.id, 1) },
+              ]
+            : []
+        }
+        /*
           The copy in the hand has no buttons, and keeps the room they took:
           the words in it then stay where they were when it was picked up.
-        */}
-        {movable && !next ? (
-          onFront ? (
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              accessibilityLabel={said.doNextLabel(title)}
-              style={styles.iconButton}
-              onPress={() => {
-                haptic('choices', 'tick');
-                onFront(job.id);
-              }}>
-              <ToFrontIcon size={18} color={c.textMuted} />
-            </Pressable>
-          ) : (
-            <View style={styles.iconButton} />
-          )
-        ) : null}
-        {onCancel ? (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityLabel={said.cancelLabel(title)}
-            disabled={!canCancel(job)}
-            style={styles.iconButton}
-            onPress={() => {
-              haptic('choices', 'tick');
-              onCancel(job.id);
-            }}>
-            <Text style={styles.cross}>×</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.iconButton} />
-        )}
-        {movable ? (
-          <Pressable
-            onLongPress={onLift ? (event: GestureResponderEvent) => onLift(job.id, event.nativeEvent.pageY) : undefined}
-            onPressOut={onLetGo}
-            delayLongPress={LIFT_AFTER_MS}
-            hitSlop={GRIP_SLOP}
-            // The row's own actions say how it is moved without a finger.
-            accessible={false}
-            style={styles.gripButton}>
-            <Text style={styles.grip} importantForAccessibility="no">≡</Text>
-          </Pressable>
-        ) : null}
-      </View>
+        */
+        trailing={
+          <>
+            {movable && !next ? (
+              onFront ? (
+                <RowControl
+                  accessibilityLabel={said.doNextLabel(title)}
+                  onPress={() => {
+                    haptic('choices', 'tick');
+                    onFront(job.id);
+                  }}>
+                  <ToFrontIcon size={ICON} color={c.textMuted} />
+                </RowControl>
+              ) : (
+                <RowControl>{null}</RowControl>
+              )
+            ) : null}
+            {onCancel ? (
+              <RowControl
+                accessibilityLabel={said.cancelLabel(title)}
+                disabled={!canCancel(job)}
+                onPress={() => {
+                  haptic('choices', 'tick');
+                  onCancel(job.id);
+                }}>
+                <Text style={styles.cross}>×</Text>
+              </RowControl>
+            ) : (
+              <RowControl>{null}</RowControl>
+            )}
+          </>
+        }
+        // The handle at the very edge, as the queue's is: held, it lifts the row; the row's own actions say how it is
+        // moved without a finger.
+        afterDots={
+          movable ? (
+            <RowControl
+              hidden
+              onLongPress={onLift ? (event: GestureResponderEvent) => onLift(job.id, event.nativeEvent.pageY) : undefined}
+              onPressOut={onLetGo}
+              delayLongPress={LIFT_AFTER_MS}>
+              <Text style={styles.grip} importantForAccessibility="no">
+                ≡
+              </Text>
+            </RowControl>
+          ) : null
+        }
+      />
     );
   },
   (before, after) =>
     sameJob(before.job, after.job) &&
-    before.height === after.height &&
     before.next === after.next &&
     before.lifted === after.lifted &&
     before.onLift === after.onLift &&
@@ -318,14 +299,12 @@ export const WaitingRow = memo(
 export const FinishedRow = memo(
   function FinishedRow({
     job,
-    height,
     advice,
     busy,
     onRetry,
     onAdvice,
   }: {
     job: DownloadJob;
-    height: number;
     /** What there is to say about the extractor's age, and whether something is being done about it now. */
     advice: Advice;
     busy: boolean;
@@ -333,8 +312,8 @@ export const FinishedRow = memo(
     onAdvice: (what: 'update' | 'check') => void;
   }) {
     const t = useT();
+    const c = useColours();
     const styles = useStyles();
-    const pressed = usePressed();
     const { title } = namesOf(job);
     const failed = job.status === 'failed';
     const offer = offerFor(job, advice);
@@ -342,52 +321,41 @@ export const FinishedRow = memo(
     // The failure in its own words, where it has any.
     const outcome = (failed ? jobError(job) : null) ?? statusLabel(job, t);
     return (
-      <View style={[styles.row, { height }]}>
-        <Thumbnail job={job} />
-        <View style={styles.text}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {metaLine(job, t)}
-          </Text>
-          <Text style={failed ? styles.bad : styles.meta} numberOfLines={1}>
-            {outcome}
-          </Text>
-        </View>
-        {offer ? (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityLabel={offer === 'update' ? said.rowUpdateLabel(title) : said.rowCheckLabel(title)}
-            disabled={busy}
-            style={styles.textButton}
-            onPress={() => onAdvice(offer)}>
-            <Text style={styles.link}>{busy ? '…' : offer === 'update' ? said.rowUpdate : said.rowCheck}</Text>
-          </Pressable>
-        ) : canRetry(job) ? (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityLabel={t.downloads.retryLabel(title)}
-            style={styles.textButton}
-            onPress={() => {
-              haptic('choices', 'tick');
-              onRetry(job.id);
-            }}>
-            <Text style={styles.link}>{t.common.retry}</Text>
-          </Pressable>
-        ) : job.status === 'done' ? (
-          <Text style={styles.tick} accessible={false}>
-            ✓
-          </Text>
-        ) : null}
-      </View>
+      <MediaRow
+        size="tall"
+        lead={<Thumbnail job={job} />}
+        title={title}
+        subtitle={metaLine(job, t)}
+        detail={failed ? <Text style={styles.bad}>{outcome}</Text> : outcome}
+        menu={false}
+        trailing={
+          offer ? (
+            <TextButton
+              label={busy ? '…' : offer === 'update' ? said.rowUpdate : said.rowCheck}
+              accessibilityLabel={offer === 'update' ? said.rowUpdateLabel(title) : said.rowCheckLabel(title)}
+              disabled={busy}
+              onPress={() => onAdvice(offer)}
+            />
+          ) : canRetry(job) ? (
+            <TextButton
+              label={t.common.retry}
+              accessibilityLabel={t.downloads.retryLabel(title)}
+              onPress={() => {
+                haptic('choices', 'tick');
+                onRetry(job.id);
+              }}
+            />
+          ) : job.status === 'done' ? (
+            <RowControl>
+              <TickIcon size={ICON} color={c.success} />
+            </RowControl>
+          ) : null
+        }
+      />
     );
   },
   (before, after) =>
     sameJob(before.job, after.job) &&
-    before.height === after.height &&
     before.advice === after.advice &&
     before.busy === after.busy &&
     before.onRetry === after.onRetry &&
@@ -397,9 +365,6 @@ export const FinishedRow = memo(
 /** How long a hold has to last before it lifts a row: the queue's own wait. */
 const LIFT_AFTER_MS = 220;
 
-/** Out to the row's own edges, and no further left than the cross beside it. */
-const GRIP_SLOP = { top: 18, bottom: 18, left: 2, right: 16 };
-
 const ACTION_SLOP = { top: 8, bottom: 8, left: 12, right: 12 };
 
 const useStyles = makeStyles((c) =>
@@ -408,70 +373,48 @@ const useStyles = makeStyles((c) =>
       flexDirection: 'row',
       alignItems: 'flex-end',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingBottom: 8,
+      paddingHorizontal: SPACE.l,
+      paddingBottom: SPACE.s,
     },
-    headingText: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, flexShrink: 1 },
-    headingAction: { paddingHorizontal: 4, borderRadius: 8 },
+    headingText: { color: c.textFaint, fontSize: TYPE.label, fontWeight: '600', letterSpacing: 0.8, flexShrink: 1 },
+    headingAction: { paddingHorizontal: SPACE.xs, borderRadius: RADIUS.cover },
 
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingLeft: 20,
-      paddingRight: 10,
-      overflow: 'hidden',
-      /*
-        Said outright, for when a lifted row is put down: a row that cuts its
-        contents works out where from its corners and border, and one told of
-        them and then told nothing keeps cutting to the shape it last had (see
-        `outlinedClip`).
-      */
-      borderRadius: 0,
-      borderWidth: 0,
-      borderColor: 'transparent',
-    },
     /*
       One flat colour, whatever the theme writes its surfaces in. The rows it
       is carried over go on sliding about underneath, and through a fill of
       glass every one of them would be read through the row in the hand.
     */
-    rowLifted: { backgroundColor: laid(c.surfaceRaised, c.bg), borderRadius: 10, ...outlined(c) },
+    rowLifted: { backgroundColor: laid(c.surfaceRaised, c.bg), borderRadius: RADIUS.control, ...outlined(c) },
 
-    nowSlot: { paddingHorizontal: 16, paddingBottom: 6 },
+    nowSlot: { paddingHorizontal: SPACE.l, paddingBottom: SPACE.xs },
     nowCard: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      paddingLeft: 12,
-      paddingRight: 4,
+      gap: SPACE.m,
+      paddingLeft: SPACE.m,
+      paddingRight: SPACE.xs,
       backgroundColor: c.surface,
-      borderRadius: 14,
+      borderRadius: RADIUS.card,
       overflow: 'hidden',
       ...outlinedClip(c),
     },
 
     // No colour of the theme's on the picture itself; see TrackRow's `art`.
-    thumb: { width: 52, height: 38, borderRadius: 6 },
-    thumbLarge: { width: 92, height: 62, borderRadius: 8 },
+    thumb: { width: 52, height: 38, borderRadius: RADIUS.cover },
+    thumbLarge: { width: 92, height: 62, borderRadius: RADIUS.cover },
     thumbEmpty: { backgroundColor: c.surfaceRaised },
 
     text: { flex: 1, minWidth: 0, gap: 1 },
-    title: { color: c.text, fontSize: 14.5, lineHeight: 20 },
-    nowTitle: { color: c.text, fontSize: 15, lineHeight: 20, fontWeight: '500' },
-    meta: { color: c.textMuted, fontSize: 12, lineHeight: 16 },
-    bad: { color: c.danger, fontSize: 12, lineHeight: 16 },
+    nowTitle: { color: c.text, fontSize: TYPE.body, lineHeight: LEADING.body, fontWeight: '500' },
+    meta: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+    bad: { color: c.danger, fontSize: TYPE.hint, lineHeight: LEADING.hint },
 
-    track: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, marginTop: 6, overflow: 'hidden' },
-    fill: { height: 3, backgroundColor: c.accent },
+    track: { marginTop: SPACE.xs },
 
-    textButton: { paddingHorizontal: 12, minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-    link: { color: c.text, fontSize: 13, fontWeight: '500' },
-    iconButton: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-    cross: { color: c.textMuted, fontSize: 20, lineHeight: 22 },
-    gripButton: { width: 30, height: 44, alignItems: 'center', justifyContent: 'center' },
+    link: { color: c.text, fontSize: TYPE.small, fontWeight: '500' },
+    // The queue's cross and handle, so that the two lists that are rearranged by hand are rearranged alike.
+    cross: { color: c.textFaint, fontSize: 18, lineHeight: 20 },
     grip: { color: c.textDisabled, fontSize: 18 },
-    tick: { color: c.success, fontSize: 16, fontWeight: '700', width: 44, textAlign: 'center' },
   })
 );

@@ -8,6 +8,7 @@ import { subscribeLibrary } from '../lib/library/index';
 import { albumKey } from '../lib/media/albums';
 import { foldForMatch } from '../lib/metadata/text';
 import { leftFor, startTrail, type PageParams } from '../lib/ui/pageTrail';
+import { OverPlayer } from '../lib/player/overPlayer';
 
 /**
  * Names that lead where they name: an artist's to the artist, a record's to
@@ -23,7 +24,8 @@ import { leftFor, startTrail, type PageParams } from '../lib/ui/pageTrail';
 export const LeaveFirst = createContext<(() => void) | null>(null);
 
 /**
- * How a name goes to its page. From the page it names, nowhere: it is there.
+ * How a name goes to its page. From inside the player, over it (see
+ * `player/overPlayer.ts`). From the page it names, nowhere: it is there.
  * From another list's page, in place of that one, remembered for Back (see
  * `ui/pageTrail.ts`), so that one name after another does not pile page on
  * page. From anywhere else, as a page opened over it.
@@ -31,8 +33,21 @@ export const LeaveFirst = createContext<(() => void) | null>(null);
 function useGoTo(): (params: PageParams, same: (here: PageParams) => boolean) => void {
   const router = useRouter();
   const leave = use(LeaveFirst);
+  const over = use(OverPlayer);
   return (params, same) => {
     leave?.();
+    /*
+      From inside the player, always a page of its own over it, the page
+      under the player left as it is: back comes down to the player again,
+      and then to that page.
+    */
+    if (over) {
+      over(() => {
+        startTrail();
+        router.push({ pathname: '/playlist', params });
+      });
+      return;
+    }
     const { path, here } = where;
     const onPage = path.endsWith('/playlist');
     if (onPage && same(here)) return;
@@ -84,6 +99,15 @@ function namesIn(credit: string): string[] {
   } catch {
     return [credit];
   }
+}
+
+/** The way to an artist's page by their name, for a row that is wholly one artist (the stats' list of them). */
+export function useOpenArtist(): (name: string) => void {
+  const goTo = useGoTo();
+  return (name) => {
+    const artist = foldForMatch(name);
+    goTo({ artist }, (here) => here.artist === artist);
+  };
 }
 
 /**

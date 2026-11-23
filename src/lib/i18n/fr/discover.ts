@@ -14,6 +14,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Pour ta prochaine écoute',
     refresh: 'Actualiser',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Glisser pour actualiser',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Relâcher pour actualiser',
     updated: (date) => `Mise à jour le ${date}`,
 
     familiar: (because) => `De tes artistes · ${because}`,
@@ -53,7 +57,6 @@ export const discover: Strings['discover'] = {
     failed: 'Échec du téléchargement · touche pour réessayer',
     needsBuild: 'Nécessite l’app à jour',
     waitingWifi: 'En attente du Wi-Fi · touche pour télécharger',
-    percent: (percent) => `${format.number(percent)} %`,
     gettingReady: 'Téléchargement en cours',
     hint: 'Lit le morceau, en le téléchargeant d’abord si nécessaire',
     nowPlaying: (title) => `En cours de lecture : ${title}`,
@@ -159,7 +162,8 @@ export const discover: Strings['discover'] = {
     findingLater: 'Certains morceaux n’ont pas pu être vérifiés pour l’instant. Découvrir réessaiera plus tard.',
     buildingArtists: (done, total) => `Recherche de morceaux · ${artistsOf(done, total)}`,
     preparing: (ready, target) =>
-      `Une nouvelle liste arrive · ${format.number(ready)} sur ${format.number(target)} ${one(target, 'morceau', 'morceaux')} ${one(ready, 'prêt', 'prêts')}.${ready > 0 ? ' Actualise à nouveau pour la voir maintenant.' : ''}`,
+      `Une nouvelle liste arrive · ${format.number(ready)} sur ${format.number(target)} ${one(target, 'morceau', 'morceaux')} ${one(ready, 'prêt', 'prêts')}.`,
+    showNow: 'Afficher maintenant',
     offline: 'Pas de connexion. Ta liste est conservée ; de nouveaux morceaux seront cherchés dès qu’il y en aura une.',
     offlineEmpty: 'Pas de connexion. Découvrir créera ta liste dès qu’il y en aura une.',
     noLibrary: 'Découvrir part de la musique de ce téléphone, et n’en a pas encore trouvé.',

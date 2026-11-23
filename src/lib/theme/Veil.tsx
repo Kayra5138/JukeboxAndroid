@@ -7,6 +7,7 @@ import { effectsOf, veilOf } from './effects.ts';
 import { useColours } from './index';
 import type { Palette } from './tokens.ts';
 import { createStore } from '../ui/store.ts';
+import { useMotionReduced } from '../ui/motion';
 
 /**
  * The veil: what a theme of glass draws over the app while a sheet or a
@@ -162,7 +163,15 @@ export function Behind({
   children: ReactNode;
 }) {
   const c = useColours();
-  const radius = veiled && CAN_BLUR ? veilOf(c) : 0;
+  /*
+    Held still, not out of focus, which is a whole screen blurred again at
+    every frame anything under it moves: covered instead by a scrim thick
+    enough that what is under it is a shape and not something to read, as
+    on a phone that cannot blur (`scrimOf`).
+  */
+  const still = useMotionReduced();
+  const radius = veiled && CAN_BLUR && !still ? veilOf(c) : 0;
+  const covered = veiled && still && veilOf(c) > 0;
   useEffect(() => {
     if (!veiled) return;
     laidOver.set(laidOver.get() + 1);
@@ -186,6 +195,7 @@ export function Behind({
   return (
     <Veiled blur={radius} style={style} importantForAccessibility={veiled ? 'no-hide-descendants' : 'auto'}>
       {children}
+      {covered ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: thickScrimOf(c) }]} /> : null}
     </Veiled>
   );
 }
@@ -202,6 +212,17 @@ export function WindowBehind({ children }: { children: ReactNode }) {
 
 
 const SCRIMS = new WeakMap<Palette, string>();
+const THICK = new WeakMap<Palette, string>();
+
+/** Over a screen a sheet lies over while the decoration is held still, under the sheet's own scrim: the two together as thick as `scrimOf` makes one where there is no blur. */
+function thickScrimOf(c: Palette): string {
+  let made = THICK.get(c);
+  if (!made) {
+    made = `${withAlpha(c.scrim, 1).slice(0, 7)}b0`;
+    THICK.set(c, made);
+  }
+  return made;
+}
 
 /**
  * The colour drawn over the screen behind a sheet: `c.scrim`, nearly always.

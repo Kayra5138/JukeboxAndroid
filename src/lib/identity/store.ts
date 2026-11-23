@@ -404,6 +404,15 @@ function side(database: BackupDb, id: string): Side {
  * -- and this is the one place that has to be right about it.
  */
 export function suggestions(database: BackupDb): Suggestion[] {
+  return openPairs(database).map((pair) => ({ from: side(database, pair.from), to: side(database, pair.to) }));
+}
+
+/**
+ * The same pairs by their two ids alone, without what each file is: for a
+ * count, and for asking whether one is still open, which the whole
+ * description of every pair made a long wait of.
+ */
+export function openPairs(database: BackupDb): Pair[] {
   const asked = database.all<Pair>(
     `SELECT old_id AS "from", new_id AS "to" FROM track_pairs
      WHERE state = 'asked' ORDER BY noted_at, old_id, new_id`
@@ -412,7 +421,5 @@ export function suggestions(database: BackupDb): Suggestion[] {
   const own = owners(database, asked.map((pair) => pair.from));
   const stale = asked.filter((pair) => !own.has(pair.from));
   if (stale.length > 0) database.transaction(() => dropPairs(database, stale));
-  return asked
-    .filter((pair) => own.has(pair.from))
-    .map((pair) => ({ from: side(database, pair.from), to: side(database, pair.to) }));
+  return asked.filter((pair) => own.has(pair.from));
 }

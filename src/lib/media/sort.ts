@@ -119,6 +119,37 @@ export function compareNames(left: string, right: string): number {
 }
 
 /**
+ * A folded name as a string that sorts by plain `<` in the order
+ * {@link compareFolded} gives: each character as its rank, in two code units
+ * so that a rank past the first sixty-five thousand still sorts after the
+ * rest, and a name that is the start of another before it.
+ *
+ * The comparison spread both names into characters and looked each up in the
+ * alphabet, every time two rows met; a sort of ten thousand meets some
+ * hundred and forty thousand times. Made once a name, it is one comparison
+ * of two strings.
+ */
+export function rankKey(folded: string, keep = true): string {
+  const known = keep ? keys.get(folded) : undefined;
+  if (known != null) return known;
+  let key = '';
+  for (const character of folded) {
+    const rank = rankOf(character);
+    key += String.fromCharCode(rank >>> 16, rank & 0xffff);
+  }
+  if (!keep) return key;
+  if (keys.size > MOST_KEYS) keys.clear();
+  keys.set(folded, key);
+  return key;
+}
+
+/** Made once a name and kept, as the folds are, up to a bound. */
+const keys = new Map<string, string>();
+const MOST_KEYS = 60_000;
+
+const byKey = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
+
+/**
  * One row, with everything it will be compared by worked out in advance.
  *
  * Folded once here rather than inside the comparison, which a sort of a few
@@ -129,7 +160,7 @@ type Ranked<T> = {
   item: T;
   /** Milliseconds since the epoch, or null where nothing can be said. */
   at: number | null;
-  /** Folded, most significant first; every row in a list carries as many. */
+  /** Folded and made into {@link rankKey}s, most significant first; every row in a list carries as many. */
   names: string[];
 };
 
@@ -164,7 +195,7 @@ function byDate(left: Ranked<unknown>, right: Ranked<unknown>, order: SortOrder)
  */
 function byName(left: Ranked<unknown>, right: Ranked<unknown>): number {
   for (let at = 0; at < left.names.length; at += 1) {
-    const order = compareFolded(left.names[at]!, right.names[at]!);
+    const order = byKey(left.names[at]!, right.names[at]!);
     if (order !== 0) return order;
   }
   return 0;
@@ -212,7 +243,7 @@ export function sortTracks(
     tracks.map((track) => ({
       item: track,
       at: order === 'played' ? (lastPlayed.get(track.id) ?? null) : (track.addedAt ?? null),
-      names: [canonicalLabel(track.title), canonicalLabel(track.artist ?? ''), track.id],
+      names: [rankKey(canonicalLabel(track.title)), rankKey(canonicalLabel(track.artist ?? '')), rankKey(track.id, false)],
     })),
     order
   );
@@ -250,7 +281,7 @@ export function sortAlbums(
           order === 'played' ? (lastPlayed.get(track.id) ?? null) : (track.addedAt ?? null)
         )
       ),
-      names: [canonicalLabel(album.name), canonicalLabel(album.artist ?? ''), album.key],
+      names: [rankKey(canonicalLabel(album.name)), rankKey(canonicalLabel(album.artist ?? '')), rankKey(album.key, false)],
     })),
     order
   );

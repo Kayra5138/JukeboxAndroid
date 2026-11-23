@@ -4,6 +4,7 @@ import { isManual, writeLocalLyrics, writeLyrics } from '../db/lyrics.ts';
 import { readLocalLyrics } from '../lyrics/device.ts';
 import { fetchLyrics } from '../lyrics/lrclib.ts';
 import { enrichLibrary } from '../metadata/enrich.ts';
+import { libraryState } from '../library/index.ts';
 
 /**
  * Everything that happens to a file once it is in the library: find out what it
@@ -26,7 +27,9 @@ export async function describeTrack(trackId: string, signal?: AbortSignal): Prom
     const track = await findTrack(trackId);
     if (!track || signal?.aborted) return;
 
-    await enrichLibrary([track], () => {}, signal);
+    // With the library already held, where there is one: read afresh for every song that arrived, it was the whole of it each time.
+    const held = libraryState();
+    await enrichLibrary([track], () => {}, signal, { library: held.kind === 'library' ? held.tracks : undefined });
     if (signal?.aborted) return;
 
     // Words somebody chose are not a guess waiting to be improved on, and this

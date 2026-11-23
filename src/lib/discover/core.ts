@@ -352,6 +352,16 @@ export const NO_MATCH_SHOWN_MS = 0;
 /** How long an exclusion can be taken back, and how long any other notice stands. */
 export const UNDO_MS = 10_000;
 export const NOTICE_MS = 6_000;
+
+/**
+ * How long a while that goes by itself is made, from the time it would be:
+ * longer where somebody has asked Android for more time to act. Told by the
+ * app (`ui/actionTime.ts`), which can ask; as it is, in a test.
+ */
+let lengthened = (ms: number) => ms;
+export function lengthenTimesWith(lengthen: (ms: number) => number): void {
+  lengthened = lengthen;
+}
 /**
  * How long a new list is waited for before it is shown as far as it has got.
  *
@@ -402,6 +412,22 @@ const NO_PLAYER: Player = { currentId: null, queue: [], key: '', playing: false 
 
 /** What is written down, as it is read back: see `store.ts`. */
 export type Kept = Pick<State, 'list' | 'staged' | 'pool' | 'refreshedAt' | 'retired' | 'attemptAt' | 'problem' | 'fruitlessAt'>;
+
+/*
+  Each queue as it was last written out, by the array it came in: told of a
+  play or a pause, the same queue as before is not written out again, ids
+  and all, which with the whole library shuffled was thousands of them.
+*/
+const queueKeys = new WeakMap<readonly string[], string>();
+
+function queueKeyOf(queue: readonly string[]): string {
+  let key = queueKeys.get(queue);
+  if (key === undefined) {
+    key = queue.join('|');
+    queueKeys.set(queue, key);
+  }
+  return key;
+}
 
 export function initial(
   kept: Kept,
@@ -669,9 +695,16 @@ export function wanted(s: State, now: number): Item[] {
     !item.track && !s.live.has(item.id) && !beingStopped(s, item.id) &&
     (!item.failure || isWaitingWifi(item) || retryable(item, now));
   const at = playingAt(s);
-  // A new list in the making is what is wanted next; the one on show only while it is being played from.
-  const rows = count <= 0 ? [] : s.staged
-    ? [...window(s.staged.items), ...(at >= 0 ? window(following(s.list, at)) : [])]
+  /*
+    A new list in the making is what is wanted next; the one on show only
+    while it is being played from. From the moment a new one is asked for,
+    and not only once its songs are chosen: while they were being looked
+    for, the first few of the old list went on being fetched, for a list
+    about to go.
+  */
+  const renewing = s.staged != null || s.building?.refresh === true;
+  const rows = count <= 0 ? [] : renewing
+    ? [...(s.staged ? window(s.staged.items) : []), ...(at >= 0 ? window(following(s.list, at)) : [])]
     : window(at >= 0 ? following(s.list, at) : s.list);
   /*
     And after them, whatever the player's similar songs asked for, seen or
@@ -761,7 +794,7 @@ function swap(d: Draft): void {
     staged: null,
     refreshedAt: d.now,
     undo: null,
-    notice: { kind: 'refreshed', until: d.now + NOTICE_MS },
+    notice: { kind: 'refreshed', until: d.now + lengthened(NOTICE_MS) },
     dry: null,
   });
 }
@@ -961,13 +994,13 @@ function mendBeforeKeeping(d: Draft, item: Item): void {
   if (before != null && before !== jobId) {
     const { keep: _keep, ...rest } = item;
     replace(d, rest);
-    set(d, { notice: { kind: 'keepFailed', id: item.id, title: item.song.title, code: KEEP_FAILED, until: d.now + NOTICE_MS } });
+    set(d, { notice: { kind: 'keepFailed', id: item.id, title: item.song.title, code: KEEP_FAILED, until: d.now + lengthened(NOTICE_MS) } });
     return;
   }
   if (before == null) {
     set(d, {
       wrong: new Map(d.s.wrong).set(item.id, jobId),
-      notice: { kind: 'wrongFile', id: item.id, title: item.song.title, until: d.now + NOTICE_MS },
+      notice: { kind: 'wrongFile', id: item.id, title: item.song.title, until: d.now + lengthened(NOTICE_MS) },
       undo: null,
     });
     // Asked for by somebody now, which is what has it asked for again the moment its job is gone (`askTapped`), whoever lets it go.
@@ -1451,6 +1484,29 @@ function mayBuild(d: Draft, byHand: boolean): boolean {
 function build(d: Draft, refresh: boolean): void {
   set(d, { building: { refresh, done: 0, total: null, label: '' }, attemptAt: d.now, problem: null });
   d.fx.push({ kind: 'build', refresh });
+  if (refresh) letOldGo(d);
+}
+
+/**
+ * A new list asked for: the songs of the one on show that were only being
+ * got ready ahead of anybody wanting them are let go of, being about to go
+ * themselves. Not one somebody tapped, is keeping, or the player asked for
+ * by name, nor what is playing; and none at all while the list is being
+ * played from, whose next few are still wanted (`wanted`).
+ */
+function letOldGo(d: Draft): void {
+  if (playingAt(d.s) >= 0) return;
+  const current = d.s.player.currentId;
+  for (const item of d.s.list) {
+    if (!item.jobId || !d.s.live.has(item.id)) continue;
+    if (item.asked || item.keep || d.s.keeping.has(item.id) || d.s.called.has(item.id)) continue;
+    if (current && item.track?.id === current) continue;
+    stop(d, item.jobId, item.id);
+    retire(d, item.jobId);
+    const { jobId: _job, jobAt: _at, ...rest } = item;
+    replace(d, rest);
+    setLive(d, item.id, undefined);
+  }
 }
 
 /**
@@ -1647,7 +1703,7 @@ function take(d: Draft, event: Event): void {
       putAway(d, item.song, 'saved');
       // The file stays for as long as the player has it queued: a kept song may finish playing.
       remove(d, item.id);
-      set(d, { notice: { kind: 'kept', id: item.id, title: item.song.title, until: d.now + NOTICE_MS }, undo: null });
+      set(d, { notice: { kind: 'kept', id: item.id, title: item.song.title, until: d.now + lengthened(NOTICE_MS) }, undo: null });
       return;
     }
 
@@ -1657,7 +1713,7 @@ function take(d: Draft, event: Event): void {
       if (!item) return;
       const { keep: _keep, ...rest } = item;
       replace(d, rest);
-      set(d, { notice: { kind: 'keepFailed', id: item.id, title: item.song.title, code: event.code, until: d.now + NOTICE_MS } });
+      set(d, { notice: { kind: 'keepFailed', id: item.id, title: item.song.title, code: event.code, until: d.now + lengthened(NOTICE_MS) } });
       return;
     }
 
@@ -1693,10 +1749,10 @@ function take(d: Draft, event: Event): void {
       fill(d);
       const filler = d.s.list.find((other) => !before.has(other.id))?.id ?? null;
       set(d, {
-        undo: { item, index, artist: !!event.artist, filler, until: d.now + UNDO_MS },
+        undo: { item, index, artist: !!event.artist, filler, until: d.now + lengthened(UNDO_MS) },
         notice: {
           kind: 'excluded', id: item.id, title: item.song.title,
-          artist: event.artist ? item.song.artist : null, until: d.now + UNDO_MS,
+          artist: event.artist ? item.song.artist : null, until: d.now + lengthened(UNDO_MS),
         },
       });
       return;
@@ -1728,7 +1784,7 @@ function take(d: Draft, event: Event): void {
       }
       const list = [...d.s.list];
       list.splice(Math.min(undo.index, list.length), 0, clean);
-      set(d, { list, notice: { kind: 'restored', id: clean.id, title: song.title, until: d.now + NOTICE_MS } });
+      set(d, { list, notice: { kind: 'restored', id: clean.id, title: song.title, until: d.now + lengthened(NOTICE_MS) } });
       return;
     }
 
@@ -1813,7 +1869,8 @@ function take(d: Draft, event: Event): void {
       return configure(d, event.value);
 
     case 'player': {
-      const key = event.queue.join('|');
+      // The same queue as last told is the same key, not written out again: see `DiscoverProvider` and `queueKeys`.
+      const key = queueKeyOf(event.queue);
       const same = key === s.player.key && event.currentId === s.player.currentId && event.playing === s.player.playing;
       // The app's own player has been started by somebody. The phone takes the speaker from the preview for that; this is the same said here.
       if (event.playing && !s.player.playing && s.preview?.phase === 'playing') endPreview(d);
@@ -2052,6 +2109,15 @@ export function wakeAt(s: State, now: number): number | null {
   if (s.networkAt != null) times.push(s.networkAt);
   if (s.settings.refreshDays > 0 && s.list.length > 0 && !s.staged && !s.building) {
     times.push(Math.max(s.refreshedAt + s.settings.refreshDays * DAY, s.attemptAt + BUILD_EVERY_MS, s.fruitlessAt + DAY));
+  }
+  /*
+    A list short of what was asked for, a build having failed or come back
+    with too few: asked again when the next asking is allowed, and not left
+    empty until the app is next brought to the front. One that came back
+    with nothing to go on waits its day, as `upkeep` has it.
+  */
+  if (!s.staged && !s.building && shown(s.list).length < s.settings.count && s.attemptAt > 0) {
+    times.push(Math.max(s.attemptAt + BUILD_EVERY_MS, s.fruitlessAt + DAY));
   }
   // A song whose search ahead came to nothing is looked for again a day on.
   for (const item of everyItem(s)) if (item.soughtAt != null && !item.jobId && !item.track) times.push(item.soughtAt + DAY);

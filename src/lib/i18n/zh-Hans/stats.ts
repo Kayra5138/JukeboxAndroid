@@ -20,7 +20,6 @@ const arrow = (change: number) => (change >= 0 ? '↑' : '↓');
 const weekdays = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日'];
 
 export const stats: Strings['stats'] = {
-  percent: (value) => `${value}%`,
 
   period: {
     labels: { day: '日', week: '周', month: '月', year: '年', all: '全部' },

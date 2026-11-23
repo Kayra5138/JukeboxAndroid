@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { SPACE, TYPE } from '../lib/theme/measures';
 import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 
 import { makeStyles } from '../lib/theme/index';
@@ -102,8 +103,8 @@ type Common = {
   format: (value: number) => string;
   /**
    * The nearest value the finger is allowed to stop on, where a control has
-   * such a thing. Omitted, the sweep is continuous, which is what a band or a
-   * duration in milliseconds wants.
+   * such a thing: a duration, at the steps it is kept at. Omitted, the sweep
+   * is continuous, which is what a band wants.
    *
    * Applied here rather than left to the caller so that the thumb stops where
    * the value does. A control that snapped only on its way out would show a
@@ -647,7 +648,13 @@ export function Slider({
         {...handlers}
         onResponderGrant={(event) => {
           measure();
-          handlers.onResponderGrant?.(event);
+          /*
+            What the grant answers is passed on: it is what tells the phone
+            to keep a scroller round this from taking the touch. Dropped, a
+            drag along the track was given up to the page at the first
+            sideways wobble of the finger.
+          */
+          return handlers.onResponderGrant?.(event);
         }}>
         <View style={styles.railWide} />
         {/* The notch the detent snaps to, so the resting value can be aimed
@@ -695,9 +702,9 @@ export function Slider({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  band: { flex: 1, minWidth: 0, alignItems: 'center', gap: 8 },
-  bandValue: { color: c.textFaint, fontSize: 11, fontVariant: ['tabular-nums'] },
-  bandLabel: { color: c.textFaint, fontSize: 10.5 },
+  band: { flex: 1, minWidth: 0, alignItems: 'center', gap: SPACE.s },
+  bandValue: { color: c.textFaint, fontSize: TYPE.label, fontVariant: ['tabular-nums'] },
+  bandLabel: { color: c.textFaint, fontSize: TYPE.label },
 
   faderTrack: { width: 34, alignItems: 'center', justifyContent: 'center' },
   rail: { position: 'absolute', width: TRACK, borderRadius: TRACK / 2, backgroundColor: c.borderStrong },
@@ -714,10 +721,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderColor: c.bg,
   },
 
-  slider: { gap: 9 },
+  slider: { gap: SPACE.s },
   sliderHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  sliderLabel: { color: c.text, fontSize: 14.5 },
-  sliderValue: { color: c.textFaint, fontSize: 13, fontVariant: ['tabular-nums'] },
+  sliderLabel: { color: c.text, fontSize: TYPE.body },
+  sliderValue: { color: c.textFaint, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
   sliderTrack: { height: THUMB + 14, justifyContent: 'center' },
   railWide: { height: TRACK, borderRadius: TRACK / 2, backgroundColor: c.borderStrong },
   // Taller than the rail on purpose: buried inside it, the mark would be lost

@@ -31,6 +31,6 @@ export function playedLongAgo<T extends { id: string; folder?: string | null }>(
   return tapes.filter((tape) => {
     const place = places.get(tape.id);
     if (!place?.finished || now - place.at < days * DAY) return false;
-    return seriesFolders.has(folderKey(tape.folder ?? '').toLocaleLowerCase());
+    return seriesFolders.has(folderKey(tape.folder ?? '').toLowerCase());
   });
 }

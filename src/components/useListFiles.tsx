@@ -1,5 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { LEADING, SPACE, TYPE, RADIUS } from '../lib/theme/measures';
+import { TextButton } from './Button';
+import { CardAnswers } from './CardAnswers';
+import { Dialog } from './Dialog';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Busy } from './Busy';
 import { Pressable } from './Pressable';
 import { Segmented } from './Segmented';
 
@@ -22,8 +27,7 @@ import {
   type Prepared,
 } from '../lib/playlists/m3u/index';
 import { freeListName } from '../lib/playlists/m3u/write';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles, useColours, usePressed } from '../lib/theme/index';
 import { useAnnounce } from '../lib/ui/announce';
 
 /**
@@ -271,17 +275,11 @@ export function useListFiles({
 
 /** The card every sheet here is drawn on, over a scrim; touching the scrim is [onClose] where there is one. */
 function Card({ visible, onClose, children }: { visible: boolean; onClose?: () => void; children: ReactNode }) {
-  const styles = useStyles();
-  useWindowVeil(visible);
+  // With no way out, Back and the scrim wait as the card does (`Dialog`).
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose ?? (() => {})}>
-      {/* Neither the backdrop nor the card is a stop for a screen reader; see `OptionSheet`. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
-        <Pressable style={styles.card} onPress={() => {}} accessible={false}>
-          {children}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <Dialog visible={visible} onClose={onClose ?? (() => {})}>
+      {children}
+    </Dialog>
   );
 }
 
@@ -293,7 +291,7 @@ function Reading({ visible }: { visible: boolean }) {
   return (
     <Card visible={visible}>
       <View style={styles.reading}>
-        <ActivityIndicator color={c.text} />
+        <Busy color={c.text} />
         <Text style={styles.body}>{t.lists.files.reading}</Text>
       </View>
     </Card>
@@ -323,9 +321,7 @@ function Choose({
     <Card visible={choosing != null} onClose={onClose}>
       <View style={styles.chooseHead}>
         <Text accessibilityRole="header" style={[styles.heading, styles.chooseHeading]}>{said.heading}</Text>
-        <Pressable accessibilityRole="button" style={styles.linkHit} onPress={() => onAll(!every)}>
-          <Text style={styles.link}>{every ? said.none : said.all}</Text>
-        </Pressable>
+        <TextButton label={every ? said.none : said.all} strong onPress={() => onAll(!every)} />
       </View>
       <Text style={styles.hint}>{said.hint}</Text>
       <ScrollView style={styles.scroll}>
@@ -350,20 +346,12 @@ function Choose({
           );
         })}
       </ScrollView>
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-          <Text style={styles.quiet}>{t.common.cancel}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: ticked === 0 }}
-          disabled={ticked === 0}
-          android_ripple={pressed}
-          style={styles.button}
-          onPress={onBring}>
-          <Text style={ticked === 0 ? styles.quiet : styles.link}>{said.bring(ticked)}</Text>
-        </Pressable>
-      </View>
+      <CardAnswers
+        answers={[
+          { label: t.common.cancel, kind: 'quiet', onPress: onClose },
+          { label: said.bring(ticked), disabled: ticked === 0, onPress: onBring },
+        ]}
+      />
     </Card>
   );
 }
@@ -371,7 +359,6 @@ function Choose({
 function Conflict({ asking, onAnswer }: { asking: Asking | null; onAnswer: (choice: 'replace' | 'keepBoth' | 'skip') => void }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.lists.files.conflict;
   const other = asking ? freeListName(asking.prepared.name, listNames()) : '';
   return (
@@ -380,17 +367,14 @@ function Conflict({ asking, onAnswer }: { asking: Asking | null; onAnswer: (choi
         {asking ? said.heading(asking.existing.name) : ''}
       </Text>
       <Text style={styles.hint}>{said.hint}</Text>
-      <View style={styles.choices}>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.choice} onPress={() => onAnswer('replace')}>
-          <Text style={styles.link}>{said.replace}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.choice} onPress={() => onAnswer('keepBoth')}>
-          <Text style={styles.link}>{said.keepBoth(other)}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.choice} onPress={() => onAnswer('skip')}>
-          <Text style={styles.quiet}>{said.skip}</Text>
-        </Pressable>
-      </View>
+      {/* Putting the new list over the one there cannot be taken back; keeping both or leaving it changes nothing there. */}
+      <CardAnswers
+        answers={[
+          { label: said.skip, kind: 'quiet', onPress: () => onAnswer('skip') },
+          { label: said.keepBoth(other), onPress: () => onAnswer('keepBoth') },
+          { label: said.replace, kind: 'danger', onPress: () => onAnswer('replace') },
+        ]}
+      />
     </Card>
   );
 }
@@ -411,7 +395,6 @@ function Outcomes({
 }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.lists.files.result;
   /** Which imported lists have their missing entries showing, by list id. */
   const [open, setOpen] = useState<number[]>([]);
@@ -445,22 +428,17 @@ function Outcomes({
               {encoding.startsWith('Windows') ? <Text style={styles.hint}>{said.encoding(encoding)}</Text> : null}
               <View style={styles.links}>
                 {onOpen ? (
-                  <Pressable accessibilityRole="button" style={styles.linkHit} onPress={() => onOpen(imported.listId)}>
-                    <Text style={styles.link}>{said.open}</Text>
-                  </Pressable>
+                  <TextButton label={said.open} strong onPress={() => onOpen(imported.listId)} />
                 ) : null}
                 {imported.missing.length > 0 ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: showing }}
-                    style={styles.linkHit}
+                  <TextButton
+                    label={showing ? said.hideMissing : said.showMissing(imported.missing.length)}
+                    strong
+                    expanded={showing}
                     onPress={() =>
                       setOpen(showing ? open.filter((id) => id !== imported.listId) : [...open, imported.listId])
-                    }>
-                    <Text style={styles.link}>
-                      {showing ? said.hideMissing : said.showMissing(imported.missing.length)}
-                    </Text>
-                  </Pressable>
+                    }
+                  />
                 ) : null}
               </View>
               {showing
@@ -483,11 +461,7 @@ function Outcomes({
           );
         })}
       </ScrollView>
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-          <Text style={styles.link}>{t.common.close}</Text>
-        </Pressable>
-      </View>
+      <CardAnswers answers={[{ label: t.common.close, onPress: onClose }]} />
     </Card>
   );
 }
@@ -507,7 +481,6 @@ function ExportSheet({
 }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.lists.files.exportSheet;
   const all = exporting?.kind === 'all';
   return (
@@ -525,14 +498,12 @@ function ExportSheet({
         onChange={onStyle}
       />
       {all ? <Text style={styles.hint}>{said.allHint}</Text> : null}
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-          <Text style={styles.quiet}>{t.common.cancel}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onRun}>
-          <Text style={styles.link}>{all ? said.chooseFolder : said.save}</Text>
-        </Pressable>
-      </View>
+      <CardAnswers
+        answers={[
+          { label: t.common.cancel, kind: 'quiet', onPress: onClose },
+          { label: all ? said.chooseFolder : said.save, onPress: onRun },
+        ]}
+      />
     </Card>
   );
 }
@@ -540,71 +511,44 @@ function ExportSheet({
 function Message({ lines, onClose }: { lines: string[] | null; onClose: () => void }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   useAnnounce(lines ? lines.join(' ') : null);
   return (
     <Card visible={lines != null} onClose={onClose}>
       {(lines ?? []).map((line, index) => (
         <Text key={index} style={index === 0 ? styles.body : styles.hint}>{line}</Text>
       ))}
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-          <Text style={styles.link}>{t.common.close}</Text>
-        </Pressable>
-      </View>
+      <CardAnswers answers={[{ label: t.common.close, onPress: onClose }]} />
     </Card>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  card: {
-    backgroundColor: c.surface,
-    borderRadius: 14,
-    padding: 20,
-    gap: 10,
-    alignSelf: 'stretch',
-    // Short enough to leave the backdrop showing, so there is always somewhere to tap that means "never mind".
-    maxHeight: '85%',
-    ...outlined(c),
-  },
-  reading: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  heading: { color: c.text, fontSize: 15.5, fontWeight: '600' },
-  body: { color: c.text, fontSize: 14, lineHeight: 20 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
-  link: { color: c.accent, fontSize: 14 },
-  quiet: { color: c.textMuted, fontSize: 14 },
+  reading: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m },
+  heading: { color: c.text, fontSize: TYPE.body, fontWeight: '600' },
+  body: { color: c.text, fontSize: TYPE.small, lineHeight: LEADING.small },
+  hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.small },
 
-  choices: { paddingTop: 4 },
-  choice: { minHeight: 48, justifyContent: 'center' },
 
   scroll: { flexGrow: 0 },
-  outcomes: { gap: 14 },
-  outcome: { gap: 2 },
-  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
-  linkHit: { minHeight: 44, justifyContent: 'center' },
+  outcomes: { gap: SPACE.m },
+  outcome: { gap: SPACE.xxs },
+  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: SPACE.l },
   missing: {
-    paddingVertical: 8,
+    paddingVertical: SPACE.s,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: c.border,
-    gap: 2,
+    gap: SPACE.xxs,
   },
-  missingName: { color: c.text, fontSize: 13.5 },
+  missingName: { color: c.text, fontSize: TYPE.small },
 
-  chooseHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  chooseHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m },
   chooseHeading: { flex: 1 },
-  chosen: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 56, paddingVertical: 8 },
-  chosenText: { flex: 1, minWidth: 0, gap: 2 },
+  chosen: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, minHeight: 56, paddingVertical: SPACE.s },
+  chosenText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
   tick: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: RADIUS.control,
     borderWidth: 1.5,
     borderColor: c.borderStrong,
     alignItems: 'center',
@@ -614,8 +558,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   dot: { width: 9, height: 9, borderRadius: 2, backgroundColor: c.onAccent },
 
   // On the card, which is the surface a tray is elsewhere: the page's colour is the step off it here.
-  options: { backgroundColor: c.bg, marginTop: 4 },
+  options: { backgroundColor: c.bg, marginTop: SPACE.xs },
 
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, paddingTop: 6 },
-  button: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8 },
 }));

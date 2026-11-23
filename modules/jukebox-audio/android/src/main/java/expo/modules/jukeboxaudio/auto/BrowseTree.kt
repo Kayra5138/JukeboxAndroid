@@ -680,13 +680,6 @@ internal object BrowseTree {
   }
 
   /**
-   * The id that carries on with the tape [trackId], as the home tab's rows
-   * of tapes part way through do: for the widget, which offers the last one
-   * listened to.
-   */
-  fun tapeToContinue(trackId: String): String = "$PLAYABLE$TAPES|$trackId"
-
-  /**
    * What playing the tape [trackId] plays: the rest of its show, book or
    * folder of tapes with it, in their order, from it — or the tape alone,
    * where it is nothing's part. Rows under [parent], which is where it was
@@ -729,13 +722,40 @@ internal object BrowseTree {
     them too ([tapes]).
   */
   private fun tracks(context: Context, root: String, tapes: Boolean = false): List<Entry> {
+    val all = library(context, root)
+    return if (tapes) all else all.filter { !Tapes.isTapeFolder(it.folder ?: "", root) }
+  }
+
+  /** The library as [readLibrary] last read it, and what it was read from: see [library]. */
+  private class Reading(val key: String, val entries: List<Entry>)
+
+  @Volatile private var lastReading: Reading? = null
+
+  /**
+   * The library, tapes and all, read again only where something it is read
+   * from has moved.
+   *
+   * A car opening one tab asks for several nodes, and a node for several
+   * readings, each of which was the whole library sorted and named, and the
+   * copy opened for its corrections. What it is read from is the media store, whose
+   * [MediaStoreLibrary.stamp] says in one short unsorted pass whether any of
+   * it has changed; the copy, which is replaced whole and so has a new date
+   * when it changes; and the folder. The same three, the same library.
+   */
+  private fun library(context: Context, root: String): List<Entry> {
+    val stamp = runCatching { MediaStoreLibrary.stamp(context, root) }.getOrNull()
+    val key = stamp?.let { "$root|${LibraryDatabase.version(context)}|$it" }
+    lastReading?.takeIf { key != null && it.key == key }?.let { return it.entries }
+    return readLibrary(context, root).also { if (key != null) lastReading = Reading(key, it) }
+  }
+
+  private fun readLibrary(context: Context, root: String): List<Entry> {
     val kept = LibraryDatabase.kept(context)
     val hiding = LibraryDatabase.hiding(context)
 
     return MediaStoreLibrary.queryTracks(context, root).mapNotNull { row ->
       val id = row["id"] as? String ?: return@mapNotNull null
       val uri = row["uri"] as? String ?: return@mapNotNull null
-      if (!tapes && Tapes.isTapeFolder(row["folder"] as? String ?: "", root)) return@mapNotNull null
       if (!hiding.leavesNothing &&
         !hiding.shows(row["folder"] as? String, (row["durationSec"] as? Number)?.toDouble() ?: 0.0)
       ) return@mapNotNull null

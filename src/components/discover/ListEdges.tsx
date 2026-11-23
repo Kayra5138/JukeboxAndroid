@@ -1,12 +1,14 @@
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
+import { Busy } from '../Busy';
 
 import { DISCOVER_ROW_HEIGHT } from './DiscoverRow';
 import { useDiscoverIds, useDiscoverStatus } from './hooks';
 import { emptyShows, listFoot } from './show';
-import { Pressable } from '../Pressable';
 import { useDiscoverActions } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, outlined, useColours } from '../../lib/theme/index';
+import { Button } from '../Button';
 
 /** How many rows that are not there yet are drawn while a list is made. Enough to say "a list", on any phone. */
 const SKELETON = [0, 1, 2, 3, 4, 5];
@@ -29,7 +31,6 @@ export function ListEmpty() {
   const { refresh, findMore } = useDiscoverActions();
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const shows = emptyShows(status);
 
   if (shows.kind === 'skeleton') {
@@ -57,14 +58,13 @@ export function ListEmpty() {
       </Text>
       {/* No button where pressing one would only be told the same again: there the words say what would help. */}
       {action ? (
-        <Pressable
-          android_ripple={pressed}
-          accessibilityRole="button"
-          hitSlop={4}
-          style={styles.button}
-          onPress={action === 'findMore' ? findMore : refresh}>
-          <Text style={styles.buttonLabel}>{shows.kind === 'problem' ? t.common.retry : t.discover.panel.refresh}</Text>
-        </Pressable>
+        <Button
+          label={shows.kind === 'problem' ? t.common.retry : t.discover.panel.refresh}
+          kind="secondary"
+          shape="pill"
+          size="small"
+          onPress={action === 'findMore' ? findMore : refresh}
+        />
       ) : null}
     </View>
   );
@@ -82,14 +82,13 @@ export function ListFoot() {
   const t = useT();
   const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
   const foot = listFoot(status, shown);
   if (foot === 'none') return null;
 
   if (foot === 'finding') {
     return (
       <View style={styles.foot}>
-        <ActivityIndicator size={14} color={c.textMuted} />
+        <Busy size={14} color={c.textMuted} />
         <Text style={styles.footText}>{t.discover.empty.findingMore}</Text>
       </View>
     );
@@ -99,15 +98,13 @@ export function ListFoot() {
       <Text style={[styles.footText, styles.grow]} numberOfLines={2}>
         {t.discover.empty.short(status.vacancies)}
       </Text>
-      <Pressable
-        android_ripple={pressed}
-        accessibilityRole="button"
-        // Drawn 40 tall; this much further is the 48 a finger is owed.
-        hitSlop={4}
-        style={styles.button}
-        onPress={findMore}>
-        <Text style={styles.buttonLabel}>{t.discover.header.findMore}</Text>
-      </Pressable>
+      <Button
+        label={t.discover.header.findMore}
+        kind="secondary"
+        shape="pill"
+        size="small"
+        onPress={findMore}
+      />
     </View>
   );
 }
@@ -116,36 +113,26 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   ghost: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACE.m,
     height: DISCOVER_ROW_HEIGHT,
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACE.l,
   },
-  ghostArt: { width: 46, height: 46, borderRadius: 6, backgroundColor: c.surface, ...outlined(c) },
-  ghostText: { flex: 1, gap: 9 },
-  ghostLine: { height: 9, borderRadius: 5, backgroundColor: c.surfaceRaised },
+  ghostArt: { width: 46, height: 46, borderRadius: RADIUS.cover, backgroundColor: c.surface, ...outlined(c) },
+  ghostText: { flex: 1, gap: SPACE.s },
+  ghostLine: { height: 9, borderRadius: RADIUS.check, backgroundColor: c.surfaceRaised },
   ghostTitle: { width: '58%' },
   ghostReason: { width: '36%' },
 
-  empty: { alignItems: 'center', gap: 16, paddingHorizontal: 32, paddingTop: 40, paddingBottom: 8 },
-  emptyText: { color: c.textMuted, fontSize: 14, lineHeight: 21, textAlign: 'center' },
-  button: {
-    minHeight: 40,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.surface,
-    ...outlined(c),
-  },
-  buttonLabel: { color: c.text, fontSize: 13.5, fontWeight: '600' },
+  empty: { alignItems: 'center', gap: SPACE.l, paddingHorizontal: SPACE.xl, paddingTop: SPACE.xl, paddingBottom: SPACE.s },
+  emptyText: { color: c.textMuted, fontSize: TYPE.small, lineHeight: LEADING.body, textAlign: 'center' },
 
   foot: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACE.m,
     minHeight: DISCOVER_ROW_HEIGHT,
-    paddingHorizontal: 16,
+    paddingHorizontal: SPACE.l,
   },
-  footText: { color: c.textMuted, fontSize: 13 },
+  footText: { color: c.textMuted, fontSize: TYPE.small },
   grow: { flex: 1, minWidth: 0 },
 }));

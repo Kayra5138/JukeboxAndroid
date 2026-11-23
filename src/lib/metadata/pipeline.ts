@@ -158,7 +158,8 @@ export type CoverStore = {
 export type EnrichStore = {
   filterUnenriched: (trackIds: string[]) => string[];
   manualTrackIds: () => Set<string>;
-  saveMetadata: (entry: TrackMetadata) => void;
+  /** Answers false where the row was not written: one somebody wrote by hand meanwhile (`saveMetadataTo`). */
+  saveMetadata: (entry: TrackMetadata) => boolean | void;
   saveLookupTags: (trackId: string, tags: string[], source: TagSource) => void;
   /**
    * Remember whether a credit turned out to be one artist or several.
@@ -818,13 +819,14 @@ export async function runEnrichment(
       const { tags, ...metadata } = match;
       const entry: TrackMetadata = { trackId, status: 'matched', ...metadata };
       matched += 1;
-      store.saveMetadata(entry);
-      store.saveLookupTags(trackId, tags, metadata.source);
-      rows.set(trackId, entry);
+      // Not over a row written by hand since the run set out, nor the tags that go with it.
+      if (store.saveMetadata(entry) !== false) {
+        store.saveLookupTags(trackId, tags, metadata.source);
+        rows.set(trackId, entry);
+      }
     } else {
       missed += 1;
-      store.saveMetadata(miss(trackId));
-      rows.set(trackId, miss(trackId));
+      if (store.saveMetadata(miss(trackId)) !== false) rows.set(trackId, miss(trackId));
     }
     wantCover(item);
   };

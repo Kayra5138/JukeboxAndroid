@@ -155,8 +155,15 @@ export function refreshShow(followed: Subscription, now = Date.now(), wifi?: boo
   return next;
 }
 
-async function readShow(followed: Subscription, now: number, wifi?: boolean): Promise<number> {
-  const show = await fetchShow(followed.feedUrl);
+async function readShow(given: Subscription, now: number, wifi?: boolean): Promise<number> {
+  const show = await fetchShow(given.feedUrl);
+  /*
+    As it stands now the feed has been read, and not as it stood when the
+    reading began: let go of meanwhile, it is not written to and nothing of
+    it is fetched; its settings changed, they are the ones that count.
+  */
+  const followed = subscription(given.feedUrl);
+  if (!followed) return 0;
   saveEpisodes(followed.feedUrl, show.episodes, now);
   noteChecked(followed.feedUrl, show, now);
   // Off Wi‑Fi where it has to wait for it, put in the queue all the same, to wait there.

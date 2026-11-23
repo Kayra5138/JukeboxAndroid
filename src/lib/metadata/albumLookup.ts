@@ -58,7 +58,8 @@ export type AlbumLookupDeps = {
   /** Which of these tracks' files carry a picture of their own. */
   pictures: (trackIds: string[]) => Promise<ReadonlyMap<string, boolean | null>>;
   readAllMetadata: () => Map<string, TrackMetadata>;
-  saveMetadata: (entry: TrackMetadata) => void;
+  /** Answers false where the row was not written: one somebody wrote by hand meanwhile (`saveMetadataTo`). */
+  saveMetadata: (entry: TrackMetadata) => boolean | void;
   saveLookupTags: (trackId: string, tags: string[], source: TagSource) => void;
   /** Puts one cover on all of [trackIds] but [keep], over what they had (`chooseCovers`). */
   chooseCovers: (trackIds: string[], uri: string, keep: ReadonlySet<string>) => string[];
@@ -184,7 +185,7 @@ export async function lookUpAlbum(
         known?.year != null && rest.release.year != null
           ? Math.min(known.year, rest.release.year)
           : (rest.release.year ?? known?.year ?? null);
-      deps.saveMetadata({
+      const wrote = deps.saveMetadata({
         trackId: track.id,
         status: 'matched',
         source: 'musicbrainz',
@@ -203,7 +204,8 @@ export async function lookUpAlbum(
         // The disc only on a record of several, as everywhere else.
         discNumber: rest.discs > 1 ? entry.disc : null,
       });
-      if (genres.length > 0) deps.saveLookupTags(track.id, genres, 'musicbrainz');
+      // Written by hand since the record was read: left as it is, its tags with it.
+      if (wrote !== false && genres.length > 0) deps.saveLookupTags(track.id, genres, 'musicbrainz');
       matched += 1;
       done += 1;
     }

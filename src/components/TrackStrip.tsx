@@ -10,6 +10,7 @@ import {
 
 import type { Track } from '../lib/types';
 import { haptic } from '../lib/ui/haptics';
+import { unlessStill } from '../lib/ui/motion';
 
 /**
  * How far the finger must travel sideways before this is a swipe at all.
@@ -72,6 +73,7 @@ export function TrackStrip({
   wraps,
   renderTrack,
   onGo,
+  swipes = true,
   style,
 }: {
   queue: Track[];
@@ -81,6 +83,8 @@ export function TrackStrip({
   wraps: boolean;
   renderTrack: (track: Track) => React.ReactNode;
   onGo: (to: number) => void;
+  /** Whether it can be pulled sideways at all: not, where it is set not to be (`ui/miniPlayer.ts`), and it is a card. */
+  swipes?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const [width, setWidth] = useState(0);
@@ -97,8 +101,8 @@ export function TrackStrip({
   const asked = useRef<number | null>(null);
   const patience = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const live = useRef({ queue, wraps, width, onGo, at, shownAt });
-  live.current = { queue, wraps, width, onGo, at, shownAt };
+  const live = useRef({ queue, wraps, width, onGo, at, shownAt, swipes });
+  live.current = { queue, wraps, width, onGo, at, shownAt, swipes };
 
   /** The queue position one step either side, or -1 where there is nothing. */
   const step = (from: number, delta: number, q: Track[], round: boolean) => {
@@ -141,7 +145,7 @@ export function TrackStrip({
 
     return PanResponder.create({
       onMoveShouldSetPanResponder: (_event, gesture) => {
-        if (live.current.width <= 0) return false;
+        if (live.current.width <= 0 || !live.current.swipes) return false;
         const across = Math.abs(gesture.dx);
         return across >= CLAIM && across >= Math.abs(gesture.dy) * STRAIGHTNESS;
       },
@@ -172,13 +176,17 @@ export function TrackStrip({
 
         if (target < 0 || !(moved > w * COMMIT || flicked)) {
           fling.current = gesture.vx;
-          Animated.spring(shift, {
-            toValue: 0,
-            velocity: gesture.vx,
-            useNativeDriver: true,
-            speed: 16,
-            bounciness: 4,
-          }).start();
+          unlessStill(
+            Animated.spring(shift, {
+              toValue: 0,
+              velocity: gesture.vx,
+              useNativeDriver: true,
+              speed: 16,
+              bounciness: 4,
+            }),
+            shift,
+            0
+          );
           return;
         }
 
@@ -190,12 +198,7 @@ export function TrackStrip({
         go(target);
       },
       onPanResponderTerminate: () => {
-        Animated.spring(shift, {
-          toValue: 0,
-          useNativeDriver: true,
-          speed: 16,
-          bounciness: 4,
-        }).start();
+        unlessStill(Animated.spring(shift, { toValue: 0, useNativeDriver: true, speed: 16, bounciness: 4 }), shift, 0);
       },
     });
   }, [shift]);
@@ -215,13 +218,8 @@ export function TrackStrip({
     }
     if (now.current === 0) return;
 
-    Animated.spring(shift, {
-      toValue: 0,
-      velocity: fling.current,
-      useNativeDriver: true,
-      speed: 16,
-      bounciness: 0,
-    }).start();
+    // Held still, the new song is simply there.
+    unlessStill(Animated.spring(shift, { toValue: 0, velocity: fling.current, useNativeDriver: true, speed: 16, bounciness: 0 }), shift, 0);
     fling.current = 0;
   }, [shownAt, width, shift]);
 
@@ -290,9 +288,15 @@ export function TrackStrip({
     clipped out of sight until a finger brings one in, and a reader that found
     one would announce the track before or after as though it were playing.
   */
-  const slot = (index: number, spare: string, shown: boolean) => (
+  const keyOf = (index: number, spare: string) => (index >= 0 && queue[index] ? `q${index}` : spare);
+  // A queue of two going round has the same song either side: the one behind
+  // then goes by its side's name, and the one ahead keeps its own.
+  const hereKey = keyOf(shownAt, 'here');
+  const aheadKey = keyOf(aheadAt, 'after');
+  const behindKey = [hereKey, aheadKey].includes(keyOf(behindAt, 'before')) ? 'before' : keyOf(behindAt, 'before');
+  const slot = (index: number, key: string, shown: boolean) => (
     <View
-      key={index >= 0 && queue[index] ? `q${index}` : spare}
+      key={key}
       /*
         Always a view of its own. Left to React Native, the card in the
         middle, which a screen reader may read, was folded into its parent,
@@ -324,9 +328,9 @@ export function TrackStrip({
           { width: width * 3, marginLeft: -width, transform: [{ translateX: shift }] },
         ]}
         {...pan.panHandlers}>
-        {slot(behindAt, 'before', false)}
-        {slot(shownAt, 'here', true)}
-        {slot(aheadAt, 'after', false)}
+        {slot(behindAt, behindKey, false)}
+        {slot(shownAt, hereKey, true)}
+        {slot(aheadAt, aheadKey === hereKey ? 'after' : aheadKey, false)}
       </Animated.View>
     </View>
   );

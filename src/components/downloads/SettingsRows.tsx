@@ -1,11 +1,12 @@
 import { Link } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
-import { Switch } from '../Switch';
+import { LEADING, SPACE, TYPE, TOUCH } from '../../lib/theme/measures';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../settings/Find';
 
 import { Pressable } from '../Pressable';
-import { CategoryRow } from '../settings/rows';
+import { CategoryRow, SwitchRow, LinkRow, Chevron } from '../settings/rows';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, switchColours, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, usePressed } from '../../lib/theme/index';
 import { setDownloadsButtonWanted, useDownloadsButtonWanted } from '../../lib/ui/downloadsButton';
 import { useDownloads } from '../../lib/youtube/DownloadsProvider';
 import { setExtractorCheckWanted, useExtractor } from '../../lib/youtube/extractorState';
@@ -33,7 +34,6 @@ export function DownloadsSettings() {
   const floating = useDownloadsButtonWanted();
   const looking = useExtractor().wanted;
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
   const tally = tallyOf(all);
@@ -52,55 +52,39 @@ export function DownloadsSettings() {
                   {state}
                 </Text>
               ) : null}
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+              <Chevron />
             </View>
           </View>
           <Text style={styles.muted}>{t.settings.downloads.note}</Text>
         </Pressable>
       </Link>
       <View style={styles.rule} />
-      <View style={styles.row}>
-        <View style={styles.line}>
-          <Text style={styles.title}>{t.settings.downloads.button.title}</Text>
-          <Switch
-            value={floating}
-            accessibilityLabel={t.settings.downloads.button.title}
-            onValueChange={setDownloadsButtonWanted}
-            {...switchColours(c, floating)}
-          />
-        </View>
-        <Text style={styles.muted}>{t.settings.downloads.button.note}</Text>
-      </View>
+      <SwitchRow
+        title={t.settings.downloads.button.title}
+        hint={t.settings.downloads.button.note}
+        value={floating}
+        onChange={setDownloadsButtonWanted}
+      />
       <View style={styles.rule} />
       {/*
         A way in and not the settings themselves, which are a card as long as
         a page: laid out here they would put the switch below them out of
         sight. It is the screen the gear over Discover's list opens.
       */}
-      <Link href="/discover-settings" asChild>
-        <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row}>
-          <View style={styles.line}>
-            <Text style={styles.title}>{t.discover.settings.heading}</Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-          </View>
-          <Text style={styles.muted}>{t.settings.discover.note}</Text>
-        </Pressable>
-      </Link>
+      <LinkRow
+        title={t.discover.settings.heading}
+        hint={t.settings.discover.note}
+        href="/discover-settings"
+      />
       {downloads?.extractorLatestAsync ? (
         <>
           <View style={styles.rule} />
-          <View style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{t.settings.downloads.check.title}</Text>
-              <Switch
-                value={looking}
-                accessibilityLabel={t.settings.downloads.check.title}
-                onValueChange={setExtractorCheckWanted}
-                {...switchColours(c, looking)}
-              />
-            </View>
-            <Text style={styles.muted}>{t.settings.downloads.check.note}</Text>
-          </View>
+          <SwitchRow
+            title={t.settings.downloads.check.title}
+            hint={t.settings.downloads.check.note}
+            value={looking}
+            onChange={setExtractorCheckWanted}
+          />
         </>
       ) : null}
     </>
@@ -131,13 +115,12 @@ export function DownloadsCategory() {
 
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    row: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
-    rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: 16 },
-    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-    choices: { flexDirection: 'row', gap: 6, flexShrink: 1 },
-    title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-    value: { color: c.textSecondary, fontSize: 14, flexShrink: 1 },
-    muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-    chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22 },
+    row: { paddingHorizontal: SPACE.l, paddingVertical: SPACE.m, gap: SPACE.xs },
+    rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: SPACE.l },
+    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.row },
+    choices: { flexDirection: 'row', gap: SPACE.xs, flexShrink: 1 },
+    title: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+    value: { color: c.textSecondary, fontSize: TYPE.small, flexShrink: 1 },
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
   })
 );

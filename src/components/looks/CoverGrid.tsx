@@ -1,15 +1,17 @@
 import { memo, startTransition, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Animated as Native, Dimensions, FlatList, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import { SPACE, TYPE } from '../../lib/theme/measures';
+import { Animated as Native, Dimensions, FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Curtain } from '../Curtain';
 import { FastScroller, useFastScroll } from '../FastScroller';
 import { WALL_COLUMNS } from './shared';
-import { ROWS_KEPT } from '../../lib/ui/lists';
+import { CLIP_SUBVIEWS, ROWS_KEPT } from '../../lib/ui/lists';
 import { backToTop } from '../../lib/ui/tabReselect';
 import type { EnrichedTrack } from '../../lib/media/merge';
 import { makeStyles } from '../../lib/theme/index';
+import { useScreenReader } from '../../lib/ui/screenReader';
 
 /**
  * A list pinched out: the same entries in the same order as covers, three,
@@ -52,6 +54,8 @@ type GridProps<T> = {
   bottom: number;
   onPress: (item: T, index: number) => void;
   onLongPress?: (item: T, index: number) => void;
+  /** What a screen reader calls the long press, where there is one. */
+  holdLabel?: string;
 };
 
 /*
@@ -191,19 +195,24 @@ export function ZoomStack<T>({
 
   /*
     The walls drawn: the one at rest and those either side of it, ready for
-    a pinch to bring up, and soon after all of them, for a pinch that goes
-    on through two or three; kept, as they are no cost once standing and a
-    long wait being laid out again.
+    a pinch to bring up, and as a pinch steps on, those either side of the
+    one it has come to, for a pinch that goes on through two or three.
+
+    Not all of them, a moment after the stack was put up, as they once were:
+    that was some two thousand covers for every list and page with a stack,
+    the walls of thirteen and twenty-one alone more than fifteen hundred,
+    each with its picture to be found and made small, for walls most people
+    never pinch out to; and a page that cannot be pinched (`enabled` false)
+    put them up as well. Those a pinch went out to are put away again once
+    the fingers are off and the walls have gone back to sleep, all but the
+    one at rest and its two.
   */
   const [walls, setWalls] = useState<ReadonlySet<number>>(() => new Set());
-  const [allWalls, setAllWalls] = useState(false);
-  // The rest a moment after: put up as the fingers came down, they held up the first step by near half a second.
-  useEffect(() => {
-    const later = setTimeout(() => setAllWalls(true), 900);
-    return () => clearTimeout(later);
-  }, []);
-  const wanted = (allWalls ? WALL_COLUMNS.map((_columns, level) => level) : [zoom - 1, zoom, zoom + 1]).filter((level) => level >= 1 && level <= LAST_LEVEL && !walls.has(level));
-  if (wanted.length > 0) setWalls(new Set([...walls, ...wanted]));
+  const [awake, setAwake] = useState<ReadonlySet<number>>(() => new Set());
+  const near = (level: number, of: number) => level >= 1 && level <= LAST_LEVEL && Math.abs(level - of) <= 1;
+  const wanted = (enabled ? [zoom - 1, zoom, zoom + 1] : [zoom]).filter((level) => level >= 1 && level <= LAST_LEVEL && !walls.has(level));
+  const spare = awake.size === 0 ? [...walls].filter((level) => level !== zoom && !(enabled && near(level, zoom))) : [];
+  if (wanted.length > 0 || spare.length > 0) setWalls(new Set([...walls, ...wanted].filter((level) => !spare.includes(level))));
   /*
     How tall the header is (the shelves over the tracks): drawn on the level
     at rest alone, and on the others a space as tall, so that every level has
@@ -218,7 +227,6 @@ export function ZoomStack<T>({
     records' wall lost two frames in five -- where one shut away (see
     `Curtain`), standing and laid out as ever, costs nothing.
   */
-  const [awake, setAwake] = useState<ReadonlySet<number>>(() => new Set());
   const away = (level: number) => zoom !== level && !awake.has(level);
   /*
     What the walls shut away are drawn from: what the list was when they last
@@ -243,6 +251,9 @@ export function ZoomStack<T>({
     sleepers.delete(token);
     const around = [level - 1, level, level + 1].filter((one) => one >= 0 && one <= LAST_LEVEL);
     setAwake((now) => (around.every((one) => now.has(one)) ? now : new Set([...now, ...around])));
+    // Put up as well where they are not yet: the walls either side of the one a step has come to.
+    const up = around.filter((one) => one >= 1);
+    setWalls((now) => (up.every((one) => now.has(one)) ? now : new Set([...now, ...up])));
   };
   // Once the fingers are off and any step has run its course.
   const sleepSoon = () => {
@@ -481,6 +492,7 @@ function GridLevelOf<T>({
   bottom,
   onPress,
   onLongPress,
+  holdLabel,
   columns,
   shown,
   headerSpace,
@@ -546,10 +558,20 @@ function GridLevelOf<T>({
     return { rows: out, rowOf: where };
   }, [columns, items, labelOf, sectionOf]);
 
-  const dense = columns >= DENSE;
+  /*
+    Not with a screen reader on: a row that is one press, the cover picked
+    by where across it the finger lands, is no cover at all to a reader,
+    which presses the middle of what it has chosen. Each cover its own, then,
+    small as they are.
+  */
+  const reader = useScreenReader();
+  const dense = columns >= DENSE && !reader;
   const gap = dense ? NARROW_GAP : GAP;
   const cell = width > 0 ? (width - PAD * 2 - gap * (columns - 1)) / columns : 0;
-  const rowHeight = cell + (named ? (detailOf ? 40 : 24) : gap);
+  // The names under each cover as tall as the phone's size of type makes them: kept at the size for the usual one, larger names ran into the row below.
+  const { fontScale } = useWindowDimensions();
+  const lines = Math.min(fontScale, 2);
+  const rowHeight = cell + (named ? Math.ceil((detailOf ? 40 : 24) * lines) : gap);
   const headHeight = columns >= 8 ? 34 : 42;
   // The header's height where there is one (not once something is searched, which takes the shelves away).
   const headed = givenHeader ? headerSpace : 0;
@@ -612,6 +634,14 @@ function GridLevelOf<T>({
   useEffect(() => {
     askersOf(token)[level] = api;
   });
+  // And forgotten once the wall is put away: see `walls`.
+  useEffect(
+    () => () => {
+      const apis = askersOf(token);
+      if (apis[level] != null) delete apis[level];
+    },
+    [level, token]
+  );
 
   return (
     <View style={gridStyles.fill} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
@@ -619,6 +649,8 @@ function GridLevelOf<T>({
         <RowsList
           ref={list}
           data={rows}
+          // As every list in the app: Android's own default here is the "addViewAt" crash (`lib/ui/lists.ts`).
+          removeClippedSubviews={CLIP_SUBVIEWS}
           {...ROWS_KEPT}
           keyExtractor={(row) => row.key}
           contentContainerStyle={{ paddingTop: top, paddingBottom: bottom + 12 }}
@@ -685,16 +717,26 @@ function GridLevelOf<T>({
                   <Pressable
                     key={keyOf(item)}
                     style={({ pressed }) => [{ width: cell }, pressed && styles.pressed]}
+                    accessibilityRole="button"
+                    // Named even where the wall is too close for names under the covers.
+                    accessibilityLabel={[titleOf(item), detailOf?.(item)].filter(Boolean).join(', ')}
+                    accessibilityActions={onLongPress && holdLabel ? [{ name: 'longpress', label: holdLabel }] : undefined}
+                    onAccessibilityAction={
+                      onLongPress &&
+                      ((event) => {
+                        if (event.nativeEvent.actionName === 'longpress') onLongPress(item, at);
+                      })
+                    }
                     onPress={() => onPress(item, at)}
                     onLongPress={onLongPress ? () => onLongPress(item, at) : undefined}>
                     {renderCover(item, cell)}
                     {named ? (
                       <>
-                        <Text style={styles.title} numberOfLines={1}>
+                        <Text style={styles.title} numberOfLines={1} maxFontSizeMultiplier={2}>
                           {titleOf(item)}
                         </Text>
                         {detailOf ? (
-                          <Text style={styles.detail} numberOfLines={1}>
+                          <Text style={styles.detail} numberOfLines={1} maxFontSizeMultiplier={2}>
                             {detailOf(item) ?? ''}
                           </Text>
                         ) : null}
@@ -747,12 +789,12 @@ const gridStyles = StyleSheet.create({
 
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    head: { justifyContent: 'flex-end', paddingHorizontal: PAD, paddingBottom: 6 },
-    headText: { color: c.text, fontSize: 22, fontWeight: '800' },
-    headSmall: { fontSize: 17 },
+    head: { justifyContent: 'flex-end', paddingHorizontal: PAD, paddingBottom: SPACE.xs },
+    headText: { color: c.text, fontSize: TYPE.head, fontWeight: '800' },
+    headSmall: { fontSize: TYPE.heading },
     row: { flexDirection: 'row', gap: GAP, paddingHorizontal: PAD },
     pressed: { opacity: 0.6 },
-    title: { color: c.text, fontSize: 12.5, fontWeight: '600', marginTop: 4 },
-    detail: { color: c.textMuted, fontSize: 11 },
+    title: { color: c.text, fontSize: TYPE.hint, fontWeight: '600', marginTop: SPACE.xs },
+    detail: { color: c.textMuted, fontSize: TYPE.label },
   })
 );

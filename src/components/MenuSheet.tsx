@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
+import { SPACE, TYPE, RADIUS } from '../lib/theme/measures';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { About } from './About';
 import { Image } from './Picture';
 import { Pressable } from './Pressable';
 import { makeStyles, useColours, usePressed } from '../lib/theme/index';
@@ -16,13 +18,19 @@ import { makeStyles, useColours, usePressed } from '../lib/theme/index';
 /** What can be drawn for an entry, in the colour it is given. */
 export type MenuIcon = (props: { size: number; color: string }) => ReactNode;
 
-/** The top of the sheet. [picture] is left out where the thing has no picture of its own; [accessory] goes at the end. */
+/**
+ * The top of the sheet. [picture] is left out where the thing has no picture
+ * of its own; [accessory] goes at the end; [about], what the thing says of
+ * itself, under all of it, its first lines and the rest a press away
+ * (`About`): an episode's summary, which its row has no room for.
+ */
 export function MenuHeader({
   title,
   detail,
   picture,
   accessory,
   under,
+  about,
 }: {
   title: string;
   /** A line of words, or of words some of which lead somewhere (`NameLinks`). */
@@ -31,9 +39,10 @@ export function MenuHeader({
   accessory?: ReactNode;
   /** A line under the rest, for something the thing is in the middle of. */
   under?: ReactNode;
+  about?: string | null;
 }) {
   const styles = useStyles();
-  return (
+  const head = (
     <View style={styles.header}>
       {picture !== false ? (
         <View style={styles.cover}>
@@ -53,6 +62,15 @@ export function MenuHeader({
       </View>
       {accessory}
     </View>
+  );
+  if (!about) return head;
+  return (
+    <>
+      {head}
+      <View style={styles.about}>
+        <About text={about} />
+      </View>
+    </>
   );
 }
 
@@ -134,27 +152,32 @@ export function MenuEntry({
   );
 }
 
+/** The sheet's top's room at its sides, which its words under it keep as well. */
+const HEADER_SIDE = 20;
+
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12 },
-    cover: { width: 48, height: 48, borderRadius: 8, overflow: 'hidden', backgroundColor: c.surfaceRaised },
+    header: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingHorizontal: HEADER_SIDE, paddingTop: SPACE.l, paddingBottom: SPACE.m },
+    // Under the name, at its margins, before what can be done.
+    about: { paddingHorizontal: HEADER_SIDE, paddingBottom: SPACE.m },
+    cover: { width: 48, height: 48, borderRadius: RADIUS.cover, overflow: 'hidden', backgroundColor: c.surfaceRaised },
     coverPicture: { width: 48, height: 48 },
-    named: { flex: 1, gap: 2 },
-    title: { color: c.text, fontSize: 16, fontWeight: '600' },
-    detail: { color: c.textMuted, fontSize: 13 },
+    named: { flex: 1, gap: SPACE.xxs },
+    title: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+    detail: { color: c.textMuted, fontSize: TYPE.small },
     quick: {
       flexDirection: 'row',
-      paddingHorizontal: 8,
-      paddingBottom: 6,
-      marginBottom: 6,
+      paddingHorizontal: SPACE.s,
+      paddingBottom: SPACE.xs,
+      marginBottom: SPACE.xs,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
     },
-    quickEntry: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 2 },
-    quickLabel: { color: c.text, fontSize: 12, textAlign: 'center' },
-    action: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20, paddingVertical: 12 },
-    actionLabel: { flex: 1, color: c.text, fontSize: 15 },
-    destructive: { flex: 1, color: c.danger, fontSize: 15 },
+    quickEntry: { flex: 1, alignItems: 'center', gap: SPACE.xs, paddingVertical: SPACE.s, paddingHorizontal: SPACE.xxs },
+    quickLabel: { color: c.text, fontSize: TYPE.hint, textAlign: 'center' },
+    action: { flexDirection: 'row', alignItems: 'center', gap: SPACE.l, paddingHorizontal: SPACE.l, paddingVertical: SPACE.m },
+    actionLabel: { flex: 1, color: c.text, fontSize: TYPE.body },
+    destructive: { flex: 1, color: c.danger, fontSize: TYPE.body },
     off: { opacity: 0.4 },
   })
 );

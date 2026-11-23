@@ -36,11 +36,31 @@ internal object SpreadShuffle {
     return (dealt.subList(from, dealt.size) + dealt.subList(0, from)).map { it.second }
   }
 
-  /** One artist, whatever the case, the accents and the punctuation, as `artistKey` has it. */
+  /**
+   * One artist, whatever the case, the accents and the punctuation, as
+   * `artistKey` has it: whoever the song is filed under, the first name in
+   * its credit, and not the credit as written. `Sertab Erener feat. Ozan`
+   * and `Sertab Erener & Demir` were artists of their own to the spread, and
+   * came back to back with `Sertab Erener` nearly as often as in a plain draw.
+   */
   fun artistKey(artist: String?): String =
-    Normalizer.normalize(artist ?: "", Normalizer.Form.NFD)
+    Normalizer.normalize(firstArtist(artist), Normalizer.Form.NFD)
       .replace(Regex("\\p{M}+"), "")
       .lowercase()
       .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
       .trim()
+
+  /** The first name in a credit, parted where `splitCredit` in `src/lib/metadata/credit.ts` parts one. */
+  internal fun firstArtist(credit: String?): String {
+    var first = (credit ?: "").trim().split(FEATURING).first()
+    first = first.split(HARD).first()
+    // Somebody's backing band is part of their name.
+    if (!AND_THE.containsMatchIn(first)) first = first.split(SOFT).first()
+    return first.trim()
+  }
+
+  private val FEATURING = Regex("""\s*[(\[]?\s*\b(?:featuring|feat|ft)\b\.?\s+""", RegexOption.IGNORE_CASE)
+  private val HARD = Regex("""\s*[;,]\s*|\s+/\s+""")
+  private val SOFT = Regex("""\s+&\s+|\s+x\s+|\s+vs\.?\s+""")
+  private val AND_THE = Regex("""\s+(?:&|and|\+)\s+the\s+""", RegexOption.IGNORE_CASE)
 }

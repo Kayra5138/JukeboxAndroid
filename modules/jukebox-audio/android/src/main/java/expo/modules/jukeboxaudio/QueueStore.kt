@@ -38,29 +38,63 @@ object QueueStore {
    */
   private const val PLACE_FILE = "queue-place.json"
 
-  /** Beyond this the file costs more to write than the tail of it is worth. */
+  /** Beyond this the file costs more to write than the rest of it is worth. */
   private const val MAX_ITEMS = 2_000
+
+  /** Of a queue longer than [MAX_ITEMS], how many of what has been played are kept before the track playing. */
+  private const val KEPT_BEHIND = 200
 
   data class Saved(val items: List<MediaItem>, val index: Int, val positionMs: Long)
 
   private fun file(context: Context) = File(context.filesDir, FILE)
 
   /**
+   * The queue as [snapshot] read it off the player, for [serialise] to write
+   * out somewhere else. [from] is where in the player's queue the first of
+   * [items] is, and [index] counts from there.
+   */
+  class Snapshot(val items: List<MediaItem>, val index: Int, val positionMs: Long, val from: Int = 0)
+
+  /**
    * Reads the player, which has to happen on the thread that owns it.
    *
    * Separate from the writing so the expensive half — building the document and
    * putting it on disk — can be done somewhere else. A player cannot be touched
-   * off the main thread, and a file should not be written on it.
+   * off the main thread, and a file should not be written on it. Only the items
+   * are taken here, which are fixed once made; turning two thousand of them
+   * into JSON is [serialise]'s, and the other thread's.
+   *
+   * A queue longer than can be kept is kept round the track playing, a little
+   * of what has gone and the most of what is to come: the first two thousand
+   * of a queue playing its three thousandth would be picked up on a track
+   * that is not in them.
    */
-  fun snapshot(player: Player): String = runCatching {
-    val count = minOf(player.mediaItemCount, MAX_ITEMS)
+  fun snapshot(player: Player): Snapshot? = runCatching {
+    val all = player.mediaItemCount
+    val current = player.currentMediaItemIndex.coerceIn(0, maxOf(all - 1, 0))
+    val from = windowStart(all, current)
+    val count = minOf(all, MAX_ITEMS)
+    Snapshot(
+      items = List(count) { player.getMediaItemAt(from + it) },
+      index = (current - from).coerceIn(0, maxOf(count - 1, 0)),
+      positionMs = player.currentPosition.coerceAtLeast(0),
+      from = from
+    )
+  }.getOrNull()
+
+  /** Where the part of a queue of [all] kept round [current] begins. */
+  fun windowStart(all: Int, current: Int): Int =
+    if (all <= MAX_ITEMS) 0 else (current - KEPT_BEHIND).coerceIn(0, all - MAX_ITEMS)
+
+  fun serialise(snapshot: Snapshot): String = runCatching {
     val items = JSONArray()
-    for (index in 0 until count) items.put(toJson(player.getMediaItemAt(index)))
+    for (item in snapshot.items) items.put(toJson(item))
 
     JSONObject()
       .put("items", items)
-      .put("index", player.currentMediaItemIndex.coerceIn(0, maxOf(count - 1, 0)))
-      .put("positionMs", player.currentPosition.coerceAtLeast(0))
+      .put("index", snapshot.index)
+      .put("positionMs", snapshot.positionMs)
+      .put("from", snapshot.from)
       .toString()
   }.getOrDefault("")
 
@@ -102,7 +136,12 @@ object QueueStore {
     runCatching {
       val target = File(context.filesDir, name)
       val temporary = File(target.parentFile, "$name.part")
-      temporary.writeText(body)
+      // On the disk itself before the rename, or a phone that loses power
+      // just after can be left with the new name over nothing.
+      java.io.FileOutputStream(temporary).use { out ->
+        out.write(body.toByteArray())
+        out.fd.sync()
+      }
       if (!temporary.renameTo(target)) temporary.delete()
     }
   }
@@ -127,7 +166,8 @@ object QueueStore {
       ids = items.map { it.mediaId },
       index = body.optInt("index", 0),
       positionMs = body.optLong("positionMs", 0L),
-      place = loadPlace(context)
+      place = loadPlace(context),
+      from = body.optInt("from", 0)
     )
     Saved(items = items, index = index, positionMs = positionMs)
   }.getOrNull()
@@ -190,6 +230,9 @@ data class Place(val id: String, val index: Int, val positionMs: Long)
 /**
  * Which track to pick up on and where, out of the two things written down.
  *
+ * The place counts in the player's whole queue, and [from] is where in it
+ * the part that was kept begins.
+ *
  * The queue carries the place it was at when it was last written; [place] is
  * the later word, but it is a separate file and nothing writes the two as one.
  * So it is believed only where it still describes this queue -- its index
@@ -199,9 +242,10 @@ data class Place(val id: String, val index: Int, val positionMs: Long)
  *
  * Pure, so the judgement can be stated without a player or a disk.
  */
-fun resumeFrom(ids: List<String>, index: Int, positionMs: Long, place: Place?): Pair<Int, Long> {
-  if (place != null && ids.getOrNull(place.index) == place.id) {
-    return place.index to place.positionMs.coerceAtLeast(0L)
+fun resumeFrom(ids: List<String>, index: Int, positionMs: Long, place: Place?, from: Int = 0): Pair<Int, Long> {
+  val at = place?.let { it.index - from }
+  if (place != null && at != null && at >= 0 && ids.getOrNull(at) == place.id) {
+    return at to place.positionMs.coerceAtLeast(0L)
   }
   return index.coerceIn(0, maxOf(ids.size - 1, 0)) to positionMs.coerceAtLeast(0L)
 }

@@ -4,6 +4,9 @@ import type { Strings } from '../en/index.ts';
 export const player: Strings['player'] = {
   bar: {
     opensPlayer: 'プレーヤーを開きます',
+    upNext: (title: string) => `次：${title}`,
+    lastInQueue: 'キューの最後',
+    timeLeft: (clock: string) => `残り ${clock}`,
   },
   sheet: {
     nothingPlaying: '再生中の曲はありません。',
@@ -52,6 +55,9 @@ export const player: Strings['player'] = {
     },
   },
   settings: {
+    tabs: { sound: 'サウンド', look: '見た目', sleep: 'スリープ' },
+    moreEffects: 'もっと見る',
+    fewerEffects: '少なく表示',
     playback: '再生',
     backToNormal: '速度とピッチを元に戻す',
     normal: '標準',
@@ -60,7 +66,6 @@ export const player: Strings['player'] = {
     pitchHint: '半音単位で上下します。再生速度は上の設定のまま変わりません。',
     effects: 'エフェクト',
     equalizer: { note: 'バンド、低音、ラウドネス' },
-    crossfade: { note: '曲から次の曲へのつなぎ方' },
     allEffects: { title: 'すべてのエフェクト', note: '広がり、クロスフィード、回転、レベル' },
     jumps: {
       heading: 'この本・番組の移動秒数',

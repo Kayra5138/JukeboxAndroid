@@ -3,6 +3,7 @@ import type { Strings } from '../en/index.ts';
 import { oneOrMany } from '../write.ts';
 
 export const lyrics: Strings['lyrics'] = {
+  follow: 'Torna alla canzone',
   none: 'Nessun testo trovato.',
   translating: 'Traduzione…',
   seekTo: (seconds) => `Vai a ${seconds} secondi`,

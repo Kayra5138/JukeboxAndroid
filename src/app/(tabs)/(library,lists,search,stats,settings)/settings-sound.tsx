@@ -1,17 +1,15 @@
 import { useCallback, useState } from 'react';
-import { Link, useFocusEffect, useIsFocused } from 'expo-router';
-import { Text, View } from 'react-native';
+import { formatSpeed } from '../../../lib/player/playback';
+import { useFocusEffect } from 'expo-router';
+import { View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 import { Switch } from '../../../components/Switch';
 
 import JukeboxAudio from '../../../../modules/jukebox-audio';
-import { PlayerSettings } from '../../../components/PlayerSettings';
-import { Pressable } from '../../../components/Pressable';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
+import { SettingsPage, useRows, LinkRow } from '../../../components/settings/rows';
 import { useT } from '../../../lib/i18n/index';
-import { usePlayerActions, usePlayerState } from '../../../lib/player/PlayerProvider';
-import { switchColours, useColours, usePressed } from '../../../lib/theme/index';
+import { useSpeed } from '../../../lib/player/current';
 import { useLandscape } from '../../../lib/ui/layout';
-import { useBack } from '../../../lib/ui/back';
 import { haptic } from '../../../lib/ui/haptics';
 
 /**
@@ -20,17 +18,13 @@ import { haptic } from '../../../lib/ui/haptics';
  * how fast and how high it is all played.
  *
  * The rows are the ones that were on the Settings tab, as they were, with the
- * sheet of playback settings that the last of them opens.
+ * page of playback settings that the last of them opens (`playback`).
  */
 export default function SoundSettingsScreen() {
   const t = useT();
-  const c = useColours();
   const styles = useRows();
-  const pressed = usePressed();
   const landscape = useLandscape();
-  const [playbackOpen, setPlaybackOpen] = useState(false);
-  const { speed, pitch } = usePlayerState();
-  const { setSpeed, setPitch } = usePlayerActions();
+  const speed = useSpeed();
   /**
    * Whether tracks are evened out, or null where this build cannot say.
    *
@@ -46,30 +40,20 @@ export default function SoundSettingsScreen() {
       .then((loudness) => setEven(loudness.enabled))
       .catch(() => setEven(null));
   }, []));
-  const focused = useIsFocused();
-  useBack(playbackOpen && focused, () => setPlaybackOpen(false));
 
   const shaping = (
     <>
-      <Link href="/equalizer" asChild>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-          <View style={styles.line}>
-            <Text style={styles.title}>{t.nav.equalizer}</Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-          </View>
-          <Text style={styles.muted}>{t.settings.equalizer.note}</Text>
-        </Pressable>
-      </Link>
+      <LinkRow
+        title={t.nav.equalizer}
+        hint={t.settings.equalizer.note}
+        href="/equalizer"
+      />
       <View style={styles.rule} />
-      <Link href="/effects" asChild>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-          <View style={styles.line}>
-            <Text style={styles.title}>{t.nav.effects}</Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-          </View>
-          <Text style={styles.muted}>{t.settings.effects.note}</Text>
-        </Pressable>
-      </Link>
+      <LinkRow
+        title={t.nav.effects}
+        hint={t.settings.effects.note}
+        href="/effects"
+      />
       {/*
         A switch and no more. There is a target level and a ceiling
         behind it, and neither is offered: the one is a standard and
@@ -102,7 +86,6 @@ export default function SoundSettingsScreen() {
                       setEven(!on);
                     });
                 }}
-                {...switchColours(c, even)}
               />
             </View>
             <Text style={styles.muted}>{t.settings.loudness.note}</Text>
@@ -113,33 +96,23 @@ export default function SoundSettingsScreen() {
   );
   const pacing = (
     <>
-      <Link href="/transitions" asChild>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row}>
-          <View style={styles.line}>
-            <Text style={styles.title}>{t.nav.crossfade}</Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-          </View>
-          <Text style={styles.muted}>{t.settings.crossfade.note}</Text>
-        </Pressable>
-      </Link>
+      <LinkRow
+        title={t.nav.crossfade}
+        hint={t.settings.crossfade.note}
+        href="/transitions"
+      />
       <View style={styles.rule} />
-      <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.row} onPress={() => setPlaybackOpen(true)}>
-        <View style={styles.line}>
-          <Text style={styles.title}>{t.settings.playback.title}</Text>
-          <Text style={styles.chevron} importantForAccessibility="no">›</Text>
-        </View>
-        <Text style={styles.muted}>{t.settings.playback.note(String(speed))}</Text>
-      </Pressable>
+      {/* A page of its own, as everything Settings opens is: it was a sheet laid over this one. */}
+      <LinkRow
+        title={t.settings.playback.title}
+        hint={t.settings.playback.note(formatSpeed(speed, t).replace(/×$/, ''))}
+        href="/playback"
+      />
     </>
   );
 
   return (
-    // The page itself goes out of focus behind the sheet of playback settings, which is laid over it.
-    <SettingsPage
-      veiled={playbackOpen}
-      sheets={
-        <PlayerSettings visible={playbackOpen} speed={speed} pitch={pitch} onSpeed={(value) => void setSpeed(value)} onPitch={(value) => void setPitch(value)} onClose={() => setPlaybackOpen(false)} />
-      }>
+    <SettingsPage>
       {/*
         One card upright. Sideways it is five rows in a frame that shows two,
         so it is cut in two where the subject changes — what shapes the sound,

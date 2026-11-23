@@ -798,6 +798,27 @@ const SET_ASIDE = `
   );
 `;
 
+/**
+ * Skips that were only a queue being set. The player says a song has come on
+ * when a queue is set, as when one follows another, and that the one before
+ * was not finished; each queue begun wrote its first song down as skipped
+ * after nought seconds (see `isLanding`). Nobody skips a song in less than a
+ * second of it but somebody flicking through, which says nothing about the
+ * song either.
+ */
+const LANDINGS_NOT_SKIPS = `
+  DELETE FROM skips WHERE seconds_played < 1;
+`;
+
+/**
+ * Which lists a track is in, found without reading every list: what taking a
+ * track out of every list, following it to a new file and telling two copies
+ * of a song apart all ask, for every track they touch.
+ */
+const LIST_MEMBERS_BY_TRACK = `
+  CREATE INDEX IF NOT EXISTS playlist_tracks_track ON playlist_tracks (track_id);
+`;
+
 export const MIGRATIONS: string[] = [
   LEGACY_DATA,
   LYRICS_UNREACHABLE,
@@ -837,6 +858,8 @@ export const MIGRATIONS: string[] = [
   SMART_LISTS,
   PLAYS_FROM_ELSEWHERE,
   SET_ASIDE,
+  LANDINGS_NOT_SKIPS,
+  LIST_MEMBERS_BY_TRACK,
 ];
 
 /**
@@ -884,12 +907,34 @@ function applyAtomically(database: MigrationTarget, sql: string): void {
   }
 }
 
+/** A mark of [text], as a whole number SQLite keeps as a database's application id: FNV-1a, never nought. */
+export function schemaMark(text: string): number {
+  let hash = 0x811c9dc5;
+  for (let at = 0; at < text.length; at += 1) {
+    hash ^= text.charCodeAt(at);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  // Signed, as SQLite holds it, and never the nought every database starts with.
+  return hash | 0 || 1;
+}
+
 /** Bring `database` up to date. Returns the version it now holds. */
 export function migrate(database: MigrationTarget): number {
   const target = MIGRATIONS.length;
   const baseline = baselineOf(database);
 
-  applyAtomically(database, BASE_SCHEMA);
+  /*
+    The tables as they are written above, put in place where the database has
+    not had them as they are written now: told by a mark of the text, kept in
+    the database's application id. Nothing to do on nearly every open, and the
+    two dozen statements were run all the same, on the thread that draws the
+    first frame. A table added above, or changed, is a new mark, and runs them.
+  */
+  const mark = schemaMark(BASE_SCHEMA);
+  const had = database.getFirstSync<{ application_id: number }>('PRAGMA application_id')?.application_id ?? 0;
+  if (baseline < target || had !== mark) {
+    applyAtomically(database, `${BASE_SCHEMA} PRAGMA application_id = ${mark};`);
+  }
 
   for (let version = baseline; version < target; version += 1) {
     // The version bump rides inside the same transaction as the work it

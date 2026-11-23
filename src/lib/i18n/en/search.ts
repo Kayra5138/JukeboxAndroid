@@ -17,7 +17,6 @@ export const search = {
       'Books, podcasts, talks and long recordings from YouTube, fetched into the Tapes folder of your library and played on from where you left them. Search, or paste a link to a video or a playlist — or to a channel, to follow it.',
     placeholder: { videos: 'Title, show or YouTube link', playlist: 'Book, series or playlist link' },
     empty: { videos: 'Search for a book, a show, a talk or a lecture.', playlist: 'Search for a playlist to fetch as one tape: a book in parts, or a season of a show.' },
-    download: 'Download as tape',
     /** Over a playlist's videos: all of them, as the parts of one tape, in the list's order. */
     downloadBook: (count: number) => `Download all ${format.number(count)} as one tape`,
     bookHint: 'They go into one folder named after the list, numbered in its order, and play on one into the next.',
@@ -67,6 +66,11 @@ export const search = {
       placeholder: 'Podcast or channel name, or a link',
       searchFailed: 'Could not search for podcasts. Check your connection.',
       feedFailed: 'Could not read that podcast’s feed.',
+      /** A feed asked for by a link from outside the app, before it is read: where it is, and whether to. */
+      linkAsk: 'Open a feed from a link?',
+      linkAskBody: (host: string) => `A link asks to read the podcast feed at ${host}. Open it only if you trust where the link came from.`,
+      linkOpen: 'Open',
+      linkRefused: 'That link points at an address on this phone or your own network, which a link is not let read.',
       notChannel: 'That is not a YouTube channel’s address, or the channel could not be found.',
       /** Headings over a search's results: the channels YouTube found, and the podcasts Apple's directory did. */
       channelsHeading: 'YouTube channels',
@@ -89,6 +93,8 @@ export const search = {
       episodes: (count: number) => `Episodes · ${format.number(count)}`,
       noEpisodes: 'This feed has no episodes with a file.',
       download: 'Download',
+      /** The button on an episode or a part, read aloud with what it fetches, in the order the language puts them. */
+      downloadNamed: (title: string) => `Download ${title}`,
       /** The series' card that carries it on at one press: begun or not. */
       continue: 'Continue',
       start: 'Start',
@@ -144,15 +150,12 @@ export const search = {
 
   /** One result, and what can be done with it. */
   playlist: 'Playlist',
-  openPlaylist: 'Open playlist',
   /** Over the songs of a list opened from the results, and what the back key does there. */
   backToResults: 'Back to results',
   openPlaylistLabel: (title: string) => `Open playlist ${title}`,
   downloadLabel: (title: string) => `Download ${title}`,
-  download: { mp3: 'Download MP3', original: 'Download audio' },
   adding: 'Adding…',
   /** Listening without keeping: a result played at once, fetched into the app's own files, kept only when kept. See `lib/listen`. */
-  listen: 'Listen',
   listenLabel: (title: string) => `Listen to ${title} without keeping it`,
   readying: 'Getting it ready…',
   /** The minus beside a song listened to in the player: out of the queue, its file let go. */

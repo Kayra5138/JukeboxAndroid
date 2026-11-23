@@ -1,12 +1,16 @@
 import { useCallback, useState } from 'react';
+import { SPACE } from '../../../lib/theme/measures';
+import { Note } from '../../../components/Note';
 import { useFocusEffect } from 'expo-router';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Busy } from '../../../components/Busy';
+import { Text } from '../../../components/settings/Find';
 
 import JukeboxAudio from '../../../../modules/jukebox-audio/index';
 
 import { NumberStepper } from '../../../components/NumberStepper';
 import { Pressable } from '../../../components/Pressable';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
+import { SettingsPage, useRows, SectionLabel } from '../../../components/settings/rows';
 import { Switch } from '../../../components/Switch';
 import { useT } from '../../../lib/i18n/index';
 import { schedulePodcasts } from '../../../lib/podcasts/background';
@@ -17,7 +21,7 @@ import { followAll, podcastsWifiOnly, setPodcastsWifiOnly } from '../../../lib/p
 import { subscriptions } from '../../../lib/podcasts/store';
 import { sponsorsTurnedOn } from '../../../lib/tapes/extras';
 import { setSmartRewind, setTapeFlag, setTapeJump, smartRewind, TAPE_JUMP_RANGE, tapeFlag, tapeJumps, type TapeFlag } from '../../../lib/tapes/settings';
-import { switchColours, useColours, usePressed } from '../../../lib/theme/index';
+import { useColours, usePressed } from '../../../lib/theme/index';
 import { haptic } from '../../../lib/ui/haptics';
 
 /** A week, for heard episodes kept a while after they were heard: long enough to go back to one. */
@@ -61,6 +65,15 @@ export default function TapeSettingsScreen() {
     setJumps(tapeJumps());
     setWifiOnly(podcastsWifiOnly());
     setDeleteDays(deletePlayedDays());
+    /*
+      Heard episodes are deleted as the page is left, by however many days it
+      was left at: not as the switch is turned on, which is at a week and on
+      the way to the number wanted, and took what was heard eight days ago
+      from somebody about to say thirty.
+    */
+    return () => {
+      if (deletePlayedDays() != null) void cleanUpPlayed();
+    };
   }, []));
 
   // One of a tape's switches, each a row of its own with what it does under it.
@@ -76,7 +89,6 @@ export default function TapeSettingsScreen() {
             if (name === 'skipSponsors' && on) sponsorsTurnedOn();
             setFlags((now) => ({ ...now, [name]: on }));
           }}
-          {...switchColours(c, flags[name])}
         />
       </View>
       <Text style={styles.muted}>{said[name].note}</Text>
@@ -115,7 +127,6 @@ export default function TapeSettingsScreen() {
                 setSmartRewind(on);
                 setRewind(on);
               }}
-              {...switchColours(c, rewind)}
             />
           </View>
           <Text style={styles.muted}>{said.smartRewind.note}</Text>
@@ -127,7 +138,7 @@ export default function TapeSettingsScreen() {
         <View style={styles.rule} />
         {jumpRow('forward', said.jumpNote)}
       </View>
-      <Text accessibilityRole="header" style={[styles.section, styles.sectionAfter]}>{t.format.upper(said.podcasts)}</Text>
+      <SectionLabel>{said.podcasts}</SectionLabel>
       <View style={styles.card}>
         <View style={styles.row}>
           <View style={styles.line}>
@@ -139,7 +150,6 @@ export default function TapeSettingsScreen() {
                 setPodcastsWifiOnly(on);
                 setWifiOnly(on);
               }}
-              {...switchColours(c, wifiOnly)}
             />
           </View>
           <Text style={styles.muted}>{t.search.tapes.podcasts.wifiOnlyNote}</Text>
@@ -157,9 +167,7 @@ export default function TapeSettingsScreen() {
                 setDeletePlayedDays(days);
                 setDeleteDays(days);
                 void schedulePodcasts();
-                if (on) void cleanUpPlayed();
               }}
-              {...switchColours(c, deleteDays != null)}
             />
           </View>
           {deleteDays != null ? (
@@ -177,7 +185,7 @@ export default function TapeSettingsScreen() {
         </View>
       </View>
       {/* The shows followed, to or from another app. */}
-      <Text accessibilityRole="header" style={[styles.section, styles.sectionAfter]}>{t.format.upper(said.opml.heading)}</Text>
+      <SectionLabel>{said.opml.heading}</SectionLabel>
       <View style={styles.card}>
         <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.row} onPress={exportShows}>
           <Text style={styles.title}>{said.opml.export}</Text>
@@ -196,12 +204,12 @@ export default function TapeSettingsScreen() {
       </View>
       {opml ? (
         <View style={layout.opmlLine}>
-          {opml.busy ? <ActivityIndicator size="small" color={c.textMuted} /> : null}
-          <Text accessibilityRole={opml.bad ? 'alert' : undefined} style={opml.bad ? styles.noteBad : styles.aside}>{opml.line}</Text>
+          {opml.busy ? <Busy size="small" color={c.textMuted} /> : null}
+          <Note tone={opml.bad ? 'bad' : 'muted'} style={styles.noteRoom}>{opml.line}</Note>
         </View>
       ) : null}
       {/* Still being worked on, so at the foot of the page and off until turned on (`FLAG_DEFAULTS`). */}
-      <Text accessibilityRole="header" style={[styles.section, styles.sectionAfter]}>{t.format.upper(t.settings.sections.experimental)}</Text>
+      <SectionLabel>{t.settings.sections.experimental}</SectionLabel>
       <View style={styles.card}>
         {flagRow('skipSilence')}
         <View style={styles.rule} />
@@ -245,5 +253,5 @@ async function readShows(said: Said, onEach: (line: string) => void): Promise<Li
 
 const layout = StyleSheet.create({
   // A spinner beside the line while a list is read in, the line alone after.
-  opmlLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  opmlLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
 });

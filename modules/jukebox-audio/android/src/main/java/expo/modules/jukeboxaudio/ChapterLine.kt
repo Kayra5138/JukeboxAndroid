@@ -55,7 +55,7 @@ internal class ChapterLine(
   private val tick = object : Runnable {
     override fun run() {
       look(force = false)
-      if (ticking()) handler.postDelayed(this, EVERY_MS)
+      if (ticking()) handler.postDelayed(this, untilNext())
     }
   }
 
@@ -77,14 +77,34 @@ internal class ChapterLine(
 
   override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
     if (oldPosition.mediaItemIndex == newPosition.mediaItemIndex) look(force = false)
+    restart()
   }
+
+  // Faster or slower, the next chapter comes sooner or later.
+  override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) = restart()
 
   /** Playing a tape that has chapters, or may yet be found to. */
   private fun ticking(): Boolean = player.isPlaying && tapeId != null && (chapters.isNotEmpty() || !readAgain)
 
   private fun restart() {
     handler.removeCallbacks(tick)
-    if (ticking()) handler.postDelayed(tick, EVERY_MS)
+    if (ticking()) handler.postDelayed(tick, untilNext())
+  }
+
+  /*
+    How long until there is anything to look at: the next chapter's start, at
+    the speed the tape is played, or the moment its chapters are read once
+    more. It was looked at every second for as long as a tape played, a book
+    of an hour's chapters three thousand times an hour to find out a few
+    times. Never more than a minute, in case the clock and the tape part
+    company; and a seek or a change of speed works it out again.
+  */
+  private fun untilNext(): Long {
+    if (chapters.isEmpty()) return (cameAt + READ_AGAIN_MS - SystemClock.elapsedRealtime()).coerceIn(SOONEST_MS, LATEST_MS)
+    val position = player.currentPosition
+    val next = chapters.firstOrNull { it.first > position }?.first ?: return LATEST_MS
+    val speed = player.playbackParameters.speed.coerceAtLeast(0.25f)
+    return ((next - position) / speed).toLong().plus(SOONEST_MS).coerceIn(SOONEST_MS, LATEST_MS)
   }
 
   private fun read(item: MediaItem?) {
@@ -129,7 +149,9 @@ internal class ChapterLine(
   }
 
   companion object {
-    private const val EVERY_MS = 1_000L
+    /** Not sooner than this after a look, and a moment past a chapter's start, so that it is looked at once it is in it. */
+    private const val SOONEST_MS = 250L
+    private const val LATEST_MS = 60_000L
     private const val READ_AGAIN_MS = 15_000L
 
     /** Which of the chapters beginning at [starts], in order, [positionMs] is in: -1 before the first. */

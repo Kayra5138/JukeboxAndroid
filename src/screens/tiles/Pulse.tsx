@@ -11,7 +11,7 @@ import { usePlayerPosition } from '../../lib/player/PlayerProvider';
  * up.
  */
 export function Pulse({ into }: { into: SharedValue<number> }) {
-  const { positionSec } = usePlayerPosition(true);
+  const { positionSec } = usePlayerPosition(true, true);
   useEffect(() => {
     into.set(Math.max(0, Math.round(positionSec * 1000)));
   }, [into, positionSec]);

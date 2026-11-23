@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Note } from '../Note';
+import { Button } from '../Button';
+import { Text, View } from 'react-native';
 import { Pressable } from '../Pressable';
 
 import { FormScroll } from '../FormScroll';
@@ -10,7 +12,6 @@ import { saveManualTags, tagCounts, tagsFor, type TagEdit } from '../../lib/db/t
 import { isAbortError } from '../../lib/metadata/http';
 import { noteError } from '../../lib/support/errorLogStore';
 import { lookUpTags, withLookupTags } from '../../lib/metadata/single';
-import { useColours, usePressed } from '../../lib/theme/index';
 import type { Track } from '../../lib/types';
 import { useShared } from './styles';
 import { useAnnounce } from '../../lib/ui/announce';
@@ -52,9 +53,7 @@ export function TagsTab({
   useAnnounce(note?.text);
   const search = useRef<AbortController | null>(null);
   const t = useT();
-  const c = useColours();
   const shared = useShared();
-  const pressed = usePressed();
 
   useEffect(() => () => search.current?.abort(), []);
 
@@ -111,25 +110,18 @@ export function TagsTab({
   }, [track.id, tags, onChanged, t]);
   // Tags changed and not saved, or one typed and not added, are asked about on the way out.
   const names = (list: TagEdit[]) => list.map((entry) => entry.tag).join('\u0000');
-  useUnsavedBack(names(tags) !== names(kept) || draft.trim() !== '', () => {
-    setTags(kept);
-    setDraft('');
-  });
+  useUnsavedBack(
+    names(tags) !== names(kept) || draft.trim() !== '',
+    () => {
+      setTags(kept);
+      setDraft('');
+    },
+    'tags'
+  );
 
   return (
     <FormScroll contentContainerStyle={shared.content}>
-      <Pressable
-        accessibilityRole="button"
-        android_ripple={pressed}
-        style={[shared.action, looking && shared.actionOff]}
-        disabled={looking}
-        onPress={() => void lookUp()}>
-        {looking ? (
-          <ActivityIndicator color={c.onPrimary} />
-        ) : (
-          <Text style={shared.actionLabel}>{t.details.lookUp}</Text>
-        )}
-      </Pressable>
+      <Button label={t.details.lookUp} busy={looking} onPress={() => void lookUp()} />
       <Text style={shared.hint}>{t.details.tags.lookUpHint}</Text>
 
       <TagEditor
@@ -140,12 +132,10 @@ export function TagsTab({
         onChange={setTags}
       />
 
-      {note ? <Text style={note.bad ? shared.noteBad : shared.note}>{note.text}</Text> : null}
+      {note ? <Note tone={note.bad ? 'bad' : 'good'}>{note.text}</Note> : null}
 
       <View style={shared.actions}>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={[shared.action, shared.actionWide]} onPress={save}>
-          <Text style={shared.actionLabel}>{t.common.save}</Text>
-        </Pressable>
+        <Button label={t.common.save} wide onPress={save} />
       </View>
       <Text style={shared.hint}>{t.details.tags.saveHint}</Text>
     </FormScroll>

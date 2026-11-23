@@ -14,6 +14,11 @@ export const LANES = 4;
 
 /** How many may be lost before a run is over. */
 export const LIVES = 5;
+/**
+ * One life a second at most: a key let past and a tap beside it at the same
+ * moment are one slip, and take one life rather than two.
+ */
+export const LIFE_GRACE_MS = 1_000;
 
 /**
  * How fast the board moves, which is the whole of what difficulty means.

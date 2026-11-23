@@ -88,6 +88,8 @@ export const welcome: Strings['welcome'] = {
     note:
       '最初の設定、ジャケットと曲の情報を取得するかの確認、ヒントを、インストール直後と同じようにもう一度表示します。音楽、リスト、設定はそのまま残ります。',
     again: 'もう一度見る',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: '初回起動をもう一度表示しますか？', body: '最初の設定、ジャケットと曲の情報を取得するかの確認、ヒントがもう一度表示されます。音楽、リスト、設定はそのまま残ります。' },
   },
 
   discoverEarly:

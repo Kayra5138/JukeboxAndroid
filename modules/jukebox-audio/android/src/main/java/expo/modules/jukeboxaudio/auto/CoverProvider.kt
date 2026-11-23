@@ -9,8 +9,10 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.OpenableColumns
 import expo.modules.jukeboxaudio.AlbumArtwork
+import expo.modules.jukeboxaudio.Callers
 import expo.modules.jukeboxaudio.Localised
 import expo.modules.jukeboxaudio.MediaStoreLibrary
+import expo.modules.jukeboxaudio.StandIn
 import expo.modules.jukeboxaudio.downloads.DownloadStore
 import java.io.File
 
@@ -51,6 +53,7 @@ class CoverProvider : ContentProvider() {
     // Read-only in the strict sense: not "writes are ignored" but "a writer is
     // told no", so nothing can quietly believe it has saved a cover here.
     if (mode != "r") throw java.io.FileNotFoundException("Covers are read-only.")
+    if (!mayRead()) throw SecurityException("Covers are for this app and what plays it.")
     val file = resolve(uri) ?: throw java.io.FileNotFoundException("No cover for $uri")
     return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
   }
@@ -66,6 +69,7 @@ class CoverProvider : ContentProvider() {
     selectionArgs: Array<out String>?,
     sortOrder: String?
   ): Cursor? {
+    if (!mayRead()) return null
     val file = resolve(uri) ?: return null
     val columns = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
     return MatrixCursor(columns).apply {
@@ -78,6 +82,20 @@ class CoverProvider : ContentProvider() {
       }.toTypedArray())
     }
   }
+
+  /**
+   * Whether whoever is asking may have a cover: this app, the system, and
+   * what may browse the player ([expo.modules.jukeboxaudio.BROWSERS]), the
+   * car first. Open to any app, the covers said which songs are on the phone
+   * to anything that cared to count through the ids.
+   */
+  private fun mayRead(): Boolean =
+    Callers.mayRead(
+      android.os.Binder.getCallingUid(),
+      runCatching { callingPackage }.getOrNull(),
+      android.os.Process.myUid(),
+      context?.packageName ?: "",
+    )
 
   override fun insert(uri: Uri, values: ContentValues?): Uri? =
     throw UnsupportedOperationException("Covers are read-only.")
@@ -104,9 +122,7 @@ class CoverProvider : ContentProvider() {
    */
   private fun resolve(uri: Uri): File? {
     val context = context ?: return null
-    val segments = uri.pathSegments
-    if (segments.size != 2 || segments[0] != TRACK) return null
-    val trackId = segments[1].takeIf { it.toLongOrNull() != null } ?: return null
+    val trackId = trackOf(uri.pathSegments) ?: return null
 
     val kept = runCatching { LibraryDatabase.cover(context, trackId) }.getOrNull()
     if (kept != null && kept.startsWith("file://")) own(context, kept)?.let { return it }
@@ -124,8 +140,9 @@ class CoverProvider : ContentProvider() {
 
     // Nothing to show is not the same as nothing to draw. Refusing here leaves
     // the car to fall back on its own broken-image mark, and a shelf of records
-    // with two of those in it reads as a fault rather than as a gap.
-    return runCatching { Tile.of(context, trackId) }.getOrNull()
+    // with two of those in it reads as a fault rather than as a gap. The
+    // record's paper sleeve, then, as the app shows it ([StandIn]).
+    return runCatching { StandIn.forTrack(context, trackId) }.getOrNull()
   }
 
   /**
@@ -135,8 +152,7 @@ class CoverProvider : ContentProvider() {
    * apps. Only a picture inside the app's own folder is ever handed over.
    */
   private fun own(context: Context, address: String): File? =
-    runCatching { File(java.net.URI(address)) }.getOrNull()
-      ?.takeIf { it.isFile && it.canonicalPath.startsWith(context.filesDir.canonicalPath + File.separator) }
+    runCatching { File(java.net.URI(address)) }.getOrNull()?.takeIf { within(it, context.filesDir) }
 
   /**
    * A cover at a web address, fetched and kept.
@@ -165,6 +181,19 @@ class CoverProvider : ContentProvider() {
 
     private const val TRACK = "track"
 
+    /** The song an address of ours names, `track/<id>`, and nothing for any other shape of address. */
+    internal fun trackOf(segments: List<String>): String? =
+      segments.takeIf { it.size == 2 && it[0] == TRACK }?.get(1)?.takeIf { it.toLongOrNull() != null }
+
+    /**
+     * Whether [file] is a file inside [folder], once both are followed to
+     * where they really are: a cover the library names is handed out only
+     * from the app's own files, and a name with `..` in it, or a link out of
+     * the folder, is not one of them.
+     */
+    internal fun within(file: File, folder: File): Boolean =
+      runCatching { file.isFile && file.canonicalPath.startsWith(folder.canonicalPath + File.separator) }.getOrDefault(false)
+
     private fun authority(context: Context) = "${context.packageName}.covers"
 
     /** Where a car should look for [trackId]'s cover. */
@@ -175,9 +204,10 @@ class CoverProvider : ContentProvider() {
         .appendPath(TRACK)
         .appendPath(trackId)
         // A car remembers a picture by its address. The tiles it was shown
-        // while this skipped the app's own covers are filed under the old
-        // one, and it would go on showing them; a new address asks again.
-        .appendQueryParameter("v", "3")
+        // while this skipped the app's own covers, and the lettered ones that
+        // stood in for none before the sleeves, are filed under the old one,
+        // and it would go on showing them; a new address asks again.
+        .appendQueryParameter("v", "4")
         .build()
   }
 }

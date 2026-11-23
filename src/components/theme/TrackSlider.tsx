@@ -11,6 +11,7 @@ import {
 
 import { makeStyles } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
+import { SPACE, TYPE } from '../../lib/theme/measures';
 
 /** How often a drag is allowed to reach whoever is listening, in milliseconds. */
 const TELL_EVERY_MS = 32;
@@ -128,6 +129,8 @@ export function TrackSlider({
     dragging.current = true;
     start.current = { page: event.nativeEvent.pageX, value: latest.current };
     end.current = endOf(at(latest.current));
+    // Held from here on: a scroller round it is kept from taking the touch however the finger wanders (see `Slider`).
+    return true;
   };
 
   const move = (event: GestureResponderEvent) => {
@@ -219,10 +222,10 @@ export function TrackSlider({
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  slider: { gap: 4 },
+  slider: { gap: SPACE.xs },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  label: { color: c.textSecondary, fontSize: 13.5 },
-  value: { color: c.textFaint, fontSize: 13, fontVariant: ['tabular-nums'] },
+  label: { color: c.textSecondary, fontSize: TYPE.small },
+  value: { color: c.textFaint, fontSize: TYPE.small, fontVariant: ['tabular-nums'] },
   // Taller than what is drawn in it: the strip is thin and a fingertip is not.
   track: { height: THUMB + 14, justifyContent: 'center' },
   /*

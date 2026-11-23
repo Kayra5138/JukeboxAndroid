@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { RADIUS, SPACE, TYPE } from '../lib/theme/measures';
 import { Pressable } from './Pressable';
 
 import { TextField } from './FormScroll';
@@ -7,6 +8,7 @@ import { useT } from '../lib/i18n/index';
 import { canonicalLabel, foldForMatch } from '../lib/metadata/text';
 import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import type { TagEdit } from '../lib/db/tags';
+import { Chip } from './Segmented';
 
 /**
  * Edits an ordered list of tags.
@@ -144,9 +146,7 @@ export function TagEditor({
       {offered.length > 0 ? (
         <View style={styles.suggestions}>
           {offered.map((tag) => (
-            <Pressable accessibilityRole="button" android_ripple={pressed} key={tag} style={styles.suggestion} onPress={() => add(tag)}>
-              <Text style={styles.suggestionLabel}>{tag}</Text>
-            </Pressable>
+            <Chip key={tag} label={tag} on={false} role="button" onPress={() => add(tag)} />
           ))}
         </View>
       ) : null}
@@ -162,42 +162,41 @@ export function TagEditor({
 const ACTION_SLOP = { top: 9, bottom: 9, left: 3, right: 3 };
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  container: { gap: 8 },
-  label: { color: c.textSecondary, fontSize: 12, letterSpacing: 1 },
+  container: { gap: SPACE.s },
+  label: { color: c.textSecondary, fontSize: TYPE.hint, letterSpacing: 1 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACE.xs,
     backgroundColor: c.surface,
-    borderRadius: 8,
-    paddingLeft: 12,
-    paddingRight: 4,
-    paddingVertical: 6,
+    borderRadius: RADIUS.cover,
+    paddingLeft: SPACE.m,
+    paddingRight: SPACE.xs,
+    paddingVertical: SPACE.xs,
     ...outlined(c),
   },
-  position: { color: c.textFaint, fontSize: 12, width: 14, fontVariant: ['tabular-nums'] },
-  tag: { color: c.text, fontSize: 15, flex: 1 },
-  action: { paddingHorizontal: 10, paddingVertical: 6 },
-  actionLabel: { color: c.text, fontSize: 16 },
-  actionOff: { color: c.textDisabled, fontSize: 16 },
+  position: { color: c.textFaint, fontSize: TYPE.hint, width: 14, fontVariant: ['tabular-nums'] },
+  tag: { color: c.text, fontSize: TYPE.body, flex: 1 },
+  action: { paddingHorizontal: SPACE.s, paddingVertical: SPACE.xs },
+  actionLabel: { color: c.text, fontSize: TYPE.heading },
+  actionOff: { color: c.textDisabled, fontSize: TYPE.heading },
   input: {
     backgroundColor: c.surface,
-    borderRadius: 8,
+    borderRadius: RADIUS.cover,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     color: c.text,
-    fontSize: 15,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    fontSize: TYPE.body,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.s,
     ...outlined(c),
   },
-  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.xs },
   suggestion: {
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.borderStrong,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.xs,
   },
-  suggestionLabel: { color: c.textSecondary, fontSize: 13 },
 }));

@@ -32,8 +32,8 @@ export const TAPE_FOLDERS = [
 /** The tapes folder [folder] is in, under the library folder [root], or nothing: folders as the media store writes them, `Music/Jukebox/Tapes/Book/`. */
 export function isTapeFolder(folder: string | null | undefined, root: string): boolean {
   if (!folder) return false;
-  const base = root.replace(/^\/+|\/+$/g, '').toLocaleLowerCase();
-  const path = folder.replace(/^\/+/, '').toLocaleLowerCase();
+  const base = root.replace(/^\/+|\/+$/g, '').toLowerCase();
+  const path = folder.replace(/^\/+/, '').toLowerCase();
   const under = base ? (path.startsWith(`${base}/`) ? path.slice(base.length + 1) : null) : path;
   if (under == null) return false;
   const first = under.split('/')[0] ?? '';

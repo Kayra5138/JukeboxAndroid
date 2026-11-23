@@ -3,6 +3,7 @@ import { readSetting, SETTINGS, writeSetting } from '../db/index.ts';
 import { refreshLibrary } from '../library/index.ts';
 import { scanLibrary } from '../media/library.ts';
 import { forgetTracks } from '../media/remove.ts';
+import { queuedIds } from '../player/queuedIds.ts';
 import { isTape } from '../tapes/tape.ts';
 import { wholeIn } from '../ui/range.ts';
 import { AUTO_MONTHS_RANGE, dueForDeletion, dueToLook, LONG_AGO_MONTHS, type AutoSettings } from './candidates.ts';
@@ -52,7 +53,16 @@ export async function deleteUnheard(now = Date.now()): Promise<number> {
     const playing = (await JukeboxAudio.getStatusAsync().catch(() => null))?.trackId ?? null;
     const due = dueForDeletion(songs, readListening(), own, membershipOf(readLists()), settings, playing, now);
     if (due.length === 0) return 0;
-    const erased = await JukeboxAudio.deleteOwnTracksAsync(due.map((track) => track.id));
+    /*
+      Nor one waiting in the queue, the kept one included: a song a few
+      places on, shuffled into it from everything, gone, and the player
+      stopped there. Nothing at all where the queue could not be read.
+    */
+    const queued = await queuedIds();
+    if (!queued) return 0;
+    const going = due.filter((track) => !queued.has(track.id));
+    if (going.length === 0) return 0;
+    const erased = await JukeboxAudio.deleteOwnTracksAsync(going.map((track) => track.id));
     if (erased.length > 0) {
       // What was known of them goes with them, as it does for a file deleted by hand.
       forgetTracks(erased);

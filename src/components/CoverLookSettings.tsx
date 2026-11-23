@@ -1,26 +1,25 @@
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './settings/Find';
 
 import { OptionSheet } from './OptionSheet';
 import { Pressable } from './Pressable';
 import { Segmented } from './Segmented';
-import { useRows } from './settings/rows';
+import { useRows, Chevron } from './settings/rows';
 import { useT } from '../lib/i18n/index';
 import type { CoverMotion } from '../lib/ui/coverFace';
 import {
   MOTIONS,
-  setBeatFeel,
   setCoverMotion,
   setSongLook,
   setTapeLook,
   setTonearm,
-  useBeatFeel,
   useCoverMotion,
   useSongLook,
   useTapeLook,
   useTonearm,
 } from '../lib/ui/coverLook';
-import { switchColours, useColours, usePressed } from '../lib/theme/index';
+import { usePressed } from '../lib/theme/index';
 import { Switch } from './Switch';
 
 /** What stands where the cover is in the player, for songs and for tapes, and what moves with the music round it: Settings → Player. See `ui/coverLook.ts`. */
@@ -32,9 +31,7 @@ export function CoverLookSettings() {
   const song = useSongLook();
   const tape = useTapeLook();
   const motion = useCoverMotion();
-  const beats = useBeatFeel();
   const tonearm = useTonearm();
-  const c = useColours();
   const [choosing, setChoosing] = useState(false);
   const noteOf = (each: CoverMotion) => (each === 'none' ? undefined : said.notes[each]);
 
@@ -78,7 +75,7 @@ export function CoverLookSettings() {
           <View style={styles.row}>
             <View style={styles.line}>
               <Text style={styles.title}>{said.tonearm}</Text>
-              <Switch accessibilityLabel={said.tonearm} value={tonearm} onValueChange={setTonearm} {...switchColours(c, tonearm)} />
+              <Switch accessibilityLabel={said.tonearm} value={tonearm} onValueChange={setTonearm} />
             </View>
             <Text style={styles.muted}>{said.tonearmNote}</Text>
           </View>
@@ -98,20 +95,13 @@ export function CoverLookSettings() {
             <Text style={styles.value} numberOfLines={1}>
               {said[motion]}
             </Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+            <Chevron />
           </View>
         </View>
         <Text style={styles.muted}>{said.motionNote}</Text>
       </Pressable>
-      <View style={styles.rule} />
-      <View style={styles.row}>
-        <View style={styles.line}>
-          <Text style={styles.title}>{said.beats}</Text>
-          <Switch accessibilityLabel={said.beats} value={beats} onValueChange={setBeatFeel} {...switchColours(c, beats)} />
-        </View>
-        <Text style={styles.muted}>{said.beatsNote}</Text>
-      </View>
       <OptionSheet
+        page
         visible={choosing}
         heading={said.motion}
         options={MOTIONS.map((each) => ({ value: each, label: said[each], detail: noteOf(each) }))}

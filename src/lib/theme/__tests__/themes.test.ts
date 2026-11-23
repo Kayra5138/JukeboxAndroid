@@ -285,9 +285,14 @@ describe('the edge round a surface', () => {
       assert.deepEqual(outlined(theme.colours, theme.colours.accent), {}, name);
       assert.deepEqual({ padding: 4, ...outlined(theme.colours) }, { padding: 4 }, name);
       // A view that cuts its contents to its shape is told of a border of no
-      // width rather than of none: told nothing, Android keeps cutting to the
-      // shape it had under the last theme that drew one.
-      assert.deepEqual(outlinedClip(theme.colours), { borderWidth: 0, borderColor: 'transparent' }, name);
+      // width rather than of none, on every side too: told nothing, Android
+      // keeps cutting to the shape it had under the last theme that drew one,
+      // and a side given in glass and then not is kept as not a number.
+      assert.deepEqual(
+        outlinedClip(theme.colours),
+        { borderWidth: 0, borderTopWidth: 0, borderRightWidth: 0, borderBottomWidth: 0, borderLeftWidth: 0, borderColor: 'transparent' },
+        name
+      );
     }
   });
 

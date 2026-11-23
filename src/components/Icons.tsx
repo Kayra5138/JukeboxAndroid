@@ -480,6 +480,12 @@ export function TranslateIcon({ size = 20, color: asked }: { size?: number; colo
   return <VectorIcon source={require('../../assets/icons/translate.svg')} size={size} color={color} />;
 }
 
+/** Where you are, as a map marks it: back to the place in something that is the one now (the sung line of the words). */
+export function LocateIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
+  const color = useInk(asked);
+  return <VectorIcon source={require('../../assets/icons/locate.svg')} size={size} color={color} />;
+}
+
 /** A ticked box: the sign for turning a list into something to choose from. */
 export function SelectIcon({ size = 20, color: asked }: { size?: number; color?: string }) {
   const color = useInk(asked);

@@ -94,7 +94,20 @@ export function ringed(c: Palette, colour: string): Edge {
 }
 
 /** A border that is there and takes no room, as opposed to no border at all. */
-const NO_ROOM: Edge = Object.freeze({ borderWidth: 0, borderColor: 'transparent' });
+/*
+  Each side said too: in a theme of glass each side's width is given
+  (`edgesAt`), and a side a style stops giving is kept as "not a number" by
+  React Native 0.86, which a view that cuts takes its edge from (see
+  `Pressable`).
+*/
+const NO_ROOM: Edge = Object.freeze({
+  borderWidth: 0,
+  borderTopWidth: 0,
+  borderRightWidth: 0,
+  borderBottomWidth: 0,
+  borderLeftWidth: 0,
+  borderColor: 'transparent',
+});
 
 /**
  * The same edge, for something that also cuts its contents to its own shape:

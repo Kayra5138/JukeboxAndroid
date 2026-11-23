@@ -31,13 +31,34 @@ internal object Tapes {
   private val FOLDERS = setOf("tapes", "kasetler", "kassetten", "casetes", "cassettes", "cassette", "fitas", "カセット", "кассеты", "磁带")
 
   /** The library folder, read again after a while: asked of every track as it plays, and changed a few times in an install's life. */
-  private var root: String? = null
-  private var rootAt = 0L
+  @Volatile private var root: String? = null
+  @Volatile private var rootAt = 0L
+  private val rereading = java.util.concurrent.atomic.AtomicBoolean(false)
 
+  /*
+    Asked on the player's thread at every change of song and more, and read
+    out of the app's database: so read there only the first time, and after
+    that read again beside it when it is old, with the one already known
+    answered meanwhile. A library folder changes once in a long while.
+  */
   private fun rootOf(context: Context): String {
     val now = System.currentTimeMillis()
     val known = root
-    if (known != null && now - rootAt < ROOT_FRESH_MS) return known
+    if (known != null) {
+      if (now - rootAt >= ROOT_FRESH_MS && rereading.compareAndSet(false, true)) {
+        val app = context.applicationContext
+        Thread({
+          try {
+            root = expo.modules.jukeboxaudio.auto.LibraryDatabase.libraryRoot(app)
+            rootAt = System.currentTimeMillis()
+          } catch (_: Throwable) {
+          } finally {
+            rereading.set(false)
+          }
+        }, "jukebox-tapes-root").start()
+      }
+      return known
+    }
     return expo.modules.jukeboxaudio.auto.LibraryDatabase.libraryRoot(context).also {
       root = it
       rootAt = now
@@ -444,7 +465,7 @@ internal object TapeStore {
  * Keeps each tape's place as it plays, and takes a tape back to it when it
  * comes on again.
  *
- * Written down every few seconds while one plays, when it is paused, and as
+ * Written down every twenty seconds while one plays, when it is paused, and as
  * it is left for another track, from where it was at that moment. Heard
  * nearly to the end, it is finished, and starts from the top next time. Put
  * back a few seconds early, so that the sentence it stopped in is heard
@@ -482,7 +503,9 @@ internal class TapeKeeper(private val context: Context, private val player: ExoP
 
   /**
    * Passes over a part of the playing tape to be skipped as the tape comes
-   * to it: looked at twice a second while a tape that has any plays.
+   * to it. Looked at again when the next such part begins, at the speed the
+   * tape plays, rather than twice a second for as long as it played; never
+   * more than half a minute on, in case the clock and the tape part company.
    */
   private val skipper = object : Runnable {
     override fun run() {
@@ -490,7 +513,10 @@ internal class TapeKeeper(private val context: Context, private val player: ExoP
       val at = player.currentPosition
       // Only one entered from its start, not one sought into on purpose part way.
       skips.firstOrNull { at in it.first until (it.last - 500) && at - it.first < 1_500 }?.let { skip -> expo.modules.jukeboxaudio.sleep.SleepTimers.passOver { player.seekTo(skip.last) } }
-      handler.postDelayed(this, 500)
+      val next = skips.firstOrNull { it.first > at }?.first
+      val speed = player.playbackParameters.speed.coerceAtLeast(0.25f)
+      val wait = if (next == null) SKIP_LATEST_MS else ((next - at) / speed).toLong() + SKIP_SOONEST_MS
+      handler.postDelayed(this, wait.coerceIn(SKIP_SOONEST_MS, SKIP_LATEST_MS))
     }
   }
 
@@ -551,7 +577,16 @@ internal class TapeKeeper(private val context: Context, private val player: ExoP
     if (isPlaying) handler.postDelayed(keep, EVERY_MS) else saveCurrent()
   }
 
+  /** Looked at again from where the tape is now, and at the speed it plays now: the next part to pass over comes when it does. */
+  private fun skipFromHere() {
+    handler.removeCallbacks(skipper)
+    if (player.isPlaying && skips.isNotEmpty()) handler.post(skipper)
+  }
+
+  override fun onPlaybackParametersChanged(playbackParameters: androidx.media3.common.PlaybackParameters) = skipFromHere()
+
   override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+    skipFromHere()
     val item = oldPosition.mediaItem ?: return
     if (!Tapes.isTape(context, item)) return
     // Run out by itself: heard to the end, whatever the clock said a moment before.
@@ -636,7 +671,8 @@ internal class TapeKeeper(private val context: Context, private val player: ExoP
     /** The keeper of the player running, for a mark made in the app to reach. */
     @Volatile var live: TapeKeeper? = null
 
-    private const val EVERY_MS = 5_000L
+    // Twenty seconds: every five, the whole store of places was read, put in order and written out again on the player's thread. A pause and a change of track write it at once as well.
+    private const val EVERY_MS = 20_000L
     /** Less than this in, and there is no place worth going back to. */
     private const val LEAST_KEPT_MS = 10_000L
     /** Less than this left, and it was heard. */
@@ -647,3 +683,8 @@ internal class TapeKeeper(private val context: Context, private val player: ExoP
     private const val FROM_THE_TOP_MS = 2_500L
   }
 }
+
+/** Not sooner than this after a look at the parts to pass over, and a moment into one, so that it is found begun. */
+private const val SKIP_SOONEST_MS = 250L
+/** Nor later than this, whatever the clock says. */
+private const val SKIP_LATEST_MS = 30_000L

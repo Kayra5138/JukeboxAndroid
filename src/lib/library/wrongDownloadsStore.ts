@@ -4,6 +4,7 @@ import { readSetting, SETTINGS, writeSetting } from '../db/index';
 import { libraryMistakes, rightKey, type Mistake } from '../discover/verify';
 import type { EnrichedTrack } from '../media/enriched';
 import { useDownloads } from '../youtube/DownloadsProvider';
+import { arrivedSignature } from '../youtube/signature';
 import type { DownloadJob } from '../youtube/types';
 import { useLibraryTracks } from './useLibrary';
 
@@ -52,20 +53,27 @@ export function markRight(trackId: string, videoId: string): void {
 }
 
 let kept: {
-  jobs: readonly DownloadJob[];
+  arrived: string;
   tracks: readonly EnrichedTrack[];
   right: ReadonlySet<string>;
   found: Mistake<EnrichedTrack>[];
 } | null = null;
 
+/*
+  Kept by the downloads that have arrived, and not by the reading of the
+  jobs: that is new every second while one is coming, with how far it has
+  got, and the whole library was gone through again each time. Only a
+  download arriving can make another mistake.
+*/
 function mistakesIn(
   jobs: readonly DownloadJob[],
   tracks: readonly EnrichedTrack[],
   said: ReadonlySet<string>
 ): Mistake<EnrichedTrack>[] {
-  if (kept && kept.jobs === jobs && kept.tracks === tracks && kept.right === said) return kept.found;
+  const arrived = arrivedSignature(jobs);
+  if (kept && kept.arrived === arrived && kept.tracks === tracks && kept.right === said) return kept.found;
   const found = libraryMistakes(jobs, tracks, said);
-  kept = { jobs, tracks, right: said, found };
+  kept = { arrived, tracks, right: said, found };
   return found;
 }
 

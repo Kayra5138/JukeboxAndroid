@@ -3,7 +3,6 @@ import type { Strings } from '../en/index.ts';
 
 export const sound: Strings['sound'] = {
   // Turkish writes the sign first: %50.
-  percent: (value) => `%${format.number(value)}`,
 
   effects: {
     failures: {
@@ -22,6 +21,8 @@ export const sound: Strings['sound'] = {
       },
       '8d': { name: '8D', hint: 'Ses çevrende yavaşça döner' },
       karaoke: { name: 'Karaoke gibi', hint: 'Ortadaki sesi geriye iter' },
+      nightcore: { name: 'Nightcore', hint: 'Daha hızlı ve ince, hızlı çalınan bir plak gibi' },
+      slowed: { name: 'Slowed + reverb', hint: 'Daha yavaş ve kalın, büyük bir odada çalınmış gibi' },
     },
     voices: {
       off: { name: 'Kapalı', hint: 'Kayıt olduğu gibi' },
@@ -45,6 +46,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `%${percent} sol`,
     right: (percent) => `%${percent} sağ`,
     swap: { title: 'Kanalları değiştir', note: 'Sol sağ olur. Ters bağlanmış bir kablo için.' },
+
+    room: 'Oda',
+
+    reverb: 'Yankı',
+
+    reverbNote: 'Müziğin ne kadar büyük bir odada çalındığı. Sıfır, hiç yankı yok demek.',
+
 
     headphones: 'Kulaklık',
     crossfeed: 'Crossfeed',

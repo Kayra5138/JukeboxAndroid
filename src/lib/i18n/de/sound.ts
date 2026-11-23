@@ -8,7 +8,6 @@ import { oneOrMany } from '../write.ts';
   equalizers use for a curve that changes nothing.
 */
 export const sound: Strings['sound'] = {
-  percent: (value) => `${format.number(value)}${NNBSP}%`,
 
   effects: {
     failures: {
@@ -24,6 +23,8 @@ export const sound: Strings['sound'] = {
       headphones: { name: 'Kopfhörer', hint: 'Holt hart gepannte Mixe aus deinem Kopf' },
       '8d': { name: '8D', hint: 'Der Klang kreist langsam um dich' },
       karaoke: { name: 'Quasi-Karaoke', hint: 'Drängt die Mitte zurück' },
+      nightcore: { name: 'Nightcore', hint: 'Schneller und höher, wie eine zu schnell abgespielte Platte' },
+      slowed: { name: 'Slowed + Reverb', hint: 'Langsamer und tiefer, in einem großen Raum gespielt' },
     },
     voices: {
       off: { name: 'Aus', hint: 'Die Aufnahme, wie sie ist' },
@@ -47,6 +48,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `${percent}${NNBSP}% links`,
     right: (percent) => `${percent}${NNBSP}% rechts`,
     swap: { title: 'Kanäle tauschen', note: 'Links wird rechts. Für ein falsch verdrahtetes Kabel.' },
+
+    room: 'Raum',
+
+    reverb: 'Hall',
+
+    reverbNote: 'Wie viel eines großen Raums die Musik umgibt. Null ist keiner.',
+
 
     headphones: 'Kopfhörer',
     crossfeed: 'Crossfeed',

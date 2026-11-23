@@ -1,3 +1,4 @@
+import { rankKey } from '../media/sort.ts';
 import { canonicalLabel, foldForMatch } from '../metadata/text.ts';
 
 /**
@@ -420,11 +421,42 @@ export function smartListMatches(
   stats: SmartStats,
   now: number
 ): number {
-  return smartListIds(tracks, { ...rules, limit: null, order: 'title' }, stats, now).length;
+  // Counted, and not put in order first: the editor asks at every letter typed.
+  const asked = rules.rules.filter((rule) => ruleProblem(rule) == null);
+  if (asked.length === 0) return tracks.length;
+  let count = 0;
+  for (const track of tracks) {
+    const meetsAll =
+      rules.match === 'all'
+        ? asked.every((rule) => meets(track, rule, stats, now))
+        : asked.some((rule) => meets(track, rule, stats, now));
+    if (meetsAll) count += 1;
+  }
+  return count;
 }
 
-const byTitle = (a: SmartTrack, b: SmartTrack) =>
-  a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+/**
+ * By title, in the library's alphabet (`media/sort.ts`), and by id where two
+ * are called the same. Each title made into its key once, as it is first
+ * met, rather than compared through `localeCompare`, which built a collator
+ * on the other side of the bridge for every pair.
+ */
+function byTitleOf(): (a: SmartTrack, b: SmartTrack) => number {
+  const keys = new Map<string, string>();
+  const keyOf = (track: SmartTrack) => {
+    let key = keys.get(track.id);
+    if (key == null) {
+      key = rankKey(canonicalLabel(track.title));
+      keys.set(track.id, key);
+    }
+    return key;
+  };
+  return (a, b) => {
+    const one = keyOf(a);
+    const two = keyOf(b);
+    return one < two ? -1 : one > two ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  };
+}
 
 /**
  * [tracks] in [order]. Ties are broken by title, so that two songs played as
@@ -432,6 +464,7 @@ const byTitle = (a: SmartTrack, b: SmartTrack) =>
  * and a limit cuts it in the same place.
  */
 function inOrder(tracks: SmartTrack[], order: SmartOrder, stats: SmartStats, random: () => number): SmartTrack[] {
+  const byTitle = byTitleOf();
   const plays = (track: SmartTrack) => stats.plays.get(track.id) ?? 0;
   // A song the phone will not date stands after every dated one, whichever way round.
   const added = (track: SmartTrack) => track.addedAt;

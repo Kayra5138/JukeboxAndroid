@@ -92,6 +92,8 @@ export const welcome: Strings['welcome'] = {
     note:
       'Mostra Jukebox com’era il giorno dell’installazione: le prime impostazioni, la proposta di cercare le copertine e i suggerimenti. La tua musica, le liste e le impostazioni restano come sono.',
     again: 'Rivedi',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: 'Rivedere il primo avvio?', body: 'Tornano le prime impostazioni, la proposta di cercare le copertine e i suggerimenti. La tua musica, le liste e le impostazioni restano come sono.' },
   },
 
   discoverEarly:

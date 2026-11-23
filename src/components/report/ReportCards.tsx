@@ -1,3 +1,4 @@
+import { FittedText } from '../FittedText';
 import { Image } from '../Picture';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
@@ -202,12 +203,11 @@ function Opening({ card, unit }: { card: Extract<ReportCard, { kind: 'opening' }
         The one number the card exists for. Left to shrink rather than wrap,
         because "1h 20m" and "132h" want the same line and not the same size.
       */}
-      <Text
-        adjustsFontSizeToFit
+      <FittedText
         numberOfLines={1}
         style={[styles.hero, { fontSize: 64 * unit, lineHeight: 74 * unit }]}>
         {formatDuration(card.seconds, t)}
-      </Text>
+      </FittedText>
       {card.change == null ? null : (
         <View style={[styles.chip, { paddingHorizontal: 12 * unit, paddingVertical: 6 * unit, borderRadius: 999 }]}>
           <Text style={[styles.chipText, { fontSize: 13 * unit }]}>

@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { SPACE } from '../lib/theme/measures';
 import { useRouter } from 'expo-router';
 import { FlatList, StyleSheet, useWindowDimensions, View } from 'react-native';
 
@@ -7,7 +8,7 @@ import { DiscoverHeader, discoverHeaderHeight } from './discover/DiscoverHeader'
 import { DiscoverMenu } from './discover/DiscoverMenu';
 import { DiscoverNotice } from './discover/DiscoverNotice';
 import { DiscoverRow, useDiscoverRowHeight } from './discover/DiscoverRow';
-import { useDiscoverIds } from './discover/hooks';
+import { useDiscoverIds, useDiscoverSaying } from './discover/hooks';
 import { ListEmpty, ListFoot } from './discover/ListEdges';
 import { makeStyles } from '../lib/theme/index';
 import { useTip } from '../lib/ui/tipsStore';
@@ -62,7 +63,8 @@ export function DiscoverPanel() {
   const under = useUnderBars({ player: true });
   const tipped = useTip('discover').shown;
   const top = tipped ? 0 : under.top;
-  const headerHeight = top + discoverHeaderHeight(width, fontScale);
+  const saying = useDiscoverSaying();
+  const headerHeight = top + discoverHeaderHeight(width, fontScale, saying);
 
   return (
     <View style={styles.panel}>
@@ -94,7 +96,7 @@ export function DiscoverPanel() {
         }
         initialNumToRender={10 * columns}
         windowSize={7}
-        ListHeaderComponent={<DiscoverHeader onAbout={openAbout} onSettings={openSettings} />}
+        ListHeaderComponent={<DiscoverHeader onAbout={openAbout} onSettings={openSettings} hasList={ids.length > 0} />}
         ListEmptyComponent={ListEmpty}
         ListFooterComponent={ListFoot}
       />
@@ -109,5 +111,5 @@ const useStyles = makeStyles(() => StyleSheet.create({
   panel: { flex: 1 },
   // Room under the last row for what floats at the foot: the notice, and the downloads button.
   content: { paddingBottom: 76 },
-  columns: { gap: 8 },
+  columns: { gap: SPACE.s },
 }));

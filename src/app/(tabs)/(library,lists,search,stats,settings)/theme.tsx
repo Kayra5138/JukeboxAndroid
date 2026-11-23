@@ -1,10 +1,13 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, RADIUS, SPACE, TYPE, CARD_GAP } from '../../../lib/theme/measures';
+import { SectionLabel, Chevron } from '../../../components/settings/rows';
+import { offerUndo } from '../../../lib/ui/undo';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 import { Switch } from '../../../components/Switch';
 import { Pressable } from '../../../components/Pressable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FormScroll } from '../../../components/FormScroll';
+import { PageScroll } from '../../../components/Page';
 import { ColourEditor } from '../../../components/theme/ColourEditor';
 import { ThemePreview } from '../../../components/theme/ThemePreview';
 import { useT } from '../../../lib/i18n/index';
@@ -12,12 +15,8 @@ import { customColours, DEFAULT_SEEDS, sameSeeds, type CustomSeeds, type SeedRol
 import {
   chooseTheme,
   makeStyles,
-  outlined,
   outlinedClip,
   saveCustomTheme,
-  scene,
-  switchColours,
-  useColours,
   useCustomSeeds,
   usePressed,
   useThemeChoice,
@@ -27,6 +26,7 @@ import { useLandscape } from '../../../lib/ui/layout';
 import { useBack } from '../../../lib/ui/back';
 import { haptic } from '../../../lib/ui/haptics';
 import { useIsFocused } from 'expo-router';
+import { Button, TextButton } from '../../../components/Button';
 
 /** The three colours in the order they are asked for, and the token each one ends up as. */
 const ROLES: { role: SeedRole; token: keyof Palette }[] = [
@@ -52,9 +52,7 @@ const ROLES: { role: SeedRole; token: keyof Palette }[] = [
  * picture; the button at the foot turns to it, and is not there once it has.
  */
 export default function CustomThemeScreen() {
-  const insets = useSafeAreaInsets();
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
   const say = t.settings.customTheme;
@@ -78,173 +76,151 @@ export default function CustomThemeScreen() {
 
   const picture = (
     <View style={styles.picture}>
-      <Text accessibilityRole="header" style={styles.section}>{t.format.upper(say.preview)}</Text>
+      <SectionLabel after={false}>{say.preview}</SectionLabel>
       <ThemePreview colours={made.colours} />
     </View>
   );
 
-  const edges = { paddingLeft: insets.left + 20, paddingRight: insets.right + 20 };
-
   return (
-    <View style={styles.screen}>
-      {/*
-        Held above the colours rather than scrolled away with them, upright:
-        the third colour's sliders are a screen down, and a picture that has
-        to be scrolled back to is not one that can be watched while dragging.
-        Sideways there is no height to spare for it, and it goes with the rest.
-      */}
-      {sideways ? null : <View style={[styles.held, edges]}>{picture}</View>}
+    /*
+      The picture held above the colours rather than scrolled away with them,
+      upright: the third colour's sliders are a screen down, and a picture
+      that has to be scrolled back to is not one that can be watched while
+      dragging. Sideways there is no height to spare for it, and it goes with
+      the rest.
 
-      <FormScroll contentContainerStyle={[styles.content, edges, { paddingBottom: insets.bottom + 40 }]}>
-        {sideways ? picture : null}
+      Marked where it says what was looked for in Settings; not scrolled to,
+      the form keeping its scroller to itself.
+    */
+    <PageScroll form head={sideways ? undefined : picture}>
+      {sideways ? picture : null}
 
-        <View style={styles.card}>
-          {ROLES.map(({ role, token }, index) => {
-            const picked = draft[role];
-            const shown = made.colours[token];
-            const expanded = open === role;
-            return (
-              <View key={role}>
-                {index > 0 ? <View style={styles.rule} /> : null}
-                <Pressable
-                  android_ripple={pressed}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${say[role]}, ${picked ?? say.automatic}`}
-                  accessibilityState={{ expanded }}
-                  style={styles.row}
-                  onPress={() => setOpen(expanded ? null : role)}>
-                  {/* What it came out as, which is what the app will wear; the line under says so where that differs. */}
-                  <View style={[styles.swatch, { backgroundColor: shown }]} />
+      <View style={styles.card}>
+        {ROLES.map(({ role, token }, index) => {
+          const picked = draft[role];
+          const shown = made.colours[token];
+          const expanded = open === role;
+          return (
+            <View key={role}>
+              {index > 0 ? <View style={styles.rule} /> : null}
+              <Pressable
+                android_ripple={pressed}
+                accessibilityRole="button"
+                accessibilityLabel={`${say[role]}, ${picked ?? say.automatic}`}
+                accessibilityState={{ expanded }}
+                style={styles.row}
+                onPress={() => setOpen(expanded ? null : role)}>
+                {/* What it came out as, which is what the app will wear; the line under says so where that differs. */}
+                <View style={[styles.swatch, { backgroundColor: shown }]} />
+                <View style={styles.rowText}>
+                  <Text style={styles.title}>{say[role]}</Text>
+                  <Text style={styles.code}>{picked ?? say.automatic}</Text>
+                </View>
+                <Chevron turned={expanded ? 'down' : null} />
+              </Pressable>
+
+              {picked !== null && picked !== shown ? (
+                <Text style={styles.nudged}>{say.nudged(shown)}</Text>
+              ) : null}
+
+              {expanded && role === 'surface' ? (
+                <View style={styles.automatic}>
                   <View style={styles.rowText}>
-                    <Text style={styles.title}>{say[role]}</Text>
-                    <Text style={styles.code}>{picked ?? say.automatic}</Text>
+                    <Text style={styles.title}>{say.automatic}</Text>
+                    <Text style={styles.code}>{say.automaticNote}</Text>
                   </View>
-                  <Text style={[styles.chevron, expanded && styles.chevronOpen]} importantForAccessibility="no">›</Text>
-                </Pressable>
-
-                {picked !== null && picked !== shown ? (
-                  <Text style={styles.nudged}>{say.nudged(shown)}</Text>
-                ) : null}
-
-                {expanded && role === 'surface' ? (
-                  <View style={styles.automatic}>
-                    <View style={styles.rowText}>
-                      <Text style={styles.title}>{say.automatic}</Text>
-                      <Text style={styles.code}>{say.automaticNote}</Text>
-                    </View>
-                    <Switch
-                      value={picked === null}
-                      accessibilityLabel={say.automatic}
-                      // Turned off, it starts from the card it had, so that nothing moves until something is moved.
-                      onValueChange={(on) => keep({ ...draft, surface: on ? null : shown })}
-                      {...switchColours(c, picked === null)}
-                    />
-                  </View>
-                ) : null}
-
-                {expanded && picked !== null ? (
-                  <ColourEditor
-                    role={role}
-                    value={picked}
-                    onChange={(colour) => setDraft({ ...draft, [role]: colour })}
-                    onCommit={(colour) => keep({ ...draft, [role]: colour })}
+                  <Switch
+                    value={picked === null}
+                    accessibilityLabel={say.automatic}
+                    // Turned off, it starts from the card it had, so that nothing moves until something is moved.
+                    onValueChange={(on) => keep({ ...draft, surface: on ? null : shown })}
                   />
-                ) : null}
-              </View>
-            );
-          })}
-        </View>
+                </View>
+              ) : null}
 
-        <Text style={styles.aside}>{say.note}</Text>
+              {expanded && picked !== null ? (
+                <ColourEditor
+                  role={role}
+                  value={picked}
+                  onChange={(colour) => setDraft({ ...draft, [role]: colour })}
+                  onCommit={(colour) => keep({ ...draft, [role]: colour })}
+                />
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
 
-        {inUse ? null : (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            style={styles.use}
-            onPress={() => {
-              haptic('results', 'confirm');
-              chooseTheme('custom');
-            }}>
-            <Text style={styles.useLabel}>{say.use}</Text>
-          </Pressable>
-        )}
+      <Text style={styles.aside}>{say.note}</Text>
 
-        <Pressable
-          android_ripple={pressed}
-          accessibilityRole="button"
-          style={styles.reset}
+      {inUse ? null : (
+        <Button
+          kind="primary"
+          wide
+          label={say.use}
           onPress={() => {
             haptic('results', 'confirm');
-            keep(DEFAULT_SEEDS);
-          }}>
-          <Text style={styles.resetLabel}>{say.reset}</Text>
-        </Pressable>
-      </FormScroll>
-    </View>
+            chooseTheme('custom');
+          }}
+        />
+      )}
+
+      <TextButton
+        label={say.reset}
+        size="body"
+        style={styles.reset}
+        onPress={() => {
+          haptic('results', 'confirm');
+          // Offered back for a moment: three colours picked by hand are gone in one press.
+          const was = draft;
+          keep(DEFAULT_SEEDS);
+          if (!sameSeeds(was, DEFAULT_SEEDS)) offerUndo(t.common.undone.reset, () => {
+            setDraft(was);
+            saveCustomTheme(was);
+          });
+        }}
+      />
+    </PageScroll>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...scene(c) },
-  held: { paddingTop: 14, paddingBottom: 6 },
-  content: { paddingTop: 14 },
-  picture: { marginBottom: 14 },
+  picture: { marginBottom: SPACE.m },
 
-  section: {
-    color: c.textFaint,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    marginBottom: 8,
-    marginLeft: 4,
-  },
 
   // One surface with its rows ruled off inside it, as the settings are. Clipped to its corners.
-  card: { backgroundColor: c.surface, borderRadius: 14, overflow: 'hidden', ...outlinedClip(c) },
-  rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: 16 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, paddingVertical: 13 },
-  rowText: { flex: 1, minWidth: 0, gap: 2 },
-  title: { color: c.text, fontSize: 15.5 },
-  code: { color: c.textMuted, fontSize: 12.5, fontVariant: ['tabular-nums'] },
-  chevron: { color: c.textDisabled, fontSize: 20, lineHeight: 22, width: 14, textAlign: 'center' },
+  card: { backgroundColor: c.surface, borderRadius: RADIUS.card, overflow: 'hidden', ...outlinedClip(c) },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginLeft: SPACE.l },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingHorizontal: SPACE.l, paddingVertical: SPACE.m },
+  rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  title: { color: c.text, fontSize: TYPE.body },
+  code: { color: c.textMuted, fontSize: TYPE.hint, fontVariant: ['tabular-nums'] },
   // The same mark turned to point down, rather than another glyph the phone's font may not have.
-  chevronOpen: { transform: [{ rotate: '90deg' }] },
   // An edge in this theme's colours: the swatch of the card's own colour would otherwise not be there.
   swatch: {
     width: 30,
     height: 30,
-    borderRadius: 15,
+    borderRadius: RADIUS.pill,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.borderStrong,
   },
   nudged: {
     color: c.textFaint,
-    fontSize: 12,
-    lineHeight: 17,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    marginTop: -4,
+    fontSize: TYPE.hint,
+    lineHeight: LEADING.hint,
+    paddingHorizontal: SPACE.l,
+    paddingBottom: SPACE.m,
+    marginTop: -SPACE.xs,
   },
   automatic: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    gap: SPACE.m,
+    paddingHorizontal: SPACE.l,
+    paddingBottom: SPACE.m,
   },
 
-  aside: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, marginTop: 10, marginHorizontal: 4 },
-
-  use: {
-    backgroundColor: c.primary,
-    borderRadius: 12,
-    paddingVertical: 13,
-    alignItems: 'center',
-    marginTop: 24,
-    ...outlined(c, c.primary),
-  },
-  useLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
-  reset: { alignItems: 'center', paddingTop: 26 },
-  resetLabel: { color: c.accent, fontSize: 14.5 },
+  aside: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: SPACE.s, marginHorizontal: SPACE.xs },
+  // Apart from the rest, in the middle, the way back to where it began.
+  reset: { alignSelf: 'center', marginTop: CARD_GAP },
 }));

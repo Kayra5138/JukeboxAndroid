@@ -1,12 +1,15 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { Note } from '../../../components/Note';
+import { View } from 'react-native';
+import { Busy } from '../../../components/Busy';
+import { Text } from '../../../components/settings/Find';
 
 import { AutoBackupSettings } from '../../../components/AutoBackupSettings';
 import { BackupSheet } from '../../../components/BackupSheet';
 import { HistorySheet } from '../../../components/HistorySheet';
 import { ListenBrainzSettings } from '../../../components/ListenBrainzSettings';
 import { Pressable } from '../../../components/Pressable';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
+import { SettingsPage, useRows, Chevron } from '../../../components/settings/rows';
 import { UpdateCheckSetting } from '../../../components/support/UpdateRows';
 import {
   applyBackup,
@@ -197,7 +200,7 @@ export default function DataSettingsScreen() {
           onPress={() => void saveBackup()}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.settings.exportAll.title}</Text>
-            {busy === 'export' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
+            {busy === 'export' ? <Busy color={c.textMuted} /> : <Chevron />}
           </View>
           <Text style={styles.muted}>{t.settings.exportAll.note}</Text>
         </Pressable>
@@ -210,7 +213,7 @@ export default function DataSettingsScreen() {
           onPress={() => void chooseBackup()}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.settings.importBackup.title}</Text>
-            {busy === 'import' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
+            {busy === 'import' ? <Busy color={c.textMuted} /> : <Chevron />}
           </View>
           <Text style={styles.muted}>{t.settings.importBackup.note}</Text>
         </Pressable>
@@ -223,15 +226,15 @@ export default function DataSettingsScreen() {
           onPress={() => void chooseHistory()}>
           <View style={styles.line}>
             <Text style={styles.title}>{t.backup.history.title}</Text>
-            {busy === 'history' ? <ActivityIndicator color={c.textMuted} /> : <Text style={styles.chevron} importantForAccessibility="no">›</Text>}
+            {busy === 'history' ? <Busy color={c.textMuted} /> : <Chevron />}
           </View>
           <Text style={styles.muted}>{t.backup.history.note}</Text>
         </Pressable>
       </View>
       {note ? (
-        <Text accessibilityRole={note.bad ? 'alert' : undefined} style={note.bad ? styles.noteBad : styles.note}>
+        <Note tone={note.bad ? 'bad' : 'good'} style={styles.noteRoom}>
           {note.text}
-        </Text>
+        </Note>
       ) : null}
       {/* The same backup, made by itself into a folder chosen once: see `backup/auto.ts`. */}
       <AutoBackupSettings />

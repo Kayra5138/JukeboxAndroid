@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Frost, useFrosted, useSceneTarget } from '../Frosted';
 
@@ -48,7 +49,7 @@ export function PreviewBar({
       style={[
         column ? styles.column : styles.bar,
         frosted && styles.clear,
-        column && { width, paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14, paddingRight: 12 + insets.right },
+        column && { width, paddingTop: insets.top + 14, paddingBottom: insets.bottom + 14, paddingRight: SPACE.m + insets.right },
       ]}
       accessibilityLiveRegion="polite">
       {frosted && target ? <Frost target={target} edge="top" /> : null}
@@ -88,35 +89,37 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SPACE.s,
     borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderTopColor: c.border,
     backgroundColor: c.surface,
     // As the bar's, in a theme of glass: laid over a list, and washed to be read over it.
     ...barGlass(c),
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.s,
   },
   /** Its fill left to `Frost`, which draws it over the blur. */
   clear: { backgroundColor: 'transparent' },
   column: {
+    // As long as the panel's room, as the bar of what is playing is (`NowPlayingBar`).
+    flexGrow: 1,
     justifyContent: 'center',
     borderLeftWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
     borderLeftColor: c.border,
     backgroundColor: c.surface,
-    paddingHorizontal: 12,
-    paddingTop: 14,
-    gap: 10,
+    paddingHorizontal: SPACE.m,
+    paddingTop: SPACE.m,
+    gap: SPACE.s,
   },
-  art: { width: 40, height: 40, borderRadius: 6 },
-  artWide: { width: '100%', aspectRatio: 1, borderRadius: 7 },
+  art: { width: 40, height: 40, borderRadius: RADIUS.cover },
+  artWide: { width: '100%', aspectRatio: 1, borderRadius: RADIUS.cover },
   artEmpty: { backgroundColor: c.surfaceRaised },
-  text: { flex: 1, minWidth: 0, gap: 2 },
-  columnText: { gap: 3 },
-  heading: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  text: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  columnText: { gap: SPACE.xxs },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
   // The one word that matters here, where the eye lands first and in the colour the app keeps for what is chosen.
-  label: { color: c.accent, fontSize: 10.5, fontWeight: '700', letterSpacing: 0.8 },
-  title: { color: c.text, fontSize: 14.5, flexShrink: 1 },
-  note: { color: c.textMuted, fontSize: 12 },
-  stop: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22 },
+  label: { color: c.accent, fontSize: TYPE.label, fontWeight: '700', letterSpacing: 0.8 },
+  title: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+  note: { color: c.textMuted, fontSize: TYPE.hint },
+  stop: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.pill },
 }));

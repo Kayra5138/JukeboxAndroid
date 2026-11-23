@@ -8,6 +8,9 @@ import type { Strings } from '../en/index.ts';
 */
 export const common: Strings['common'] = {
   cancel: '取消',
+  /** For a moment after something is taken out, the way to have it back (`ui/undo.ts`). */
+  undo: '撤销',
+  undone: { reset: '已重置', removedFromList: (title: string) => `已从歌单移除：${title}`, letGo: (title: string) => `已放弃：${title}` },
   save: '保存',
   done: '完成',
   ok: '确定',

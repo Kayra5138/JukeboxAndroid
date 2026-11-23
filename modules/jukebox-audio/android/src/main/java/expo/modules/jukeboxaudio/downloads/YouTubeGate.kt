@@ -11,9 +11,10 @@ import java.util.concurrent.atomic.AtomicBoolean
  *  - a download, of which there is one at a time;
  *  - a search made for the queue, for a job asked for by name: one at a
  *    time, and never beside a download;
- *  - a search somebody typed, or a playlist they asked to be read: one at a
- *    time among themselves, and not kept waiting by a download, which may be
- *    half an hour of somebody else's album.
+ *  - a search somebody typed, a playlist they asked to be read, or what a
+ *    tape being played is to be told of itself, its chapters and its words:
+ *    one at a time among themselves, and not kept waiting by a download,
+ *    which may be half an hour of somebody else's album.
  *
  * Somebody typing comes first. While their search is in flight, or waiting
  * for the one before it, the queue starts nothing new; and a search the

@@ -1,55 +1,26 @@
-import { Modal, ScrollView, StyleSheet } from 'react-native';
+import type { ReactNode } from 'react';
 
-import { Pressable } from '../Pressable';
-import { makeStyles, outlined } from '../../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../../lib/theme/Veil';
+import { MenuPage } from '../MenuPage';
 
 /**
- * A sheet that comes up from the foot of the screen, in a window of its own:
- * the shape the track menu has, for the two that Discover opens.
- *
- * Bounded and scrolling, since either is taller than a phone on its side. A
- * touch anywhere off it closes it, and so does the back button, which is the
- * window's to answer.
+ * Discover's menus and its note on itself: a page of its own in the tab, the
+ * bars where they are, or a sheet where there is no tab (`MenuPage`).
  */
 export function Sheet({
   visible,
+  title,
   onClose,
   children,
 }: {
   visible: boolean;
+  /** The page's name in its bar. */
+  title: string;
   onClose: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
-  const styles = useStyles();
-  useWindowVeil(visible);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} accessible={false} onPress={onClose}>
-        {visible ? (
-          <ScrollView style={styles.sheet} contentContainerStyle={styles.body}>
-            {/* Swallows a touch on the sheet's own words, which is not a touch on what is behind it. */}
-            <Pressable accessible={false} onPress={swallow}>
-              {children}
-            </Pressable>
-          </ScrollView>
-        ) : null}
-      </Pressable>
-    </Modal>
+    <MenuPage visible={visible} title={title} onClose={onClose}>
+      {children}
+    </MenuPage>
   );
 }
-
-const swallow = () => {};
-
-const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: scrimOf(c), justifyContent: 'flex-end' },
-  sheet: {
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '85%',
-    flexGrow: 0,
-    ...outlined(c),
-  },
-  body: { paddingBottom: 28 },
-}));

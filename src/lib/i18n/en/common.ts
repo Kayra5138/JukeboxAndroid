@@ -11,6 +11,9 @@ import { oneOrMany } from '../write.ts';
  */
 export const common = {
   cancel: 'Cancel',
+  /** For a moment after something is taken out, the way to have it back (`ui/undo.ts`). */
+  undo: 'Undo',
+  undone: { reset: 'Reset', removedFromList: (title: string) => `Taken out of the list: ${title}`, letGo: (title: string) => `Let go: ${title}` },
   save: 'Save',
   done: 'Done',
   ok: 'OK',

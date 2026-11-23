@@ -7,6 +7,8 @@ import { useDownloads } from '../youtube/DownloadsProvider';
 import { downloads } from '../youtube/native.ts';
 import { keepWhatIsListed, letGoOfListened, listening, stopWaiting } from './index.ts';
 import { stopPreview } from './preview.ts';
+import { announce } from '../ui/announce';
+import { haptic } from '../ui/haptics';
 
 /**
  * Plays a song listened to from the Search tab the moment it is in, and opens
@@ -32,7 +34,12 @@ export function Listening() {
     stopWaiting();
     // The preview, if one played meanwhile, gives way: to the song itself, or to nothing where it could not be had.
     if (waiting.previewing) void stopPreview();
-    if (failed) return;
+    // Felt, and said to a screen reader, wherever it is: the row that says so is on the Search tab, which may not be in front.
+    if (failed) {
+      haptic('results', 'reject');
+      announce(job?.errorText ?? job?.error ?? null);
+      return;
+    }
     void trackOf(waiting.jobId).then(async (track) => {
       // Something else asked to be listened to meanwhile: that one plays when it is in, not this.
       if (!track || listening.get() != null) return;
@@ -40,7 +47,7 @@ export function Listening() {
       await playQueue([track.artworkUri ? track : { ...track, artworkUri: waiting.cover }], 0);
       openPlayer();
     });
-  }, [waiting, done, failed, playQueue, openPlayer]);
+  }, [waiting, done, failed, job, playQueue, openPlayer]);
 
   useEffect(() => {
     void letGoOfListened();

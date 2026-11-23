@@ -9,6 +9,7 @@ export const settings: Strings['settings'] = {
     look: '外观与触感',
     sound: '声音',
     player: '播放器',
+    miniPlayer: '迷你播放器',
     tapes: '磁带',
     library: '音乐库',
     downloads: '下载与发现',
@@ -20,6 +21,7 @@ export const settings: Strings['settings'] = {
     look: '主题、动效、振动，以及音乐库提供哪些视图。',
     sound: '均衡器和音效、音量均衡、交叉淡化，以及速度和音调。',
     player: '跳转按钮的步长、播放队列结束后播放什么，以及歌词翻译的目标语言。',
+    miniPlayer: '正在播放栏显示的内容、按钮、外观和操作方式。',
     tapes: '智能回退、磁带跳转按钮的步长，以及仅在 Wi‑Fi 下获取播客。',
     library: '音乐所在的文件夹、标签和封面，以及可能是同一首歌的文件。',
     waiting: (count) => `${format.number(count)} 项待确认`,
@@ -27,6 +29,19 @@ export const settings: Strings['settings'] = {
     data: '备份全部内容或导入备份、检查新版本，以及 ListenBrainz（实验性）。',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: '滚动条', note: '长列表旁的滚动条，按住即可一下子跳到很远的位置。', always: '始终显示', moving: '滚动时', never: '从不显示' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: '歌单下方的推荐', note: '在歌单的歌曲下方，根据歌单常用的标签，显示资料库中可能适合的其他歌曲。' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: '移除后可撤销', note: '从歌单移除歌曲、在播放器中放弃或在发现中拒绝后的几秒内，显示一个可以撤回的按钮。' },
+  search: {
+    open: '搜索设置',
+    title: '搜索设置',
+    placeholder: '任意设置中的词语',
+    none: (query: string) => `没有设置包含“${query}”。`,
+  },
   language: {
     title: '语言',
     note: '应用使用的语言，不跟随手机的系统语言。',
@@ -62,7 +77,6 @@ export const settings: Strings['settings'] = {
     saturation: '饱和度',
     lightness: '亮度',
     degrees: (value) => `${value}°`,
-    percent: (value) => `${value}%`,
     hex: '颜色代码',
     nudged: (colour) => `已调整为 ${colour}，以便上面的内容清晰可读。`,
     note: '文字颜色会根据这些颜色自动计算，确保始终清晰可读。出于同样的原因，你选择的颜色可能会被稍微调亮或调暗。',
@@ -162,12 +176,11 @@ export const settings: Strings['settings'] = {
       sparks: '每个节拍从边缘飞向整个播放器的火花。',
       aurora: '整个播放器后方的封面颜色云团，各自随声音的一部分膨胀。',
     },
-    beats: '随节拍振动',
-    beatsNote: '播放器打开且正在播放时，每个节拍轻轻振动一下。强度取决于你的振动设置。',
   },
   still: {
     title: '减少装饰动效',
-    note: '适合容易掉帧的手机。播放器会直接出现而不是向上滑出，游戏中获得或失去生命时也不再闪光。琴键仍会落下——那是游戏本身，不是装饰。',
+    note:
+      '适合容易掉帧的手机。页面和弹出面板直接打开，不带动画；封面不再淡入，唱片和可视化效果保持静止，玻璃效果不再模糊。',
   },
   scriptNames: { title: '其他文字的名称', latin: '拉丁字母', original: '原文', note: '当查找同时找到歌曲的拉丁字母名和原文名（日文、中文、韩文）时，曲库显示哪一个。之前查找过的歌曲在重新查找后补全。' },
   haptics: {
@@ -182,7 +195,9 @@ export const settings: Strings['settings'] = {
       custom: "在下方选择哪些时刻振动。",
     },
     strength: "强度",
-    strengthNote: "松手时可感受到。电机无法调节强弱的手机保持其自身强度。",
+    strengthNote: "松手时可感受到。100% 为推荐值；超过后同样的触感会更重，超过 200% 时电机以最大强度振动。电机无法调节强弱的手机在此之前保持其自身强度。",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "推荐",
     groupsHeading: "哪些会振动",
     groups: {
       holds: { title: "长按和拖动", note: "长按生效、抬起一行以移动、手指划过复选框。" },
@@ -199,9 +214,81 @@ export const settings: Strings['settings'] = {
     note:
       '显示在每首歌曲和每张专辑行的末尾，打开与长按相同的菜单。关闭后仍可长按打开。',
   },
+  miniPlayer: {
+    shows: '显示内容',
+    progress: {
+      title: '进度',
+      none: '无',
+      line: '线条',
+      fill: '填充',
+      note: '歌曲播放到哪里：底部的一条细线，或随歌曲推进逐渐填满整个播放栏。',
+    },
+    line: {
+      title: '歌名下方',
+      artist: '艺人',
+      album: '专辑',
+      both: '艺人和专辑',
+      left: '剩余时间',
+      next: '下一首',
+      note: '第二行显示的内容。',
+    },
+    cover: {
+      title: '封面',
+      square: '方形',
+      round: '圆形',
+      record: '唱片',
+      note: '播放时唱片会转动。',
+    },
+    buttons: {
+      title: '按钮',
+      aside: '最多四个，按此处的顺序显示。',
+      names: {
+        previous: '上一首',
+        playPause: '播放和暂停',
+        next: '下一首',
+        back: '后退',
+        forward: '快进',
+        heart: '收藏',
+        shuffle: '随机',
+        repeat: '重复',
+      },
+    },
+    handling: '触控',
+    swipe: {
+      title: '滑动切换歌曲',
+      note: '向侧边拖动可切换到上一首或下一首。关闭后只会打开播放器。',
+    },
+    hold: {
+      title: '长按时打开',
+      none: '无',
+      menu: '歌曲菜单',
+      queue: '播放队列',
+      lyrics: '歌词',
+      note: '长按其中的歌曲时的操作。',
+    },
+    look: '外观',
+    floating: {
+      title: '悬浮',
+      note: '圆角并与屏幕边缘留出间距，而不是占满整个宽度。',
+    },
+    tint: {
+      title: '封面颜色',
+      note: '用正在播放歌曲的封面颜色着色。',
+    },
+    leftHanded: {
+      title: '左手模式',
+      note: '按钮在左，歌曲在右。',
+    },
+  },
   tabs: {
     title: '标签页',
-    searchNote: '“发现”和 YouTube 下载都在这个标签页中，会随之隐藏。',
+    notes: {
+      library: '你的歌曲、专辑、艺人、磁带和文件夹。',
+      lists: '你的播放列表、智能列表和收藏。',
+      search: '发现与从 YouTube 下载。隐藏此标签页时，两者也会一起隐藏。',
+      stats: '你听过的内容和收听报告。',
+      settings: '应用的外观、声音和行为。',
+    },
     aside: '音乐库和设置始终显示。',
     names: '图标下方显示名称',
     namesNote: '关闭后，底栏只显示图标，并会矮一些。横屏时始终如此。',

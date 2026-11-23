@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { LEADING, RADIUS, SPACE, TYPE } from '../../../lib/theme/measures';
+import { ScreenState } from '../../../components/ScreenState';
+import { TimedRow } from '../../../components/TimedRow';
 import { SectionList, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CrossIcon } from '../../../components/Icons';
 import { Image } from '../../../components/Picture';
-import { Pressable } from '../../../components/Pressable';
 import { TextPrompt } from '../../../components/TextPrompt';
 import { useT } from '../../../lib/i18n/index';
 import { libraryState, refreshLibrary } from '../../../lib/library/index';
@@ -15,10 +15,11 @@ import { usePlayerActions, usePlayerState } from '../../../lib/player/PlayerProv
 import { removeMark, setMarkNote, useAllMarks, type TapeMark } from '../../../lib/tapes/marks';
 import { partsOf } from '../../../lib/tapes/order';
 import { isTape } from '../../../lib/tapes/tape';
-import { makeStyles, scene, useColours, usePressed } from '../../../lib/theme/index';
+import { makeStyles, scene } from '../../../lib/theme/index';
 import { haptic } from '../../../lib/ui/haptics';
 import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../../lib/ui/lists';
 import { durationLabel } from '../../../lib/youtube/types';
+import { usePageRoom } from '../../../components/Page';
 
 type Section = { key: string; track: EnrichedTrack; data: TapeMark[] };
 
@@ -31,10 +32,10 @@ type Section = { key: string; track: EnrichedTrack; data: TapeMark[] };
  */
 export default function MarksScreen() {
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  const insets = useSafeAreaInsets();
+  // The bar of what is playing is along the foot of every page of a tab (see the tabs' layout), laid over it in a theme of glass.
+  // The skeleton of a page (`usePageRoom`), its rows running to the edges.
+  const room = usePageRoom({ edge: true });
   const said = t.player.marks;
   const marks = useAllMarks();
   const library = useLibraryTracks();
@@ -47,7 +48,6 @@ export default function MarksScreen() {
     lifting went to the window the box replaced, so the first press in the
     box, its Save, was taken as the end of that touch and did nothing.
   */
-  const held = useRef<TapeMark | null>(null);
 
   // Opened before any screen has read the library: read it now.
   useEffect(() => {
@@ -89,43 +89,28 @@ export default function MarksScreen() {
         sections={sections}
         keyExtractor={(mark) => String(mark.id)}
         stickySectionHeadersEnabled={false}
-        contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
-        ListEmptyComponent={<Text style={styles.empty}>{said.noneAnywhere}</Text>}
+        contentContainerStyle={room}
+        ListEmptyComponent={<ScreenState kind="empty" text={said.noneAnywhere} />}
         renderSectionHeader={({ section }) => <TapeHeading track={section.track} count={section.data.length} />}
         renderItem={({ item, section }) => (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityHint={said.playHint}
-            accessibilityActions={[{ name: 'longpress', label: said.editNote }]}
-            onAccessibilityAction={() => setEditing(item)}
+          <TimedRow
+            // Under the cover of the heading, beside it, as the rows of a thing are under its name.
             style={styles.row}
+            at={durationLabel(item.positionSec)}
+            text={item.note ?? said.noNote}
+            empty={!item.note}
+            lines={4}
+            detail={t.format.date(new Date(item.createdAt))}
+            accessibilityHint={said.playHint}
+            holdLabel={said.editNote}
             onPress={() => void play(section.track, item.positionSec)}
-            onLongPress={() => {
-              held.current = item;
+            onHold={() => setEditing(item)}
+            removeLabel={said.remove(durationLabel(item.positionSec))}
+            onRemove={() => {
+              haptic('choices', 'toggleOff');
+              removeMark(item.id);
             }}
-            onPressOut={() => {
-              if (held.current) setEditing(held.current);
-              held.current = null;
-            }}>
-            <Text style={styles.time}>{durationLabel(item.positionSec)}</Text>
-            <View style={styles.rowText}>
-              <Text style={[styles.note, !item.note && styles.noteNone]} numberOfLines={4}>{item.note ?? said.noNote}</Text>
-              <Text style={styles.when}>{new Date(item.createdAt).toLocaleDateString()}</Text>
-            </View>
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              accessibilityLabel={said.remove(durationLabel(item.positionSec))}
-              hitSlop={8}
-              style={styles.remove}
-              onPress={() => {
-                haptic('choices', 'toggleOff');
-                removeMark(item.id);
-              }}>
-              <CrossIcon size={14} color={c.textMuted} />
-            </Pressable>
-          </Pressable>
+          />
         )}
         ListFooterComponent={sections.length > 0 ? <Text style={styles.hint}>{said.howTo}</Text> : null}
       />
@@ -165,20 +150,12 @@ function TapeHeading({ track, count }: { track: EnrichedTrack; count: number }) 
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
-  content: { paddingVertical: 8 },
-  empty: { color: c.textMuted, fontSize: 14, lineHeight: 20, padding: 24, textAlign: 'center' },
-  heading: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 18, paddingBottom: 6 },
-  art: { width: 44, height: 44, borderRadius: 6 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingHorizontal: SPACE.l, paddingTop: SPACE.l, paddingBottom: SPACE.xs },
+  art: { width: 44, height: 44, borderRadius: RADIUS.cover },
   artEmpty: { backgroundColor: c.surface },
-  headingText: { flex: 1, minWidth: 0, gap: 2 },
-  title: { color: c.text, fontSize: 15.5, fontWeight: '600' },
-  subtitle: { color: c.textMuted, fontSize: 12.5 },
-  row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingLeft: 72, paddingRight: 12, paddingVertical: 10 },
-  time: { color: c.accent, fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'], minWidth: 52, paddingTop: 1 },
-  rowText: { flex: 1, minWidth: 0, gap: 3 },
-  note: { color: c.text, fontSize: 14.5, lineHeight: 20 },
-  noteNone: { color: c.textFaint },
-  when: { color: c.textFaint, fontSize: 11.5 },
-  remove: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  hint: { color: c.textFaint, fontSize: 12.5, lineHeight: 18, paddingHorizontal: 20, paddingTop: 16 },
+  headingText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  title: { color: c.text, fontSize: TYPE.body, fontWeight: '600' },
+  subtitle: { color: c.textMuted, fontSize: TYPE.hint },
+  row: { paddingLeft: 72 },
+  hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint, paddingHorizontal: SPACE.l, paddingTop: SPACE.l },
 }));

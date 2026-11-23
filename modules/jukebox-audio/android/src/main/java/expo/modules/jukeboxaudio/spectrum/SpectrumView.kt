@@ -14,7 +14,6 @@ import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.Shader
 import android.view.Choreographer
-import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.ViewOutlineProvider
 import com.facebook.react.uimanager.PointerEvents
@@ -88,8 +87,6 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
   private var insetY = 0f
   /** Sparks and clouds: where the cover is within the player's screen, which this view lies over, in points: left, top, width, height. */
   private val target = FloatArray(4)
-  /** A light knock on each beat, where asked for. */
-  private var feel = false
   /** How far into a jump on the beat it is: one at the beat, falling to nought. */
   private var punched = 0f
   private val waterfall by lazy { Waterfall() }
@@ -137,7 +134,11 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
   */
   private var glowPicture: Bitmap? = null
   private var ringPicture: Bitmap? = null
-  private var picturesFor = ""
+  private var madeWide = -1f
+  private var madeTall = -1f
+  private var madeCorner = -1f
+  private var madeRound: Boolean? = null
+  private var madeColour = 0
   private val dark = Paint()
   private val under = Paint(Paint.ANTI_ALIAS_FLAG).apply {
     color = Color.argb(90, 0, 0, 0); style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
@@ -241,11 +242,6 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
     invalidate()
   }
 
-  fun setFeel(on: Boolean) {
-    feel = on
-    update()
-  }
-
   /** The cover's own colours, for the clouds. */
   fun setColours(list: List<String>) {
     aurora.colours(list.mapNotNull { runCatching { Color.parseColor(it) }.getOrNull() }.toIntArray())
@@ -321,8 +317,7 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
         heard.level = 0f
       }
       settle(seconds)
-      val beat = if (live && (feel || mode == "ripple" || mode == "punch" || mode == "sparks")) listen(frameTimeNanos) else 0f
-      if (beat > 0f && feel) performHapticFeedback(if (beat > 0.7f) HapticFeedbackConstants.KEYBOARD_TAP else HapticFeedbackConstants.CLOCK_TICK)
+      val beat = if (live && (mode == "ripple" || mode == "punch" || mode == "sparks")) listen(frameTimeNanos) else 0f
       when (mode) {
         "punch" -> {
           if (beat > 0f) punched = 0.5f + beat * 0.5f
@@ -475,7 +470,13 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
     if (shade) {
       // As dark under the bars as they are loud, so that they read over a light cover.
       val loudness = shown.average().toFloat()
-      dark.shader = LinearGradient(0f, from, 0f, to, Color.TRANSPARENT, Color.argb((150 * min(1f, loudness * 2.2f)).toInt(), 0, 0, 0), Shader.TileMode.CLAMP)
+      // One shading for where it goes, made again only if that moves, and made as dark as the music by the paint's alpha.
+      if (shadeFrom != from || shadeTo != to) {
+        shadeFrom = from
+        shadeTo = to
+        dark.shader = LinearGradient(0f, from, 0f, to, Color.TRANSPARENT, Color.argb(150, 0, 0, 0), Shader.TileMode.CLAMP)
+      }
+      dark.alpha = (255 * min(1f, loudness * 2.2f)).toInt()
       canvas.drawRect(shape.left, from, shape.right, to, dark)
     }
     for (band in 0 until count) {
@@ -486,6 +487,9 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
       canvas.drawRoundRect(rect, wide / 2, wide / 2, bar)
     }
   }
+
+  private var shadeFrom = Float.NaN
+  private var shadeTo = Float.NaN
 
   private fun drawSpokes(canvas: Canvas) {
     val half = min(width, height) / 2f
@@ -511,9 +515,14 @@ class SpectrumView(context: Context, appContext: AppContext) : ExpoView(context,
 
   /** The pictures for the shape as it is now, made again if it has changed. */
   private fun pictures() {
-    val key = "${shape.width()}:${shape.height()}:$cornerPx:$round:$colour"
-    if (key == picturesFor || shape.width() <= 0f || shape.height() <= 0f) return
-    picturesFor = key
+    // Told apart by their numbers, and not by a string of them made at every frame.
+    val same = shape.width() == madeWide && shape.height() == madeTall && cornerPx == madeCorner && round == madeRound && colour == madeColour
+    if (same || shape.width() <= 0f || shape.height() <= 0f) return
+    madeWide = shape.width()
+    madeTall = shape.height()
+    madeCorner = cornerPx
+    madeRound = round
+    madeColour = colour
     val wide = shape.width()
     val tall = shape.height()
     // The glow: the shape a little larger, blurred, as bright as it will be.

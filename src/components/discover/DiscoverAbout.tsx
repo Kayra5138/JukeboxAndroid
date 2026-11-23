@@ -1,10 +1,11 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, SPACE, TYPE } from '../../lib/theme/measures';
 
 import { MinusIcon, PlusIcon } from '../Icons';
-import { Pressable } from '../Pressable';
 import { Sheet } from './Sheet';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, usePressed } from '../../lib/theme/index';
+import { makeStyles } from '../../lib/theme/index';
+import { Button } from '../Button';
 
 /**
  * What Discover is, where its songs come from and what the two buttons on a
@@ -17,10 +18,9 @@ import { makeStyles, usePressed } from '../../lib/theme/index';
 export function DiscoverAbout({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.discover.about;
   return (
-    <Sheet visible={visible} onClose={onClose}>
+    <Sheet visible={visible} title={said.heading} onClose={onClose}>
       <View style={styles.body}>
         <Text accessibilityRole="header" style={styles.heading}>
           {said.heading}
@@ -44,9 +44,7 @@ export function DiscoverAbout({ visible, onClose }: { visible: boolean; onClose:
         </View>
         <Text style={styles.text}>{said.room}</Text>
         <View style={styles.actions}>
-          <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonLabel}>{t.common.close}</Text>
-          </Pressable>
+          <Button kind="secondary" label={t.common.close} onPress={onClose} />
         </View>
       </View>
     </Sheet>
@@ -54,13 +52,11 @@ export function DiscoverAbout({ visible, onClose }: { visible: boolean; onClose:
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  body: { paddingHorizontal: 20, paddingTop: 18, gap: 12 },
-  heading: { color: c.text, fontSize: 16, fontWeight: '600' },
-  text: { color: c.textSecondary, fontSize: 13.5, lineHeight: 20 },
-  pair: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  body: { paddingHorizontal: SPACE.l, paddingTop: SPACE.l, gap: SPACE.m },
+  heading: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+  text: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small },
+  pair: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.m },
   sign: { width: 24, height: 20, alignItems: 'center', justifyContent: 'center' },
-  signText: { flex: 1, color: c.textSecondary, fontSize: 13.5, lineHeight: 20 },
+  signText: { flex: 1, color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small },
   actions: { flexDirection: 'row', justifyContent: 'flex-end' },
-  button: { paddingHorizontal: 16, paddingVertical: 9, minHeight: 44, justifyContent: 'center', borderRadius: 8 },
-  buttonLabel: { color: c.textSecondary, fontSize: 14 },
 }));

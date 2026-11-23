@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -11,6 +9,8 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
+import { Button } from '../Button';
+import { Floating } from '../Floating';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 
@@ -20,7 +20,7 @@ import { artistPhotoFor } from '../../lib/media/artistPhotos';
 import { artworkFor } from '../../lib/media/artwork';
 import JukeboxAudio from '../../../modules/jukebox-audio';
 import type { ReportCard } from '../../lib/stats/report';
-import { makeStyles, outlined, page, useColours } from '../../lib/theme/index';
+import { makeStyles, page } from '../../lib/theme/index';
 import { useAnnounce } from '../../lib/ui/announce';
 import { haptic } from '../../lib/ui/haptics';
 import { CLIP_SUBVIEWS } from '../../lib/ui/lists';
@@ -66,6 +66,15 @@ export function ReportViewer({
   const [at, setAt] = useState(0);
   const [busy, setBusy] = useState<'save' | 'share' | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Opened again from the first card, as its list is: the dots were left on the card it was closed on.
+  const [shown, setShown] = useState(visible);
+  if (shown !== visible) {
+    setShown(visible);
+    if (visible) {
+      setAt(0);
+      setNote(null);
+    }
+  }
   // Said aloud when it appears: it comes up where nobody's attention is, after a press elsewhere.
   useAnnounce(note);
   const [covers, setCovers] = useState<Covers>(() => new Map());
@@ -176,8 +185,16 @@ export function ReportViewer({
   */
   const poster = useRef<View>(null);
 
-  const cardWidth = Math.min(width - 56, 380);
-  const room = height - insets.top - insets.bottom - 172;
+  /*
+    The room it is given: in a tab, the page's, short of the tab bar and the
+    bar of what is playing (`Floating`), and not the whole window's.
+  */
+  const [area, setArea] = useState<{ width: number; height: number } | null>(null);
+  const wide = area?.width ?? width;
+  const tall = area?.height ?? height - insets.bottom;
+  const room = tall - insets.top - 172;
+  // As wide as the height leaves room for at its shape: sideways, a card as wide as the screen was squashed to fit.
+  const cardWidth = Math.max(160, Math.min(wide - 56, 380, room / SHAPE));
   const cardHeight = Math.min(cardWidth * SHAPE, room);
 
   const showing = cards[Math.min(at, cards.length - 1)];
@@ -221,8 +238,14 @@ export function ReportViewer({
   }, [busy, t]);
 
   return (
-    <Modal visible={visible} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
-      <View style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 8 }]}>
+    // The whole of the tab's page, short of the bars, which stay where they are (`Floating`).
+    <Floating visible={visible} onClose={onClose}>
+      <View
+        style={[styles.screen, { paddingTop: insets.top + 8, paddingBottom: 8 }]}
+        onLayout={(event) => {
+          const { width: w, height: h } = event.nativeEvent.layout;
+          if (area?.width !== w || area?.height !== h) setArea({ width: w, height: h });
+        }}>
         <View style={styles.bar}>
           <Pressable
             accessibilityRole="button"
@@ -251,7 +274,7 @@ export function ReportViewer({
           onMomentumScrollEnd={settle}
           keyExtractor={(card, index) => `${card.kind}-${index}`}
           renderItem={({ item }) => (
-            <View style={[styles.page, { width }]}>
+            <View style={[styles.page, { width: wide }]}>
               <ReportCardView card={item} width={cardWidth} height={cardHeight} stamp={stamp} covers={covers} photos={photos} tints={tints} />
             </View>
           )}
@@ -262,15 +285,15 @@ export function ReportViewer({
             {note ?? ''}
           </Text>
           <View style={styles.actions}>
-            <Action
+            <Button
+              kind="secondary"
               label={t.common.save}
               busy={busy === 'save'}
               disabled={busy !== null}
               onPress={() => void write('save')}
             />
-            <Action
+            <Button
               label={t.stats.viewer.share}
-              primary
               busy={busy === 'share'}
               disabled={busy !== null}
               onPress={() => void write('share')}
@@ -296,38 +319,7 @@ export function ReportViewer({
           </View>
         </View>
       </View>
-    </Modal>
-  );
-}
-
-function Action({
-  label,
-  onPress,
-  busy,
-  disabled,
-  primary,
-}: {
-  label: string;
-  onPress: () => void;
-  busy: boolean;
-  disabled: boolean;
-  primary?: boolean;
-}) {
-  const c = useColours();
-  const styles = useStyles();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      disabled={disabled}
-      onPress={onPress}
-      style={[styles.action, primary && styles.actionPrimary, disabled && styles.actionOff]}>
-      {busy ? (
-        <ActivityIndicator color={primary ? c.onPrimary : c.text} size="small" />
-      ) : (
-        <Text style={[styles.actionLabel, primary && styles.actionLabelPrimary]}>{label}</Text>
-      )}
-    </Pressable>
+    </Floating>
   );
 }
 
@@ -346,19 +338,6 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   note: { color: c.textMuted, fontSize: 12.5, lineHeight: 17, minHeight: 34 },
   // Bottom right, where a thumb already is.
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
-  action: {
-    minWidth: 104,
-    minHeight: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: c.surfaceRaised,
-    ...outlined(c),
-  },
-  actionPrimary: { backgroundColor: c.primary, ...outlined(c, c.primary) },
-  actionOff: { opacity: 0.5 },
-  actionLabel: { color: c.text, fontSize: 14.5, fontWeight: '600' },
-  actionLabelPrimary: { color: c.onPrimary },
 
   offstage: { position: 'absolute', left: -10000, top: 0 },
 }));

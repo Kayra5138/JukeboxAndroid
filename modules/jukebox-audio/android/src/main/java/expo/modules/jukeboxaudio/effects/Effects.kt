@@ -57,12 +57,18 @@ object Effects {
      * judged at is [judgedMix], which is what the screen offers when one is
      * picked.
      */
-    val voiceMix: Float = DEFAULT_VOICE_MIX
+    val voiceMix: Float = DEFAULT_VOICE_MIX,
+    /**
+     * How much of a large room the music is heard in, nought to one: nought
+     * is none at all, one the most that keeps the song in front of the room.
+     * See [Reverb].
+     */
+    val reverb: Float = 0f
   ) {
     /** Whether anything at all is being done, so the quiet path can be taken. */
     val idle: Boolean
       get() = preampDb == 0f && width == 1f && balance == 0f && !swap &&
-        crossfeed == 0f && rotate == 0f && voice == OFF
+        crossfeed == 0f && rotate == 0f && voice == OFF && reverb == 0f
   }
 
   const val OFF = "off"
@@ -139,7 +145,8 @@ object Effects {
       rotateSeconds = json.optDouble("rotateSeconds", 12.0).toFloat(),
       voice = voice,
       voiceMix = if (voice == OFF) DEFAULT_VOICE_MIX
-      else json.optDouble("voiceMix", judgedMix(voice).toDouble()).toFloat().coerceIn(0f, 1f)
+      else json.optDouble("voiceMix", judgedMix(voice).toDouble()).toFloat().coerceIn(0f, 1f),
+      reverb = json.optDouble("reverb", 0.0).toFloat().coerceIn(0f, 1f)
     )
   }
 
@@ -153,6 +160,7 @@ object Effects {
     .put("rotateSeconds", s.rotateSeconds.toDouble())
     .put("voice", s.voice)
     .put("voiceMix", s.voiceMix.toDouble())
+    .put("reverb", s.reverb.toDouble())
 
   fun asMap(s: Settings): Map<String, Any?> = mapOf(
     "preampDb" to s.preampDb,
@@ -163,7 +171,8 @@ object Effects {
     "rotate" to s.rotate,
     "rotateSeconds" to s.rotateSeconds,
     "voice" to s.voice,
-    "voiceMix" to s.voiceMix
+    "voiceMix" to s.voiceMix,
+    "reverb" to s.reverb
   )
 
   fun fromMap(m: Map<String, Any?>): Settings {
@@ -181,7 +190,8 @@ object Effects {
       voice = voice,
       // Asking for a voice and saying nothing about how much of it gets the
       // amount it was chosen at, rather than whatever the last one used.
-      voiceMix = number("voiceMix", judgedMix(voice)).coerceIn(0f, 1f)
+      voiceMix = number("voiceMix", judgedMix(voice)).coerceIn(0f, 1f),
+      reverb = number("reverb", 0f).coerceIn(0f, 1f)
     )
   }
 }

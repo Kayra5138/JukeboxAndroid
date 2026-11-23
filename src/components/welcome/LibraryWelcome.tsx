@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { LEADING, RADIUS, SPACE, TYPE } from '../../lib/theme/measures';
+import { ProgressBar } from '../ProgressBar';
 import { useRouter } from 'expo-router';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -16,6 +18,7 @@ import { makeStyles, outlined, usePressed } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
 import { useTip } from '../../lib/ui/tipsStore';
 import { useWelcomeShown } from '../../lib/ui/welcomeStore';
+import { Button } from '../Button';
 
 /**
  * What the library says to a newcomer, under the line that counts its tracks:
@@ -101,9 +104,7 @@ export function LibraryWelcome({ tracks, confirmed }: { tracks: number; confirme
         <Text style={styles.progressText} numberOfLines={1}>
           {said(done)}
         </Text>
-        <View style={styles.bar}>
-          <View style={[styles.fill, { width: `${total === 0 ? 0 : Math.round((done / total) * 100)}%` }]} />
-        </View>
+        <ProgressBar value={total === 0 ? 0 : done / total} />
       </Pressable>
     );
   }
@@ -117,22 +118,8 @@ export function LibraryWelcome({ tracks, confirmed }: { tracks: number; confirme
         <Text style={styles.body}>{t.welcome.offer.body(offer)}</Text>
         <Text style={styles.small}>{t.welcome.offer.privacy}</Text>
         <View style={styles.actions}>
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            hitSlop={4}
-            style={styles.secondary}
-            onPress={() => answer(false)}>
-            <Text style={styles.secondaryLabel}>{t.welcome.offer.decline}</Text>
-          </Pressable>
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            hitSlop={4}
-            style={styles.primary}
-            onPress={() => answer(true)}>
-            <Text style={styles.primaryLabel}>{t.welcome.offer.accept}</Text>
-          </Pressable>
+          <Button kind="secondary" label={t.welcome.offer.decline} onPress={() => answer(false)} />
+          <Button kind="primary" label={t.welcome.offer.accept} onPress={() => answer(true)} />
         </View>
       </View>
     );
@@ -199,38 +186,20 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   card: {
     // Dense in a theme of glass, as the tips are: see `TipCard`.
     backgroundColor: glassOf(c) > 0 ? barWashOf(c) : c.surface,
-    borderRadius: 12,
-    padding: 14,
-    gap: 8,
+    borderRadius: RADIUS.control,
+    padding: SPACE.m,
+    gap: SPACE.s,
     ...outlined(c),
   },
-  heading: { color: c.text, fontSize: 15, fontWeight: '600' },
-  body: { color: c.textSecondary, fontSize: 13.5, lineHeight: 19 },
-  small: { color: c.textMuted, fontSize: 12, lineHeight: 17 },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 4 },
-  secondary: {
-    minHeight: 40,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    justifyContent: 'center',
-  },
-  secondaryLabel: { color: c.textSecondary, fontSize: 14 },
-  primary: {
-    minHeight: 40,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    justifyContent: 'center',
-    backgroundColor: c.primary,
-    ...outlined(c, c.primary),
-  },
-  primaryLabel: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
+  heading: { color: c.text, fontSize: TYPE.body, fontWeight: '600' },
+  body: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small },
+  small: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: SPACE.s, marginTop: SPACE.xs },
 
-  progress: { gap: 5, paddingVertical: 2, borderRadius: 6 },
-  progressText: { color: c.textMuted, fontSize: 12 },
-  bar: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, overflow: 'hidden' },
-  fill: { height: 3, backgroundColor: c.accent },
+  progress: { gap: SPACE.xs, paddingVertical: SPACE.xxs, borderRadius: RADIUS.cover },
+  progressText: { color: c.textMuted, fontSize: TYPE.hint },
 
-  copies: { paddingVertical: 2, borderRadius: 6 },
-  copiesText: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
+  copies: { paddingVertical: SPACE.xxs, borderRadius: RADIUS.cover },
+  copiesText: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
   copiesLink: { color: c.accent, fontWeight: '600' },
 }));

@@ -24,6 +24,27 @@ export const CLIP_SUBVIEWS = false;
 export const LIST_WINDOW = 7;
 
 /**
+ * The window for a list with a heading above its rows: [LIST_WINDOW], or
+ * more where the heading would otherwise fill all of it.
+ *
+ * A list reaches half its window past the bottom of the screen, three screens
+ * at seven. Where its heading goes on further than that -- the shelves over
+ * the tracks, sideways, are four short screens tall -- the end of the window
+ * falls before the first row, and React Native, finding no row there, takes
+ * the end to be the last row and draws every one of them: seven hundred rows
+ * and twelve thousand views for a screen that showed none, every frame of
+ * the page after that some milliseconds slower to put together. Widened to
+ * reach a screen past the heading, the list draws the first rows and waits.
+ *
+ * [heading] is how far down the first row starts, room over the heading
+ * included; [viewport] the height of the list.
+ */
+export function windowPast(heading: number, viewport: number): number {
+  if (heading <= 0 || viewport <= 0) return LIST_WINDOW;
+  return Math.max(LIST_WINDOW, Math.ceil((2 * heading) / viewport) + 1);
+}
+
+/**
  * Spread on a FlatList for its rows to be drawn again only when how a row
  * is drawn (`renderItem`) changes, and not at every drawing of the screen it
  * is on: FlatList's `strictMode`, which its types leave out. Without it the

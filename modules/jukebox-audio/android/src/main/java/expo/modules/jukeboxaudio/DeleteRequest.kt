@@ -31,7 +31,12 @@ class DeleteRequest : AppContextActivityResultContract<DeleteRequest.Input, Bool
   data class Input(val ids: ArrayList<String>) : Serializable
 
   override fun createIntent(context: Context, input: Input): Intent {
-    val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    /*
+      Every volume, as the library is read from (`MediaStoreLibrary`): asked of
+      the phone's own storage alone, a song on a memory card was not deleted
+      and the request said it was, and all the app knew of it was let go.
+    */
+    val collection = MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
     val uris = input.ids
       .mapNotNull { it.toLongOrNull() }
       .map { ContentUris.withAppendedId(collection, it) }

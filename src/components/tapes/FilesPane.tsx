@@ -1,18 +1,22 @@
 import { useState } from 'react';
+import { Note } from '../Note';
+import { SectionLabel } from '../settings/rows';
 import { useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { FlatList, StyleSheet, Text, View } from 'react-native';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index';
-import { Pressable } from '../Pressable';
+import { Button, TextButton } from '../Button';
+import { Field } from '../FormScroll';
 import { useT } from '../../lib/i18n/index';
 import { refreshLibrary } from '../../lib/library/index';
 import { libraryRoot } from '../../lib/media/library';
 import { folderNameFor, inNameOrder } from '../../lib/tapes/files';
 import { folderNameOf, tapeFolderOf } from '../../lib/tapes/folders';
-import { makeStyles, outlinedClip, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
 import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../lib/ui/lists';
+import { LEADING, SPACE, TYPE, PAGE } from '../../lib/theme/measures';
+import { usePageRoom } from '../Page';
 
 type Picked = { uri: string; name: string };
 
@@ -25,10 +29,10 @@ type Picked = { uri: string; name: string };
  */
 export function FilesPane() {
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  const insets = useSafeAreaInsets();
+  // The tab bar and the bar of what is playing, in a theme of glass laid over the foot of the list.
+  // The page's room, under the choice of where tapes come from, which stands over it (see `PageScroll`'s [head]).
+  const room = usePageRoom();
   const router = useRouter();
   const said = t.search.tapes.files;
   const [picked, setPicked] = useState<Picked[]>([]);
@@ -71,45 +75,38 @@ export function FilesPane() {
       data={picked}
       keyExtractor={(file) => file.uri}
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[styles.content, { paddingBottom: 32 + insets.bottom }]}
+      contentContainerStyle={{ ...room, paddingTop: PAGE.top }}
       ListHeaderComponent={
         <>
           <Text style={styles.intro}>{said.intro}</Text>
-          <Pressable android_ripple={pressed} accessibilityRole="button" disabled={copying} style={styles.choose} onPress={() => void choose()}>
-            <Text style={styles.chooseLabel}>{picked.length > 0 ? said.chooseOther : said.choose}</Text>
-          </Pressable>
+          <Button kind="secondary" label={picked.length > 0 ? said.chooseOther : said.choose} disabled={copying} onPress={() => void choose()} style={styles.choose} />
           {result ? (
             <View style={styles.resultLine}>
-              <Text accessibilityRole={result.bad ? 'alert' : undefined} style={result.bad ? styles.bad : styles.note}>{result.line}</Text>
+              <Note tone={result.bad ? 'bad' : 'muted'} style={styles.noteRoom}>{result.line}</Note>
               {!result.bad ? (
-                <Pressable accessibilityRole="button" onPress={() => router.back()}>
-                  <Text style={styles.link}>{said.toTapes}</Text>
-                </Pressable>
+                <TextButton label={said.toTapes} strong onPress={() => router.back()} />
               ) : null}
             </View>
           ) : null}
           {picked.length > 0 ? (
             <>
               <Text style={styles.label}>{said.folder}</Text>
-              <TextInput
-                style={styles.input}
+              <Field
                 value={name}
                 onChangeText={setName}
                 placeholder={said.folderPlaceholder}
-                placeholderTextColor={c.textFaint}
                 accessibilityLabel={said.folder}
                 maxLength={80}
               />
               <Text style={styles.note}>{said.folderNote}</Text>
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
+              <Button
+                label={said.copy(picked.length)}
+                busy={copying}
                 disabled={copying || !folderNameOf(name, '')}
-                style={[styles.copy, (copying || !folderNameOf(name, '')) && styles.disabled]}
-                onPress={() => void copy()}>
-                {copying ? <ActivityIndicator color={c.onPrimary} /> : <Text style={styles.copyLabel}>{said.copy(picked.length)}</Text>}
-              </Pressable>
-              <Text accessibilityRole="header" style={styles.section}>{t.format.upper(said.chosen(picked.length))}</Text>
+                onPress={() => void copy()}
+                style={styles.copy}
+              />
+              <SectionLabel>{said.chosen(picked.length)}</SectionLabel>
             </>
           ) : null}
         </>
@@ -150,21 +147,15 @@ async function copyFiles(files: readonly Picked[], folder: string, failed: strin
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  content: { padding: 20 },
-  intro: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 16 },
-  choose: { alignSelf: 'flex-start', paddingHorizontal: 20, minHeight: 44, borderRadius: 22, justifyContent: 'center', overflow: 'hidden', backgroundColor: c.surfaceRaised, ...outlinedClip(c) },
-  chooseLabel: { color: c.text, fontSize: 14.5, fontWeight: '600' },
-  label: { color: c.textMuted, fontSize: 12, marginTop: 20, marginBottom: 6, marginLeft: 4 },
-  input: { color: c.text, fontSize: 15, minHeight: 48, borderRadius: 12, paddingHorizontal: 14, backgroundColor: c.surface, ...outlinedClip(c) },
-  note: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: 8 },
-  bad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 8 },
-  link: { color: c.accent, fontSize: 13, fontWeight: '600', marginTop: 6 },
-  resultLine: { marginTop: 4 },
-  copy: { marginTop: 16, alignSelf: 'flex-start', paddingHorizontal: 20, minHeight: 44, minWidth: 120, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: c.primary, ...outlinedClip(c, c.primary) },
-  copyLabel: { color: c.onPrimary, fontSize: 14.5, fontWeight: '600' },
-  disabled: { opacity: 0.45 },
-  section: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, marginTop: 24, marginBottom: 6, marginLeft: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
-  number: { color: c.textFaint, fontSize: 12.5, fontVariant: ['tabular-nums'], minWidth: 22 },
-  file: { flex: 1, color: c.text, fontSize: 14 },
+  intro: { color: c.textMuted, fontSize: TYPE.small, lineHeight: LEADING.small, marginBottom: SPACE.l },
+  // Under the words, as wide as its own: the start of what is done here, not the whole of the page.
+  choose: { alignSelf: 'flex-start' },
+  label: { color: c.textMuted, fontSize: TYPE.hint, marginTop: SPACE.l, marginBottom: SPACE.xs, marginLeft: SPACE.xs },
+  note: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint, marginTop: SPACE.s },
+  noteRoom: { marginTop: SPACE.s },
+  resultLine: { marginTop: SPACE.xs },
+  copy: { marginTop: SPACE.l, alignSelf: 'flex-start' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingVertical: SPACE.s, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
+  number: { color: c.textFaint, fontSize: TYPE.hint, fontVariant: ['tabular-nums'], minWidth: 22 },
+  file: { flex: 1, color: c.text, fontSize: TYPE.small },
 }));

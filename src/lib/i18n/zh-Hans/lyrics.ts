@@ -2,6 +2,7 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const lyrics: Strings['lyrics'] = {
+  follow: '回到当前歌词',
   none: '未找到歌词。',
   translating: '正在翻译…',
   seekTo: (seconds) => `跳到第 ${seconds} 秒`,

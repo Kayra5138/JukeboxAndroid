@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { Animated, Easing, StyleSheet, View, type ImageStyle } from 'react-native';
 import { Image } from './Picture';
 import { LinearGradient } from 'expo-linear-gradient';
 import { requireNativeViewManager } from 'expo-modules-core';
 
 import { usePlayerPosition } from '../lib/player/PlayerProvider';
+import { useSpeed } from '../lib/player/current';
 import { scrubbing } from '../lib/player/scrub';
 import { motionReduced } from '../lib/ui/motion';
 import { useTonearm } from '../lib/ui/coverLook';
 import { useColours } from '../lib/theme/index';
+import { isStandIn, STAND_IN_LABEL } from '../lib/media/standIns';
 import { armTurn, FIRST_GROOVE, LAST_GROOVE, RECORD_TURN_MS, REEL_TURN_MS, woundTo } from '../lib/ui/coverFace';
 
 /**
@@ -30,7 +32,6 @@ export function CoverFace({
   turning,
   live,
   trackId,
-  speed,
 }: {
   look: 'record' | 'cassette';
   artwork: string | null;
@@ -39,12 +40,11 @@ export function CoverFace({
   turning: boolean;
   /** Whether the player is in sight, for the reels and the record to follow the position. */
   live: boolean;
-  /** The song playing, and how fast: for the record, which goes round with it. */
+  /** The song playing: for the record, which goes round with it, as fast as it is played. */
   trackId: string;
-  speed: number;
 }) {
   return look === 'record' ? (
-    <Record artwork={artwork} size={size} turning={turning} live={live} trackId={trackId} speed={speed} />
+    <Record artwork={artwork} size={size} turning={turning} live={live} trackId={trackId} />
   ) : (
     <Cassette artwork={artwork} size={size} turning={turning} live={live} />
   );
@@ -180,8 +180,9 @@ const RUN_S = 600;
  * going when it gets there, with nothing left to spin.
  */
 function useSongTurn(trackId: string, live: boolean, turning: boolean, speed: number): Animated.Value {
-  const { positionSec } = usePlayerPosition(live);
   const still = motionReduced();
+  // Held still, the record does not turn with the song, and has no need to know where it is.
+  const { positionSec } = usePlayerPosition(live && !still);
   const [turn] = useState(() => new Animated.Value(turnsAt(positionSec)));
   const held = useRef({ pos: positionSec, at: 0, turn: turnsAt(positionSec), running: false, rate: speed, track: trackId, live });
   // Which handing-over is the latest, so that one overtaken does not go on.
@@ -345,15 +346,15 @@ function Record({
   turning,
   live,
   trackId,
-  speed,
 }: {
   artwork: string | null;
   size: number;
   turning: boolean;
   live: boolean;
   trackId: string;
-  speed: number;
 }) {
+  // Read here rather than handed down: see `playbackSpeed`.
+  const speed = useSpeed();
   // Over it only where asked for.
   const tonearm = useTonearm();
   const c = useColours();
@@ -377,7 +378,7 @@ function Record({
           rounded copy of itself again each time it was drawn turned.
         */}
         <View style={[round(label), styles.recordLabel, !artwork && { backgroundColor: c.accent }]}>
-          {artwork ? <Image source={{ uri: artwork }} style={{ width: label, height: label }} contentFit="cover" /> : null}
+          {artwork ? <Image source={{ uri: artwork }} style={labelled(artwork, label, label, true)} contentFit="cover" /> : null}
         </View>
         <View style={[styles.spindle, round(size * 0.035), { backgroundColor: c.bg }]} />
       </Animated.View>
@@ -425,6 +426,20 @@ const CASSETTE_TALL = 0.64;
 /** Its window, as a share of how tall it is. */
 const WINDOW_TALL = 0.3;
 
+/*
+  A cover on a label [wide] by [high], [round] or not: as it is, or where it
+  is a paper sleeve standing in for none, brought in close on the sleeve's
+  own label, so that the record or the tape wears that label -- its colour,
+  its name and whose it is -- rather than a picture of another record.
+*/
+function labelled(artwork: string, wide: number, high: number, round: boolean): ImageStyle {
+  if (!isStandIn(artwork)) return { width: wide, height: high };
+  // Round, as wide as the label; square-cornered, as wide as its corners are apart.
+  const across = round ? Math.max(wide, high) : Math.hypot(wide, high);
+  const side = across / STAND_IN_LABEL;
+  return { position: 'absolute', width: side, height: side, left: (wide - side) / 2, top: (high - side) / 2 };
+}
+
 function Cassette({ artwork, size, turning, live }: { artwork: string | null; size: number; turning: boolean; live: boolean }) {
   const c = useColours();
   const wide = size;
@@ -432,6 +447,7 @@ function Cassette({ artwork, size, turning, live }: { artwork: string | null; si
   const screw = tall * 0.045;
   const labelInset = wide * 0.055;
   const labelTall = tall * 0.6;
+  const labelWide = wide - labelInset * 2;
   return (
     <View style={[styles.cassetteBox, { width: size, height: size }]}>
       <View style={[styles.body, { width: wide, height: tall, borderRadius: tall * 0.08 }]}>
@@ -449,7 +465,13 @@ function Cassette({ artwork, size, turning, live }: { artwork: string | null; si
             { left: labelInset, right: labelInset, top: tall * 0.075, height: labelTall, borderRadius: tall * 0.05 },
             !artwork && { backgroundColor: c.accent },
           ]}>
-          {artwork ? <Image source={{ uri: artwork }} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+          {artwork ? (
+            <Image
+              source={{ uri: artwork }}
+              style={isStandIn(artwork) ? labelled(artwork, labelWide, labelTall, false) : StyleSheet.absoluteFill}
+              contentFit="cover"
+            />
+          ) : null}
         </View>
         {/*
           Over the label and not in it: what turns inside a clipped corner had

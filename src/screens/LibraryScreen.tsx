@@ -1,8 +1,9 @@
+import { ROW_SIDE } from '../components/MediaRow';
+import { RADIUS, ROW_COVER, SPACE, TYPE } from '../lib/theme/measures';
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -11,7 +12,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
   type LayoutChangeEvent,
@@ -21,7 +21,7 @@ import {
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 
-import { LookIcon, MarksIcon, PlayIcon, PlusIcon, SearchIcon, SettingsIcon, ShuffleIcon } from '../components/Icons';
+import { LookIcon, MarksIcon, PlayIcon, PlayingIcon, PlusIcon, SearchIcon, SettingsIcon, ShuffleIcon } from '../components/Icons';
 import { PressRing } from '../components/PressMenu';
 import { useTrackRing } from '../components/trackRing';
 import { useTrackMenu, WITHOUT_ALBUM } from '../components/useTrackMenu';
@@ -33,6 +33,7 @@ import { underGlass, Veiled } from '../lib/theme/Veil';
 import { Behind } from '../lib/theme/Veil';
 import { SelectIcon } from '../components/Icons';
 import { useHiddenTabs } from '../lib/ui/tabs';
+import { useScreenReader } from '../lib/ui/screenReader';
 import { rackWanted, useLandscape, useListColumns } from '../lib/ui/layout';
 import { useDragSelect } from '../lib/ui/useDragSelect';
 import { haptic } from '../lib/ui/haptics';
@@ -41,7 +42,7 @@ import { useTabOpen } from '../lib/ui/tabOpen';
 import { useSelectionActions } from '../components/SelectionActions';
 import { LibraryWelcome } from '../components/welcome/LibraryWelcome';
 import { WrongDownloadsLine } from '../components/WrongDownloadsLine';
-import { NowPlayingBar, usePageSides } from '../components/NowPlayingBar';
+import { usePageSides } from '../components/NowPlayingBar';
 import { topGlass, useLaidOver, useUnderBars } from '../components/UnderBars';
 import { PlaylistCover } from '../components/PlaylistCover';
 import { BrowseRow, useBrowseRowHeight } from '../components/BrowseRow';
@@ -51,6 +52,7 @@ import { CoverFlow, type Rack, type Sleeve } from '../components/CoverFlow';
 import { FastScroller, useFastScroll, type FastScroll } from '../components/FastScroller';
 import { ZoomStack, type LevelApi, type StackApi } from '../components/looks/CoverGrid';
 import { Curtain } from '../components/Curtain';
+import { ScreenState } from '../components/ScreenState';
 import { ArtistMap } from '../components/artists/ArtistMap';
 import { asTrackLook, asZoom, nextTrackLook, TrackCover, type TrackLook } from '../components/looks/shared';
 import { Shelves } from '../components/looks/Shelves';
@@ -88,6 +90,7 @@ import { useLibrary } from '../lib/library/useLibrary';
 import { ensureNotificationPermission, libraryRoot } from '../lib/media/library';
 import type { EnrichedTrack } from '../lib/media/merge';
 import { search, searchNamed } from '../lib/media/search';
+import { foldForMatch } from '../lib/metadata/text';
 import { LIBRARY_VIEWS, viewShown, type LibraryView } from '../lib/media/views';
 import {
   asSortOrder,
@@ -96,7 +99,7 @@ import {
   sortTracks,
   type SortOrder,
 } from '../lib/media/sort';
-import { lastPlayedAt, playCounts } from '../lib/db/history';
+import { listenedTo, playsMark } from '../lib/db/history';
 import { artistKey, spreadShuffle } from '../lib/media/shuffle';
 import { PressList, type PressListFor } from '../components/PressList';
 import { useFavoritesShown } from '../lib/playlists/favorites';
@@ -112,11 +115,11 @@ import {
   type ShuffleSource,
 } from '../lib/lists/shuffleSource';
 import { usePlayTapped, type TapPlace } from '../lib/player/usePlayTapped';
-import { currentTrack, playingTrack } from '../lib/player/current';
+import { currentTrack, playingTrack, useHoldsCurrent } from '../lib/player/current';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
-import { motionReduced } from '../lib/ui/motion';
-import { CLIP_SUBVIEWS, ROWS_KEPT } from '../lib/ui/lists';
+import { motionReduced, useMotionReduced } from '../lib/ui/motion';
+import { CLIP_SUBVIEWS, ROWS_KEPT, windowPast } from '../lib/ui/lists';
 import { followsScrolling } from '../lib/ui/moving';
 import { useStartingOffset } from '../lib/ui/useStartingOffset';
 import { backToTop, useTabReselect } from '../lib/ui/tabReselect';
@@ -134,12 +137,15 @@ import { TAPE_FOLDERS } from '../lib/tapes/rule';
 import { seriesByFolder, seriesOf } from '../lib/podcasts/series';
 import { folderKey } from '../lib/media/folders';
 import { subscriptions, type Subscription } from '../lib/podcasts/store';
+import { Button } from '../components/Button';
 
 /** A stable empty library, so the searching below is not re-run over a new one. */
 const NOTHING: EnrichedTrack[] = [];
 
 /** The same, for a listening history that has not been read yet. */
 const UNPLAYED: ReadonlyMap<string, number> = new Map();
+/** Nothing chosen, for the lists standing behind the one in front. */
+const NONE_CHOSEN: ReadonlySet<string> = new Set();
 
 /** Nobody named, for the moment before the catalogues' verdicts have been read. */
 const NOBODY: NamesOn = () => [];
@@ -194,9 +200,7 @@ type ScrollEnds = {
 };
 
 const NO_TRACKS: EnrichedTrack[] = [];
-/** Where a row's cover is in it, as `TrackRow` and `BrowseRow` draw it: so far in from the side, and so big. */
-const ROW_SIDE = 16;
-const ROW_COVER = 46;
+// Where a row's cover is in it, as `MediaRow` draws it: `ROW_SIDE` in from the side, and `ROW_COVER` big.
 
 // What a wall of covers is told of a song and of a heading: see `CoverGrid`.
 const trackKey = (track: EnrichedTrack) => track.id;
@@ -207,10 +211,34 @@ const sameTrack = (track: EnrichedTrack) => track;
 const headingKey = (heading: Heading) => heading.id;
 const headingTitle = (heading: Heading) => heading.title;
 const headingBy = (heading: Heading) => heading.by;
-const headingCover = (heading: Heading, size: number) => (
-  <PlaylistCover tracks={heading.tracks} chosen={null} sleeve={heading.cover} size={size} />
-);
+const headingCover = (heading: Heading, size: number) => <HeadingCover heading={heading} size={size} />;
 const headingSleeve = (heading: Heading) => heading.cover[0];
+
+/**
+ * A heading's cover in a wall: a record's, an artist's, a folder's, with a
+ * level meter on its corner where the song playing is one of its, as its row
+ * in the list says it by its name.
+ */
+function HeadingCover({ heading, size }: { heading: Heading; size: number }) {
+  const c = useColours();
+  const styles = useStyles();
+  const playing = useHoldsCurrent(heading.tracks);
+  const badge = Math.max(14, Math.min(24, size * 0.26));
+  return (
+    <View>
+      <PlaylistCover tracks={heading.tracks} chosen={null} sleeve={heading.cover} size={size} />
+      {playing ? (
+        <View
+          style={[
+            styles.playingBadge,
+            { width: badge, height: badge, borderRadius: badge * 0.28, backgroundColor: c.accent, right: badge * 0.2, bottom: badge * 0.2 },
+          ]}>
+          <PlayingIcon size={badge * 0.6} color={c.onAccent} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 /** A row of the tapes view: a heading over one of its two parts, a podcast followed, one of its episodes laid out under it, or a tape. */
 type TapeRow =
@@ -265,14 +293,32 @@ const CONTROL_HEIGHT = 40;
 function readListening(): { reader: NamesOn; latest: Map<string, number>; listens: Map<string, number> } | null {
   try {
     const reader = currentCreditReader();
-    const latest = lastPlayedAt();
-    const listens = new Map<string, number>();
-    for (const [id, count] of playCounts()) listens.set(id, count.plays);
-    return { reader, latest, listens };
+    // The history read again only where a listen has been written or taken away since: see `playsMark`.
+    const mark = playsMark();
+    if (heardWas?.mark !== mark) heardWas = { mark, ...listeningNow() };
+    return { reader, latest: heardWas.latest, listens: heardWas.listens };
   } catch (error) {
     console.warn('The listening history could not be read for the library.', error);
     return null;
   }
+}
+
+/*
+  The history as it was last read for the library, and the mark it was read
+  at. Read whole at every visit to the tab, with a long history that was a
+  twentieth of a second on a fast phone each time, for the same answer as
+  the visit before.
+*/
+let heardWas: { mark: string; latest: Map<string, number>; listens: Map<string, number> } | null = null;
+
+function listeningNow(): { latest: Map<string, number>; listens: Map<string, number> } {
+  const latest = new Map<string, number>();
+  const listens = new Map<string, number>();
+  for (const [id, heard] of listenedTo()) {
+    latest.set(id, heard.lastAt);
+    listens.set(id, heard.plays);
+  }
+  return { latest, listens };
 }
 
 /** The tapes' view, by a name the React Compiler reads as it reads the others' (`listOf`). */
@@ -296,6 +342,8 @@ export default function LibraryScreen() {
   const screen = useLibrary();
   const [query, setQuery] = useState('');
   const [headerHeight, setHeaderHeight] = useState(0);
+  // The height of the list of tracks, for how much of it to keep drawn under a tall heading: see `windowPast`.
+  const [tracksHeight, setTracksHeight] = useState(0);
   /*
     Selection is a mode rather than something a long press falls into: the long
     press already opens the track's own menu, and one gesture cannot sensibly do
@@ -341,7 +389,15 @@ export default function LibraryScreen() {
   // The tapes' own order: the ones being listened to first, by name, or by what came newest.
   const [tapeSort, setTapeSort] = useState<TapeSort>(() => asTapeSort(readSetting(SETTINGS.libraryTapeSort)));
   /** The artists as a map rather than a list: see `ArtistMap`. */
-  const [artistMap, setArtistMap] = useState(() => readSetting(SETTINGS.artistLook) === 'map');
+  const [mapChosen, setArtistMap] = useState(() => readSetting(SETTINGS.artistLook) === 'map');
+  /*
+    The artists as a list while a screen reader is on, whatever was chosen:
+    the map is a picture gone about in by dragging and pinching, every artist
+    on it a dot nothing can be put on but a finger, and a reader has nothing
+    there to read out or move to. The choice is kept for when it is off.
+  */
+  const reader = useScreenReader();
+  const artistMap = mapChosen && !reader;
   /** The rack's own order: see where the records are put in it. */
   const [rackSort, setRackSort] = useState<RackSort>(() => asRackSort(readSetting(SETTINGS.rackSort)));
   /** How the Tracks view is drawn: the list, or one of the looks being tried out. */
@@ -385,6 +441,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const sides = usePageSides();
   const glass = underGlass(c);
+  const still = useMotionReduced();
   const [note, setNote] = useState<string | null>(null);
 
   // Restored in an effect rather than in the first render: opening the
@@ -453,7 +510,7 @@ export default function LibraryScreen() {
     over the rack, which is no list and has nothing to pass under them; it
     begins under the top as it always has.
   */
-  const top = useLaidOver();
+  const top = useLaidOver({ clock: true });
   /*
     Laid over the rack too, the rack keeping clear of it itself (see where
     it is drawn): the lists, standing under the rack, kept to the same room
@@ -468,8 +525,8 @@ export default function LibraryScreen() {
   const frosted = useFrosted(over ? target : null);
   /*
     The room over the lists: how tall the top is as it stands over them,
-    taken only from a laying out of it over them. Over the rack it is a line
-    shorter (it has no count of records), and the lists, shut under it, keep
+    taken only from a laying out of it over them. Over the rack it may be
+    another height (it is laid tighter), and the lists, shut under it, keep
     the room they had; taken from the top as it was at each drawing, they
     were laid out again for the rack's top on the way back from it, and
     again for their own a moment later.
@@ -589,30 +646,22 @@ export default function LibraryScreen() {
 
   /*
     At the foot of a search, what is not in the library may be on YouTube:
-    the same words searched for there, on the Search tab, at a press. Not
-    while that tab is taken off the bar, which would send anybody who went
-    there straight back here.
+    the same words searched for there at a press, songs on the Search tab and
+    tapes on the page that adds them. Not on the Search tab while that tab is
+    taken off the bar, which would send anybody who went there straight back
+    here.
   */
   const searchTabShown = !useHiddenTabs().has('search');
   const wanted = query.trim();
-  // Kept the same from one drawing to the next, as it goes to every list and wall: see `wallOf`.
-  const searchElsewhere = useMemo(() =>
-    wanted && searchTabShown && !selecting ? (
-      <View style={styles.elsewhere}>
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={styles.tagAction}
-          onPress={() => router.navigate({ pathname: '/search', params: { q: wanted, run: String(Date.now()) } })}>
-          <View style={styles.elsewhereIcon}>
-            <SearchIcon size={14} color={c.onPrimary} />
-          </View>
-          <Text style={styles.tagActionLabel} numberOfLines={2}>
-            {t.library.screen.searchYouTube(wanted)}
-          </Text>
-        </Pressable>
-      </View>
-    ) : null, [c.onPrimary, pressed, router, searchTabShown, selecting, styles, t, wanted]);
+  // Kept the same from one drawing to the next, as they go to every list and wall: see `wallOf`.
+  const searchElsewhere = useMemo(
+    () => (wanted && searchTabShown && !selecting ? <SearchYouTube words={wanted} to="/search" /> : null),
+    [searchTabShown, selecting, wanted]
+  );
+  const searchTapesElsewhere = useMemo(
+    () => (wanted && !selecting ? <SearchYouTube words={wanted} to="/tapes-add" /> : null),
+    [selecting, wanted]
+  );
 
   const library = screen.kind === 'library' ? screen.tracks : NOTHING;
   /*
@@ -682,10 +731,19 @@ export default function LibraryScreen() {
     title it looks at, and re-running it because a menu opened would fold the
     whole library again.
   */
-  const results = useMemo(
-    () => sortTracks(found.filter((track) => !isTape(track)), sort, played),
-    [found, played, sort]
-  );
+  /*
+    The music is put in order once, and a search takes what it found out of
+    that order: put in order afresh for every letter typed, ten thousand songs
+    took half a second on a phone. Only when the order is by when each was
+    played does a new record of the listening put it in order again.
+  */
+  const playedForOrder = sort === 'played' ? played : UNPLAYED;
+  const ordered = useMemo(() => sortTracks(music, sort, playedForOrder), [music, playedForOrder, sort]);
+  const results = useMemo(() => {
+    if (found === library) return ordered;
+    const ids = new Set(found.map((track) => track.id));
+    return ordered.filter((track) => ids.has(track.id));
+  }, [found, library, ordered]);
   /*
     What the Tracks view lists: the results less what is set aside. Only
     there: the records, the artists and the folders are narrowed by the
@@ -743,13 +801,14 @@ export default function LibraryScreen() {
     order that went with the view would have it put in order again, out of
     sight, at every change.
   */
+  const playedForRack = rackSort === 'played' ? played : UNPLAYED;
   const rackAlbums = useMemo(() => {
     if (!seenAlbums || !rack) return [];
-    if (rackSort !== 'colour') return sortAlbums(narrowed, rackSort, played);
-    return byColour(sortAlbums(narrowed, 'name', played), (album) => albumColours.get(album.key));
-  }, [albumColours, narrowed, played, rack, rackSort, seenAlbums]);
+    if (rackSort !== 'colour') return sortAlbums(narrowed, rackSort, playedForRack);
+    return byColour(sortAlbums(narrowed, 'name', UNPLAYED), (album) => albumColours.get(album.key));
+  }, [albumColours, narrowed, playedForRack, rack, rackSort, seenAlbums]);
   // The list's, in the library's order: the list stands under the rack, and is not put in the rack's order and back with each change of view.
-  const albums = useMemo(() => (seenAlbums ? sortAlbums(narrowed, sort, played) : []), [narrowed, played, seenAlbums, sort]);
+  const albums = useMemo(() => (seenAlbums ? sortAlbums(narrowed, sort, playedForOrder) : []), [narrowed, playedForOrder, seenAlbums, sort]);
 
   /**
    * Records whose name the query matched, for jumping straight to one.
@@ -759,11 +818,12 @@ export default function LibraryScreen() {
    * library would qualify.
    */
   const matchedAlbums = useMemo(() => {
-    const needle = searched.trim().toLowerCase();
+    // Folded as the search folds, accents, dotted and dotless i and all: lowered alone, `İstanbul` was not found by `istanbul`.
+    const needle = foldForMatch(searched.trim());
     if (albumView || needle.length === 0) return [];
     return narrowAlbums(records, results)
       // By its name: the key carries its artist as well.
-      .filter((entry) => nameOfKey(entry.key).includes(needle))
+      .filter((entry) => foldForMatch(nameOfKey(entry.key)).includes(needle))
       .slice(0, 3);
   }, [albumView, records, results, searched]);
 
@@ -796,9 +856,11 @@ export default function LibraryScreen() {
     Put in order apart from the grouping, so that a tap on the button arranges
     a few hundred headings and does not read every credit in the library again.
   */
+  // How often each was listened to, only for the order that is by it.
+  const countsForOrder = artistSort === 'played' ? counts : UNCOUNTED;
   const orderedArtists = useMemo(
-    () => sortArtists(artists, artistSort, counts),
-    [artistSort, artists, counts]
+    () => sortArtists(artists, artistSort, countsForOrder),
+    [artistSort, artists, countsForOrder]
   );
   const orderedFolders = useMemo(() => sortFolders(folders, folderSort), [folderSort, folders]);
 
@@ -875,26 +937,28 @@ export default function LibraryScreen() {
   );
   /** What a view of headings says where it has none, as a list and as a wall of covers alike. */
   const emptyOf = useMemo(() => {
+    // Searched, what was looked for; not, what the view has nothing of, each its own: the artists said there were no folders.
     const of = (kind: (typeof GROUPED_VIEWS)[number]) =>
-      kind === 'albums' ? (
+      searched.trim() ? (
+        <Text style={styles.empty}>{t.library.nothingMatches(searched)}</Text>
+      ) : kind === 'albums' ? (
         <Text style={styles.muted}>{t.library.noAlbums}</Text>
-      ) : (
-        <Text style={styles.empty}>
-          {query.trim()
-            ? t.library.nothingMatches(query)
-            : t.library.screen.noFolders}
-        </Text>
-      );
+      ) : kind === 'folders' ? (
+        <Text style={styles.empty}>{t.library.screen.noFolders}</Text>
+      ) : null;
     return { albums: of('albums'), artists: of('artists'), folders: of('folders') };
-  }, [query, styles, t]);
-  const tracksEmpty = useMemo(() => <Text style={styles.empty}>{t.library.nothingMatches(query)}</Text>, [query, styles, t]);
+  }, [searched, styles, t]);
+  // From the words a moment behind the box, as the lists are: from the box, every wall of covers behind them was told of each letter.
+  const tracksEmpty = useMemo(() => <Text style={styles.empty}>{t.library.nothingMatches(searched)}</Text>, [searched, styles, t]);
   const headingsEmpty = (kind: (typeof GROUPED_VIEWS)[number]) => emptyOf[kind];
 
   /*
     The tapes: the tracks the search left that are books, podcasts or long
     recordings, those part way through first. See `lib/tapes`.
   */
-  const places = useTapePlaces();
+  const tabInFront = useTabOpen();
+  // Only while the tapes are in front: a tape playing moves its place every few seconds, which drew the whole of this screen again for any view.
+  const places = useTapePlaces(view === 'tapes' && tabInFront);
   // Fetching them, on a phone that can fetch.
   const tapesFetchable = downloads != null;
   const seenTapes = visited.has('tapes');
@@ -940,8 +1004,9 @@ export default function LibraryScreen() {
       if (!show) singles.push(track);
       else episodes.set(show.feedUrl, [...(episodes.get(show.feedUrl) ?? []), track]);
     }
-    const asked = searched.trim().toLocaleLowerCase();
-    const shows = followed.filter((show) => !asked || episodes.has(show.feedUrl) || show.title.toLocaleLowerCase().includes(asked));
+    // Folded as every other search here is, and not by the phone's language, which lowered `I` to `ı` on a Turkish one.
+    const asked = foldForMatch(searched.trim());
+    const shows = followed.filter((show) => !asked || episodes.has(show.feedUrl) || foldForMatch(show.title).includes(asked));
     // When any of [tracks] was last listened to, and when the newest of them came: what the orders go by.
     const heardAt = (tracks: readonly EnrichedTrack[]) => tracks.reduce((latest, track) => Math.max(latest, places.get(track.id)?.at ?? 0), 0);
     const addedAt = (tracks: readonly EnrichedTrack[]) => tracks.reduce((latest, track) => Math.max(latest, track.addedAt ?? 0), 0);
@@ -966,7 +1031,7 @@ export default function LibraryScreen() {
     */
     const folders = new Map<string, EnrichedTrack[]>();
     for (const track of singles) {
-      const key = folderKey(track.folder ?? '').toLocaleLowerCase();
+      const key = folderKey(track.folder ?? '').toLowerCase();
       folders.set(key, [...(folders.get(key) ?? []), track]);
     }
     const placed = new Set<string>();
@@ -974,10 +1039,10 @@ export default function LibraryScreen() {
     const loose: Unit[] = [];
     for (const track of singles) {
       const folder = folderKey(track.folder ?? '');
-      const key = folder.toLocaleLowerCase();
+      const key = folder.toLowerCase();
       const together = folders.get(key) ?? [];
       const name = folder.split('/').pop() ?? '';
-      if (together.length < 2 || !name || (TAPE_FOLDERS as readonly string[]).includes(name.toLocaleLowerCase())) {
+      if (together.length < 2 || !name || (TAPE_FOLDERS as readonly string[]).includes(name.toLowerCase())) {
         loose.push({ title: track.title, added: track.addedAt ?? 0, heard: heardAt([track]), rows: [{ kind: 'tape', id: track.id, track }] });
         continue;
       }
@@ -1196,7 +1261,8 @@ export default function LibraryScreen() {
 
     // The whole record, and not the part of it a search has narrowed the
     // list to: what is looked up or given a cover is the record.
-    const record = findAlbum(albumsOf(music), key);
+    // From the records already worked out where there are any: [records] is the whole library's.
+    const record = findAlbum(records.length > 0 ? records : albumsOf(music), key);
     if (!record) return;
     const say = (message: string) => {
       setNote(message);
@@ -1237,6 +1303,15 @@ export default function LibraryScreen() {
   const sharedFolders = columnsOf('folders') > 1;
   const tracksColumns = columnsOf('tracks');
 
+  /*
+    What is chosen, to the list in front only: the others stand behind it
+    unseen, and a drag down the checkboxes drew all of their rows again at
+    every row it reached. Each is told afresh when it comes to the front.
+  */
+  const chosenTracks = view === 'tracks' ? selected : NONE_CHOSEN;
+  const chosenTapes = view === 'tapes' ? selected : NONE_CHOSEN;
+  const chosenHeadings = view !== 'tracks' && view !== 'tapes' ? selected : NONE_CHOSEN;
+
   // One for each view's list, so that changing view gives none of them a new one to draw its rows again with.
   const renderHeadingOf = useMemo(() => {
     const rowsOf = (records: boolean, shared: boolean) =>
@@ -1249,14 +1324,14 @@ export default function LibraryScreen() {
           tracks={item.tracks}
           cover={item.cover}
           shared={shared}
-          mark={selecting ? markOf(item.tracks, selected) : undefined}
+          mark={selecting ? markOf(item.tracks, chosenHeadings) : undefined}
           held={records ? t.library.albumMenu : undefined}
           onPress={onHeadingPress}
           onLongPress={onHeadingHeld}
         />
       );
     return { albums: rowsOf(true, sharedAlbums), artists: rowsOf(false, sharedArtists), folders: rowsOf(false, sharedFolders) };
-  }, [onHeadingHeld, onHeadingPress, selected, selecting, sharedAlbums, sharedArtists, sharedFolders, t]);
+  }, [chosenHeadings, onHeadingHeld, onHeadingPress, selecting, sharedAlbums, sharedArtists, sharedFolders, t]);
 
   /** Each matched tag with the tracks carrying it, gathered once per search. */
   const tagShuffles = useMemo(
@@ -1654,12 +1729,12 @@ export default function LibraryScreen() {
           onPlayNext={selecting ? undefined : playNextTrack}
           onAddToQueue={selecting ? undefined : queueTrack}
           selectable={selecting}
-          selected={selected.has(item.id)}
+          selected={chosenTracks.has(item.id)}
         />
         </PressRing>
       </SwipeRow>
     ),
-    [addToQueue, c, tracksColumns, onRowPress, openMenu, playNext, playNextTrack, queueTrack, ring, selected, selecting, styles, t, toggleSelected]
+    [addToQueue, c, chosenTracks, tracksColumns, onRowPress, openMenu, playNext, playNextTrack, queueTrack, ring, selecting, styles, t, toggleSelected]
   );
 
   const expandSeries = useCallback((show: SeriesShow) => {
@@ -1718,7 +1793,7 @@ export default function LibraryScreen() {
           onExpand={expandSeries}
           book={item.book}
           selectable={selecting}
-          selected={tickedOf(item.episodes, selected)}
+          selected={tickedOf(item.episodes, chosenTapes)}
           onSelect={() => selectSeries(item.episodes)}
         />
       ) : item.kind === 'episode' ? (
@@ -1730,7 +1805,7 @@ export default function LibraryScreen() {
             onPress={onTapePress}
             onLongPress={selecting ? toggleSelected : openMenu}
             selectable={selecting}
-            selected={selected.has(item.track.id)}
+            selected={chosenTapes.has(item.track.id)}
           />
           </PressRing>
         </View>
@@ -1744,11 +1819,11 @@ export default function LibraryScreen() {
           onPlay={playFromSeries}
           onLongPress={selecting ? toggleSelected : openMenu}
           selectable={selecting}
-          selected={selected.has(item.track.id)}
+          selected={chosenTapes.has(item.track.id)}
         />
         </PressRing>
       ),
-    [expandSeries, expanded, onTapePress, openMenu, openSeries, playFromSeries, places, ring, selectSeries, selected, selecting, styles, t, toggleSelected]
+    [chosenTapes, expandSeries, expanded, onTapePress, openMenu, openSeries, playFromSeries, places, ring, selectSeries, selecting, styles, t, toggleSelected]
   );
 
   /*
@@ -1860,7 +1935,8 @@ export default function LibraryScreen() {
     enabled: selecting,
     selected,
     onChange: setSelected,
-    top: topRoom,
+    // Under the header over the rows as well: searching, its record shortcuts and tags put the rows a row or more lower.
+    top: topRoom + headerHeight,
   });
   // What the tracks' list does at each step it scrolls besides moving its scroll bar: see `onScroll` on it.
   useEffect(() => {
@@ -1894,10 +1970,15 @@ export default function LibraryScreen() {
   const allChosen = useMemo(() => holdsAll(selected, shown), [selected, shown]);
   const selectAll = useCallback(() => setSelected(new Set(shown)), [shown]);
 
-  const chosen = useCallback(
-    () => library.filter((track) => selected.has(track.id)),
-    [library, selected]
-  );
+  // In the order they are shown in, and not in the order the phone read them: added to the queue, they come as they were picked from.
+  const chosen = useCallback(() => {
+    const seen: readonly EnrichedTrack[] =
+      view === 'tapes' ? tapeResults : grouped ? shownHeadings.flatMap((heading) => heading.tracks as EnrichedTrack[]) : listed;
+    // Once each, a song under two of its artists among them.
+    const placed = new Set<string>();
+    const inOrder = seen.filter((track) => selected.has(track.id) && !placed.has(track.id) && placed.add(track.id) != null);
+    return [...inOrder, ...library.filter((track) => selected.has(track.id) && !placed.has(track.id))];
+  }, [grouped, library, listed, selected, shownHeadings, tapeResults, view]);
 
   const queueSelected = useCallback(() => {
     const tracks = chosen();
@@ -1964,23 +2045,16 @@ export default function LibraryScreen() {
 
   if (screen.kind === 'loading') {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={c.text} />
+      <View style={styles.screen}>
+        <ScreenState kind="loading" />
       </View>
     );
   }
 
   if (screen.kind === 'denied' || screen.kind === 'error') {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <Text style={styles.body}>
-          {screen.kind === 'denied'
-            ? t.library.screen.needsAccess
-            : screen.message}
-        </Text>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void load(true)}>
-          <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
-        </Pressable>
+      <View style={styles.screen}>
+        <ScreenState kind="error" text={screen.kind === 'denied' ? t.library.screen.needsAccess : screen.message} onRetry={() => void load(true)} />
       </View>
     );
   }
@@ -2051,12 +2125,11 @@ export default function LibraryScreen() {
   });
   const shelves =
     trackLook === 'shelves' && !asked && !selecting ? (
-      <Shelves tracks={listed} counts={counts} played={played} onPlay={playFrom} onHold={openMenu} />
+      <Shelves tracks={listed} counts={counts} played={played} onPlay={playFrom} onHold={openMenu} ring={ring} />
     ) : null;
   const views = (
     <Segmented
       role="tab"
-      size="compact"
       accessibilityLabel={t.library.screen.viewSwitch}
       // On a row of its own, the views share the width evenly instead of each taking what its word needs.
       layout={stacked ? 'fill' : 'fit'}
@@ -2116,7 +2189,11 @@ export default function LibraryScreen() {
         Nor a right edge while the panel is down that side, for the reason
         there is no left one: the panel keeps clear of the edge itself.
       */
-      edges={landscape ? (sides.right > 0 ? RIGHT_EDGE : NO_EDGES) : UPRIGHT_EDGES}>
+      /*
+        Nor a top edge upright in a theme of glass, where the top runs on up
+        behind the clock and keeps clear of it itself: see `useLaidOver`.
+      */
+      edges={landscape ? (sides.right > 0 ? RIGHT_EDGE : NO_EDGES) : top.clock > 0 ? SIDE_EDGES : UPRIGHT_EDGES}>
       {/* All of the screen the list picker is laid over, when it is. */}
       <GlassScene scene={scene}>
       <Behind veiled={menuVeiled} style={landscape ? styles.sideways : styles.upright}>
@@ -2126,11 +2203,16 @@ export default function LibraryScreen() {
           // its own to be found.
           collapsable={false}
           /*
-            Sideways, kept to itself: put out of focus under an open record, it
-            spread past its own edge by as far as it was blurred, and a dark band
-            of it showed down the side of the panel of what is playing.
+            Sideways, kept to itself while a record is open: put out of focus
+            under one, it spread past its own edge by as far as it was blurred,
+            and a dark band of it showed down the side of the panel of what is
+            playing. Only then: cutting it to its edge at all times had the
+            phone draw the whole of it once more, apart, at every frame, and
+            coming back to the library sideways took a tenth of a second a
+            frame where upright it took a sixtieth (measured on the phone,
+            20 November 2026: half the frames late against three in a hundred).
           */
-          style={[styles.middle, landscape && styles.middleKept]}>
+          style={[styles.middle, landscape && opened != null && styles.middleKept]}>
         {/*
           Everything a record opens over. While one is open none of it is
           there to be touched or read out: it is covered, and a screen reader
@@ -2138,8 +2220,8 @@ export default function LibraryScreen() {
           something nobody can see.
         */}
         <Veiled
-          // Out of focus under an open record, where screens are glass.
-          blur={opened ? glass : 0}
+          // Out of focus under an open record, where screens are glass; covered by the record's own page instead while held still.
+          blur={opened && !still ? glass : 0}
           style={styles.upright}
           pointerEvents={opened ? 'none' : 'auto'}
           importantForAccessibility={opened ? 'no-hide-descendants' : 'auto'}
@@ -2151,6 +2233,7 @@ export default function LibraryScreen() {
           // What the safe area used to do for the whole screen, asked for by
           // the one part of it that is actually under the clock.
           landscape && { paddingTop: insets.top + 8 },
+          top.clock > 0 && { paddingTop: top.clock + SPACE.s },
           over && styles.headerOver,
           frosted && styles.headerClear,
         ]}
@@ -2244,19 +2327,17 @@ export default function LibraryScreen() {
           <View style={styles.bulkBar}>
             <Text style={styles.bulkCount}>{(view === 'tapes' ? t.library.tapes.selected : t.library.screen.selected)(selected.size)}</Text>
             <View style={styles.bulkActions}>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={styles.bulkAction}
+              <Button
+                label={allChosen ? t.common.clear : t.common.selectAll}
+                kind="outline"
+                shape="pill"
+                size="small"
                 onPress={() => {
                   haptic('choices', 'click');
                   if (allChosen) setSelected(new Set());
                   else selectAll();
-                }}>
-                <Text style={styles.bulkLabel}>
-                  {allChosen ? t.common.clear : t.common.selectAll}
-                </Text>
-              </Pressable>
+                }}
+              />
               {view === 'tapes' ? (
                 /*
                   A tape's, not a song's: played, queued, marked heard or
@@ -2264,112 +2345,110 @@ export default function LibraryScreen() {
                   are not looked up, so none of that is offered.
                 */
                 <>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={pressed}
-                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                  <Button
+                    label={t.common.play}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     disabled={selected.size === 0}
-                    onPress={playSelected}>
-                    <Text style={styles.bulkLabel}>{t.common.play}</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={pressed}
-                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    onPress={playSelected}
+                  />
+                  <Button
+                    label={t.common.addToQueue}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     disabled={selected.size === 0}
-                    onPress={queueSelected}>
-                    <Text style={styles.bulkLabel}>{t.common.addToQueue}</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={pressed}
-                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    onPress={queueSelected}
+                  />
+                  <Button
+                    label={t.library.tapes.markPlayed}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     disabled={selected.size === 0}
-                    onPress={() => markSelected(true)}>
-                    <Text style={styles.bulkLabel}>{t.library.tapes.markPlayed}</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={pressed}
-                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    onPress={() => markSelected(true)}
+                  />
+                  <Button
+                    label={t.library.tapes.markUnplayed}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     disabled={selected.size === 0}
-                    onPress={() => markSelected(false)}>
-                    <Text style={styles.bulkLabel}>{t.library.tapes.markUnplayed}</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={pressed}
-                    style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                    onPress={() => markSelected(false)}
+                  />
+                  <Button
+                    label={t.common.delete}
+                    kind="danger"
+                    shape="pill"
+                    size="small"
                     disabled={selected.size === 0}
-                    onPress={() => actions.run('delete')}>
-                    <Text style={styles.bulkDestructive}>{t.common.delete}</Text>
-                  </Pressable>
+                    onPress={() => actions.run('delete')}
+                  />
                 </>
               ) : (
               <>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+              <Button
+                label={t.common.addToQueue}
+                kind="outline"
+                shape="pill"
+                size="small"
                 disabled={selected.size === 0}
-                onPress={queueSelected}>
-                <Text style={styles.bulkLabel}>{t.common.addToQueue}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                onPress={queueSelected}
+              />
+              <Button
+                label={t.library.screen.addToList}
+                kind="outline"
+                shape="pill"
+                size="small"
                 disabled={selected.size === 0}
-                onPress={() => addToList([...selected], { favorites: true })}>
-                <Text style={styles.bulkLabel}>{t.library.screen.addToList}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+                onPress={() => addToList([...selected], { favorites: true })}
+              />
+              <Button
+                label={t.library.screen.addTag}
+                kind="outline"
+                shape="pill"
+                size="small"
                 disabled={selected.size === 0}
-                onPress={() => actions.run('addTag')}>
-                <Text style={styles.bulkLabel}>{t.library.screen.addTag}</Text>
-              </Pressable>
+                onPress={() => actions.run('addTag')}
+              />
               {/* Not offered where it cannot be done: Android 10, or a native
                   build from before it could. */}
               {canWriteFiles() ? (
-              <Pressable
-                android_ripple={pressed}
-                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
-                disabled={selected.size === 0}
-                accessibilityRole="button"
+              <Button
+                label={t.library.screen.writeToFiles}
+                kind="outline"
+                shape="pill"
+                size="small"
                 accessibilityLabel={t.library.screen.writeToFilesSpoken}
-                onPress={() => actions.run('write')}>
-                <Text style={styles.bulkLabel}>{t.library.screen.writeToFiles}</Text>
-              </Pressable>
+                disabled={selected.size === 0}
+                onPress={() => actions.run('write')}
+              />
               ) : null}
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
+              <Button
+                label={t.common.delete}
+                kind="danger"
+                shape="pill"
+                size="small"
                 disabled={selected.size === 0}
-                onPress={() => actions.run('delete')}>
-                <Text style={styles.bulkDestructive}>{t.common.delete}</Text>
-              </Pressable>
+                onPress={() => actions.run('delete')}
+              />
               {/* Everything, these included, from looking up to resetting. */}
-              <Pressable
-                accessibilityRole="button"
+              <Button
+                label={t.details.selection.more}
+                kind="outline"
+                shape="pill"
+                size="small"
                 accessibilityHint={t.details.selection.moreHint}
-                android_ripple={pressed}
-                style={[styles.bulkAction, selected.size === 0 && styles.bulkDisabled]}
                 disabled={selected.size === 0}
-                onPress={actions.open}>
-                <Text style={styles.bulkLabel}>{t.details.selection.more}</Text>
-              </Pressable>
+                onPress={actions.open}
+              />
               </>
               )}
             </View>
           </View>
         ) : null}
-        {/* Every view says how much it holds, the records too; only the rack,
-            sideways, has no room for the line unless there is a note to say. */}
-        {racked && note == null ? null : (
+        {/* Every view says how much it holds, the rack of records too (23 Nov, Kayra). */}
         <View style={styles.meta}>
           <Text style={styles.metaText} numberOfLines={note != null ? 3 : 1}>
             {/* Whatever the list picker last did is said here, since adding
@@ -2387,11 +2466,13 @@ export default function LibraryScreen() {
           </Text>
           {/*
             The whole library, in a new order, from the line that says how
-            much of it there is. Only on the tracks, and not while a note is
-            on the line or tracks are being ticked: then the line is saying
-            something else, and this is not what a tap there would mean.
+            much of it there is: on every view of the music, the records, the
+            artists and the folders as well as the tracks (23 Nov, Kayra).
+            Not while a note is on the line or tracks are being ticked: then
+            the line is saying something else, and this is not what a tap
+            there would mean.
           */}
-          {view === 'tracks' && note == null && !selecting && music.length > 1 ? (
+          {view !== 'tapes' && note == null && !selecting && music.length > 1 ? (
             <PressList menu={shuffleMenu}>
               <Pressable
                 android_ripple={pressed}
@@ -2452,14 +2533,13 @@ export default function LibraryScreen() {
               ) : null}
             </View>
           ) : note == null && !selecting ? (
-            // Its room kept in the other views, unseen, so the line is as tall in all of them and the list under it starts in the same place.
+            // Its room kept with nothing to shuffle, unseen, so the line is as tall as ever and the list under it starts in the same place.
             <View style={[styles.shuffleAll, styles.unseen]} pointerEvents="none" importantForAccessibility="no-hide-descendants">
               <ShuffleIcon size={15} color={c.accent} />
               <Text style={styles.shuffleAllLabel}>{t.library.screen.shuffleAll}</Text>
             </View>
           ) : null}
         </View>
-        )}
         {/* The offer to look the files up, a lookup under way, or the one tip:
             for a newcomer, and out of the way while tracks are being chosen. */}
         {/* The music's offer and tip, about songs: not over the tapes, which are not looked up and are not songs. */}
@@ -2493,9 +2573,10 @@ export default function LibraryScreen() {
             <Curtain key={kind} shut={kind !== view || (kind === 'albums' && racked)} warm={warming(kind)} style={styles.pane}>
               {kind === 'artists' && artistMap && !selecting ? (
                 <ArtistMap
+                  inSight={view === 'artists' && tabOpen}
                   register={registerMap}
                   artists={artists}
-                  query={query}
+                  query={searched}
                   top={topRoom}
                   bottom={under.bottom}
                   onOpen={onHeadingPress}
@@ -2535,7 +2616,7 @@ export default function LibraryScreen() {
                 columnWrapperStyle={columnsOf(kind) > 1 ? styles.columnRow : undefined}
                 keyExtractor={(heading) => heading.id}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
+                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: SPACE.s + under.bottom }]}
                 // Exact with one column and left to be measured with two, for the
                 // reason given at length on the track list below.
                 getItemLayout={
@@ -2585,6 +2666,7 @@ export default function LibraryScreen() {
                 bottom={under.bottom}
                 onPress={wallOf[kind].onPress}
                 onLongPress={wallOf[kind].onLongPress}
+                holdLabel={kind === 'albums' && !selecting ? t.library.albumMenu : t.library.row.select}
               />
               )}
             </Curtain>
@@ -2623,6 +2705,7 @@ export default function LibraryScreen() {
                 showsVerticalScrollIndicator={false}
                 onLayout={(event) => {
                   dragWidth(event.nativeEvent.layout.width);
+                  setTracksHeight(event.nativeEvent.layout.height);
                   fastTracks.onLayout(event);
                 }}
                 onContentSizeChange={fastTracks.onContentSizeChange}
@@ -2636,7 +2719,7 @@ export default function LibraryScreen() {
                 columnWrapperStyle={tracksColumns > 1 ? styles.columnRow : undefined}
                 keyExtractor={(track) => track.id}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
+                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: SPACE.s + under.bottom }]}
                 // Where the scroll bar stands is followed from here natively, and the rest told as well: see `tracksScrolled`.
                 onScroll={fastTracks.onScrollEvent}
                 scrollEventThrottle={16}
@@ -2671,7 +2754,7 @@ export default function LibraryScreen() {
                 }
                 // Covers are read out of the files, so keep that to what is on screen.
                 initialNumToRender={12 * tracksColumns}
-                windowSize={7}
+                windowSize={windowPast(topRoom + headerHeight, tracksHeight)}
                 // Left to the list to measure, clipping guesses at what is off screen
                 // from the same frames, and guesses wrong in the same way.
                 ListHeaderComponent={
@@ -2748,6 +2831,7 @@ export default function LibraryScreen() {
                 bottom={under.bottom}
                 onPress={wallTrackPress}
                 onLongPress={wallTrackLongPress}
+                holdLabel={t.library.trackMenu}
               />
             </Curtain>
           ) : null}
@@ -2761,11 +2845,12 @@ export default function LibraryScreen() {
                 ref={listOf.refs[TAPES]}
                 keyExtractor={(row) => row.id}
                 keyboardShouldPersistTaps="handled"
-                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: 8 + under.bottom }]}
+                contentContainerStyle={[styles.list, { paddingTop: topRoom, paddingBottom: SPACE.s + under.bottom }]}
                 initialNumToRender={12}
                 windowSize={7}
                 renderItem={renderTape}
                 ListHeaderComponent={tapeFilterBar}
+                ListFooterComponent={searchTapesElsewhere}
                 ListEmptyComponent={
                   <Text style={styles.empty}>{query.trim() ? t.library.nothingMatches(query) : t.library.tapes.empty(`${libraryRoot()}/Tapes`)}</Text>
                 }
@@ -2784,7 +2869,7 @@ export default function LibraryScreen() {
         <Curtain shut={!racked} warm={warming('albums')} style={[styles.pane, { paddingTop: laidTop }]}>
           {/* Two fingers draw the rack further off, to see more of it, and back near: see `CoverFlow`. */}
             {landscape ? (
-              <CoverFlow key={rackOrder} ref={shelf} albums={rackAlbums} onOpen={openAlbum} onHold={onSleeveHeld} initial={rackIndex} onSettle={settleRack} />
+              <CoverFlow key={rackOrder} ref={shelf} albums={rackAlbums} onOpen={openAlbum} onHold={onSleeveHeld} initial={rackIndex} onSettle={settleRack} inSight={racked || warming('albums')} />
             ) : (
               /*
                 Upright, the same rack across the top, its name said under it
@@ -2801,6 +2886,7 @@ export default function LibraryScreen() {
                     onHold={onSleeveHeld}
                     initial={rackIndex}
                     onSettle={settleRack}
+                    inSight={racked || warming('albums')}
                   />
                 </View>
                 <RackFront
@@ -2848,9 +2934,6 @@ export default function LibraryScreen() {
           />
         ) : null}
         </View>
-        {/* The bar becomes a panel down the right, so the middle keeps its
-            width and the height goes to the list. */}
-        <NowPlayingBar column={landscape} />
       </Behind>
       </GlassScene>
 
@@ -2873,22 +2956,59 @@ export default function LibraryScreen() {
 const RIGHT_EDGE = ['right'] as const;
 const NO_EDGES = [] as const;
 const UPRIGHT_EDGES = ['top', 'left', 'right'] as const;
+const SIDE_EDGES = ['left', 'right'] as const;
+
+/**
+ * The words searched for in the library, searched for on YouTube at a press:
+ * songs on the Search tab ([to] `/search`), tapes on the page that adds them
+ * (`/tapes-add`), each of which looks for [words] as it is opened.
+ */
+function SearchYouTube({ words, to }: { words: string; to: '/search' | '/tapes-add' }) {
+  const t = useT();
+  const c = useColours();
+  const styles = useStyles();
+  const pressed = usePressed();
+  const router = useRouter();
+  // A new [run] at every press, so that the same words asked again are looked for again.
+  const go = () => {
+    const params = { q: words, run: String(Date.now()) };
+    if (to === '/search') router.navigate({ pathname: to, params });
+    else router.push({ pathname: to, params });
+  };
+  return (
+    <View style={styles.elsewhere}>
+      <Pressable
+        accessibilityRole="button"
+        android_ripple={pressed}
+        style={styles.tagAction}
+        onPress={go}>
+        <View style={styles.elsewhereIcon}>
+          <SearchIcon size={14} color={c.onPrimary} />
+        </View>
+        <Text style={styles.tagActionLabel} numberOfLines={2}>
+          {t.library.screen.searchYouTube(words)}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
 const useStyles = makeStyles((c) => StyleSheet.create({
+  playingBadge: { position: 'absolute', alignItems: 'center', justifyContent: 'center' },
   screen: { flex: 1, ...scene(c) },
   upright: { flex: 1 },
   sideways: { flex: 1, flexDirection: 'row' },
   middle: { flex: 1, minWidth: 0 },
   middleKept: { overflow: 'hidden' },
-  centered: { alignItems: 'center', justifyContent: 'center', gap: 16, padding: 24 },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: SPACE.l, padding: SPACE.xl },
 
-  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, gap: 12 },
+  header: { paddingHorizontal: SPACE.l, paddingTop: SPACE.s, paddingBottom: SPACE.m, gap: SPACE.m },
   // Each row takes an equal share of the width so the pair lines up.
-  columnRow: { gap: 8 },
+  columnRow: { gap: SPACE.s },
   swipeShared: { flex: 1, minWidth: 0 },
   listWrapper: { flex: 1 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  headerTight: { paddingBottom: 8 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  headerTight: { paddingBottom: SPACE.s },
   // Over the list in a theme of glass; nothing at all in any other.
   headerOver: topGlass(c),
   /** Its fill left to `Frost`, which draws it over the blur. */
@@ -2919,10 +3039,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   viewsSlot: { overflow: 'hidden', flexShrink: 0 },
   // Three or four words beside the box, sideways: each gives up a little of
   // its margin so the box keeps a width worth typing in.
-  viewTight: { paddingHorizontal: 8 },
+  viewTight: { paddingHorizontal: SPACE.s },
   // The cover stands in for the play button the tag rows carry, so the two
   // kinds of shortcut line up rather than each finding their own left edge.
-  albumActionIcon: { width: 22, height: 22, borderRadius: 4, overflow: 'hidden' },
+  albumActionIcon: { width: 22, height: 22, borderRadius: RADIUS.check, overflow: 'hidden' },
   searchGrow: { flex: 1 },
   // Clips the button on its way out, exactly as the switch's slot does; the
   // button inside keeps the width it was given so that nothing inside it
@@ -2934,101 +3054,89 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.surface,
-    borderRadius: 9,
-    paddingVertical: 5,
+    borderRadius: RADIUS.control,
+    paddingVertical: SPACE.xs,
     ...outlined(c),
   },
-  sortLabel: { color: c.textFaint, fontSize: 8.5, letterSpacing: 1 },
+  sortLabel: { color: c.textFaint, fontSize: TYPE.label, letterSpacing: 1 },
   // The switch and the button beside it, as tall as each other.
-  viewsRow: { flexDirection: 'row', alignItems: 'stretch', gap: 6 },
+  viewsRow: { flexDirection: 'row', alignItems: 'stretch', gap: SPACE.xs },
   viewsGrow: { flex: 1, minWidth: 0 },
   // No room of its own above and below: the switch beside it says how tall the two are.
   lookButton: { gap: 1, paddingVertical: 0 },
   views: { height: CONTROL_HEIGHT },
   lookOff: { opacity: 0.35 },
-  sortValue: { color: c.text, fontSize: 12.5, fontWeight: '600' },
-  selectButton: { padding: 8 },
-  bulkBar: { gap: 8, paddingTop: 4 },
-  bulkCount: { color: c.accent, fontSize: 12 },
-  bulkActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  bulkAction: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.borderStrong,
-  },
+  sortValue: { color: c.text, fontSize: TYPE.hint, fontWeight: '600' },
+  selectButton: { padding: SPACE.s },
+  bulkBar: { gap: SPACE.s, paddingTop: SPACE.xs },
+  bulkCount: { color: c.accent, fontSize: TYPE.hint },
+  bulkActions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
   bulkDisabled: { opacity: 0.35 },
-  bulkLabel: { color: c.text, fontSize: 13 },
-  bulkDestructive: { color: c.danger, fontSize: 13 },
-  meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  metaText: { color: c.textFaint, fontSize: 12, flexShrink: 1 },
-  shuffleAll: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
-  shuffleAllLabel: { color: c.accent, fontSize: 12.5 },
+  meta: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m },
+  metaText: { color: c.textFaint, fontSize: TYPE.hint, flexShrink: 1 },
+  shuffleAll: { flexDirection: 'row', alignItems: 'center', gap: SPACE.xs, borderRadius: RADIUS.cover, paddingHorizontal: SPACE.xs, paddingVertical: SPACE.xxs },
+  shuffleAllLabel: { color: c.accent, fontSize: TYPE.hint },
   // A list's name can be long; the line it shares has the count of tracks to keep.
   shuffleNamed: { flexShrink: 1, maxWidth: 160 },
-  shuffleStrut: { width: 0, marginLeft: -5 },
-  tapeActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  tapeEpisode: { paddingLeft: 24 },
-  tapeFiltersOut: { marginBottom: 4 },
-  tapeFilters: { gap: 8, paddingHorizontal: 16, paddingVertical: 6 },
+  shuffleStrut: { width: 0, marginLeft: -SPACE.xs },
+  tapeActions: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
+  tapeEpisode: { paddingLeft: SPACE.xl },
+  tapeFiltersOut: { marginBottom: SPACE.xs },
+  tapeFilters: { gap: SPACE.s, paddingHorizontal: SPACE.l, paddingVertical: SPACE.xs },
   tapeFilter: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: SPACE.xs,
     backgroundColor: c.surfaceRaised,
-    borderRadius: 999,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    borderRadius: RADIUS.pill,
+    paddingVertical: SPACE.s,
+    paddingHorizontal: SPACE.m,
     overflow: 'hidden',
     ...outlinedClip(c),
   },
   tapeFilterOn: { backgroundColor: c.primary, ...outlinedClip(c, c.primary) },
-  tapeFilterLabel: { color: c.textSecondary, fontSize: 13 },
-  tapeFilterLabelOn: { color: c.onPrimary, fontSize: 13, fontWeight: '600' },
-  tapeFilterCount: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
-  tapeFilterCountOn: { color: c.onPrimary, fontSize: 12, opacity: 0.75, fontVariant: ['tabular-nums'] },
+  tapeFilterLabel: { color: c.textSecondary, fontSize: TYPE.small },
+  tapeFilterLabelOn: { color: c.onPrimary, fontSize: TYPE.small, fontWeight: '600' },
+  tapeFilterCount: { color: c.textFaint, fontSize: TYPE.hint, fontVariant: ['tabular-nums'] },
+  tapeFilterCountOn: { color: c.onPrimary, fontSize: TYPE.hint, opacity: 0.75, fontVariant: ['tabular-nums'] },
   unseen: { opacity: 0 },
-  links: { flexDirection: 'row', gap: 16 },
-  link: { color: c.accent, fontSize: 13 },
+  links: { flexDirection: 'row', gap: SPACE.l },
 
-  list: { paddingBottom: 8 },
-  tagActions: { paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
-  tapesHeading: { color: c.textFaint, fontSize: 11, fontWeight: '600', letterSpacing: 0.8, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 6 },
+  list: { paddingBottom: SPACE.s },
+  tagActions: { paddingHorizontal: SPACE.l, paddingBottom: SPACE.s, gap: SPACE.s },
+  tapesHeading: { color: c.textFaint, fontSize: TYPE.label, fontWeight: '600', letterSpacing: 0.8, paddingHorizontal: SPACE.l, paddingTop: SPACE.l, paddingBottom: SPACE.xs },
   tagAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: SPACE.s,
     backgroundColor: c.surface,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 11,
+    borderRadius: RADIUS.control,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.m,
     ...outlined(c),
   },
   tagActionIcon: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: RADIUS.pill,
     backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tagActionLabel: { color: c.text, fontSize: 14, flex: 1 },
-  elsewhere: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 },
+  tagActionLabel: { color: c.text, fontSize: TYPE.small, flex: 1 },
+  elsewhere: { paddingHorizontal: SPACE.l, paddingTop: SPACE.m, paddingBottom: SPACE.s },
   elsewhereIcon: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: RADIUS.pill,
     backgroundColor: c.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  tagActionCount: { color: c.textFaint, fontSize: 12, fontVariant: ['tabular-nums'] },
-  empty: { color: c.textFaint, fontSize: 14, textAlign: 'center', padding: 32 },
+  tagActionCount: { color: c.textFaint, fontSize: TYPE.hint, fontVariant: ['tabular-nums'] },
+  empty: { color: c.textFaint, fontSize: TYPE.small, textAlign: 'center', padding: SPACE.xl },
 
-  body: { color: c.text, fontSize: 16, textAlign: 'center' },
-  muted: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
-  button: { backgroundColor: c.surfaceRaised, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, ...outlined(c) },
-  buttonLabel: { color: c.text, fontSize: 15 },
+  body: { color: c.text, fontSize: TYPE.heading, textAlign: 'center' },
+  muted: { color: c.textMuted, fontSize: TYPE.small, textAlign: 'center' },
 
 }));

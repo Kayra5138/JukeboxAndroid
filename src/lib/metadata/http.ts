@@ -313,6 +313,8 @@ export async function request<T>(
     if (signal?.aborted) throw abortError();
     if (timedOut) throw networkError(`${service} did not answer in time`, true);
     if (statusOf(error) != null) throw error;
+    // An answer that came and could not be read is not a connection that failed: said as one, it was taken for being offline.
+    if (error instanceof SyntaxError) throw new Error(`${service} sent an answer that could not be read`);
     // fetch rejects with a TypeError when it never reached the host, which is
     // the only way "offline" ever presents itself.
     throw networkError(`${service} could not be reached`);

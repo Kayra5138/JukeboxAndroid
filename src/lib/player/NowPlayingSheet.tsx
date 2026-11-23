@@ -1,20 +1,28 @@
 import {
+  Component,
   createContext,
   use,
   useCallback,
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from 'react';
 import { Animated, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
+import { InWindow } from '../../components/Floating';
 import { PlayerSheet } from '../../components/PlayerSheet';
 import { useColours } from '../theme/index';
 import { underGlass, Veiled } from '../theme/Veil';
-import { useCoveredByRoute } from './overlayRoutes';
-import { motionReduced } from '../ui/motion';
+import { motionReduced, useMotionReduced } from '../ui/motion';
+import { createStore } from '../ui/store';
+import { askPlayerOpening, type PlayerOpening } from './playerOpening';
+import { noteError } from '../support/errorLogStore';
+import { BackAsleep } from '../ui/back';
+import { Curtain } from '../../components/Curtain';
+import { CoverWatch, leaveOverPlayer, onComingBack, putAway, forgetOverPlayer, OverPlayer, useCoveredPlayer } from './overPlayer';
 
 /**
  * Hosts the now-playing screen as a layer over whatever is on screen.
@@ -24,7 +32,17 @@ import { motionReduced } from '../ui/motion';
  * back once the transition completed. Keeping it in the same tree means the
  * library is simply behind it.
  */
+/** How long the player takes to go down as a page it opened comes: a little quicker than it rises. */
+const LEAVE_MS = 220;
+
 const OpenContext = createContext<(() => void) | null>(null);
+
+/** Whether the player is up and in sight, for what is drawn under it to stop moving meanwhile. */
+const up = createStore(false);
+
+export function usePlayerUp(): boolean {
+  return useSyncExternalStore(up.subscribe, up.get);
+}
 
 export function useOpenPlayer(): () => void {
   const open = use(OpenContext);
@@ -32,15 +50,40 @@ export function useOpenPlayer(): () => void {
   return open;
 }
 
+
+/** The player opened with its queue up, or its words in place of the cover: for the bar held (`ui/miniPlayer.ts`). */
+export function useOpenPlayerWith(): (what: PlayerOpening) => void {
+  const open = useOpenPlayer();
+  return useCallback(
+    (what: PlayerOpening) => {
+      askPlayerOpening(what);
+      open();
+    },
+    [open]
+  );
+}
+
 export function NowPlayingHost({ children }: { children: ReactNode }) {
   const { height } = useWindowDimensions();
-  const covered = useCoveredByRoute();
   const glass = underGlass(useColours());
+  const still = useMotionReduced();
   const [mounted, setMounted] = useState(false);
-  const rise = useRef(new Animated.Value(0)).current;
+  const [rise] = useState(() => new Animated.Value(0));
+  // Hidden under a page it opened, and there again when back comes down to the page under that: see `overPlayer.ts`.
+  const covered = useCoveredPlayer() && mounted;
 
-  const open = useCallback(() => setMounted(true), []);
-  const close = useCallback(() => setMounted(false), []);
+  // From its bar while hidden under a page, it is shown over that page, and the page is left as it is.
+  const open = useCallback(() => {
+    forgetOverPlayer();
+    setMounted(true);
+  }, []);
+  useEffect(() => {
+    up.set(mounted && !covered);
+  }, [mounted, covered]);
+  const close = useCallback(() => {
+    forgetOverPlayer();
+    setMounted(false);
+  }, []);
 
   /*
     The home screen widget's cover opens the player. An app that press
@@ -61,7 +104,40 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
     open player back below the bottom edge to slide up again.
   */
   const heightRef = useRef(height);
-  heightRef.current = height;
+  useEffect(() => {
+    heightRef.current = height;
+  }, [height]);
+
+  /*
+    A page opened from it: the page comes, and the player goes down as it
+    does when it is put away, and is put away under the page once it is
+    down. Back down to the page it was over, it comes up again as it was.
+    See `overPlayer.ts`.
+  */
+  const overPlayer = useCallback(
+    (go: () => void) => {
+      leaveOverPlayer(go);
+      if (motionReduced()) {
+        putAway();
+        return;
+      }
+      Animated.timing(rise, { toValue: heightRef.current, duration: LEAVE_MS, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) putAway();
+      });
+    },
+    [rise]
+  );
+  useEffect(
+    () =>
+      onComingBack(() => {
+        if (motionReduced()) {
+          rise.setValue(0);
+          return;
+        }
+        Animated.timing(rise, { toValue: 0, duration: 260, useNativeDriver: true }).start();
+      }),
+    [rise]
+  );
 
   useEffect(() => {
     if (!mounted) return;
@@ -100,29 +176,59 @@ export function NowPlayingHost({ children }: { children: ReactNode }) {
         otherwise walked on through every row of the list it is covering.
       */}
       <Veiled
-        blur={mounted && !covered ? glass : 0}
+        // Held still, the player's page is not glass but the page itself (`PlayerSheet`), and nothing need be blurred.
+        blur={mounted && !covered && !still ? glass : 0}
         style={styles.under}
         importantForAccessibility={mounted && !covered ? 'no-hide-descendants' : 'auto'}>
         {children}
       </Veiled>
+      <CoverWatch />
       {mounted ? (
         <Animated.View
-          /*
-            `display: none` rather than opacity or moving it off screen: it has
-            to stop taking touches as well as stop being seen, and it must not
-            animate on the way out -- the route sliding in over it is the
-            transition, and a second one underneath reads as a glitch.
-          */
-          style={[
-            StyleSheet.absoluteFill,
-            { transform: [{ translateY: rise }] },
-            covered && styles.hidden,
-          ]}>
-          <PlayerSheet onClose={close} />
+          style={[StyleSheet.absoluteFill, { transform: [{ translateY: rise }] }]}
+          pointerEvents={covered ? 'none' : 'auto'}
+          importantForAccessibility={covered ? 'no-hide-descendants' : 'auto'}>
+          {/* Hidden, it is not drawn at all, and back is the page's. */}
+          <Curtain shut={covered} style={StyleSheet.absoluteFill}>
+            <BackAsleep value={covered}>
+              <OverPlayer value={overPlayer}>
+                <PlayerFault onFault={close}>
+                  {/* Over the bars itself: what it asks is a window over it, not a card in the tab under it (`Floating`). */}
+                  <InWindow value>
+                    <PlayerSheet onClose={close} />
+                  </InWindow>
+                </PlayerFault>
+              </OverPlayer>
+            </BackAsleep>
+          </Curtain>
         </Animated.View>
       ) : null}
     </OpenContext>
   );
 }
 
-const styles = StyleSheet.create({ hidden: { display: 'none' }, under: { flex: 1 } });
+/**
+ * The player, caught where it throws while drawing: it closes, with what was
+ * thrown written down for the report, and the library under it goes on as
+ * it was. Under only the app's own boundary, a fault in the player put the
+ * whole app away behind the page that says something went wrong.
+ */
+class PlayerFault extends Component<{ children: ReactNode; onFault: () => void }, { fallen: boolean }> {
+  state = { fallen: false };
+
+  static getDerivedStateFromError() {
+    return { fallen: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('The player could not be drawn', error);
+    noteError('render', error);
+    this.props.onFault();
+  }
+
+  render() {
+    return this.state.fallen ? null : this.props.children;
+  }
+}
+
+const styles = StyleSheet.create({ under: { flex: 1 } });

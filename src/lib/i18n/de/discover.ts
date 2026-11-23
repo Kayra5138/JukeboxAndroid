@@ -10,6 +10,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Für dich zusammengestellt',
     refresh: 'Aktualisieren',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Zum Aktualisieren schieben',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Zum Aktualisieren loslassen',
     updated: (date) => `Aktualisiert am ${date}`,
 
     familiar: (because) => `Mehr von deinen Künstlern · ${because}`,
@@ -49,7 +53,6 @@ export const discover: Strings['discover'] = {
     failed: 'Download fehlgeschlagen · zum Wiederholen tippen',
     needsBuild: 'Braucht die aktualisierte App',
     waitingWifi: 'Wartet auf WLAN · zum Herunterladen tippen',
-    percent: (percent) => `${format.number(percent)}${NNBSP}%`,
     gettingReady: 'Wird heruntergeladen',
     hint: 'Spielt den Song ab und lädt ihn vorher herunter, falls nötig',
     nowPlaying: (title) => `${title} läuft`,
@@ -155,7 +158,8 @@ export const discover: Strings['discover'] = {
     findingLater: 'Einige Songs ließen sich gerade nicht prüfen. Entdecken versucht es später erneut.',
     buildingArtists: (done, total) => `Songs werden gesucht · ${ofArtists(done, total)}`,
     preparing: (ready, target) =>
-      `Eine neue Liste ist unterwegs · ${format.number(ready)} von ${format.number(target)} ${oneOrMany(target, 'Song', 'Songs')} bereit.${ready > 0 ? ' Aktualisiere erneut, um sie jetzt zu sehen.' : ''}`,
+      `Eine neue Liste ist unterwegs · ${format.number(ready)} von ${format.number(target)} ${oneOrMany(target, 'Song', 'Songs')} bereit.`,
+    showNow: 'Jetzt zeigen',
     offline: 'Keine Verbindung. Deine Liste bleibt; neue Songs werden gesucht, sobald wieder eine besteht.',
     offlineEmpty: 'Keine Verbindung. Entdecken erstellt deine Liste, sobald wieder eine besteht.',
     noLibrary: 'Entdecken geht von der Musik auf diesem Gerät aus und hat noch keine gefunden.',

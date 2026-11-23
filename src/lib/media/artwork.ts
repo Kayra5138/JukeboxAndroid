@@ -4,6 +4,7 @@ import { artworkRevision, subscribeArtwork } from './artworkEvents';
 
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
 import { isEmbeddedPicture, isStoredCover } from '../metadata/covers';
+import { standInFor, standInNow } from './standIns';
 import type { Track } from '../types.ts';
 
 /**
@@ -48,6 +49,8 @@ function coverNow(track: Track): { uri: string | null; settled: boolean } {
   if (held?.startsWith('file://')) return { uri: held, settled: true };
   const known = found.get(track.id);
   if (known !== undefined) return { uri: known, settled: true };
+  // Asked already, and the file has none: not asked again until it is written to.
+  if (missed.has(track.id)) return { uri: held ?? track.artworkUri, settled: true };
   return { uri: held ?? track.artworkUri, settled: false };
 }
 
@@ -59,7 +62,11 @@ function coverNow(track: Track): { uri: string | null; settled: boolean } {
  */
 export function forgetEmbedded(trackId: string): void {
   found.delete(trackId);
+  missed.delete(trackId);
   asked.delete(trackId);
+  for (const key of bareSleeves) {
+    if (key.startsWith(`${trackId}\u001f`) || key.includes(`\u001e${trackId}\u001f`)) bareSleeves.delete(key);
+  }
   // Any record whose sleeve was worked out with this track among it.
   for (const key of sleeves.keys()) {
     if (key.startsWith(`${trackId}\u001f`) || key.includes(`\u001e${trackId}\u001f`)) sleeves.delete(key);
@@ -75,6 +82,48 @@ export function forgetEmbedded(trackId: string): void {
  * questions being put again each time a list is rebuilt.
  */
 const asked = new Set<string>();
+
+/*
+  The tracks, and the sets of tracks, last found to have no cover: drawn at
+  once with their paper sleeve ([standInNow]) the next time they come on
+  screen, rather than blank until they have been asked again.
+*/
+const bare = new Set<string>();
+const bareSleeves = new Set<string>();
+
+/*
+  The tracks whose files were asked for a picture and have none. Not asked
+  again: a wall of records with no pictures in their files opened every one
+  of them again each time it came on screen. A file written to is forgotten
+  here ([forgetEmbedded]), and a cover the app is given later is found in
+  the catalogue above, which is read before this.
+*/
+const missed = new Set<string>();
+
+/*
+  The tracks covers have been asked for by, by id: for those asking by id
+  alone ([artworkFor]), the colours of the sky and the spectrum among them,
+  to be answered with a sleeve as well, coloured as it is, rather than with
+  nothing and the theme's own colour.
+*/
+const tracksSeen = new Map<string, Track>();
+
+/**
+ * [answer], or where there is none, the paper sleeve of [track]'s record,
+ * handed to [show] at once if it is made and when it is otherwise.
+ */
+function orStandIn(track: Track, answer: string | null, show: (uri: string | null) => void, stopped: () => boolean): void {
+  if (answer) {
+    show(answer);
+    return;
+  }
+  const now = standInNow(track);
+  show(now);
+  if (now) return;
+  void standInFor(track).then((made) => {
+    if (made && !stopped()) show(made);
+  });
+}
 
 /**
  * Finds the covers of [tracks] before anything is drawing them, in the order
@@ -137,19 +186,26 @@ export async function artworkFor(trackId: string): Promise<string | null> {
 
   const embedded = await JukeboxAudio.getEmbeddedArtworkAsync(trackId).catch(() => null);
   if (embedded) found.set(trackId, embedded);
-  return embedded ?? held ?? null;
+  const answer = embedded ?? held ?? null;
+  if (answer) return answer;
+  // None at all: the paper sleeve, where the track is one a cover was drawn for.
+  const track = tracksSeen.get(trackId);
+  return track ? standInFor(track) : null;
 }
 
 export function useTrackArtwork(track: Track | null): string | null {
   const revision = useSyncExternalStore(subscribeArtwork, artworkRevision);
   // Drawn the first time with what is known, so that a cover come on screen is not drawn again a moment later with the same.
-  const [uri, setUri] = useState<string | null>(() => (track ? coverNow(track).uri : null));
+  const [uri, setUri] = useState<string | null>(() =>
+    track ? (coverNow(track).uri ?? (bare.has(track.id) ? standInNow(track) : null)) : null
+  );
 
   useEffect(() => {
     if (!track) {
       setUri(null);
       return;
     }
+    tracksSeen.set(track.id, track);
     // Known covers are shown straight away, which is what keeps a recycled row
     // from blinking. Anything else drops back to what this track itself offers
     // before asking: a row reused from another track would otherwise go on
@@ -157,15 +213,32 @@ export function useTrackArtwork(track: Track | null): string | null {
     // picture is worse than a blank one.
     // A later Tags lookup can upgrade a downloaded YouTube thumbnail.
     const now = coverNow(track);
-    setUri(now.uri);
+    setUri(now.uri ?? (bare.has(track.id) ? standInNow(track) : null));
     if (now.settled) return;
     const fallback = now.uri;
 
     let cancelled = false;
+    // None at all: the record's paper sleeve, as in every other place a cover goes.
+    /*
+      What was found is kept, and a sleeve made where there was nothing,
+      even when this row has been handed something else meanwhile: a row
+      drawn again faster than the file could be asked never learnt that it
+      had no cover, and stayed blank.
+    */
+    const answered = (answer: string | null) => {
+      if (answer) bare.delete(track.id);
+      else {
+        bare.add(track.id);
+        void standInFor(track);
+      }
+      if (cancelled) return;
+      orStandIn(track, answer, setUri, () => cancelled);
+    };
     void JukeboxAudio.getEmbeddedArtworkAsync(track.id).then((embedded) => {
       if (embedded) found.set(track.id, embedded);
-      if (!cancelled) setUri(embedded ?? fallback);
-    }).catch(() => { if (!cancelled) setUri(fallback); });
+      else missed.add(track.id);
+      answered(embedded ?? fallback);
+    }).catch(() => answered(fallback));
     return () => {
       cancelled = true;
     };
@@ -236,7 +309,9 @@ export async function albumArtworkFor(
   let thumbnail: string | null = null;
   for (let at = 0; at < Math.min(tracks.length, SEARCHED); at += 1) {
     const track = tracks[at]!;
-    const uri = found.get(track.id) ?? (await JukeboxAudio.getEmbeddedArtworkAsync(track.id).catch(() => null));
+    if (missed.has(track.id)) continue;
+    const uri = found.get(track.id) ?? (await JukeboxAudio.getEmbeddedArtworkAsync(track.id).catch(() => undefined));
+    if (uri === null) missed.add(track.id);
     if (!uri) continue;
     if (isEmbeddedPicture(uri)) {
       found.set(track.id, uri);
@@ -251,6 +326,7 @@ export async function albumArtworkFor(
   }
   const last = thumbnail ?? tracks.find((track) => track.artworkUri)?.artworkUri ?? null;
   if (last) sleeves.set(key, last);
+  else bareSleeves.add(key);
   return last;
 }
 
@@ -265,7 +341,10 @@ export function warmAlbumArtwork(records: readonly (readonly Track[] | null | un
   const run = async () => {
     for (const tracks of records) {
       if (stopped) return;
-      if (!tracks || tracks.length === 0 || storedSleeve(tracks) || sleeves.has(sleeveKey(tracks))) continue;
+      if (!tracks || tracks.length === 0 || storedSleeve(tracks)) continue;
+      const key = sleeveKey(tracks);
+      // Found already, or found to have none.
+      if (sleeves.has(key) || bareSleeves.has(key)) continue;
       await albumArtworkFor(tracks);
     }
   };
@@ -321,16 +400,27 @@ export function useAlbumArtwork(
       setUri(stored);
       return;
     }
-    const known = sleeves.get(sleeveKey(tracks));
+    const key = sleeveKey(tracks);
+    const known = sleeves.get(key);
     // What is known is shown at once; otherwise a blank rather than another
-    // record's sleeve left over in a recycled row.
-    setUri(known ?? null);
-    if (known !== undefined) return;
+    // record's sleeve left over in a recycled row, or the paper one where it
+    // was found to have none.
+    setUri(known ?? (bareSleeves.has(key) ? standInNow(tracks[0]) : null));
+    // Known, or known to have none: a set with no picture is asked again only once one of its files is written to.
+    if (known !== undefined || bareSleeves.has(key)) return;
 
     let cancelled = false;
-    void albumArtworkFor(tracks, onGap).then((answer) => {
-      if (!cancelled) setUri(answer);
-    }).catch(() => undefined);
+    // Kept whether or not this is still wanted: see the same in `useTrackArtwork`.
+    const answered = (answer: string | null) => {
+      if (answer) bareSleeves.delete(key);
+      else {
+        bareSleeves.add(key);
+        void standInFor(tracks[0]!);
+      }
+      if (cancelled) return;
+      orStandIn(tracks[0]!, answer, setUri, () => cancelled);
+    };
+    void albumArtworkFor(tracks, onGap).then(answered).catch(() => answered(null));
     return () => {
       cancelled = true;
     };
@@ -344,5 +434,6 @@ export function useAlbumArtwork(
 /** The cover of [tracks] if it is known without asking: see {@link useAlbumArtwork}. */
 function knownSleeve(tracks: readonly Track[] | null): string | null {
   if (!tracks || tracks.length === 0) return null;
-  return storedSleeve(tracks) ?? sleeves.get(sleeveKey(tracks)) ?? null;
+  const key = sleeveKey(tracks);
+  return storedSleeve(tracks) ?? sleeves.get(key) ?? (bareSleeves.has(key) ? standInNow(tracks[0]) : null);
 }

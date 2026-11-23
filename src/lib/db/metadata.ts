@@ -111,8 +111,8 @@ function toMetadata(row: Row): TrackMetadata {
   };
 }
 
-export function saveMetadata(entry: TrackMetadata): void {
-  saveMetadataTo(db(), entry, Date.now());
+export function saveMetadata(entry: TrackMetadata): boolean {
+  return saveMetadataTo(db(), entry, Date.now());
 }
 
 /** Several rows at once, as one transaction: an edit made to many tracks together. */
@@ -377,11 +377,11 @@ export function clearMisses(): void {
  */
 export function forgetMetadata(trackIds: string[], includeManual = false): void {
   if (trackIds.length === 0) return;
-  const placeholders = trackIds.map(() => '?').join(',');
   const guard = includeManual ? '' : ` AND status != 'manual'`;
+  // The ids as one value rather than one each, which past some thirty thousand SQLite would not take.
   db().runSync(
-    `DELETE FROM track_metadata WHERE track_id IN (${placeholders})${guard}`,
-    trackIds
+    `DELETE FROM track_metadata WHERE track_id IN (SELECT value FROM json_each(?))${guard}`,
+    JSON.stringify(trackIds.map(String))
   );
 }
 
@@ -416,27 +416,39 @@ export type GenreCount = {
  * genre on the play, so improving the metadata retroactively improves every
  * statistic derived from it.
  */
-export function topGenres(limit = 10, range: Range = ALL_TIME): GenreCount[] {
-  return db().getAllSync<GenreCount>(
-    `SELECT m.genre AS "key",
-            m.genre AS genre,
-            COUNT(*) AS playCount,
-            SUM(p.seconds_played) AS totalSeconds,
+export function topGenres(limit = 10, range: Range = ALL_TIME): Promise<GenreCount[]> {
+  /*
+    In one reading of the plays: each genre's tracks counted, then ranked
+    within it. The track for its cover was a reading of every play in the
+    range for each genre in turn, which with a long history imported and a
+    couple of hundred genres was seconds on a phone, at every visit to the
+    statistics after a song.
+  */
+  return db().getAllAsync<GenreCount>(
+    `WITH per AS (
+       SELECT m.genre AS genre, p.track_id AS track_id, COUNT(*) AS c, SUM(p.seconds_played) AS s
+       FROM plays p
+       JOIN track_metadata m ON m.track_id = p.track_id
+       WHERE p.started_at >= ? AND p.started_at < ? AND m.genre IS NOT NULL
+       GROUP BY m.genre, p.track_id
+     ),
+     ranked AS (
+       SELECT genre, track_id, c, s,
+              ROW_NUMBER() OVER (PARTITION BY genre ORDER BY c DESC, s DESC, track_id) AS rn,
+              SUM(c) OVER (PARTITION BY genre) AS pc,
+              SUM(s) OVER (PARTITION BY genre) AS ts
+       FROM per
+     )
+     SELECT genre AS "key",
+            genre,
+            pc AS playCount,
+            ts AS totalSeconds,
             -- Whichever track of the genre was played most, for its cover.
-            (SELECT p2.track_id FROM plays p2
-             JOIN track_metadata m2 ON m2.track_id = p2.track_id
-             WHERE m2.genre = m.genre
-               AND p2.started_at >= ? AND p2.started_at < ?
-             GROUP BY p2.track_id
-             ORDER BY COUNT(*) DESC, SUM(p2.seconds_played) DESC LIMIT 1) AS sample
-     FROM plays p
-     JOIN track_metadata m ON m.track_id = p.track_id
-     WHERE p.started_at >= ? AND p.started_at < ? AND m.genre IS NOT NULL
-     GROUP BY m.genre
+            track_id AS sample
+     FROM ranked
+     WHERE rn = 1
      ORDER BY playCount DESC, totalSeconds DESC
      LIMIT ?`,
-    range.since,
-    range.until,
     range.since,
     range.until,
     limit

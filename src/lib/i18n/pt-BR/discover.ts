@@ -6,6 +6,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Para você ouvir a seguir',
     refresh: 'Atualizar',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Deslize para atualizar',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Solte para atualizar',
     updated: (date) => `Atualizado em ${date}`,
 
     familiar: (because) => `Mais dos seus artistas · ${because}`,
@@ -45,7 +49,6 @@ export const discover: Strings['discover'] = {
     failed: 'Falha no download · toque para tentar de novo',
     needsBuild: 'Precisa do app atualizado',
     waitingWifi: 'Aguardando Wi-Fi · toque para baixar',
-    percent: (percent) => `${format.number(percent)}%`,
     gettingReady: 'Baixando',
     hint: 'Toca a música, baixando antes se for preciso',
     nowPlaying: (title) => `Tocando ${title}`,
@@ -152,7 +155,8 @@ export const discover: Strings['discover'] = {
     buildingArtists: (done, total) =>
       `Procurando músicas · ${format.number(done)} de ${format.number(total)} artistas`,
     preparing: (ready, target) =>
-      `Uma lista nova está a caminho · ${format.number(ready)} de ${format.number(target)} músicas prontas.${ready > 0 ? ' Atualize de novo para ver agora.' : ''}`,
+      `Uma lista nova está a caminho · ${format.number(ready)} de ${format.number(target)} músicas prontas.`,
+    showNow: 'Mostrar agora',
     offline: 'Sem conexão. Sua lista é mantida; novas músicas serão procuradas quando houver conexão.',
     offlineEmpty: 'Sem conexão. O Descobrir monta sua lista quando houver uma.',
     noLibrary: 'O Descobrir parte das músicas deste celular e ainda não encontrou nenhuma.',

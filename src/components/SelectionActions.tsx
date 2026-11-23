@@ -1,5 +1,14 @@
 import { useCallback, useState, type ReactNode } from 'react';
-import { Modal, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { DISABLED, SPACE, TYPE } from '../lib/theme/measures';
+import { CardAnswers } from './CardAnswers';
+import { Check } from './Check';
+import { ConfirmSheet } from './ConfirmSheet';
+import { Field } from './FormScroll';
+import { Note } from './Note';
+import { StyleSheet, Text, View } from 'react-native';
+import { MenuPage } from './MenuPage';
+import { OnAPage } from './OnAPage';
+import { useRows } from './settings/rows';
 import { Pressable } from './Pressable';
 import JukeboxAudio from '../../modules/jukebox-audio/index';
 
@@ -66,8 +75,7 @@ import {
 import { describeOutcome } from '../lib/metadata/outcome';
 import { numberComplaint } from '../lib/metadata/single';
 import { canonicalLabel } from '../lib/metadata/text';
-import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles, usePressed } from '../lib/theme/index';
 import type { Track } from '../lib/types';
 import { haptic } from '../lib/ui/haptics';
 
@@ -411,11 +419,15 @@ export function useSelectionActions({
         onChoose={removeTag}
         onClose={() => setUntagging(null)}
       />
-      <ResetSheet
+      {/* Asked before what lookups found is thrown away, since it cannot be had back but by looking again. */}
+      <ConfirmSheet
         visible={resetting}
-        count={trackIds.length}
+        title={t.details.selection.resetQuestion(trackIds.length)}
+        body={t.details.selection.resetBody}
+        confirmLabel={t.details.library.reset}
+        danger
         onConfirm={reset}
-        onClose={() => setResetting(false)}
+        onCancel={() => setResetting(false)}
       />
       <WriteFilesSheet
         visible={writingTo != null}
@@ -488,17 +500,14 @@ function ActionSheet({
   const t = useT();
   const said = t.details.selection;
   const styles = useStyles();
-  useWindowVeil(visible);
   const writable = canWriteFiles();
   const sharing = JukeboxAudio.shareTracksAsync != null;
   const offered = (action: SelectionAction) =>
     (action !== 'write' || writable) && ((action !== 'share' && action !== 'shareFile') || sharing);
   const waiting = (action: SelectionAction) => busy && RUNS.has(action);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Not a stop for a screen reader; see `AlbumMenu`. The back gesture closes it. */}
-      <Pressable style={styles.backdrop} onPress={onClose} accessible={false}>
-        <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetBody}>
+    // A page of its own in the tab, the bars where they are (`MenuPage`).
+    <MenuPage visible={visible} title={said.heading(count)} onClose={onClose}>
           <MenuHeader
             title={said.heading(count)}
             picture={false}
@@ -533,9 +542,7 @@ function ActionSheet({
               />
             );
           })}
-        </ScrollView>
-      </Pressable>
-    </Modal>
+    </MenuPage>
   );
 }
 
@@ -549,22 +556,31 @@ function EditSheet({
   onClose: () => void;
 }) {
   const t = useT();
+  // Every box of it: a page of its own in the tab, what is typed kept on the page (`EditForm`).
+  return (
+    <OnAPage visible={editing != null} title={t.details.selection.editHeading(editing?.tracks.length ?? 0)} onClose={onClose}>
+      {editing ? <EditForm editing={editing} onSave={onSave} onClose={onClose} /> : null}
+    </OnAPage>
+  );
+}
+
+/** The boxes and their buttons, made afresh for each set of tracks it is opened for. */
+function EditForm({
+  editing,
+  onSave,
+  onClose,
+}: {
+  editing: Editing;
+  onSave: (edit: SharedEdit) => void;
+  onClose: () => void;
+}) {
+  const rows = useRows();
+  const t = useT();
   const said = t.details.selection;
-  const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
-  const visible = editing != null;
-  useWindowVeil(visible);
   const [typed, setTyped] = useState<Typed>(NOTHING_TYPED);
   const [cleared, setCleared] = useState<readonly SharedField[]>(NOTHING_CLEARED);
-  // Emptied each time it opens, for another set of tracks. Done while
-  // drawing, as the lyrics tab seeds its search, rather than in an effect.
-  const [openFor, setOpenFor] = useState<Editing | null>(null);
-  if (openFor !== editing) {
-    setOpenFor(editing);
-    setTyped(NOTHING_TYPED);
-    setCleared(NOTHING_CLEARED);
-  }
 
   const edit: SharedEdit = { ...typed, cleared };
   // A year being cleared is not read, so what is in its box cannot be wrong.
@@ -572,33 +588,26 @@ function EditSheet({
   const ready = complaint == null && fieldsSet(edit).length > 0;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      {/* Neither the backdrop nor the sheet is a stop for a screen reader; see `OptionSheet`. */}
-      <Pressable style={styles.centred} onPress={onClose} accessible={false}>
-        <Pressable style={styles.dialog} onPress={() => {}} accessible={false}>
-          <ScrollView contentContainerStyle={styles.dialogBody} keyboardShouldPersistTaps="handled">
-            <Text accessibilityRole="header" style={styles.dialogHeading}>
-              {said.editHeading(editing?.tracks.length ?? 0)}
-            </Text>
-            <Text style={styles.dialogHint}>{said.editHint}</Text>
+    <>
+      <Text style={rows.muted}>{said.editHint}</Text>
+      <View style={[rows.card, styles.form]}>
             {SHARED_FIELDS.map((field) => {
               const name = t.details.general.fields[field];
               const clearing = cleared.includes(field);
               const faint = clearing ? said.cleared[CLEARS[field]] : sharedPlaceholder(editing?.shared[field] ?? null, said);
               return (
                 <View key={field} style={styles.field}>
-                  <Text style={styles.label} importantForAccessibility="no">
+                  <Text style={rows.section} importantForAccessibility="no">
                     {t.format.upper(name)}
                   </Text>
-                  <TextInput
-                    style={[styles.input, clearing && styles.closed]}
+                  <Field
+                    style={clearing && styles.closed}
                     // What was typed stays behind a cleared box, and comes back
                     // if it is unticked; it is not what the box says meanwhile.
                     value={clearing ? '' : typed[field]}
                     editable={!clearing}
                     onChangeText={(value) => setTyped((before) => ({ ...before, [field]: value }))}
                     placeholder={faint}
-                    placeholderTextColor={c.textFaint}
                     // The name over the box is a line of its own to the eye, and
                     // the faint words in it are gone once anything is typed.
                     accessibilityLabel={name}
@@ -608,7 +617,7 @@ function EditSheet({
                     autoCapitalize="words"
                     autoCorrect={false}
                   />
-                  {field === 'year' && complaint ? <Text style={styles.complaint}>{complaint}</Text> : null}
+                  {field === 'year' && complaint ? <Note tone="warn">{complaint}</Note> : null}
                   <Pressable
                     android_ripple={pressed}
                     style={styles.clear}
@@ -623,162 +632,32 @@ function EditSheet({
                         before.includes(field) ? before.filter((one) => one !== field) : [...before, field]
                       )
                     }>
-                    <View style={[styles.tickBox, clearing && styles.tickBoxOn]}>
-                      {clearing ? <View style={styles.tickMark} /> : null}
-                    </View>
+                    <Check on={clearing} />
                     <Text style={styles.clearLabel}>{said.clearOn[CLEARS[field]]}</Text>
                   </Pressable>
                 </View>
               );
             })}
-            <View style={styles.dialogActions}>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-                <Text style={styles.buttonLabel}>{t.common.cancel}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !ready }}
-                android_ripple={pressed}
-                style={[styles.button, styles.confirm, !ready && styles.off]}
-                disabled={!ready}
-                onPress={() => onSave(edit)}>
-                <Text style={styles.confirmLabel}>{t.common.save}</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+      <CardAnswers
+        style={styles.formActions}
+        answers={[
+          { label: t.common.cancel, kind: 'quiet', onPress: onClose },
+          { label: t.common.save, disabled: !ready, onPress: () => onSave(edit) },
+        ]}
+      />
+    </>
   );
 }
 
-/** Asked before what lookups found is thrown away, since it cannot be had back but by looking again. */
-function ResetSheet({
-  visible,
-  count,
-  onConfirm,
-  onClose,
-}: {
-  visible: boolean;
-  count: number;
-  onConfirm: () => void;
-  onClose: () => void;
-}) {
-  const t = useT();
-  const said = t.details.selection;
-  const styles = useStyles();
-  const pressed = usePressed();
-  useWindowVeil(visible);
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={styles.centred} onPress={onClose} accessible={false}>
-        <Pressable style={styles.dialog} onPress={() => {}} accessible={false}>
-          <View style={styles.dialogBody}>
-            <Text accessibilityRole="header" style={styles.dialogHeading}>
-              {said.resetQuestion(count)}
-            </Text>
-            <Text style={styles.dialogHint}>{said.resetBody}</Text>
-            <View style={styles.dialogActions}>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onClose}>
-                <Text style={styles.buttonLabel}>{t.common.cancel}</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={onConfirm}>
-                <Text style={styles.danger}>{t.details.library.reset}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
-// The sheet is `TrackMenu`'s, line for line; the dialogs are `TextPrompt`'s.
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '85%',
-    flexGrow: 0,
-    ...outlined(c),
-  },
-  sheetBody: { paddingBottom: 28 },
-  busy: { color: c.textFaint, fontSize: 12, marginTop: 2 },
-  header: {
-    gap: 3,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  title: { color: c.text, fontSize: 16, fontWeight: '600' },
-  section: {
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 2,
-  },
-  action: { paddingHorizontal: 20, paddingVertical: 13, gap: 2 },
-  actionLabel: { color: c.text, fontSize: 15 },
-  actionHint: { color: c.textFaint, fontSize: 12 },
-  danger: { color: c.danger, fontSize: 15 },
-  off: { opacity: 0.35 },
-
-  centred: {
-    flex: 1,
-    backgroundColor: scrimOf(c),
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 28,
-  },
-  dialog: {
-    backgroundColor: c.surface,
-    borderRadius: 14,
-    alignSelf: 'stretch',
-    maxHeight: '90%',
-    ...outlined(c),
-  },
-  dialogBody: { padding: 18, gap: 14 },
-  dialogHeading: { color: c.text, fontSize: 15, fontWeight: '600' },
-  dialogHint: { color: c.textMuted, fontSize: 12.5, lineHeight: 18, marginTop: -8 },
-  field: { gap: 6 },
-  label: { color: c.textFaint, fontSize: 11, letterSpacing: 1 },
-  input: {
-    color: c.text,
-    fontSize: 15,
-    backgroundColor: c.bg,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    ...outlined(c),
-  },
-  closed: { opacity: 0.6 },
-  complaint: { color: c.danger, fontSize: 12 },
-  // The box is `transitions.tsx`'s, a size down to sit under a field.
-  clear: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6, alignSelf: 'flex-start' },
-  tickBox: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    borderColor: c.textDisabled,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  tickBoxOn: { backgroundColor: c.accent, borderColor: c.accent },
-  tickMark: { width: 7, height: 7, borderRadius: 2, backgroundColor: c.onAccent },
-  clearLabel: { color: c.textSecondary, fontSize: 13 },
-  dialogActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
-  button: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 8 },
-  buttonLabel: { color: c.textSecondary, fontSize: 14 },
-  confirm: { backgroundColor: c.primary },
-  confirmLabel: { color: c.onPrimary, fontSize: 14, fontWeight: '600' },
+  // The boxes, in a card of the page's: under the line about them, apart from it.
+  form: { marginTop: SPACE.m, padding: SPACE.l, gap: SPACE.m },
+  formActions: { marginTop: SPACE.l },
+  busy: { color: c.textFaint, fontSize: TYPE.hint, marginTop: SPACE.xxs },
+  field: { gap: SPACE.xs },
+  // A box being cleared: what it would have said kept faint, under the line that says what becomes of it.
+  closed: { opacity: DISABLED },
+  clear: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s, paddingVertical: SPACE.xs, alignSelf: 'flex-start' },
+  clearLabel: { color: c.textSecondary, fontSize: TYPE.small },
 }));

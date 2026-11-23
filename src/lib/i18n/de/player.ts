@@ -5,6 +5,9 @@ import { oneOrMany } from '../write.ts';
 export const player: Strings['player'] = {
   bar: {
     opensPlayer: 'Öffnet den Player',
+    upNext: (title: string) => `Als Nächstes: ${title}`,
+    lastInQueue: 'Letzter in der Warteschlange',
+    timeLeft: (clock: string) => `Noch ${clock}`,
   },
   sheet: {
     nothingPlaying: 'Es läuft nichts.',
@@ -52,6 +55,9 @@ export const player: Strings['player'] = {
     },
   },
   settings: {
+    tabs: { sound: 'Klang', look: 'Aussehen', sleep: 'Schlaf' },
+    moreEffects: 'Mehr',
+    fewerEffects: 'Weniger',
     playback: 'Wiedergabe',
     backToNormal: 'Zurück zu normalem Tempo und normaler Tonhöhe',
     normal: 'Normal',
@@ -60,7 +66,6 @@ export const player: Strings['player'] = {
     pitchHint: 'Halbtöne nach oben oder unten; die Aufnahme läuft dabei weiter im oben eingestellten Tempo.',
     effects: 'Effekte',
     equalizer: { note: 'Bänder, Bass und Lautheit' },
-    crossfade: { note: 'Wie ein Titel in den nächsten übergeht' },
     allEffects: { title: 'Alle Effekte', note: 'Breite, Crossfeed, Rotation und Pegel' },
     jumps: {
       heading: 'Sprünge für dieses Buch oder diese Sendung',

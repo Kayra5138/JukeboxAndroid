@@ -174,13 +174,28 @@ export function writeLyricsOffset(trackId: string, offsetMs: number): void {
   );
 }
 
-/** A miss is stored too, so the same empty answer is not fetched repeatedly. */
+/**
+ * A miss is stored too, so the same empty answer is not fetched repeatedly.
+ *
+ * Never over words somebody chose: a lookup can take some seconds to answer,
+ * and words picked in the meantime were replaced by what it found, or wiped
+ * by its miss, their shift with them.
+ */
 export function writeLyrics(trackId: string, lyrics: Lyrics | null, at: number): void {
   db().runSync(
     // An answer settles the question, so any earlier "could not reach" is
-    // dropped along with it rather than left to expire on its own.
-    `INSERT OR REPLACE INTO track_lyrics (track_id, plain, synced, fetched_at, unreachable_at)
-     VALUES (?, ?, ?, ?, NULL)`,
+    // dropped along with it rather than left to expire on its own; and it is
+    // the lookup's, its shift and where it came from starting afresh.
+    `INSERT INTO track_lyrics (track_id, plain, synced, fetched_at, unreachable_at)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT(track_id) DO UPDATE SET
+       plain = excluded.plain,
+       synced = excluded.synced,
+       fetched_at = excluded.fetched_at,
+       unreachable_at = NULL,
+       source = NULL,
+       offset_ms = 0
+     WHERE track_lyrics.source IS NOT 'manual'`,
     trackId,
     lyrics?.plain ?? null,
     lyrics?.synced ?? null,

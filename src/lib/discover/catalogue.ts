@@ -179,24 +179,27 @@ export async function buildPool(
   const tags = new Map(
     [...allTags()].map(([id, values]) => [id, values.map((value) => value.tag).filter(isGenre)])
   );
-  const plays = db().getAllSync<Listen>(
-    `SELECT track_id, artist, started_at, seconds_played, completed
-       FROM plays WHERE started_at >= ? AND started_at <= ?`,
-    now - 30 * DAY,
-    now
-  );
-  const skips = db().getAllSync<Skip>(
-    `SELECT artist, started_at, seconds_played, duration_sec
-       FROM skips WHERE started_at >= ? AND started_at <= ?`,
-    now - 30 * DAY,
-    now
-  );
-  // One sitting capped at ten minutes here too, for the reason the profile caps it.
-  const ever = db().getAllSync<{ artist: string | null; seconds: number }>(
-    `SELECT artist, SUM(MIN(seconds_played, 600)) AS seconds
-       FROM plays WHERE artist IS NOT NULL AND started_at <= ? GROUP BY artist`,
-    now
-  );
+  // Asked of the database on its own thread, together: the whole of the listening, read where the screen is drawn, at every build.
+  const [plays, skips, ever] = await Promise.all([
+    db().getAllAsync<Listen>(
+      `SELECT track_id, artist, started_at, seconds_played, completed
+         FROM plays WHERE started_at >= ? AND started_at <= ?`,
+      now - 30 * DAY,
+      now
+    ),
+    db().getAllAsync<Skip>(
+      `SELECT artist, started_at, seconds_played, duration_sec
+         FROM skips WHERE started_at >= ? AND started_at <= ?`,
+      now - 30 * DAY,
+      now
+    ),
+    // One sitting capped at ten minutes here too, for the reason the profile caps it.
+    db().getAllAsync<{ artist: string | null; seconds: number }>(
+      `SELECT artist, SUM(MIN(seconds_played, 600)) AS seconds
+         FROM plays WHERE artist IS NOT NULL AND started_at <= ? GROUP BY artist`,
+      now
+    ),
+  ]);
   const rows = exclusionRows();
 
   const profile = tasteProfile(plays, skips, tags, now);

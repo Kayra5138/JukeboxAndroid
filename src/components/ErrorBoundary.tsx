@@ -1,14 +1,15 @@
 import Constants from 'expo-constants';
+import { SPACE, TYPE } from '../lib/theme/measures';
 import { Component, useState, type ErrorInfo, type ReactNode } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
-import { Pressable } from './Pressable';
+import { Button } from './Button';
 
 import JukeboxAudio from '../../modules/jukebox-audio';
 import { useLanguage, useT } from '../lib/i18n/index';
 import { crashText, stamp, type Crash, type ReportFacts } from '../lib/support/report';
 import { noteError, useErrorEntries } from '../lib/support/errorLogStore';
 import { downloads } from '../lib/youtube/native';
-import { makeStyles, outlined, page, usePressed, useTheme, useThemeChoice } from '../lib/theme/index';
+import { makeStyles, page, useTheme, useThemeChoice } from '../lib/theme/index';
 
 /**
  * Somewhere for a screen that threw while drawing to land.
@@ -68,7 +69,6 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, Fall> {
 function Fallen({ error, crash, onRetry }: { error: Error; crash: Crash; onRetry: () => void }) {
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
   const language = useLanguage();
   const choice = useThemeChoice();
   const theme = useTheme();
@@ -94,12 +94,8 @@ function Fallen({ error, crash, onRetry }: { error: Error; crash: Crash; onRetry
       <Text style={styles.muted} numberOfLines={6}>
         {error.message}
       </Text>
-      <Pressable android_ripple={pressed} style={styles.button} accessibilityRole="button" onPress={onRetry}>
-        <Text style={styles.buttonLabel}>{t.common.tryAgain}</Text>
-      </Pressable>
-      <Pressable android_ripple={pressed} style={styles.button} accessibilityRole="button" onPress={copy}>
-        <Text style={styles.buttonLabel}>{t.common.drawFailedCopy}</Text>
-      </Pressable>
+      <Button kind="secondary" label={t.common.tryAgain} onPress={onRetry} />
+      <Button kind="secondary" label={t.common.drawFailedCopy} onPress={copy} />
       {copiedNow != null ? (
         <Text style={styles.muted} accessibilityLiveRegion="polite">
           {copiedNow ? t.common.drawFailedCopied : t.common.drawFailedNotCopied}
@@ -143,12 +139,10 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    padding: 24,
+    gap: SPACE.l,
+    padding: SPACE.xl,
     ...page(c),
   },
-  body: { color: c.text, fontSize: 16, textAlign: 'center' },
-  muted: { color: c.textMuted, fontSize: 14, textAlign: 'center' },
-  button: { backgroundColor: c.surfaceRaised, borderRadius: 10, paddingHorizontal: 20, paddingVertical: 12, ...outlined(c) },
-  buttonLabel: { color: c.text, fontSize: 15 },
+  body: { color: c.text, fontSize: TYPE.heading, textAlign: 'center' },
+  muted: { color: c.textMuted, fontSize: TYPE.small, textAlign: 'center' },
 }));

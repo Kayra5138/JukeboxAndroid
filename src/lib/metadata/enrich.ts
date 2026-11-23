@@ -89,9 +89,11 @@ export async function enrichLibrary(
     filterUnenriched,
     manualTrackIds,
     saveMetadata: (entry) => {
-      saveMetadata(entry);
+      // Written over nothing somebody wrote by hand meanwhile, and then nothing follows it.
+      if (!saveMetadata(entry)) return false;
       onSaved?.([entry.trackId]);
       if (entry.status === 'matched') afterLookedUp([entry.trackId]);
+      return true;
     },
     saveLookupTags,
     saveCredit,
@@ -133,9 +135,10 @@ export async function enrichAlbum(
     },
     readAllMetadata,
     saveMetadata: (entry) => {
-      saveMetadata(entry);
+      if (!saveMetadata(entry)) return false;
       options.onSaved?.([entry.trackId]);
       if (entry.status === 'matched') afterLookedUp([entry.trackId]);
+      return true;
     },
     saveLookupTags,
     chooseCovers: (trackIds, uri, keep) => {

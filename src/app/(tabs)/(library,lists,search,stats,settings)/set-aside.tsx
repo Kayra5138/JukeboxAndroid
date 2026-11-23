@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { OptionSheet } from '../../../components/OptionSheet';
-import { Pressable } from '../../../components/Pressable';
+import { Button } from '../../../components/Button';
+import { PageNote } from '../../../components/Page';
+import { ScreenState } from '../../../components/ScreenState';
 import { SettingsPage, useRows } from '../../../components/settings/rows';
 import { creditReader } from '../../../lib/db/credits';
 import { playlists } from '../../../lib/db/playlists';
@@ -15,7 +17,8 @@ import { useLibraryTracks } from '../../../lib/library/useLibrary';
 import { albumsOf } from '../../../lib/media/albums';
 import { artistsOf } from '../../../lib/media/artists';
 import { isTape } from '../../../lib/tapes/tape';
-import { makeStyles, outlined, usePressed } from '../../../lib/theme/index';
+import { makeStyles } from '../../../lib/theme/index';
+import { SPACE } from '../../../lib/theme/measures';
 import { haptic } from '../../../lib/ui/haptics';
 
 /**
@@ -29,7 +32,6 @@ export default function SetAsideScreen() {
   const said = t.library.setAside;
   const rows = useRows();
   const styles = useStyles();
-  const pressed = usePressed();
   const rules = useSetAside();
   const library = useLibraryTracks();
   const music = useMemo(() => library.filter((track) => !isTape(track)), [library]);
@@ -86,8 +88,8 @@ export default function SetAsideScreen() {
 
   return (
     <SettingsPage>
-      <Text style={styles.note}>{said.note}</Text>
-      {entries.length === 0 ? <Text style={styles.note}>{said.empty}</Text> : null}
+      <PageNote>{said.note}</PageNote>
+      {entries.length === 0 ? <ScreenState kind="empty" text={said.empty} /> : null}
       {entries.map((group, at) => (
         <View key={group.kind}>
           <Text style={[rows.section, at > 0 && rows.sectionAfter]}>{t.format.upper(said.kinds[group.kind])}</Text>
@@ -107,15 +109,13 @@ export default function SetAsideScreen() {
                         </Text>
                       ) : null}
                     </View>
-                    <Pressable
-                      accessibilityRole="button"
+                    <Button
+                      label={said.bringBack}
+                      kind="outline"
+                      size="small"
                       accessibilityLabel={said.bringBackSpoken(entry.name)}
-                      android_ripple={pressed}
-                      hitSlop={6}
-                      style={styles.back}
-                      onPress={() => bringBack(group.kind, entry.key)}>
-                      <Text style={styles.backLabel}>{said.bringBack}</Text>
-                    </Pressable>
+                      onPress={() => bringBack(group.kind, entry.key)}
+                    />
                   </View>
                 </View>
               </View>
@@ -123,14 +123,14 @@ export default function SetAsideScreen() {
           </View>
         </View>
       ))}
-      <Pressable
-        accessibilityRole="button"
-        android_ripple={pressed}
+      <Button
+        label={said.addTag}
+        kind="secondary"
         style={[styles.add, entries.length > 0 && rows.sectionAfter]}
-        onPress={() => setChoosingTag(true)}>
-        <Text style={styles.addLabel}>{said.addTag}</Text>
-      </Pressable>
+        onPress={() => setChoosingTag(true)}
+      />
       <OptionSheet
+        page
         visible={choosingTag}
         heading={said.addTag}
         note={tags.length === 0 ? said.noTags : undefined}
@@ -147,24 +147,7 @@ export default function SetAsideScreen() {
   );
 }
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  note: { color: c.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 14, marginHorizontal: 4 },
-  names: { flex: 1, minWidth: 0, gap: 2 },
-  back: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.borderStrong,
-  },
-  backLabel: { color: c.accent, fontSize: 14 },
-  add: {
-    alignSelf: 'flex-start',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: c.surfaceRaised,
-    ...outlined(c),
-  },
-  addLabel: { color: c.accent, fontSize: 14.5 },
+const useStyles = makeStyles(() => StyleSheet.create({
+  names: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+  add: { alignSelf: 'flex-start' },
 }));

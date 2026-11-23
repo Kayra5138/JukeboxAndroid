@@ -19,4 +19,10 @@ export const nav: Strings['nav'] = {
   albumRest: 'Resto dell’album',
   customTheme: 'Tema personalizzato',
   downloads: 'Download',
+  album: 'Album',
+  artist: 'Artista',
+  folder: 'Cartella',
+  list: 'Lista',
+  smartList: 'Lista intelligente',
+  tag: 'Tag',
 };

@@ -14,8 +14,8 @@ export function tapeQueueOf<T extends TapePart & { folder?: string | null }>(
   tapes: readonly T[]
 ): { tracks: T[]; index: number } {
   if (seriesOf(track)) {
-    const folder = folderKey(track.folder ?? '').toLocaleLowerCase();
-    const episodes = inSeriesOrder(tapes.filter((one) => folderKey(one.folder ?? '').toLocaleLowerCase() === folder));
+    const folder = folderKey(track.folder ?? '').toLowerCase();
+    const episodes = inSeriesOrder(tapes.filter((one) => folderKey(one.folder ?? '').toLowerCase() === folder));
     const index = episodes.findIndex((one) => one.id === track.id);
     if (index >= 0) return { tracks: episodes, index };
   }

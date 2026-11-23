@@ -1,4 +1,4 @@
-import { isActive, jobError, type DownloadJob } from './types.ts';
+import { isActive, isListenJob, jobError, type DownloadJob } from './types.ts';
 
 /**
  * The queue of downloads as it is shown: what is said about the jobs the
@@ -86,7 +86,7 @@ export type Source =
 
 export function sourceOf(job: DownloadJob): Source {
   // Listened to from the Search tab: it has a key as Discover's songs do, and is not one of them.
-  if (job.video.listen === true) return { kind: 'listen' };
+  if (isListenJob(job)) return { kind: 'listen' };
   if (job.discoverKey != null) return { kind: 'discover' };
   // Read by hand and not through `placementOf`: only the record's name is
   // wanted, and this has been through the phone's storage and back.

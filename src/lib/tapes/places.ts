@@ -26,7 +26,7 @@ export function refreshTapePlaces(): void {
   reading = (async () => {
     try {
       const read = (await JukeboxAudio.getTapePlacesAsync()) as Record<string, TapePlace> | null;
-      places.set(new Map(Object.entries(read ?? {})));
+      places.set(keepSame(places.get(), read ?? {}));
     } catch {
       // An older player, or none yet: no places, as before there were tapes.
     }
@@ -39,15 +39,45 @@ export function refreshTapePlaces(): void {
   });
 }
 
-/** Every place, by the track's id. */
+/**
+ * The new reading, with each place that has not moved kept as the same
+ * object, and the whole of the old one kept where nothing moved at all.
+ * Read on every change of song and every pause, a new map each time was the
+ * library and every tape row drawn again for places that had stayed put,
+ * with no tapes at all as much as with some.
+ */
+export function keepSame(was: ReadonlyMap<string, TapePlace>, read: Record<string, TapePlace>): ReadonlyMap<string, TapePlace> {
+  const ids = Object.keys(read);
+  let changed = ids.length !== was.size;
+  const next = new Map<string, TapePlace>();
+  for (const id of ids) {
+    const fresh = read[id];
+    const old = was.get(id);
+    const same =
+      old != null &&
+      old.positionSec === fresh.positionSec &&
+      old.durationSec === fresh.durationSec &&
+      old.at === fresh.at &&
+      old.finished === fresh.finished;
+    if (!same) changed = true;
+    next.set(id, same ? old : fresh);
+  }
+  return changed ? next : was;
+}
+
 /** Where [id] was left, as last read: for a press, which is not drawn. */
 export function tapePlaceNow(id: string): TapePlace | null {
   return places.get().get(id) ?? null;
 }
 
-export function useTapePlaces(): ReadonlyMap<string, TapePlace> {
-  return useSyncExternalStore(places.subscribe, places.get);
+export function useTapePlaces(on = true): ReadonlyMap<string, TapePlace> {
+  return useSyncExternalStore(on ? places.subscribe : unwatched, on ? places.get : nowhere);
 }
+
+/** For a screen with nothing showing the places now: not told of each, as a tape plays. */
+const unwatched = () => () => {};
+const NOWHERE: ReadonlyMap<string, TapePlace> = new Map();
+const nowhere = () => NOWHERE;
 
 /** One tape's place, or null where it has none. */
 export function useTapePlace(id: string): TapePlace | null {

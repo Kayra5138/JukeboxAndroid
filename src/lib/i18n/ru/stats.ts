@@ -51,7 +51,6 @@ const months = [
 const NB = ' ';
 
 export const stats: Strings['stats'] = {
-  percent: (value) => `${value}%`,
 
   period: {
     labels: { day: 'День', week: 'Неделя', month: 'Месяц', year: 'Год', all: 'Всё' },

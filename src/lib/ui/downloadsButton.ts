@@ -12,7 +12,7 @@ import { createStore } from './store';
  * coming back into focus at which it could read the setting again, and a
  * switch that did nothing until the app was next opened would look broken.
  */
-const wanted = createStore(false);
+const wanted = createStore(true);
 let read = false;
 
 function current(): boolean {
@@ -21,9 +21,10 @@ function current(): boolean {
   if (!read) {
     read = true;
     try {
-      wanted.set(readSetting(SETTINGS.downloadsButton) === 'true');
+      // On unless it was turned off: a download under way is news whoever started it wants to see.
+      wanted.set(readSetting(SETTINGS.downloadsButton) !== 'false');
     } catch {
-      // A database that will not open has bigger news than this. Off.
+      // A database that will not open has bigger news than this. As it would be anyway, on.
     }
   }
   return wanted.get();

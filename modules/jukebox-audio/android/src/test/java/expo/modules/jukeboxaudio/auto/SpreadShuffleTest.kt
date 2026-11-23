@@ -1,6 +1,7 @@
 package expo.modules.jukeboxaudio.auto
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.random.Random
@@ -42,5 +43,12 @@ class SpreadShuffleTest {
     assertEquals(SpreadShuffle.artistKey("AURORA"), SpreadShuffle.artistKey("Aurora"))
     assertEquals(SpreadShuffle.artistKey("Björk"), SpreadShuffle.artistKey("bjork"))
     assertEquals("", SpreadShuffle.artistKey(null))
+    // Whoever it is filed under, a guest or a partner in the credit or not.
+    val alone = SpreadShuffle.artistKey("Sertab Erener")
+    assertEquals(alone, SpreadShuffle.artistKey("Sertab Erener feat. Ozan Çolakoğlu"))
+    assertEquals(alone, SpreadShuffle.artistKey("Sertab Erener & Demir Demirkan"))
+    assertEquals(alone, SpreadShuffle.artistKey("Sertab Erener, Sezen Aksu"))
+    // A band and its backing name stays one.
+    assertNotEquals(SpreadShuffle.artistKey("Florence"), SpreadShuffle.artistKey("Florence & the Machine"))
   }
 }

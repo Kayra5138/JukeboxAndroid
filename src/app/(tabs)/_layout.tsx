@@ -4,11 +4,15 @@ import { Animated, StyleSheet, View } from 'react-native';
 import { InnerScreen, ScreenContext } from 'react-native-screens';
 import { SettingsIcon, LibraryIcon, ListsIcon, SearchIcon } from '../../components/Icons';
 import { TabArea } from '../../components/Frosted';
-import { TabBar } from '../../components/TabBar';
+import { railWidth, TabBar } from '../../components/TabBar';
+import { NowPlayingBar } from '../../components/NowPlayingBar';
+import { useSheetOpen } from '../../lib/theme/Veil';
 import { BarsOver } from '../../components/UnderBars';
 import { useT } from '../../lib/i18n/index';
 import { useUpdateOffer } from '../../lib/support/updateStore';
-import { makeStyles, useColours } from '../../lib/theme/index';
+import { makeStyles, outlineWidth, useColours } from '../../lib/theme/index';
+import { RADIUS, SPACE } from '../../lib/theme/measures';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLandscape } from '../../lib/ui/layout';
 
 export default function MainTabs() {
@@ -22,6 +26,8 @@ export default function MainTabs() {
     no badge with a number, nothing that moves.
   */
   const update = useUpdateOffer() != null;
+  // A sheet a page laid over itself: the panel goes out of focus and out of reach with the page, as it did in it.
+  const sheet = useSheetOpen();
 
   return (
     /*
@@ -29,6 +35,14 @@ export default function MainTabs() {
       over it: each tab's list keeps clear of it by what `useUnderBars` says.
     */
     <BarsOver tabs>
+    {/*
+      Sideways, the bar of what is playing is a panel down the right of all
+      the tabs, one for all of them as the rail of tabs down the left is, so
+      that neither a page coming in nor a change of tab draws it again.
+      Upright it is part of the tab bar (`TabBar`).
+    */}
+    <View style={landscape ? styles.sideways : styles.upright}>
+    <TopStrip>
     <ScreenContext value={KeptScreen as unknown as typeof InnerScreen}>
     <Tabs
       /*
@@ -78,7 +92,7 @@ export default function MainTabs() {
       }} />
       <Tabs.Screen name="(stats)" options={{
         title: t.nav.stats, headerShown: false,
-        tabBarIcon: ({ color }) => <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 22, gap: 3 }}>{[10, 20, 15].map((height, i) => <View key={i} style={{ width: 4, height, backgroundColor: color }} />)}</View>,
+        tabBarIcon: ({ color }) => <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: 22, gap: SPACE.xxs }}>{[10, 20, 15].map((height, i) => <View key={i} style={{ width: 4, height, backgroundColor: color }} />)}</View>,
       }} />
       <Tabs.Screen name="(settings)" options={{
         title: t.nav.settings, headerShown: false,
@@ -92,7 +106,46 @@ export default function MainTabs() {
       }} />
     </Tabs>
     </ScreenContext>
+    </TopStrip>
+    {landscape ? (
+      // A view down the page round it, for it to be as tall as the tabs and no wider than itself.
+      <View>
+        <NowPlayingBar column veiled={sheet} />
+      </View>
+    ) : null}
+    </View>
     </BarsOver>
+  );
+}
+
+/**
+ * Sideways, the strip the phone keeps at the top for its clock, across the
+ * rail of tabs and the pages beside it as far as the panel of what is
+ * playing: in the rail's own colour, so that the rail, the strip and the
+ * panel are one frame round the pages. Left to each page, it was an empty
+ * band of the page's colour over every page, which looked like room
+ * forgotten. What is inside is then told there is only a little at the top
+ * to keep clear of (`SafeAreaInsetsContext`): no page leaves the band again,
+ * and none starts hard against the strip. Upright, nothing: the pages keep
+ * clear of the clock themselves.
+ */
+/** What the pages under the strip are told is at the top of them: a little room under it, and no more. */
+const UNDER_STRIP = SPACE.s;
+
+function TopStrip({ children }: { children: ReactNode }) {
+  const landscape = useLandscape();
+  const insets = useSafeAreaInsets();
+  const styles = useStyles();
+  if (!landscape || insets.top <= 0) return children;
+  return (
+    <View style={styles.framed}>
+      <View style={[styles.strip, { height: insets.top }]}>
+        {/* Over the rail it is the rail, with no line between; over the pages, a line along its foot as the rail has down its side. */}
+        <View style={{ width: railWidth(insets.left) }} />
+        <View style={styles.stripOverPages} />
+      </View>
+      <SafeAreaInsetsContext value={{ ...insets, top: UNDER_STRIP }}>{children}</SafeAreaInsetsContext>
+    </View>
   );
 }
 
@@ -149,6 +202,15 @@ const tabArea = ({ children, route }: { children: ReactNode; route: { key: strin
 );
 
 const useStyles = makeStyles((c) => StyleSheet.create({
+  upright: { flex: 1 },
+  sideways: { flex: 1, flexDirection: 'row' },
+  framed: { flex: 1 },
+  strip: { flexDirection: 'row', backgroundColor: c.bar },
+  stripOverPages: {
+    flex: 1,
+    borderBottomWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
+    borderBottomColor: c.border,
+  },
   // On the icon's top corner, ringed in the bar's colour so that it reads apart from the gear under it.
   dot: {
     position: 'absolute',
@@ -156,7 +218,7 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     right: -3,
     width: 9,
     height: 9,
-    borderRadius: 5,
+    borderRadius: RADIUS.check,
     backgroundColor: c.accent,
     borderWidth: 1.5,
     borderColor: c.bar,

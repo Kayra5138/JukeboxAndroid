@@ -25,7 +25,6 @@ const months = [
 const capital = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
 
 export const stats: Strings['stats'] = {
-  percent: (value) => `${value}%`,
 
   period: {
     /* Five to a bar on a narrow phone, about 60 points each: "Settimana" does not fit, so it is shortened. */

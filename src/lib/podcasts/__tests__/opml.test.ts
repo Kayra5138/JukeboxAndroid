@@ -42,3 +42,9 @@ describe('a YouTube channel in an OPML file', () => {
     assert.deepEqual(feedsInOpml(written), [page]);
   });
 });
+
+describe('an outline with a > in a quoted value', () => {
+  it('is read to its end, feed and all', () => {
+    assert.deepEqual(feedsInOpml(`<opml><body><outline text="Then > now" xmlUrl="https://a.b/feed.xml"/></body></opml>`), ['https://a.b/feed.xml']);
+  });
+});

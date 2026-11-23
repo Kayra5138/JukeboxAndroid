@@ -88,6 +88,8 @@ export const welcome: Strings['welcome'] = {
     note:
       '重新显示刚安装时看到的内容：最初的设置、是否查找封面的询问，以及使用提示。你的音乐、歌单和设置不会改变。',
     again: '重新查看',
+    /** Asked before the first start is shown again: it takes over the screen. */
+    ask: { title: '要重新查看首次启动吗？', body: '最初的设置、是否查找封面的询问以及使用提示会再次出现。你的音乐、歌单和设置不会改变。' },
   },
 
   discoverEarly: '你听得还不多时，“发现”会从你歌曲最多的艺人入手，并根据你的收听不断学习。',

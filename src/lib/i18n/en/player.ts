@@ -5,6 +5,10 @@ import { oneOrMany } from '../write.ts';
 export const player = {
   bar: {
     opensPlayer: 'Opens the player',
+    /** The line under the name on the bar, where it is set to say what comes next or how long is left: see `ui/miniPlayer.ts`. */
+    upNext: (title: string) => `Next: ${title}`,
+    lastInQueue: 'Last in the queue',
+    timeLeft: (clock: string) => `${clock} left`,
   },
   /** The player itself; see `PlayerSheet`. */
   sheet: {
@@ -69,6 +73,11 @@ export const player = {
   },
   /** The sheet behind the gear; see `PlayerSettings`. */
   settings: {
+    /** The tabs of the player's card of settings, from its gear: how it sounds, how it looks, when it stops. */
+    tabs: { sound: 'Sound', look: 'Look', sleep: 'Sleep' },
+    /** The chip that shows the rest of the effects beside the player, and the one that puts them away again. */
+    moreEffects: 'More',
+    fewerEffects: 'Fewer',
     playback: 'Playback',
     backToNormal: 'Back to normal speed and pitch',
     /** The button that undoes speed and pitch, and what a pitch of nought is written as. */
@@ -78,7 +87,6 @@ export const player = {
     pitchHint: 'Semitones, up or down, with the recording still running at the speed above it.',
     effects: 'Effects',
     equalizer: { note: 'Bands, bass and loudness' },
-    crossfade: { note: 'How one track gives way to the next' },
     allEffects: { title: 'All effects', note: 'Width, crossfeed, rotation and level' },
     /** A tape's own jumps, for its book or show: see `tapes/ownJumps.ts`. */
     jumps: {

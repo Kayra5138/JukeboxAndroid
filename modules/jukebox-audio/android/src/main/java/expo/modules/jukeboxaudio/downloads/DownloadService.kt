@@ -94,10 +94,15 @@ class DownloadService : Service() {
       .setContentText(Localised.text(this, words, *with))
       .setOnlyAlertOnce(true).setOngoing(true)
       .setProgress(100, progress, progress == 0)
-    packageManager.getLaunchIntentForPackage(packageName)?.let {
-      builder.setContentIntent(PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-    }
+    opening?.let(builder::setContentIntent)
     return builder.build()
+  }
+
+  /** What a press of the notification opens, made once: it was asked of the package manager every second. */
+  private val opening: PendingIntent? by lazy {
+    packageManager.getLaunchIntentForPackage(packageName)?.let {
+      PendingIntent.getActivity(this, 0, it, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -182,6 +187,7 @@ class DownloadService : Service() {
     }
   }
   private var shownResting = false
+  private var waitingSince = 0L
 
   private fun held(now: Boolean) {
     shownResting = false
@@ -190,7 +196,12 @@ class DownloadService : Service() {
       shownFinding = null
       return
     }
-    waiting.acquire(15_000)
+    // Taken again only when most of its time has gone: asked four times a second, every one was a call into the system.
+    val now = android.os.SystemClock.elapsedRealtime()
+    if (!waiting.isHeld || now - waitingSince > 10_000) {
+      waiting.acquire(15_000)
+      waitingSince = now
+    }
     // What is being waited for, where it has a name. Said once, not four times a second.
     val finding = DownloadStore.findingTitle() ?: return
     if (finding == shownFinding) return

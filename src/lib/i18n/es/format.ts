@@ -14,6 +14,7 @@ const date = (value: Date) =>
   `${pad2(value.getDate())}/${pad2(value.getMonth() + 1)}/${value.getFullYear()}`;
 
 export const format: Strings['format'] = {
+  percent: (value) => `${format.number(value)} %`,
   number: (value) => {
     const rounded = Math.round(value);
     const digits = groupedWhole(String(Math.abs(rounded)));

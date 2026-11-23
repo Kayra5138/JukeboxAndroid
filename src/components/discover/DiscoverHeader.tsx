@@ -1,12 +1,17 @@
-import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { ProgressBar } from '../ProgressBar';
+import { Busy } from '../Busy';
 
 import { AlertIcon, CrossIcon, InfoIcon, RefreshIcon, SettingsIcon } from '../Icons';
+import { Button } from '../Button';
 import { Pressable } from '../Pressable';
+import { SlideToRefresh } from './SlideToRefresh';
 import { useDiscoverStatus } from './hooks';
 import { statusLine, type StatusLine } from './show';
 import { useDiscoverActions } from '../../lib/discover/DiscoverProvider';
 import { useT } from '../../lib/i18n/index';
-import { makeStyles, outlined, useColours, usePressed } from '../../lib/theme/index';
+import { makeStyles, useColours, usePressed } from '../../lib/theme/index';
+import { ICON, ICON_SMALL, LEADING, SPACE, TYPE } from '../../lib/theme/measures';
 
 /** The two lines of the heading: what this is and the way to the rest, then when it was made and the way to a new one. */
 const TITLE = 44;
@@ -21,83 +26,89 @@ const ONE_LINE_FROM = 560;
  * are without measuring them.
  *
  * Worked out and not measured, so it is right on the first draw. The line
- * of status grows with the size of writing the phone is set to, up to half
- * as large again, since it is the one part that is a sentence; past that
- * its two lines shorten instead.
+ * of status is there only while it has something to say ([saying]), and
+ * grows with the size of writing the phone is set to, up to half as large
+ * again, since it is the one part that is a sentence; past that its two
+ * lines shorten instead.
  */
-export function discoverHeaderHeight(width: number, fontScale: number): number {
+export function discoverHeaderHeight(width: number, fontScale: number, saying: boolean): number {
   const heading = width >= ONE_LINE_FROM ? TITLE : TITLE + UPDATED;
-  return PADDING + heading + statusHeight(fontScale);
+  return PADDING + heading + statusHeight(fontScale, saying);
 }
 
-const statusHeight = (fontScale: number) => Math.round(12 + 34 * Math.min(Math.max(fontScale, 1), 1.5));
+const statusHeight = (fontScale: number, saying: boolean) =>
+  saying ? Math.round(12 + 34 * Math.min(Math.max(fontScale, 1), 1.5)) : 0;
 
 /**
  * What stands over the list: what it is, when it was made, the three things
  * that can be asked of it, and one line for whatever it is doing.
  *
- * That line is always there, said or empty. A status that came and went
- * used to take its room with it, and the list under the finger moved down a
- * line and back up; now nothing that happens to the list changes how tall
- * this is.
+ * That line is there only while it says something. Kept empty the rest of
+ * the time, so that the list never moved under the finger as a status came
+ * and went, it was a band of nothing between the heading and the songs for
+ * most of the time the screen was open; the list now moves down a line when
+ * there is something to say, which is mostly as a new one is begun.
  *
  * It listens for the list's state and nothing else, and is not the list's
  * parent, so a status changing draws this again and no row.
  */
-export function DiscoverHeader({ onAbout, onSettings }: { onAbout: () => void; onSettings: () => void }) {
+export function DiscoverHeader({ onAbout, onSettings, hasList }: { onAbout: () => void; onSettings: () => void; hasList: boolean }) {
   const status = useDiscoverStatus();
   const { refresh } = useDiscoverActions();
   const { width, fontScale } = useWindowDimensions();
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.discover;
   const oneLine = width >= ONE_LINE_FROM;
   const building = status.building !== null;
+  /*
+    While a new list is being got ready the track is not to be slid: what
+    sliding it would do then is show what is ready of it, and the track
+    saying "refresh" for that read as a second refresh. Once some of it is
+    ready, the track is that instead, at a touch ("Show it now").
+  */
+  const preparing = status.preparing !== null;
+  const showable = (status.preparing?.ready ?? 0) > 0;
+  const line = statusLine(status);
   const updated = status.updatedAt
     ? said.panel.updated(t.format.date(new Date(status.updatedAt)))
     : said.header.notYet;
 
+  // Round marks, as the tabs' titles have them (`TabTitle`).
   const about = (
-    <Pressable
-      android_ripple={pressed}
-      accessibilityRole="button"
-      accessibilityLabel={said.header.about}
-      style={styles.round}
-      hitSlop={ROUND_SLOP}
-      onPress={onAbout}>
-      <InfoIcon size={20} color={c.textMuted} />
-    </Pressable>
+    <Button kind="secondary" label={said.header.about} mark={(ink) => <InfoIcon size={ICON} color={ink} />} onPress={onAbout} />
   );
   const settings = (
-    <Pressable
-      android_ripple={pressed}
-      accessibilityRole="button"
-      accessibilityLabel={said.header.settings}
-      style={styles.round}
-      hitSlop={ROUND_SLOP}
-      onPress={onSettings}>
-      <SettingsIcon size={20} color={c.textMuted} />
-    </Pressable>
+    <Button kind="secondary" label={said.header.settings} mark={(ink) => <SettingsIcon size={ICON} color={ink} />} onPress={onSettings} />
   );
   /*
     A button that looks like one. It was the word "Refresh" in the corner,
     which is how a link is drawn, for the one thing on the screen that sets
     half a minute of work going.
+
+    Only while there is no list to lose. With one, a touch that was a slip
+    took the whole of it away: a new one then comes by sliding a knob along
+    a track where the button was (`SlideToRefresh`).
   */
-  const again = (
-    <Pressable
-      android_ripple={pressed}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: building, busy: building }}
+  const again = hasList ? (
+    <SlideToRefresh
+      onRefresh={refresh}
+      disabled={building || (preparing && !showable)}
+      ready={preparing && showable ? said.status.showNow : null}
+      style={oneLine ? styles.slideBeside : styles.slide}
+    />
+  ) : (
+    <Button
+      kind="secondary"
+      size="small"
+      shape="pill"
+      label={said.panel.refresh}
+      icon={<RefreshIcon size={ICON_SMALL} />}
+      busy={building}
       disabled={building}
-      style={[styles.refresh, building && styles.off]}
-      hitSlop={REFRESH_SLOP}
-      onPress={refresh}>
-      <RefreshIcon size={16} />
-      <Text style={styles.refreshLabel} maxFontSizeMultiplier={1.4}>{said.panel.refresh}</Text>
-    </Pressable>
+      onPress={refresh}
+      style={styles.refresh}
+    />
   );
 
   return (
@@ -126,15 +137,15 @@ export function DiscoverHeader({ onAbout, onSettings }: { onAbout: () => void; o
             {settings}
           </View>
           <View style={styles.updatedRow}>
-            <Text style={[styles.updated, styles.grow]} numberOfLines={1} maxFontSizeMultiplier={1.4}>
+            <Text style={[styles.updated, hasList ? styles.shrink : styles.grow]} numberOfLines={1} maxFontSizeMultiplier={1.4}>
               {updated}
             </Text>
             {again}
           </View>
         </>
       )}
-      <View style={[styles.status, { height: statusHeight(fontScale) }]}>
-        <Status line={statusLine(status)} />
+      <View style={[styles.status, { height: statusHeight(fontScale, line.kind !== 'none') }]}>
+        <Status line={line} />
       </View>
     </View>
   );
@@ -158,16 +169,13 @@ function Status({ line }: { line: StatusLine }) {
           {line.text}
         </Text>
         {line.action ? (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            style={styles.statusButton}
-            hitSlop={STATUS_SLOP}
-            onPress={line.action === 'findMore' ? findMore : refresh}>
-            <Text style={styles.statusButtonLabel} maxFontSizeMultiplier={1.5}>
-              {line.action === 'findMore' ? t.discover.header.findMore : t.common.retry}
-            </Text>
-          </Pressable>
+          <Button
+            kind="secondary"
+            size="small"
+            shape="pill"
+            label={line.action === 'findMore' ? t.discover.header.findMore : t.common.retry}
+            onPress={line.action === 'findMore' ? findMore : refresh}
+          />
         ) : null}
         <Pressable
           android_ripple={pressed}
@@ -186,7 +194,7 @@ function Status({ line }: { line: StatusLine }) {
   return (
     <View style={styles.statusColumn}>
       <View style={styles.statusRow}>
-        {line.kind === 'building' && fraction === null ? <ActivityIndicator size={14} color={c.textMuted} /> : null}
+        {line.kind === 'building' && fraction === null ? <Busy size={14} color={c.textMuted} /> : null}
         <Text
           // Said when it changes, and politely: it is news of work in hand, not an alarm.
           accessibilityLiveRegion={line.kind === 'waiting' ? 'none' : 'polite'}
@@ -198,63 +206,34 @@ function Status({ line }: { line: StatusLine }) {
       </View>
       {/* How far along, where that is known: so many artists asked about of so many, so many songs in of so many. */}
       {fraction !== null ? (
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${Math.round(fraction * 100)}%` }]} />
-        </View>
+        <ProgressBar value={fraction} />
       ) : null}
     </View>
   );
 }
 
-/*
-  How much further than they are drawn the header's buttons take a touch:
-  enough to make each of them the 48 a finger is owed, and never so far that
-  two of them reach for the same spot. The two round ones stand two points
-  apart, so they give only one each sideways.
-*/
+/* How much further than it is drawn the cross that puts a problem away takes a touch: the 48 a finger is owed. */
 const DISMISS_SLOP = { top: 10, bottom: 10, left: 8, right: 12 };
-const ROUND_SLOP = { top: 2, bottom: 2, left: 1, right: 1 };
-const REFRESH_SLOP = { top: 6, bottom: 6 };
-const STATUS_SLOP = { top: 8, bottom: 8 };
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  header: { paddingTop: PADDING, paddingHorizontal: 16 },
-  titleRow: { height: TITLE, flexDirection: 'row', alignItems: 'center', gap: 2 },
-  updatedRow: { height: UPDATED, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  names: { flex: 1, minWidth: 0, gap: 1, marginRight: 8 },
+  header: { paddingTop: PADDING, paddingHorizontal: SPACE.l },
+  titleRow: { height: TITLE, flexDirection: 'row', alignItems: 'center', gap: SPACE.xs },
+  updatedRow: { height: UPDATED, flexDirection: 'row', alignItems: 'center', gap: SPACE.m },
+  names: { flex: 1, minWidth: 0, gap: 1, marginRight: SPACE.s },
   grow: { flex: 1, minWidth: 0 },
-  heading: { color: c.text, fontSize: 18, fontWeight: '600' },
-  updated: { color: c.textMuted, fontSize: 12.5 },
-  round: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  refresh: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    height: 36,
-    paddingHorizontal: 14,
-    marginLeft: 6,
-    borderRadius: 18,
-    backgroundColor: c.surface,
-    ...outlined(c),
-  },
-  refreshLabel: { color: c.text, fontSize: 13.5, fontWeight: '600' },
-  off: { opacity: 0.45 },
+  // The date as long as it is, beside the track, which has what is left.
+  shrink: { flexShrink: 1, minWidth: 0 },
+  heading: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+  updated: { color: c.textMuted, fontSize: TYPE.hint },
+  refresh: { marginLeft: SPACE.xs },
+  // The track on the right of the line it is in, taking what the date leaves, up to a width that reads as a control.
+  slide: { flexGrow: 1, minWidth: 150, maxWidth: 240, marginLeft: 'auto' },
+  slideBeside: { width: 220, marginLeft: SPACE.xs },
 
   status: { justifyContent: 'center' },
-  statusColumn: { gap: 6 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusText: { flex: 1, minWidth: 0, color: c.textMuted, fontSize: 12, lineHeight: 16 },
-  problem: { flex: 1, minWidth: 0, color: c.danger, fontSize: 12, lineHeight: 16 },
-  statusButton: {
-    height: 32,
-    paddingHorizontal: 12,
-    borderRadius: 16,
-    justifyContent: 'center',
-    backgroundColor: c.surface,
-    ...outlined(c),
-  },
-  statusButtonLabel: { color: c.text, fontSize: 12.5, fontWeight: '600' },
+  statusColumn: { gap: SPACE.xs },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
+  statusText: { flex: 1, minWidth: 0, color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
+  problem: { flex: 1, minWidth: 0, color: c.danger, fontSize: TYPE.hint, lineHeight: LEADING.hint },
   dismiss: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
-  track: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, overflow: 'hidden' },
-  fill: { height: 3, backgroundColor: c.accent },
 }));

@@ -1,4 +1,5 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { TYPE, SPACE } from '../lib/theme/measures';
 import {
   Animated,
   PanResponder,
@@ -10,6 +11,7 @@ import {
 
 import { makeStyles } from '../lib/theme/index';
 import { haptic } from '../lib/ui/haptics';
+import { unlessStill } from '../lib/ui/motion';
 
 /**
  * How far the finger must travel sideways before this is a swipe at all.
@@ -89,6 +91,13 @@ export function SwipeRow({
   // over whatever these were on the first render.
   const state = useRef({ left, right, enabled });
   state.current = { left, right, enabled };
+  /*
+    Whether the row is being pulled, or going back from a pull: the panels
+    are put up only then. Standing under every row of every list all the
+    while, unseen, they were two more boxes and two more lines of writing
+    laid out for each row as a scroll brought it.
+  */
+  const [pulling, setPulling] = useState(false);
 
   const pan = useMemo(() => {
     /** Sideways travel turned into how far the row actually moves. */
@@ -104,12 +113,14 @@ export function SwipeRow({
 
     const settle = () => {
       armed.current = false;
-      Animated.spring(shift, {
+      unlessStill(Animated.spring(shift, {
         toValue: 0,
         useNativeDriver: true,
         speed: 18,
         bounciness: 4,
-      }).start();
+      }), shift, 0, ({ finished }) => {
+        if (finished) setPulling(false);
+      });
     };
 
     return PanResponder.create({
@@ -125,6 +136,7 @@ export function SwipeRow({
         gesture back the moment it thinks it is a scroll, and handing it over
         mid-swipe leaves the row stranded halfway open.
       */
+      onPanResponderGrant: () => setPulling(true),
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_event, gesture) => {
         const moved = follow(gesture.dx);
@@ -186,7 +198,7 @@ export function SwipeRow({
   */
   return (
     <View style={[styles.frame, style]}>
-      {left ? (
+      {left && pulling ? (
         <Animated.View
           pointerEvents="none"
           style={[
@@ -201,7 +213,7 @@ export function SwipeRow({
           </Animated.Text>
         </Animated.View>
       ) : null}
-      {right ? (
+      {right && pulling ? (
         <Animated.View
           pointerEvents="none"
           style={[
@@ -240,7 +252,7 @@ const useStyles = makeStyles(() => StyleSheet.create({
   },
   panelLeft: { left: '-100%', alignItems: 'flex-start' },
   panelRight: { left: '100%', alignItems: 'flex-end' },
-  label: { fontSize: 13, fontWeight: '600', letterSpacing: 0.2, marginHorizontal: 14 },
+  label: { fontSize: TYPE.small, fontWeight: '600', letterSpacing: 0.2, marginHorizontal: SPACE.m },
   // Over the row's own place again, a whole width from where the panel is.
   labelLeft: { left: '100%' },
   labelRight: { left: '-100%' },

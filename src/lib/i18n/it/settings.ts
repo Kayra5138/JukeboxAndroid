@@ -10,6 +10,7 @@ export const settings: Strings['settings'] = {
     look: 'Aspetto e tatto',
     sound: 'Audio',
     player: 'Lettore',
+    miniPlayer: 'Mini lettore',
     tapes: 'Cassette',
     library: 'Libreria',
     downloads: 'Download e Scopri',
@@ -21,6 +22,7 @@ export const settings: Strings['settings'] = {
     look: 'Il tema, le animazioni, la vibrazione e quali viste offre la libreria.',
     sound: 'Equalizzatore ed effetti, volume uniforme, dissolvenza incrociata, velocità e tonalità.',
     player: 'La durata dei salti avanti e indietro, cosa suona quando finisce la coda e la lingua in cui vengono tradotti i testi.',
+    miniPlayer: 'Cosa mostra la barra di ciò che suona, i suoi pulsanti, il suo aspetto e come si usa.',
     tapes: 'Riavvolgimento intelligente, la durata dei salti di una cassetta e i podcast scaricati solo con il Wi‑Fi.',
     library: 'La cartella della tua musica, tag e copertine, e i file che potrebbero essere la stessa canzone.',
     waiting: (count) => `${format.number(count)} da decidere`,
@@ -28,6 +30,19 @@ export const settings: Strings['settings'] = {
     data: 'Il backup di tutto o l’importazione di un backup, il controllo degli aggiornamenti e ListenBrainz (sperimentale).',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: 'Barra di scorrimento', note: 'La barra accanto a un elenco lungo, da afferrare per andare lontano in un colpo.', always: 'Sempre', moving: 'Durante lo scorrimento', never: 'Mai' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: 'Suggerimenti sotto un elenco', note: 'Sotto i brani di un elenco, altri della libreria che potrebbero starci, in base ai tag su cui l’elenco si basa.' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: 'Annulla dopo aver tolto', note: 'Per qualche secondo dopo che un brano è stato tolto da un elenco, lasciato andare dal lettore o scartato in Scopri, un pulsante per riaverlo.' },
+  search: {
+    open: 'Cerca nelle impostazioni',
+    title: 'Cerca nelle impostazioni',
+    placeholder: 'Una parola di qualsiasi impostazione',
+    none: (query: string) => `Nessuna impostazione contiene «${query}».`,
+  },
   language: {
     title: 'Lingua',
     note: 'La lingua dell’app. Non segue quella del telefono.',
@@ -63,7 +78,6 @@ export const settings: Strings['settings'] = {
     saturation: 'Saturazione',
     lightness: 'Luminosità',
     degrees: (value) => `${value}°`,
-    percent: (value) => `${value}%`,
     hex: 'Codice colore',
     nudged: (colour) => `Mostrato come ${colour}, così che tutto ciò che c’è sopra resti leggibile.`,
     note:
@@ -164,13 +178,11 @@ export const settings: Strings['settings'] = {
       sparks: 'Scintille lanciate dal bordo a ogni battito, per tutto il lettore.',
       aurora: 'Nuvole dei colori della copertina dietro tutto il lettore, ognuna cresce con una parte del suono.',
     },
-    beats: 'Vibra a ritmo',
-    beatsNote: 'Un leggero colpo a ogni battito mentre il lettore è aperto e la musica suona. Leggero quanto le tue impostazioni di vibrazione.',
   },
   still: {
     title: 'Riduci le animazioni',
     note:
-      'Per un telefono che perde fotogrammi. Il lettore compare invece di salire, e il gioco smette di illuminarsi quando si vince o si perde una vita. I tasti continuano a cadere: quello è il gioco, non una decorazione.',
+      'Per un telefono che perde fotogrammi. Pagine e finestre si aprono senza animazione, le copertine non compaiono in dissolvenza, il disco e le visualizzazioni stanno fermi, e il vetro è disegnato senza sfocatura.',
   },
   scriptNames: { title: 'Nomi in altre scritture', latin: 'Lettere latine', original: 'Originale', note: 'Se una ricerca ha trovato il nome di un brano in lettere latine e nella sua scrittura (giapponese, cinese, coreano), quale mostra la libreria. I brani cercati prima si completano alla prossima ricerca.' },
   haptics: {
@@ -185,7 +197,9 @@ export const settings: Strings['settings'] = {
       custom: "Scegli sotto quali momenti vibrano.",
     },
     strength: "Intensità",
-    strengthNote: "Si sente quando lasci. I telefoni il cui motore non si regola mantengono la propria intensità.",
+    strengthNote: "Si sente quando lasci. Il 100% è il valore consigliato; oltre, gli stessi tocchi diventano più forti e, oltre il 200%, il motore va al massimo. I telefoni il cui motore non si regola mantengono fin lì la propria intensità.",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "consigliato",
     groupsHeading: "Cosa vibra",
     groups: {
       holds: { title: "Premere e trascinare", note: "Una pressione lunga, una riga sollevata per spostarla, il dito sulle caselle." },
@@ -202,9 +216,81 @@ export const settings: Strings['settings'] = {
     note:
       'Alla fine di ogni riga di brani e album, aprono lo stesso menu della pressione prolungata. Anche senza, basta tenere premuta una riga.',
   },
+  miniPlayer: {
+    shows: 'Cosa mostra',
+    progress: {
+      title: 'Avanzamento',
+      none: 'Nessuno',
+      line: 'Linea',
+      fill: 'Riempimento',
+      note: 'A che punto è il brano: una linea sottile sul bordo inferiore o tutta la barra che si riempie mentre il brano va avanti.',
+    },
+    line: {
+      title: 'Sotto il nome',
+      artist: 'Artista',
+      album: 'Album',
+      both: 'Artista e album',
+      left: 'Tempo rimanente',
+      next: 'Dopo',
+      note: 'Cosa dice la seconda riga.',
+    },
+    cover: {
+      title: 'Copertina',
+      square: 'Quadrata',
+      round: 'Rotonda',
+      record: 'Disco',
+      note: 'Il disco gira mentre il brano suona.',
+    },
+    buttons: {
+      title: 'Pulsanti',
+      aside: 'Fino a quattro, nell’ordine mostrato qui.',
+      names: {
+        previous: 'Precedente',
+        playPause: 'Riproduci e pausa',
+        next: 'Successivo',
+        back: 'Salta indietro',
+        forward: 'Salta avanti',
+        heart: 'Preferito',
+        shuffle: 'Casuale',
+        repeat: 'Ripeti',
+      },
+    },
+    handling: 'Tocco',
+    swipe: {
+      title: 'Scorri per un altro brano',
+      note: 'Trascinata di lato passa al brano precedente o successivo. Spento, apre solo il lettore.',
+    },
+    hold: {
+      title: 'Tenendola premuta si apre',
+      none: 'Niente',
+      menu: 'Il menu del brano',
+      queue: 'La coda',
+      lyrics: 'Il testo',
+      note: 'Cosa fa una pressione lunga sul brano.',
+    },
+    look: 'Aspetto',
+    floating: {
+      title: 'Fluttuante',
+      note: 'Arrotondata e staccata dai bordi, invece che larga quanto lo schermo.',
+    },
+    tint: {
+      title: 'Colore della copertina',
+      note: 'Tinta con il colore della copertina di ciò che suona.',
+    },
+    leftHanded: {
+      title: 'Per mancini',
+      note: 'I pulsanti a sinistra e il brano a destra.',
+    },
+  },
   tabs: {
     title: 'Schede',
-    searchNote: 'Scopri e i download da YouTube sono in questa scheda e spariscono con lei.',
+    notes: {
+      library: 'I tuoi brani, album, artisti, cassette e cartelle.',
+      lists: 'Le tue playlist, playlist intelligenti e preferiti.',
+      search: 'Scopri e download da YouTube. Se nascondi questa scheda, spariscono entrambi con lei.',
+      stats: 'Quello che hai ascoltato e i tuoi resoconti di ascolto.',
+      settings: 'Come l’app appare, suona e si comporta.',
+    },
     aside: 'Libreria e Impostazioni ci sono sempre.',
     names: 'Nomi sotto le icone',
     namesNote: 'Se disattivato, la barra mostra solo le icone ed è un po’ più bassa. In orizzontale è sempre così.',

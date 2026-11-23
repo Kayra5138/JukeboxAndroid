@@ -1,23 +1,30 @@
-import { usePageSides, WithNowPlaying } from '../../../components/NowPlayingBar';
-import { useUnderBars } from '../../../components/UnderBars';
-import { useCallback, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { WithNowPlaying } from '../../../components/NowPlayingBar';
+import { TabTitle, usePageRoom } from '../../../components/Page';
+import { SearchField } from '../../../components/SearchField';
+import { CARD_GAP, SPACE, TYPE } from '../../../lib/theme/measures';
+import { useCallback, useDeferredValue, useRef, useState } from 'react';
+import { useFocusEffect, useIsFocused, useRouter, type Href } from 'expo-router';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { BlurArea, ClockGlass, GlassScene } from '../../../components/Frosted';
+import { FindIn, Text } from '../../../components/settings/Find';
+import { SearchResults } from '../../../components/settings/SearchResults';
+import { searchSettings, wayTo, type SettingsHit } from '../../../lib/settings/search';
+import { useBack } from '../../../lib/ui/back';
 import { Pressable } from '../../../components/Pressable';
 import JukeboxAudio from '../../../../modules/jukebox-audio';
 import Constants from 'expo-constants';
+import { ConfirmSheet } from '../../../components/ConfirmSheet';
 import { OptionSheet } from '../../../components/OptionSheet';
 import { DownloadsCategory } from '../../../components/downloads/SettingsRows';
-import { CategoryRow, useRows } from '../../../components/settings/rows';
+import { CategoryRow, useRows, Chevron } from '../../../components/settings/rows';
 import { UpdateRow } from '../../../components/support/UpdateRows';
 import { chooseLanguage, LANGUAGES, useLanguage, useT } from '../../../lib/i18n/index';
-import { sameSongs } from '../../../lib/identity/index';
+import { pendingPairCount } from '../../../lib/identity/index';
 import { useLandscape } from '../../../lib/ui/layout';
 import { startOver } from '../../../lib/ui/welcomeStore';
 import { makeStyles, scene, usePressed, useThemeChoice } from '../../../lib/theme/index';
 import { themeOf } from '../../../lib/theme/registry';
 import { useLibraryViews } from '../../../lib/ui/libraryViews';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTopOnReselect } from '../../../lib/ui/tabReselect';
 
 /**
@@ -43,6 +50,8 @@ export default function SettingsScreen() {
   */
   const language = useLanguage();
   const [languagesOpen, setLanguagesOpen] = useState(false);
+  // Whether the first start again is being asked about: see the last row.
+  const [askingStart, setAskingStart] = useState(false);
   /** What is chosen, to be named on the row that opens how the app looks. */
   const themeChoice = useThemeChoice();
   const themeNameKey = themeChoice === 'system' ? 'system' : themeOf(themeChoice).nameKey;
@@ -56,16 +65,14 @@ export default function SettingsScreen() {
   const [pairs, setPairs] = useState(0);
   useFocusEffect(useCallback(() => {
     try {
-      setPairs(sameSongs().length);
+      setPairs(pendingPairCount());
     } catch {
       setPairs(0);
     }
   }, []));
   const landscape = useLandscape();
-  const insets = useSafeAreaInsets();
-  const sides = usePageSides();
-  // In a theme of glass the tab bar and the bar of what is playing are over the foot of this.
-  const under = useUnderBars({ player: true });
+  // The skeleton every page has, for the page a tab opens on: see `usePageRoom`.
+  const room = usePageRoom({ root: true });
   const built = JukeboxAudio.buildTimestamp;
   const version = Constants.expoConfig?.version;
   const date = built ? new Date(built) : null;
@@ -90,7 +97,7 @@ export default function SettingsScreen() {
             <Text style={rows.value} numberOfLines={1}>
               {LANGUAGES.find((entry) => entry.id === language)?.name ?? language}
             </Text>
-            <Text style={rows.chevron} importantForAccessibility="no">›</Text>
+            <Chevron />
           </View>
         </View>
         <Text style={rows.muted}>{t.settings.language.note}</Text>
@@ -106,6 +113,7 @@ export default function SettingsScreen() {
       <CategoryRow href="/settings-look" title={t.settings.sections.look} note={said.look} value={t.themes[themeNameKey]} />
       <CategoryRow href="/settings-sound" title={t.settings.sections.sound} note={said.sound} />
       <CategoryRow href="/settings-player" title={t.settings.sections.player} note={said.player} />
+      <CategoryRow href="/settings-miniplayer" title={t.settings.sections.miniPlayer} note={said.miniPlayer} />
       {/* Only while the library offers tapes: there is nothing for it to set otherwise. */}
       {views.includes('tapes') ? <CategoryRow href="/settings-tapes" title={t.settings.sections.tapes} note={said.tapes} /> : null}
     </>
@@ -142,7 +150,8 @@ export default function SettingsScreen() {
           accessibilityRole="button"
           accessibilityHint={t.welcome.settings.note}
           style={rows.row}
-          onPress={startOver}>
+          // Asked first: it takes the whole screen over, and one touch too many on a row this low brought it up unasked.
+          onPress={() => setAskingStart(true)}>
           <View style={rows.line}>
             <Text style={rows.title}>{t.welcome.settings.title}</Text>
             <Text style={rows.value} numberOfLines={1}>{t.welcome.settings.again}</Text>
@@ -153,34 +162,71 @@ export default function SettingsScreen() {
     </>
   );
 
-  // Its tab pressed again: back to the top of it.
-  const backUp = useTopOnReselect();
+  /*
+    Any setting by a word it is shown with, however far in it is
+    (`lib/settings/search.ts`): what is found stands in place of the
+    categories while anything is typed, as the library's search does with
+    its lists, and opens the page it is on with the word marked there
+    (`FindIn`), by way of the pages it is in.
+  */
+  const [query, setQuery] = useState('');
+  // Looked a moment behind the field: a letter typed is never held up by it.
+  const looked = useDeferredValue(query);
+  const searching = looked.trim().length > 0;
+  const hits = searching ? searchSettings(t, looked) : [];
+  const router = useRouter();
+  const open = (hit: SettingsHit) => {
+    if (hit.page === 'settings') {
+      // On this page: the categories back, and the one found marked among them.
+      setQuery('');
+      router.setParams({ find: hit.text });
+      return;
+    }
+    const way = wayTo(hit.page);
+    way.forEach((page, index) => {
+      const last = index === way.length - 1;
+      router.push((last && !hit.isPage ? { pathname: `/${page}`, params: { find: hit.text } } : `/${page}`) as Href);
+    });
+  };
+  // Back, and the tab pressed again, take the search away before anything else, as in the library.
+  const focused = useIsFocused();
+  useBack(query.length > 0 && focused, () => setQuery(''));
+
+  // Its tab pressed again: back to the top of it, and then the search away.
+  const backUp = useTopOnReselect(() => setQuery(''));
+  // And for a row looked for from the search to be scrolled to: see `FindIn`.
+  const findScroller = useRef<ScrollView | null>(null);
 
   return <View style={styles.screen}>
     <WithNowPlaying>
+    <FindIn scroller={findScroller}>
+    {/* The page an area the glass behind the clock blurs: see `ClockGlass`. */}
+    <GlassScene>
+    <BlurArea style={styles.fill}>
     <ScrollView
       {...backUp}
-      // Clear of the clock by room in what is scrolled, not round the scroller: room given to the
-      // scroller itself is taken off how far it will scroll, and the last row stopped short of its own edge.
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingTop: insets.top + 20,
-          paddingLeft: sides.left + 20,
-          paddingRight: sides.right + 20,
-          paddingBottom: 24 + under.bottom,
-        },
-      ]}>
-      <Text style={styles.brand}>Jukebox</Text>
-      {/* The version first, being what an issue asks for, and a number that needs no words. */}
-      <Text style={styles.built} selectable>
-        {version ? `${version} · ` : ''}
-        {date && Number.isFinite(date.getTime())
-          ? t.settings.lastBuilt(t.format.dateTime(date))
-          : t.settings.lastBuiltUnknown}
-      </Text>
-      {/* Under the number it is news about, and only while there is a newer one. */}
+      // A result tapped with the keyboard up opens at the first touch, rather than only putting the keyboard away.
+      keyboardShouldPersistTaps="handled"
+      ref={(view) => {
+        findScroller.current = view;
+        backUp.ref(view);
+      }}
+      contentContainerStyle={room}>
+      <TabTitle title={t.nav.settings} />
+      {/* Word of a newer version, at the top while there is one. */}
       <UpdateRow />
+      {/* Settings searched: see `open` above. */}
+      <SearchField
+        value={query}
+        onChangeText={setQuery}
+        placeholder={t.settings.search.open}
+        accessibilityLabel={t.settings.search.title}
+      />
+      {searching ? (
+        <View style={styles.groups}>
+          <SearchResults hits={hits} query={looked.trim()} onOpen={open} />
+        </View>
+      ) : null}
       {/*
         Upright it is one column of boxes, each category its own: short enough
         to be taken in, with a line or two under each name to choose by.
@@ -189,7 +235,7 @@ export default function SettingsScreen() {
         the first three categories, the other three over the last switch —
         and reading down one and then the other is still the same order.
       */}
-      {landscape ? (
+      {searching ? null : landscape ? (
         <View style={[styles.groups, styles.groupsWide]}>
           <View style={styles.group}>
             {speaking}
@@ -206,7 +252,21 @@ export default function SettingsScreen() {
           {latter}
         </View>
       )}
+      {/*
+        Which build this is, at the foot, with the name of the app: what an
+        issue asks for, and a number that needs no words.
+      */}
+      {searching ? null : (
+        <Text style={styles.built} selectable>
+          {`Jukebox ${version ?? ''} · `}
+          {date && Number.isFinite(date.getTime()) ? t.settings.lastBuilt(t.format.dateTime(date)) : t.settings.lastBuiltUnknown}
+        </Text>
+      )}
     </ScrollView>
+    </BlurArea>
+    <ClockGlass />
+    </GlassScene>
+    </FindIn>
     </WithNowPlaying>
     {/*
       Each language written in itself, as it was when they were chips: this
@@ -214,7 +274,16 @@ export default function SettingsScreen() {
       read the rest. A list and not chips, because two fit beside the word
       Language and the third would not.
     */}
+    <ConfirmSheet
+      visible={askingStart}
+      title={t.welcome.settings.ask.title}
+      body={t.welcome.settings.ask.body}
+      confirmLabel={t.welcome.settings.again}
+      onConfirm={startOver}
+      onCancel={() => setAskingStart(false)}
+    />
     <OptionSheet
+      page
       visible={languagesOpen}
       heading={t.settings.language.title}
       note={`${t.settings.language.note} ${t.welcome.language.made}`}
@@ -228,17 +297,15 @@ export default function SettingsScreen() {
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
-  // Less at the foot than the pages have: there is nothing under the last card to keep clear of.
-  content: { padding: 20, paddingBottom: 24 },
-  brand: { color: c.text, fontSize: 28, fontWeight: '600', letterSpacing: -0.4 },
-  built: { color: c.textFaint, fontSize: 12, marginTop: 4 },
+  fill: { flex: 1 },
+  built: { color: c.textMuted, fontSize: TYPE.hint, textAlign: 'center', marginTop: CARD_GAP },
 
-  groups: { marginTop: 20 },
+  groups: { marginTop: CARD_GAP },
   // Side by side only where there is width for it.
-  groupsWide: { flexDirection: 'row', alignItems: 'flex-start', gap: 16 },
+  groupsWide: { flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.xl },
   group: { flex: 1, minWidth: 0 },
   // Between one card and the next, as on the themes' screen: there are no headings here to part them.
-  after: { marginTop: 12 },
+  after: { marginTop: SPACE.m },
   // Each box brings the room above itself; the column that begins with one gives that room back, to start level with the other.
-  beside: { marginTop: -12 },
+  beside: { marginTop: -SPACE.m },
 }));

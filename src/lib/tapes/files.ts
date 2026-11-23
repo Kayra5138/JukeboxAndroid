@@ -29,7 +29,7 @@ export function folderNameFor(names: readonly string[]): string {
   let common = stems[0]!;
   for (const stem of stems.slice(1)) {
     let at = 0;
-    while (at < common.length && at < stem.length && common[at]!.toLocaleLowerCase() === stem[at]!.toLocaleLowerCase()) at += 1;
+    while (at < common.length && at < stem.length && common[at]!.toLowerCase() === stem[at]!.toLowerCase()) at += 1;
     common = common.slice(0, at);
   }
   // Too little in common to be a name: the files are not one thing's parts, and the first one's name is offered.

@@ -1,4 +1,5 @@
 import JukeboxAudio from '../../../modules/jukebox-audio/index.ts';
+import { statusOf } from '../metadata/http';
 import { readArtistPhoto, saveArtistPhoto, type ArtistPhoto } from '../db/artistPhotos.ts';
 import { lookupArtistPhoto } from '../metadata/artistPhoto.ts';
 import { foldForMatch } from '../metadata/text.ts';
@@ -61,7 +62,10 @@ export async function artistPhotoFor(
     const photo = { uri, credit: source.credit, licence: source.licence };
     remember(key, name, photo);
     return photo;
-  } catch {
+  } catch (error) {
+    // Refused for what was asked, and not for the moment: asking again would be refused again, every time the card is made.
+    const status = statusOf(error);
+    if (status != null && status >= 400 && status < 500 && status !== 408 && status !== 429) remember(key, name, null);
     return null;
   }
 }

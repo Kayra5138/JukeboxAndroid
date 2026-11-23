@@ -4,6 +4,7 @@ import { discoverView, subscribeDiscover } from '../../lib/discover/engine';
 import type { DiscoverSettings } from '../../lib/discover/policy';
 import type { DiscoverNotice, DiscoverPreview, DiscoverStatus } from '../../lib/discover/view';
 import { useLanguage } from '../../lib/i18n/index';
+import { statusLine } from './show';
 
 /**
  * Discover's view a part at a time.
@@ -21,11 +22,21 @@ const status = () => discoverView().status;
 const notice = () => discoverView().notice;
 const settings = () => discoverView().settings;
 const preview = () => discoverView().preview;
+const saying = () => statusLine(discoverView().status).kind !== 'none';
 
 export function useDiscoverStatus(): DiscoverStatus {
   // The words are in the language of the moment, as in `useDiscover`.
   useLanguage();
   return useSyncExternalStore(subscribeDiscover, status);
+}
+
+/**
+ * Whether the line of status has anything to say: all the list needs to know
+ * of the state, to say where its rows are under a header that has the line
+ * only then, and drawn again only when that changes.
+ */
+export function useDiscoverSaying(): boolean {
+  return useSyncExternalStore(subscribeDiscover, saying);
 }
 
 export function useDiscoverNotice(): DiscoverNotice | null {

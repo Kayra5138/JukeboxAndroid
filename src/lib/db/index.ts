@@ -16,6 +16,16 @@ export function db(): SQLiteDatabase {
   const opened = openDatabaseSync('jukebox.db');
   try {
     opened.execSync('PRAGMA journal_mode = WAL');
+    /*
+      With the journal written ahead, a commit need not wait for the disk to
+      say it has it: what is written stays whole whatever happens, and at the
+      very worst the last commit before the power went is lost. Left at FULL,
+      every write -- a listen, a skip, the queue for ListenBrainz, two to four
+      of them as a song changes -- held the app up on the disk, on a cheap
+      phone's storage for tens of milliseconds each, just as the next song
+      was being drawn.
+    */
+    opened.execSync('PRAGMA synchronous = NORMAL');
     migrate(opened);
   } catch (error) {
     // expo-sqlite hands back the same native connection for a path until it is
@@ -36,11 +46,32 @@ export function db(): SQLiteDatabase {
 }
 
 export function readSetting(key: string): string | null {
-  const row = db().getFirstSync<{ value: string }>(
-    'SELECT value FROM settings WHERE key = ?',
-    key
-  );
-  return row?.value ?? null;
+  if (!held) {
+    // The whole table at the first asking: as the app starts, a hundred settings were a hundred queries one after another.
+    held = new Map(db().getAllSync<{ key: string; value: string }>('SELECT key, value FROM settings').map((row) => [row.key, row.value]));
+    stale.clear();
+  }
+  if (stale.has(key)) {
+    const row = db().getFirstSync<{ value: string }>('SELECT value FROM settings WHERE key = ?', key);
+    if (row) held.set(key, row.value);
+    else held.delete(key);
+    stale.delete(key);
+  }
+  return held.get(key) ?? null;
+}
+
+/*
+  The settings as last read, and the keys written since, which are read from
+  the table again when next asked: a write can be inside a transaction that
+  is rolled back, and the table is what says whether it stood.
+*/
+let held: Map<string, string> | null = null;
+const stale = new Set<string>();
+
+/** The settings read again from the table at the next asking: for whatever wrote them some other way, a backup put back. */
+export function forgetSettings(): void {
+  held = null;
+  stale.clear();
 }
 
 /**
@@ -65,6 +96,7 @@ export function writeSetting(key: string, value: string): boolean {
 
 /** {@link writeSetting} that lets a failure through, for a write inside a transaction that must roll back with it. */
 export function writeSettingOrThrow(key: string, value: string): void {
+  stale.add(key);
   db().runSync(
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     key,
@@ -258,6 +290,26 @@ export const SETTINGS = {
    * it is useful: the queue has a screen of its own for whoever goes looking.
    */
   downloadsButton: 'ui:downloadsButton',
+  /** Whether the bar to take hold of beside a long list is always there, there while it moves, or never: see `ui/scrollBar.ts`. */
+  scrollBar: 'ui:scrollBar',
+  /** The order of the tabs along the bar, and of the library's views along its switch: see `ui/order.ts`. */
+  tabOrder: 'ui:tabOrder',
+  libraryViewOrder: 'ui:libraryViewOrder',
+  /** Whether a list's page says what might belong in it, under its songs: see `ui/listSuggestions.ts`. */
+  listSuggestions: 'ui:listSuggestions',
+  /** Whether a song turned away or taken out can be had back for a moment after: see `ui/undo.ts`. */
+  undoOffers: 'ui:undoOffers',
+  /** The bar of what is playing, as it is set in Settings → Mini player: see `ui/miniPlayer.ts`. */
+  miniProgress: 'mini:progress',
+  miniButtonOrder: 'mini:buttonOrder',
+  miniButtons: 'mini:buttons',
+  miniLine: 'mini:line',
+  miniSwipe: 'mini:swipe',
+  miniHold: 'mini:hold',
+  miniCover: 'mini:cover',
+  miniFloating: 'mini:floating',
+  miniTint: 'mini:tint',
+  miniLeftHanded: 'mini:leftHanded',
   /** `'false'` where the player leaves out its add-to-list button; anything else shows it. */
   listButton: 'player:listButton',
   /**
@@ -278,8 +330,6 @@ export const SETTINGS = {
   tapeLook: 'player:tapeLook',
   /** What moves with the music round what stands where the cover is: `none`, `spectrum`, `ripple`, `breathe` or `scope`. See `ui/coverLook.ts`. */
   coverMotion: 'player:coverMotion',
-  /** `'on'` where the phone knocks lightly on each beat while the player is open; see `ui/coverLook.ts`. */
-  beatFeel: 'player:beatFeel',
   /** `'on'` where a record in the player has its arm over it, the needle following the song; see `ui/coverLook.ts`. */
   tonearm: 'player:tonearm',
   /**

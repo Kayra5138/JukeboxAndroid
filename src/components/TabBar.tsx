@@ -1,19 +1,29 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { RADIUS, SPACE, TYPE } from '../lib/theme/measures';
+import { FittedText } from './FittedText';
 import { Pressable } from './Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { makeStyles, outlineWidth, useColours } from '../lib/theme/index';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { SlidingMark, type MarkPlace } from './SlidingMark';
 import { useLandscape } from '../lib/ui/layout';
 import { useHiddenTabs } from '../lib/ui/tabs';
+import { tabOrder } from '../lib/ui/tabOrder';
 import { useTabLabelsShown } from '../lib/ui/tabLabels';
 import { haptic } from '../lib/ui/haptics';
-import { Frost, readyTab, useFrosted, useTabTarget } from './Frosted';
+import { Frost, GlassScene, readyTab, useFrosted, useTabTarget } from './Frosted';
+import { NowPlayingBar } from './NowPlayingBar';
+import { useSheetOpen } from '../lib/theme/Veil';
 import { barGlass, barsLaidOver, noteTabBar } from './UnderBars';
 
 /** Wide enough for an icon and a short word under it, and no wider. */
 const RAIL_WIDTH = 92;
+
+/** How wide the rail of tabs is sideways, the cutout's room at its side included: for the strip across the top that joins it. */
+export function railWidth(insetLeft: number): number {
+  return RAIL_WIDTH + insetLeft;
+}
 
 /** Worked out with the rest of what the bars cover; see there. */
 export { tabBarHeight } from '../lib/ui/bars';
@@ -71,6 +81,9 @@ const made = new Set<string>();
  * a word beside an icon is what makes that wide, and five destinations with
  * distinct icons do not need naming twice.
  */
+/** The open tab is this bar's to blur, and nobody's to claim: see `GlassScene`. */
+const noClaim = () => {};
+
 export function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
   const landscape = useLandscape();
@@ -112,6 +125,8 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
     name, Discover's link on the Lists tab among them.
   */
   const hidden = useHiddenTabs() as ReadonlySet<string>;
+  // And in the order chosen there: only the bar is put in it, the tabs staying where they are.
+  const order = tabOrder.useOrder() as readonly string[];
   // Each tab is the group its stack is in, `(lists)`; the choice of which are shown says `lists`.
   const nameOf = (route: string) => route.replace(/^\((.*)\)$/, '$1');
   // Names under the icons, unless switched off under Settings → Look.
@@ -156,17 +171,27 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
     if (open && hidden.has(open)) navigation.navigate('(library)');
   }, [hidden, navigation, open]);
 
-  return (
+  /*
+    The bar of what is playing, upright, along the top of this one and part
+    of it: one for every tab, as the tabs are, so that neither a page coming
+    in from the side nor a change of tab draws it again. Sideways it is a
+    panel down the right of all the tabs instead (`MainTabs`).
+
+    Blurring what this one blurs, the open tab, in a theme of glass; and out
+    of focus and out of reach with the page while a sheet the page laid over
+    itself is up (`useSheetOpen`).
+  */
+  const sheet = useSheetOpen();
+  const scene = useMemo(() => ({ target, claim: noClaim }), [target]);
+  const tabs = (
     <View
       style={[
-        landscape ? styles.rail : over ? styles.glassBar : styles.bar,
+        landscape ? styles.rail : over ? styles.glassRow : styles.bar,
         frosted && styles.clear,
         landscape
           ? { width: RAIL_WIDTH + insets.left, paddingLeft: insets.left, paddingTop: insets.top }
           : { paddingBottom: insets.bottom },
       ]}
-      // Measured where it is laid over the screens, which keep clear of it by as much.
-      onLayout={over ? noteTabBar : undefined}
       // Tabs to a screen reader, which then says which of five each one is.
       accessibilityRole="tablist">
       {frosted && target ? <Frost target={target} edge="top" /> : null}
@@ -180,7 +205,10 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
         place={markOf(cells[reaching ?? openKey], landscape, patchHeight)}
         style={landscape ? styles.railMark : styles.slidingMark}
       />
-      {state.routes.map((route, index) => {
+      {state.routes
+        .map((route, index) => ({ route, index }))
+        .sort((a, b) => order.indexOf(nameOf(a.route.name)) - order.indexOf(nameOf(b.route.name)))
+        .map(({ route, index }) => {
         if (hidden.has(nameOf(route.name))) return null;
         const { options } = descriptors[route.key];
         const focused = state.index === index;
@@ -268,19 +296,30 @@ export function TabBar({ state, descriptors, navigation }: TabBarProps) {
                   came out as its first few letters and a dot.
                 */}
                 {named ? (
-                  <Text
+                  <FittedText
                     style={[styles.label, { color: colour }]}
                     numberOfLines={1}
-                    adjustsFontSizeToFit
                     minimumFontScale={0.7}>
                     {options.title ?? route.name}
-                  </Text>
+                  </FittedText>
                 ) : null}
               </View>
             )}
           </Pressable>
         );
       })}
+    </View>
+  );
+  if (landscape) return tabs;
+  return (
+    <View
+      style={over ? styles.glassBar : null}
+      // Measured where it is laid over the screens, which keep clear of it, and of the bar of what is playing on it, by as much.
+      onLayout={over ? noteTabBar : undefined}>
+      <GlassScene scene={scene}>
+        <NowPlayingBar docked={false} veiled={sheet} />
+      </GlassScene>
+      {tabs}
     </View>
   );
 }
@@ -317,6 +356,8 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  glassRow: {
     flexDirection: 'row',
     ...barGlass(c),
     borderTopWidth: Math.max(StyleSheet.hairlineWidth, outlineWidth(c)),
@@ -330,26 +371,26 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     borderRightColor: c.border,
   },
   // The cell is what is pressed; the mark that moves to it is drawn apart (`SlidingMark`).
-  item: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: 5, borderRadius: 16 },
+  item: { flex: 1, minWidth: 0, alignItems: 'center', paddingVertical: SPACE.xs, borderRadius: RADIUS.card },
   /*
     One width for all five, declared rather than taken from the writing. Sized
     to the label it holds, the mark was a different shape under every tab —
     wide under Settings, narrow under Stats — which reads as five marks rather
     than one moving between them.
   */
-  patch: { width: 72, alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 4 },
+  patch: { width: 72, alignItems: 'center', justifyContent: 'center', gap: SPACE.xs, paddingVertical: SPACE.xs },
   // The icon alone, in a patch as round as the one with its name is wide: a little more room above and below it.
-  patchBare: { paddingVertical: 8 },
-  slidingMark: { borderRadius: 14, backgroundColor: c.selected },
-  railMark: { borderRadius: 12, backgroundColor: c.selected },
+  patchBare: { paddingVertical: SPACE.s },
+  slidingMark: { borderRadius: RADIUS.card, backgroundColor: c.selected },
+  railMark: { borderRadius: RADIUS.control, backgroundColor: c.selected },
   icon: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   railItem: {
     alignItems: 'center',
     justifyContent: 'center',
     height: 56,
-    marginHorizontal: 10,
-    marginTop: 8,
-    borderRadius: 12,
+    marginHorizontal: SPACE.s,
+    marginTop: SPACE.s,
+    borderRadius: RADIUS.control,
   },
-  label: { fontSize: 11, lineHeight: 16, includeFontPadding: false, textAlign: 'center' },
+  label: { fontSize: TYPE.label, lineHeight: 16, includeFontPadding: false, textAlign: 'center' },
 }));

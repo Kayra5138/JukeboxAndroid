@@ -133,6 +133,10 @@ class Outside(
 class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
   companion object {
     val activeStates = setOf("queued", "finding", "preparing", "downloading", "converting", "saving", "cancelling")
+    /** Ends with nothing to show for them: no file, no song (`compact`). */
+    private val CAME_TO_NOTHING = setOf("failed", "cancelled")
+    /** How long what was cleared and came to nothing is kept, should it be looked for. */
+    private const val FORGOTTEN_AFTER_MS = 30L * 24 * 60 * 60_000
     /** Being fetched: past waiting, and not yet at an end. */
     val fetching = setOf("preparing", "downloading", "converting", "saving", "cancelling")
     val finished = setOf("done", "failed", "cancelled", "missing")
@@ -318,6 +322,10 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
    */
   fun interrupt(failure: Failure) {
     for (job in jobs.toList()) when (job.status) {
+      // Being put in the library, which the worker finishes or fails by itself: taken for failed here, a file
+      // that went on to arrive was asked for again, and came twice. One cut off by the process going is
+      // seen to when the queue is next read ([recover]).
+      "saving" -> Unit
       in fetching -> again(job, Failed(failure))
       "finding" -> { job.put("status", "queued"); rejoin(job); changed = true }
     }
@@ -397,8 +405,11 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
     YouTubeData.urlOf(video)
     video.remove("find")
     video.put("listen", true)
+    // Only a listening job of its own, with its key: a song listened to and kept leaves a receipt behind that has
+    // the video as it was, `listen` and all, with no key and its file in the library, and answered with that one
+    // nothing played.
     val existing = jobs.lastOrNull { !it.toFind && it.video.optString("id") == id && it.video.optBoolean("listen") &&
-      (it.status in activeStates || it.status == "done") && it.status != "cancelling" }
+      !it.isNull("discoverKey") && (it.status in activeStates || it.status == "done") && it.status != "cancelling" }
     if (existing != null && (existing.status != "done" || exists(existing))) {
       if (existing.status != "done") first(existing)
       return existing.getString("id")
@@ -866,6 +877,26 @@ class DownloadQueue(private val clock: () -> Long = System::currentTimeMillis) {
    * here already, how a playlist learns which of its tracks arrived, and
    * what Discover's list points at for a song's file or for why it has none.
    */
+  /**
+   * Forgets what was cleared away a month ago and came to nothing: a failure
+   * or a cancellation, which has no file and no song to speak of. The record
+   * otherwise only grew, and is written whole at every change. A finished
+   * download stays, cleared or not: the song it brought in is found by it,
+   * and so is that song's cover (`DownloadStore.artwork`). Answers how many
+   * went.
+   */
+  fun compact(): Int {
+    val before = clock() - FORGOTTEN_AFTER_MS
+    val had = jobs.size
+    jobs.removeAll { job ->
+      job.optBoolean("cleared") && job.status in CAME_TO_NOTHING &&
+        (job.optLong("finishedAt", 0L).takeIf { it > 0 } ?: job.optLong("createdAt", 0L)) < before
+    }
+    val gone = had - jobs.size
+    if (gone > 0) changed = true
+    return gone
+  }
+
   fun clearFinished() {
     for (job in jobs) {
       if (job.status in finished && !job.optBoolean("cleared")) { job.put("cleared", true); changed = true }

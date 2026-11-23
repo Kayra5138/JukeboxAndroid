@@ -1,4 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { SPACE, TYPE } from '../lib/theme/measures';
 
 import { MarkButtons } from './ListHeading';
 import type { PressRingFor } from './PressMenu';
@@ -67,8 +68,9 @@ export function RackFront({
         // On a plate where screens are glass, as a record's own page has them.
         plate
         queue={album.tracks}
-        // Nothing in a list is "the playing one"; the mark column stays empty.
+        // No place in a record is "the one playing"; the song playing is marked where it is in it all the same.
         currentIndex={-1}
+        marksPlaying
         onSelect={(index) => (onTap ?? onPlay)(album.tracks, index)}
         onLongPress={
           onLongPress &&
@@ -86,6 +88,6 @@ export function RackFront({
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   front: { flex: 1, minHeight: 0 },
-  heading: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 4, paddingBottom: 10 },
-  about: { flex: 1, color: c.textMuted, fontSize: 12.5 },
+  heading: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingHorizontal: SPACE.l, paddingTop: SPACE.xs, paddingBottom: SPACE.s },
+  about: { flex: 1, color: c.textMuted, fontSize: TYPE.hint },
 }));

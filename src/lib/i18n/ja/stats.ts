@@ -38,7 +38,6 @@ const arrow = (change: number) => (change >= 0 ? '↑' : '↓');
 const weekdays = ['月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日', '日曜日'];
 
 export const stats: Strings['stats'] = {
-  percent: (value) => `${value}%`,
 
   period: {
     labels: { day: '日', week: '週', month: '月', year: '年', all: 'すべて' },

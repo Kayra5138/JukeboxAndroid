@@ -1,12 +1,16 @@
 import { DiscoverProvider } from '../lib/discover/DiscoverProvider';
+import { actionTime, watchActionTime } from '../lib/ui/actionTime';
+import { lengthenTimesWith } from '../lib/discover/core';
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ReducedMotionConfig, ReduceMotion } from 'react-native-reanimated';
 import * as SystemUI from 'expo-system-ui';
 
 import { DownloadsButton } from '../components/DownloadsButton';
+import { UndoNotice } from '../components/UndoNotice';
 import { ErrorBoundary } from '../components/ErrorBoundary';
 import { paged } from '../components/Pages';
 import { PressListHost } from '../components/PressList';
@@ -42,6 +46,7 @@ import { loadTheme, useTheme } from '../lib/theme/index';
 import { WindowBehind } from '../lib/theme/Veil';
 import { ThemeSurroundings } from '../lib/theme/Surroundings';
 import { useWelcomeShown } from '../lib/ui/welcomeStore';
+import { useMotionReduced } from '../lib/ui/motion';
 import { DownloadsProvider } from '../lib/youtube/DownloadsProvider';
 
 /*
@@ -61,6 +66,10 @@ loadLyricsTarget();
 */
 watchErrors();
 
+// And what goes away by itself, a song offered back or a notice, given as long as Android was asked to give it.
+watchActionTime();
+lengthenTimesWith(actionTime);
+
 /*
   The tabs under every page, however the app was opened: a page a link opened
   it on — a podcast's, from a notification or another app — has the library
@@ -74,6 +83,8 @@ export default function RootLayout() {
   const theme = useTheme();
   const c = theme.colours;
   const welcome = useWelcomeShown();
+  /** Holding the decoration still: no page slides in, and nothing Reanimated moves goes anywhere but to its end. */
+  const still = useMotionReduced();
 
   // What the car and the widget read is a copy, kept up to date from here.
   useEffect(() => keepCarCopy(), []);
@@ -178,6 +189,13 @@ export default function RootLayout() {
         why nothing here had to change places.
       */}
       <ThemeSurroundings />
+      {/*
+        Every timing, spring, decay and repeat of Reanimated's, across the
+        app, taken to its end at once while the decoration is held still; the
+        phone's own setting otherwise, as Reanimated would anyway. What runs
+        frame by frame of its own (the game's keys) is not one of those.
+      */}
+      <ReducedMotionConfig mode={still ? ReduceMotion.Always : ReduceMotion.System} />
       <DownloadsProvider>
       <DiscoverProvider>
         {/*
@@ -222,6 +240,7 @@ export default function RootLayout() {
               headerStyle: { backgroundColor: c.bg },
               headerTintColor: c.text,
               contentStyle: { backgroundColor: c.bg },
+              animation: still ? 'none' : 'default',
             }}>
             {/* Nothing under the tabs of its own: the window is the page's colour, and each tab paints its own (see `Paged`). */}
             <Stack.Screen name="(tabs)" options={{ headerShown: false, contentStyle: CLEAR_PAGE }} />
@@ -241,6 +260,8 @@ export default function RootLayout() {
             of its own.
           */}
           <DownloadsButton />
+          {/* A song taken out, offered back for a moment, in the same place for the same reason: see `lib/ui/undo.ts`. */}
+          <UndoNotice />
           {/* Sound files opened with the app from another, played: inside the host, whose player it opens. */}
           <OpenedAudio />
           {/* Where the app is, for a name pressed to ask: see `NameLinks`. */}

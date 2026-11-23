@@ -31,6 +31,19 @@ class QueueStoreTest {
   }
 
   @Test
+  fun `a long queue kept round the track playing is picked up there`() {
+    // The player was at 3 000 of 5 000; what was kept starts at 2 800.
+    val from = QueueStore.windowStart(5_000, 3_000)
+    assertEquals(2_800, from)
+    val kept = List(2_000) { "t${from + it}" }
+    assertEquals(200 to 7_000L, resumeFrom(kept, 200, 0, Place("t3000", 3_000, 7_000), from))
+    // Near either end the window keeps to the queue.
+    assertEquals(0, QueueStore.windowStart(5_000, 50))
+    assertEquals(3_000, QueueStore.windowStart(5_000, 4_990))
+    assertEquals(0, QueueStore.windowStart(1_500, 1_400))
+  }
+
+  @Test
   fun `never answers outside the queue or before the start`() {
     assertEquals(2 to 0L, resumeFrom(queue, 9, -5, null))
     assertEquals(0 to 0L, resumeFrom(queue, -3, 0, null))

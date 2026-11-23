@@ -1,9 +1,11 @@
-import { Switch, Text, View } from 'react-native';
+import { Switch, View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 
 import { Slider } from '../../../components/Fader';
 import { Segmented } from '../../../components/Segmented';
 import { SettingsPage, useRows } from '../../../components/settings/rows';
 import { useT } from '../../../lib/i18n/index';
+import { RECOMMENDED_STRENGTH, STRONGEST } from '../../../lib/ui/hapticsPlan';
 import { switchColours, useColours } from '../../../lib/theme/index';
 import {
   HAPTIC_GROUPS,
@@ -67,10 +69,15 @@ export default function HapticsSettingsScreen() {
                 label={said.strength}
                 value={settings.strength}
                 min={0.1}
-                max={1}
+                // Past the recommended, which is notched and named, to as strong as a motor goes: see `hapticsPlan.ts`.
+                max={STRONGEST}
+                centre={RECOMMENDED_STRENGTH}
                 accent={c.accent}
                 snap={(value) => Math.round(value * 20) / 20}
-                format={(value) => t.settings.customTheme.percent(t.format.number(Math.round(value * 100)))}
+                format={(value) => {
+                  const percent = t.format.percent(Math.round(value * 100));
+                  return value === RECOMMENDED_STRENGTH ? `${percent} · ${said.recommended}` : percent;
+                }}
                 onDrag={() => {}}
                 onSettle={(strength) => {
                   setHaptics({ ...settings, strength });

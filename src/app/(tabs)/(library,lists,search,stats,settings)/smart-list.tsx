@@ -1,16 +1,19 @@
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Stack, useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { LEADING, RADIUS, SPACE, TYPE, TOUCH } from '../../../lib/theme/measures';
+import { Note } from '../../../components/Note';
+import { RowControl } from '../../../components/MediaRow';
+import { usePreventRemove } from 'expo-router/build/react-navigation/core';
+import { ConfirmSheet } from '../../../components/ConfirmSheet';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { FormScroll, TextField } from '../../../components/FormScroll';
+import { Field, FormScroll } from '../../../components/FormScroll';
 import { CrossIcon, PlusIcon } from '../../../components/Icons';
 import { NumberStepper } from '../../../components/NumberStepper';
 import { OptionSheet } from '../../../components/OptionSheet';
 import { Pressable } from '../../../components/Pressable';
 import { Segmented } from '../../../components/Segmented';
-import { useUnderBars } from '../../../components/UnderBars';
-import { useRows } from '../../../components/settings/rows';
+import { useRows, SectionLabel, Chevron } from '../../../components/settings/rows';
 import { createSmartList, playlist, renamePlaylist, setSmartRules } from '../../../lib/db/playlists';
 import { tagCounts } from '../../../lib/db/tags';
 import { useT } from '../../../lib/i18n/index';
@@ -37,8 +40,10 @@ import {
 } from '../../../lib/lists/smart';
 import { readSmartStats } from '../../../lib/lists/smartLive';
 import { isTape } from '../../../lib/tapes/tape';
-import { makeStyles, outlined, outlinedClip, scene, useColours, usePressed } from '../../../lib/theme/index';
+import { makeStyles, outlinedClip, scene, useColours, usePressed } from '../../../lib/theme/index';
 import { haptic } from '../../../lib/ui/haptics';
+import { FootBar, useFootBar } from '../../../components/FootBar';
+import { usePageRoom } from '../../../components/Page';
 
 /** Enough tags to pick from without the sheet becoming the tag screen, as the Lists tab offers. */
 const TAG_CHOICES = 60;
@@ -67,8 +72,9 @@ export default function SmartListScreen() {
   const rows = useRows();
   const styles = useStyles();
   const pressed = usePressed();
-  const insets = useSafeAreaInsets();
-  const under = useUnderBars();
+  // The bar along the foot, always there, and the form's room clear of it (`FootBar`, `usePageRoom`).
+  const foot = useFootBar(true);
+  const room = usePageRoom({ foot: foot.height });
   const said = t.smart;
 
   // What was there to begin with, read once: the list, and what has been listened to, which the count is made from.
@@ -101,6 +107,21 @@ export default function SmartListScreen() {
 
   const rules = { match, rules: list.map((row) => row.rule), limit, order };
   const count = smartListMatches(songs, rules, stats, now);
+
+  /*
+    Rules changed and not saved, asked about before the page goes, as the
+    details ask: Back used to drop them without a word. Not once saved,
+    which goes as it is.
+  */
+  const changed = name !== start.name || writeSmartRules(rules) !== writeSmartRules(start.rules);
+  /** Saved once: a second tap while the page goes would make a second list. */
+  const saved = useRef(false);
+  const navigation = useNavigation();
+  const [leaving, setLeaving] = useState<{ action: Parameters<typeof navigation.dispatch>[0] } | null>(null);
+  usePreventRemove(changed, ({ data }) => {
+    if (saved.current) navigation.dispatch(data.action);
+    else setLeaving({ action: data.action });
+  });
   const kept = limit != null ? Math.min(limit, count) : count;
 
   const problemAt = list.findIndex((row) => ruleProblem(row.rule) != null);
@@ -118,11 +139,13 @@ export default function SmartListScreen() {
   };
 
   const save = () => {
+    if (saved.current) return;
     setTried(true);
     if (problem) {
       haptic('results', 'reject');
       return;
     }
+    saved.current = true;
     const written = writeSmartRules(rules);
     const at = Date.now();
     haptic('results', 'confirm');
@@ -167,32 +190,31 @@ export default function SmartListScreen() {
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ title: listId != null ? said.editor.editTitle : said.editor.newTitle }} />
-      <FormScroll
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: 12 + under.top,
-            paddingLeft: 20 + insets.left,
-            paddingRight: 20 + insets.right,
-          },
-        ]}>
-        <Text accessibilityRole="header" style={rows.section}>{t.format.upper(said.editor.name)}</Text>
-        <View style={rows.card}>
-          <View style={rows.row}>
-            <TextField
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder={said.editor.namePlaceholder}
-              placeholderTextColor={c.textFaint}
-              accessibilityLabel={said.editor.name}
-              returnKeyType="done"
-            />
-          </View>
-        </View>
-        {tried && !name.trim() ? <Text style={rows.noteBad}>{said.editor.problems.name}</Text> : null}
+      <ConfirmSheet
+        visible={leaving != null}
+        title={t.details.unsaved.title}
+        body={t.details.unsaved.body}
+        cancelLabel={t.details.unsaved.keep}
+        confirmLabel={t.details.unsaved.discard}
+        danger
+        onCancel={() => setLeaving(null)}
+        onConfirm={() => {
+          const going = leaving;
+          if (going) navigation.dispatch(going.action);
+        }}
+      />
+      <FormScroll contentContainerStyle={room}>
+        <SectionLabel after={false}>{said.editor.name}</SectionLabel>
+        <Field
+          value={name}
+          onChangeText={setName}
+          placeholder={said.editor.namePlaceholder}
+          accessibilityLabel={said.editor.name}
+          returnKeyType="done"
+        />
+        {tried && !name.trim() ? <Note tone="bad" style={rows.noteRoom}>{said.editor.problems.name}</Note> : null}
 
-        <Text accessibilityRole="header" style={[rows.section, rows.sectionAfter]}>{t.format.upper(said.editor.match)}</Text>
+        <SectionLabel>{said.editor.match}</SectionLabel>
         <Segmented
           options={[
             { value: 'all', label: said.editor.all },
@@ -202,7 +224,7 @@ export default function SmartListScreen() {
           onChange={setMatch}
         />
 
-        <Text accessibilityRole="header" style={[rows.section, rows.sectionAfter]}>{t.format.upper(said.editor.rules)}</Text>
+        <SectionLabel>{said.editor.rules}</SectionLabel>
         {list.length === 0 ? <Text style={styles.none}>{said.editor.noRules}</Text> : null}
         {list.map(({ key, rule }, at) => {
           const range = rangeOf(rule.field);
@@ -220,17 +242,11 @@ export default function SmartListScreen() {
                   style={styles.field}
                   onPress={() => setChoosingField(key)}>
                   <Text style={styles.fieldLabel} numberOfLines={1}>{said.fields[rule.field]}</Text>
-                  <Text style={rows.chevron} importantForAccessibility="no">›</Text>
+                  <Chevron />
                 </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={said.editor.removeRule(at + 1)}
-                  android_ripple={pressed}
-                  hitSlop={6}
-                  style={styles.remove}
-                  onPress={() => remove(key)}>
+                <RowControl accessibilityLabel={said.editor.removeRule(at + 1)} onPress={() => remove(key)}>
                   <CrossIcon size={14} color={c.textMuted} />
-                </Pressable>
+                </RowControl>
               </View>
               <Segmented
                 variant="chips"
@@ -243,12 +259,11 @@ export default function SmartListScreen() {
               />
               {asksWords(rule.field) ? (
                 <View style={styles.words}>
-                  <TextField
-                    style={[styles.input, styles.grow]}
+                  <Field
+                    style={styles.grow}
                     value={rule.text}
                     onChangeText={(text) => change(key, (was) => ({ ...was, text }))}
                     placeholder={rule.field === 'tag' ? said.editor.tagPlaceholder : said.editor.textPlaceholder}
-                    placeholderTextColor={c.textFaint}
                     accessibilityLabel={said.editor.valueOf(said.fields[rule.field], opLabel(rule.field, rule.op))}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -300,7 +315,7 @@ export default function SmartListScreen() {
           <Text style={styles.addLabel}>{said.editor.addRule}</Text>
         </Pressable>
 
-        <Text accessibilityRole="header" style={[rows.section, rows.sectionAfter]}>{t.format.upper(said.editor.limit)}</Text>
+        <SectionLabel>{said.editor.limit}</SectionLabel>
         <View style={styles.limit}>
           <Segmented
             options={[
@@ -315,7 +330,7 @@ export default function SmartListScreen() {
           ) : null}
         </View>
 
-        <Text accessibilityRole="header" style={[rows.section, rows.sectionAfter]}>{t.format.upper(said.editor.order)}</Text>
+        <SectionLabel>{said.editor.order}</SectionLabel>
         <Segmented
           variant="chips"
           tone="quiet"
@@ -328,21 +343,15 @@ export default function SmartListScreen() {
       </FormScroll>
 
       {/* The count and the button, held under the form rather than at the end of it, so the count can be watched while a rule is changed. */}
-      <View style={[styles.foot, { paddingBottom: 12 + insets.bottom, paddingLeft: 20 + insets.left, paddingRight: 20 + insets.right }]}>
-        <View style={styles.footText}>
-          <Text style={styles.count} accessibilityLiveRegion="polite">
-            {limit != null && kept < count ? said.editor.matchingKept(count, kept) : said.editor.matching(count)}
-          </Text>
-          {tried && problem ? <Text style={styles.wrong}>{problem}</Text> : null}
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          android_ripple={pressed}
-          style={[styles.save, problem != null && styles.saveOff]}
-          onPress={save}>
-          <Text style={styles.saveLabel}>{listId != null ? said.editor.save : said.editor.create}</Text>
-        </Pressable>
-      </View>
+      <FootBar
+        foot={foot}
+        bar={{
+          text: limit != null && kept < count ? said.editor.matchingKept(count, kept) : said.editor.matching(count),
+          // Said once Save has been pressed, not while a rule is still being written; Save stays to be pressed and say it.
+          note: tried ? problem : null,
+          actions: [{ label: listId != null ? said.editor.save : said.editor.create, kind: 'primary', onPress: save }],
+        }}
+      />
 
       <OptionSheet<SmartField>
         visible={choosingField != null}
@@ -371,71 +380,45 @@ export default function SmartListScreen() {
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
-  content: { paddingBottom: 24 },
-  input: {
-    color: c.text,
-    fontSize: 15,
-    backgroundColor: c.bg,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    ...outlined(c),
-  },
   grow: { flex: 1, minWidth: 0 },
-  none: { color: c.textFaint, fontSize: 13, lineHeight: 20, marginLeft: 4 },
+  none: { color: c.textFaint, fontSize: TYPE.small, lineHeight: LEADING.small, marginLeft: SPACE.xs },
 
-  rule: { padding: 14, gap: 12, marginBottom: 10 },
-  ruleHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  rule: { padding: SPACE.m, gap: SPACE.m, marginBottom: SPACE.xl },
+  ruleHead: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
   field: {
     flex: 1,
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 8,
-    minHeight: 40,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    gap: SPACE.s,
+    minHeight: TOUCH.normal,
+    paddingHorizontal: SPACE.m,
+    borderRadius: RADIUS.control,
     overflow: 'hidden',
     backgroundColor: c.surfaceRaised,
     ...outlinedClip(c),
   },
-  fieldLabel: { color: c.text, fontSize: 15, fontWeight: '600', flexShrink: 1 },
-  remove: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  words: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  choose: { paddingHorizontal: 10, minHeight: 40, justifyContent: 'center', borderRadius: 8, overflow: 'hidden' },
-  chooseLabel: { color: c.accent, fontSize: 14 },
-  between: { gap: 8 },
-  and: { color: c.textMuted, fontSize: 13 },
-  wrong: { color: c.danger, fontSize: 12.5, lineHeight: 18 },
+  fieldLabel: { color: c.text, fontSize: TYPE.body, fontWeight: '600', flexShrink: 1 },
+  words: { flexDirection: 'row', alignItems: 'center', gap: SPACE.s },
+  choose: { paddingHorizontal: SPACE.s, minHeight: TOUCH.normal, justifyContent: 'center', borderRadius: RADIUS.cover, overflow: 'hidden' },
+  chooseLabel: { color: c.accent, fontSize: TYPE.small },
+  between: { gap: SPACE.s },
+  and: { color: c.textMuted, fontSize: TYPE.small },
+  wrong: { color: c.danger, fontSize: TYPE.hint, lineHeight: LEADING.hint },
 
   add: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    minHeight: 48,
-    borderRadius: 14,
+    gap: SPACE.s,
+    minHeight: TOUCH.normal,
+    borderRadius: RADIUS.card,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: c.border,
     borderStyle: 'dashed',
     overflow: 'hidden',
   },
-  addLabel: { color: c.accent, fontSize: 14.5, fontWeight: '600' },
-  limit: { gap: 12 },
-
-  foot: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: c.border,
-    backgroundColor: c.surface,
-  },
-  footText: { flex: 1, minWidth: 0, gap: 2 },
-  count: { color: c.text, fontSize: 14.5, fontWeight: '600' },
-  save: { paddingHorizontal: 20, minHeight: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', backgroundColor: c.primary },
-  saveOff: { opacity: 0.45 },
-  saveLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
+  addLabel: { color: c.accent, fontSize: TYPE.body, fontWeight: '600' },
+  limit: { gap: SPACE.m },
 }));

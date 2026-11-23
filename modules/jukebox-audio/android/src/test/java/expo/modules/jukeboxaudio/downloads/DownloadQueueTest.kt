@@ -44,6 +44,34 @@ class DownloadQueueTest {
   /** The finder is taken to be gone, and nothing to have ended lately. */
   private fun muchLater() { now += 10 * 60_000 }
 
+  @Test fun whatWasClearedAndCameToNothingIsForgottenAfterAMonth() {
+    val kept = download(1)
+    val failed = download(2)
+    val cancelled = download(3)
+    val recent = download(4)
+    val notCleared = download(5)
+    assertEquals(kept, taken()); queue.complete(kept, "42")
+    queue.change(failed, "failed")
+    queue.cancel(cancelled)
+    queue.clearFinished()
+    now += 31L * 24 * 60 * 60_000
+    queue.change(recent, "failed")
+    queue.clearFinished()
+    queue.change(notCleared, "failed")
+    queue.changed = false
+    assertEquals(2, queue.compact())
+    assertTrue(queue.changed)
+    val left = queue.jobs.map { it.getString("id") }.toSet()
+    // The song it brought in, and its cover, are found by the finished job: it stays.
+    assertTrue(kept in left)
+    // Cleared only now, or never: still there to be seen.
+    assertTrue(recent in left)
+    assertTrue(notCleared in left)
+    assertFalse(failed in left)
+    assertFalse(cancelled in left)
+    assertEquals(0, queue.compact())
+  }
+
   @Test fun aJobSaysWhenItWasAskedForAndWhenItEnded() {
     val id = download(1)
     assertEquals(now, job(id).getLong("createdAt"))
@@ -395,6 +423,15 @@ class DownloadQueueTest {
     assertEquals(listened, queue.listen(video(2), "original", "Music") { true })
     // Downloaded for the library, the same video is a job of its own.
     assertTrue(queue.enqueue(video(2), "original", "Music", null, here) != listened)
+  }
+
+  @Test fun aVideoListenedToAndKeptIsListenedToAgainAsANewJobNotItsReceipt() {
+    val listened = queue.listen(video(2), "original", "Music") { true }
+    // As a song listened to and kept leaves it: done, the video as it was, and no key.
+    job(listened).put("status", "done").put("discoverKey", JSONObject.NULL)
+    val again = queue.listen(video(2), "original", "Music") { true }
+    assertTrue(again != listened)
+    assertTrue(job(again).getString("discoverKey").matches(Regex("[a-f0-9-]{36}")))
   }
 
   @Test fun askedForNextOneOfDiscoversOwnIsNoLongerItsOwn() {

@@ -9,6 +9,7 @@ import { BarsOver, useTabBarRoom } from './UnderBars';
 import { HEADER_BAR } from '../lib/ui/bars';
 import { backdropOf, makeStyles, useColours } from '../lib/theme/index';
 import { glassOf, glassPage, setBack, Veiled } from '../lib/theme/Veil';
+import { useMotionReduced } from '../lib/ui/motion';
 
 /*
   How every page is drawn, in whichever stack it is in: the root one, which
@@ -34,6 +35,58 @@ const TAB_ROOTS = new Set(['index', 'lists', 'search', 'stats', 'settings']);
  * whether a whole screen held out of focus cost too much; it did not.
  */
 const NEVER_GLASS = new Set(['(tabs)', 'tiles', ...TAB_ROOTS]);
+
+/**
+ * The pages Settings opens, and those they open in turn: opened in place of
+ * the page below in a theme of glass as in any other, and not over it.
+ *
+ * Over it, each was a sheet of glass with the page below drawn again under
+ * it, out of focus, at every frame, a menu of a page looking like something
+ * that had popped up over the last one; and with nothing of what was playing
+ * on it, the bar at the foot of Settings under it out of reach. In place of
+ * it, the page below is not drawn at all once the new one is in, the new one
+ * has the whole of the screen and the sky of its own, and the bar of what is
+ * playing is at its foot as it is at the foot of Settings.
+ *
+ * So too a page that is writing to be read and filled in (a song's details,
+ * its tags, a smart list's rules, adding a tape): over the page below, a dark
+ * cover of the library showed through behind its small grey lines and made
+ * them tiring to read. A page to look through (an album, a list, a tape)
+ * stays glass over the one it came from.
+ */
+export const IN_PLACE = new Set([
+  'settings-look',
+  'settings-haptics',
+  'settings-sound',
+  'settings-player',
+  'settings-miniplayer',
+  'settings-tapes',
+  'settings-library',
+  'settings-downloads',
+  'settings-data',
+  'report',
+  'folders',
+  'left-out',
+  'set-aside',
+  'samesongs',
+  'duplicates',
+  'wrong-downloads',
+  'free-space',
+  'equalizer',
+  'transitions',
+  'effects',
+  'themes',
+  'player-look',
+  'theme',
+  'discover-settings',
+  'shown',
+  'playback',
+  // Pages of writing to be read and filled in, wherever they are opened from.
+  'details',
+  'metadata',
+  'smart-list',
+  'tapes-add',
+]);
 
 type Routes = { index: number; routes: readonly { key: string; name: string; state?: unknown }[] };
 
@@ -108,6 +161,7 @@ function Paged({
   // The navigator's own account of what is open: an address would not do, since a screen can be opened over
   // another of the same address.
   const stack = useStack(navigation);
+  const still = useMotionReduced();
   const onBack = navigation.canGoBack() ? navigation.goBack : null;
   const glass = glassOf(c);
   const mine = !NEVER_GLASS.has(name);
@@ -120,7 +174,15 @@ function Paged({
   const at = routes.findIndex((route) => route.key === routeKey);
   const under = at < 0 ? 0 : index - at;
   // Whether everything from here up to the top is glass, which is whether this can be seen through at all.
-  const seenThrough = under > 0 && routes.slice(at + 1, index + 1).every((route) => !NEVER_GLASS.has(route.name));
+  // A page opened in place of this one is not seen through: see `IN_PLACE`.
+  // Nor is anything while the decoration is held still, when every page is opened in place (`inPlaceGlass`):
+  // the one below drawn again under each frame of this one, out of focus, is the dearest thing glass does.
+  const seenThrough =
+    !still &&
+    under > 0 &&
+    routes.slice(at + 1, index + 1).every((route) => !NEVER_GLASS.has(route.name) && !IN_PLACE.has(route.name));
+  // A page opened in place of the one below: the sky of its own and the bar of what is playing at its foot.
+  const placed = IN_PLACE.has(name);
   /*
     The page under all the tabs: nothing of its own, the window under it
     being the page's colour already (see the root layout) and every tab's
@@ -141,7 +203,7 @@ function Paged({
   */
   const plain = TAB_ROOTS.has(name) || tabsPage ? styles.below : [styles.page, clear];
   const seen = glass <= 0 ? plain : [under === 0 ? ground : !seenThrough ? ground : under === 1 ? ground : [ground, styles.unseen], clear];
-  const showSky = glass <= 0 ? !TAB_ROOTS.has(name) : ground === styles.page || tabsPage;
+  const showSky = glass <= 0 ? !TAB_ROOTS.has(name) : ground === styles.page || tabsPage || placed || (still && mine);
   /*
     The same views round the screen in every theme, only told differently:
     a theme of glass and one without each had their own, and going from one
@@ -219,7 +281,7 @@ export const paged = ({
  * Screens of glass that have no bar at all, and draw their own heading: the
  * game, and a list, whose name is over its tracks.
  */
-const HEADERLESS = new Set(['(tabs)', 'tiles', 'playlist', ...TAB_ROOTS]);
+const HEADERLESS = new Set(['(tabs)', 'tiles', ...TAB_ROOTS]);
 
 /**
  * Screens of glass whose list runs on under their bar, and is seen through
@@ -229,10 +291,13 @@ const HEADERLESS = new Set(['(tabs)', 'tiles', 'playlist', ...TAB_ROOTS]);
  * laid out below the bar, as it always was.
  */
 const SCROLLS_UNDER = new Set([
+  'shown',
+  'playback',
   'settings-look',
   'settings-haptics',
   'settings-sound',
   'settings-player',
+  'settings-miniplayer',
   'settings-tapes',
   'settings-library',
   'settings-downloads',
@@ -259,6 +324,17 @@ const SCROLLS_UNDER = new Set([
  * comes, darker as well as out of focus, which is the rest of what makes
  * the new screen stand in front and not merely lie over.
  */
+/**
+ * How a page of [IN_PLACE] is opened in a theme of glass: in from the side
+ * as any other, in place of the one below rather than over it, its bar
+ * drawn in the page as the others' are (`Paged`).
+ */
+export const inPlaceGlass = {
+  animation: 'slide_from_right',
+  contentStyle: { backgroundColor: 'transparent' },
+  headerShown: false,
+} as const;
+
 export const overGlass = {
   presentation: 'transparentModal',
   animation: 'slide_from_right',

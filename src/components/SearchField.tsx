@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { Keyboard, StyleSheet, Text, TextInput, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Button } from './Button';
 import { TextField } from './FormScroll';
 import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { hintKey, laid, makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
+import { LEADING, RADIUS, SPACE, TOUCH, TYPE } from '../lib/theme/measures';
 
 /** What a screen can do to its search box. */
 export type SearchBox = { focus: () => void };
@@ -27,6 +29,7 @@ export function SearchField({
   maxLength,
   style,
   height,
+  go,
   ref,
 }: {
   value: string;
@@ -43,6 +46,13 @@ export function SearchField({
   /** Told when the box is being typed in, for anything that should stand aside. */
   onFocus?: () => void;
   onBlur?: () => void;
+  /**
+   * A search asked for rather than run as it is typed (a show, a book, a
+   * video): its button beside the box, the app's own (`Button`), there to be
+   * pressed once there is something to look for, and the keyboard's search
+   * key doing the same.
+   */
+  go?: { label: string; onPress: () => void; busy?: boolean };
   /** For a screen to put the cursor in it: its tab pressed again at the top (`ui/tabReselect.ts`). */
   ref?: Ref<SearchBox>;
 }) {
@@ -92,8 +102,10 @@ export function SearchField({
     return () => hidden.remove();
   }, []);
 
-  return (
-    <View style={[styles.field, height != null && { height }, style]}>
+  // Beside its button, as tall as it.
+  const tall = height ?? (go ? TOUCH.normal : undefined);
+  const box = (
+    <View style={[styles.field, tall != null && { height: tall }, go ? styles.besideGo : style]}>
       {/*
         A form's field, which brings itself out from under the keyboard inside
         a form that scrolls (the details screen's lyrics) and is an ordinary
@@ -102,12 +114,12 @@ export function SearchField({
       <TextField
         key={made}
         ref={input}
-        style={[styles.input, height != null && styles.inputFitted]}
+        style={[styles.input, tall != null && styles.inputFitted]}
         value={value}
         onChangeText={onChangeText}
         onFocus={onFocus}
         onBlur={onBlur}
-        onSubmitEditing={onSubmitEditing}
+        onSubmitEditing={onSubmitEditing ?? (go && value.trim() ? go.onPress : undefined)}
         maxLength={maxLength}
         placeholder={placeholder}
         placeholderTextColor={c.textFaint}
@@ -142,6 +154,24 @@ export function SearchField({
       ) : null}
     </View>
   );
+  if (!go) return box;
+  return (
+    <View style={[styles.withGo, style]}>
+      {box}
+      {/*
+        Grey until there is something to look for, and not a faded fill: a
+        see-through slab of the strongest colour was still the brightest thing
+        on the screen, for a button that could not be pressed yet.
+      */}
+      <Button
+        label={go.label}
+        kind={value.trim() ? 'primary' : 'secondary'}
+        busy={go.busy}
+        disabled={!value.trim() || go.busy}
+        onPress={go.onPress}
+      />
+    </View>
+  );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
@@ -149,24 +179,26 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.surface,
-    borderRadius: 10,
-    paddingRight: 6,
+    borderRadius: RADIUS.control,
+    paddingRight: SPACE.xs,
     ...outlined(c),
   },
   input: {
     flex: 1,
     color: c.text,
-    fontSize: 15,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
+    fontSize: TYPE.body,
+    paddingHorizontal: SPACE.m,
+    paddingVertical: SPACE.m,
   },
+  withGo: { flexDirection: 'row', gap: SPACE.s },
+  besideGo: { flex: 1, minWidth: 0 },
   // In a box of a given height, the words in the middle of it rather than room round them.
   inputFitted: { paddingVertical: 0, alignSelf: 'stretch' },
-  clear: { padding: 6 },
+  clear: { padding: SPACE.xs },
   clearCircle: {
     width: 20,
     height: 20,
-    borderRadius: 10,
+    borderRadius: RADIUS.control,
     backgroundColor: c.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
@@ -176,9 +208,9 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     // field itself lies on. As one flat colour, since a field of glass is a
     // wash and a mark written in a wash is hardly there.
     color: laid(c.surface, c.bg),
-    fontSize: 15,
+    fontSize: TYPE.body,
     fontWeight: '700',
     // The glyph sits high in its line box; this drops it onto the centre.
-    lineHeight: 17,
+    lineHeight: LEADING.body,
   },
 }));

@@ -71,7 +71,7 @@ describe('the German table', () => {
     assert.equal(format.weekdaysShort[0], 'Mo');
     assert.equal(format.upper('Größe der Straße'), 'GRÖSSE DER STRASSE');
     assert.equal(de.stats.chart.day(new Date(2026, 8, 24)), 'Donnerstag, 24. September');
-    assert.equal(de.stats.percent(12), `12${_}%`);
+    assert.equal(de.format.percent(12), `12${_}%`);
     assert.equal(de.stats.duration.hoursMinutes(4, 12), `4${_}h 12${_}min`);
     assert.equal(de.details.lyrics.earlier(0.25), `−0,25${_}s`);
   });

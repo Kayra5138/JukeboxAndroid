@@ -1,3 +1,4 @@
+import { request } from '../metadata/http.ts';
 import { downloads } from '../youtube/native.ts';
 import { securePicture, type Episode, type Show } from './episodes.ts';
 
@@ -67,9 +68,12 @@ function country(): string {
 /** Shows by [words], from Apple's directory: the twenty-five it thinks nearest. */
 export async function searchShows(words: string): Promise<FoundShow[]> {
   const term = encodeURIComponent(words.trim());
-  const response = await fetch(`https://itunes.apple.com/search?media=podcast&entity=podcast&limit=25&country=${country()}&term=${term}`);
-  if (!response.ok) throw new Error(`search ${response.status}`);
-  const body = (await response.json()) as { results?: { feedUrl?: string; collectionName?: string; artistName?: string; artworkUrl600?: string; artworkUrl100?: string }[] };
+  // Through `request`, which gives up after a while, as a bare fetch never did.
+  const body = await request<{ results?: { feedUrl?: string; collectionName?: string; artistName?: string; artworkUrl600?: string; artworkUrl100?: string }[] }>(
+    'Apple Podcasts',
+    `https://itunes.apple.com/search?media=podcast&entity=podcast&limit=25&country=${country()}&term=${term}`,
+    {}
+  );
   return (body.results ?? [])
     .filter((result) => typeof result.feedUrl === 'string' && result.feedUrl.startsWith('http'))
     .map((result) => ({

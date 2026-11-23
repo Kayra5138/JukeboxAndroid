@@ -1,18 +1,21 @@
+import { TabTitle, usePageRoom } from '../components/Page';
+import { ICON, ICON_SMALL, LEADING, RADIUS, ROW_COVER, SPACE, TYPE, TOUCH } from '../lib/theme/measures';
 import { useDownloadLibraryRevision } from '../lib/youtube/DownloadsProvider';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useIsFocused, useRouter } from 'expo-router';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { BlurArea, GlassScene } from '../components/Frosted';
+import { BlurArea, ClockGlass, GlassScene } from '../components/Frosted';
 import { Pressable } from '../components/Pressable';
 import { Segmented } from '../components/Segmented';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { NowPlayingBar, usePageSides } from '../components/NowPlayingBar';
 import { useUnderBars } from '../components/UnderBars';
 import { PlaylistCover } from '../components/PlaylistCover';
+import { MediaRow, RowControl } from '../components/MediaRow';
 import { OptionSheet } from '../components/OptionSheet';
 import { TextPrompt } from '../components/TextPrompt';
 import { useListFiles } from '../components/useListFiles';
+import { OnAPage } from '../components/OnAPage';
+import { useRows } from '../components/settings/rows';
 import { AUTO_LISTS, autoListTrackIds, type AutoListId } from '../lib/db/autoLists';
 import {
   addToPlaylist,
@@ -26,7 +29,7 @@ import { tagCounts, trackIdsWithTag, type TagCount } from '../lib/db/tags';
 import { useT } from '../lib/i18n/index';
 import { refreshLibrary } from '../lib/library/index';
 import { useLibrary } from '../lib/library/useLibrary';
-import { makeStyles, outlined, outlinedClip, scene, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, outlinedClip, scene, useColours, usePressed } from '../lib/theme/index';
 import { favorites, useFavoritesShown } from '../lib/playlists/favorites';
 import {
   CompassIcon,
@@ -44,11 +47,11 @@ import {
 import { readSmartStats, smartListTracks } from '../lib/lists/smartLive';
 import { usePlayerActions } from '../lib/player/PlayerProvider';
 import { haptic } from '../lib/ui/haptics';
-import { Behind, scrimOf } from '../lib/theme/Veil';
+import { Behind } from '../lib/theme/Veil';
 import { useLandscape } from '../lib/ui/layout';
+import { useTabOpen } from '../lib/ui/tabOpen';
 import type { Track } from '../lib/types';
 import type { EnrichedTrack } from '../lib/media/merge';
-import { useBackInFront } from '../lib/ui/back';
 import { useTopOnReselect } from '../lib/ui/tabReselect';
 
 /** Enough tags to pick from without the sheet becoming the tag screen. */
@@ -57,12 +60,8 @@ const TAG_CHOICES = 40;
 /** How many covers a square holds, and so how many tracks are asked for. */
 const COVER_TRACKS = 4;
 
-const COVER_SIZE = 52;
-
 /** How many rows of lists the tab shows before Show all, Favorites among them. */
 const ROWS_SHOWN = 4;
-
-const FAVORITES_ART = COVER_SIZE;
 
 /** The sign on each tile of the lists made from listening. */
 const AUTO_SIGNS: Record<AutoListId, typeof FlameIcon> = {
@@ -80,12 +79,10 @@ function sameAs(a: unknown, b: unknown): boolean {
 export default function PlaylistsScreen() {
   const router = useRouter();
   const downloadRevision = useDownloadLibraryRevision();
-  const insets = useSafeAreaInsets();
-  const sides = usePageSides();
-  // In a theme of glass the tab bar and the bar of what is playing are over the foot of this.
-  const under = useUnderBars({ player: true });
-  // The tab bar alone, which the sheet of tags stands on as it always has: it covers the bar of what is playing.
-  const tabBar = useUnderBars();
+  // The skeleton of the page a tab opens on: see `usePageRoom`.
+  const room = usePageRoom({ root: true });
+  // The tab bar, which the sheet of tags stands on; the bar of what is playing is part of it now, and is not counted twice.
+  const tabBar = useUnderBars({ player: false });
   const landscape = useLandscape();
   const t = useT();
   const styles = useStyles();
@@ -97,12 +94,14 @@ export default function PlaylistsScreen() {
   const [tags, setTags] = useState<TagCount[]>([]);
   const [naming, setNaming] = useState(false);
   const [fromTags, setFromTags] = useState(false);
+  const card = useRows();
+  /** A list made from the tags sheet since it was opened: a second tap while it closes makes no second list. */
+  const made = useRef(false);
   /*
     Back closes the sheet of tags rather than the tab under it: it is the way
     out a screen reader's user reaches for first, and the sheet has no button
     of its own to cancel with.
   */
-  useBackInFront(fromTags, () => setFromTags(false));
   /** Which of the two a tag list will be. Following the tag is the one people
       mean more often, and it is also the one that cannot be got back to by
       hand once a copy has been taken. */
@@ -174,11 +173,24 @@ export default function PlaylistsScreen() {
     and counts — which are what the screen is actually for — are in hand
     without the library, and are drawn without waiting for it.
   */
+  /*
+    And only while the tab is open and this page is in front of it: worked out at every change of the library,
+    a download landing among them, with every smart list's rules run over the
+    whole of it, for a tab nobody had in front of them. Opened again, it is
+    worked out then, once, if anything has changed meanwhile.
+  */
+  // Nor under a list's page pushed over it, in a tab that is open.
+  const focused = useIsFocused();
+  const open = useTabOpen() && focused;
+  const workedFrom = useRef<{ library: unknown; enriched: unknown; lists: unknown } | null>(null);
   useEffect(() => {
     // No library yet, or none to be had: the rows keep what the lists say of
     // themselves, the squares stay empty and the counts are the stored ones.
     // An empty library is another matter, and is counted like any other.
-    if (!library) return;
+    if (!library || !open) return;
+    const from = workedFrom.current;
+    if (from && from.library === library && from.enriched === enriched && from.lists === lists) return;
+    workedFrom.current = { library, enriched, lists };
     const byId = new Map(library.map((entry) => [entry.id, entry]));
     const resolved = new Map<number, Track[]>();
     /*
@@ -233,7 +245,7 @@ export default function PlaylistsScreen() {
     setCounts(present);
     setLengths(length);
     members.current = whole;
-  }, [library, enriched, lists]);
+  }, [library, enriched, lists, open]);
 
   /** What the row says a list holds: the stored number until the library is in. */
   const held = (list: Playlist) => counts.get(list.id) ?? list.trackCount;
@@ -278,12 +290,14 @@ export default function PlaylistsScreen() {
    */
   const createFromTag = useCallback(
     (tag: string, live: boolean) => {
+      if (made.current) return;
+      made.current = true;
       const now = Date.now();
       const id = live ? createPlaylist(tag, now, tag) : createPlaylist(tag, now);
       if (!live) addToPlaylist(id, trackIdsWithTag(tag), now);
-      setFromTags(false);
       load();
-      router.push({ pathname: '/playlist', params: { id: String(id) } });
+      // In place of the page of tags, which closes as it goes (`OnAPage`): back from the list is the Lists tab.
+      router.replace({ pathname: '/playlist', params: { id: String(id) } });
     },
     [load, router]
   );
@@ -327,130 +341,98 @@ export default function PlaylistsScreen() {
       {/* What the sheet of tags is laid over: all of the screen but it. */}
       {/* The lists an area the bars over them blur, in a theme of glass: see `Frosted`. */}
       <GlassScene>
-      <Behind veiled={fromTags} style={landscape ? styles.sideways : styles.upright}>
+      <Behind veiled={false} style={landscape ? styles.sideways : styles.upright}>
       <BlurArea style={styles.middle}>
       <ScrollView
         {...backUp}
         style={styles.fill}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: insets.top + 18,
-            // See usePageSides for why these are not the phone's own sideways.
-            paddingLeft: sides.left + 20,
-            paddingRight: sides.right + 20,
-            paddingBottom: insets.bottom + 32 + under.bottom,
-          },
-        ]}>
+        // The skeleton of a tab's own page (`usePageRoom`).
+        contentContainerStyle={[styles.content, room]}>
         {/*
           The name of the tab, how many lists there are, and what can be made:
           a smart list, a list from a tag, the files, and a new list, as round buttons on
           the right where there used to be two wide ones and a row of links.
         */}
-        <View style={styles.head}>
-          <View style={styles.headText}>
-            <Text accessibilityRole="header" style={styles.title}>{t.nav.lists}</Text>
-            <Text style={styles.subtitle}>{t.lists.screen.count(shownLists.length)}</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.smart.newList}
-            android_ripple={pressed}
-            style={styles.round}
-            onPress={() => router.push('/smart-list')}>
-            <SmartIcon size={20} color={c.text} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.lists.screen.fromTag}
-            android_ripple={pressed}
-            style={styles.round}
-            onPress={() => setFromTags(true)}>
-            <TagIcon size={20} color={c.text} />
-          </Pressable>
-          {files.available ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.lists.screen.more}
-              android_ripple={pressed}
-              style={styles.round}
-              onPress={() => setMoreOpen(true)}>
-              <MoreIcon size={20} color={c.text} />
-            </Pressable>
-          ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t.lists.screen.newList}
-            android_ripple={pressed}
-            style={[styles.round, styles.roundOn]}
-            onPress={() => setNaming(true)}>
-            <PlusIcon size={18} color={c.onPrimary} />
-          </Pressable>
-        </View>
+        <TabTitle
+          title={t.nav.lists}
+          subtitle={t.lists.screen.count(shownLists.length)}
+          actions={[
+            { label: t.smart.newList, wide: false, onPress: () => router.push('/smart-list'), mark: (ink: string) => <SmartIcon size={ICON} color={ink} /> },
+            {
+              label: t.lists.screen.fromTag,
+              wide: false,
+              onPress: () => {
+                made.current = false;
+                setFromTags(true);
+              },
+              mark: (ink: string) => <TagIcon size={ICON} color={ink} />,
+            },
+            ...(files.available
+              ? [{ label: t.lists.screen.more, wide: false, onPress: () => setMoreOpen(true), mark: (ink: string) => <MoreIcon size={ICON} color={ink} /> }]
+              : []),
+            { label: t.lists.screen.newList, kind: 'primary', wide: false, onPress: () => setNaming(true), mark: (ink: string) => <PlusIcon size={ICON} color={ink} /> },
+          ]}
+        />
 
         {rows.length === 0 ? null : (
           <View style={landscape ? styles.grid : styles.listCard}>
             {rows.map((list, at) => (
-                <Pressable
-                  accessibilityRole="button"
-                  android_ripple={pressed}
+                <MediaRow
                   key={list.id}
-                  style={[styles.listRow, at > 0 && !landscape && styles.listRule, landscape && styles.cell]}
-                  onPress={() => router.push({ pathname: '/playlist', params: { id: String(list.id) } })}>
-                  {/* Favorites: the newest four of it behind the heart, or the heart alone on colour while it is empty. */}
-                  {list.kind === 'favorites' ? (
-                    <View style={styles.favoritesArt}>
-                      {(covers.get(list.id) ?? []).length > 0 ? (
-                        <>
-                          <View style={StyleSheet.absoluteFill}>
-                            <PlaylistCover tracks={covers.get(list.id) ?? []} chosen={null} picture={null} size={FAVORITES_ART} />
-                          </View>
-                          <View style={styles.favoritesVeil} />
-                          <HeartIcon size={24} color="#ffffff" full />
-                        </>
-                      ) : (
-                        <HeartIcon size={24} color={c.onAccent} full />
-                      )}
-                    </View>
-                  ) : (
-                    <PlaylistCover
-                      tracks={covers.get(list.id) ?? []}
-                      chosen={(covers.get(list.id) ?? []).find((entry) => entry.id === list.coverTrackId) ?? null}
-                      picture={list.coverUri}
-                      size={COVER_SIZE}
-                    />
-                  )}
-                  <View style={styles.rowText}>
-                    <View style={styles.nameLine}>
-                      {list.tag ? <TagIcon size={14} color={c.textSecondary} /> : null}
-                      {list.kind === 'smart' ? (
-                        <View accessible accessibilityLabel={t.smart.sign}>
-                          <SmartIcon size={14} color={c.textSecondary} />
-                        </View>
-                      ) : null}
-                      <Text style={styles.rowName} numberOfLines={1}>
-                        {list.name}
-                      </Text>
-                    </View>
-                    <Text style={styles.rowDetail} numberOfLines={1}>
-                      {/* Worth saying on the row: the two look alike here and behave differently once opened. */}
-                      {list.kind === 'smart'
-                        ? [t.smart.detail(held(list)), lengthOf(list)].filter(Boolean).join(' · ')
-                        : list.tag
-                        ? t.lists.screen.followingTag(held(list), list.tag)
-                        : [t.common.tracks(held(list)), lengthOf(list)].filter(Boolean).join(' · ')}
-                    </Text>
-                  </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={t.lists.screen.shuffleList(list.name)}
-                    android_ripple={pressed}
-                    hitSlop={6}
-                    style={styles.shuffle}
-                    onPress={() => shufflePlay(members.current.get(list.id) ?? [], list.id)}>
-                    <ShuffleIcon size={20} color={c.textSecondary} />
-                  </Pressable>
-                </Pressable>
+                  style={[at > 0 && !landscape && styles.listRule, landscape && styles.cell]}
+                  onPress={() => router.push({ pathname: '/playlist', params: { id: String(list.id) } })}
+                  lead={
+                    // Favorites: the newest four of it behind the heart, or the heart alone on colour while it is empty.
+                    list.kind === 'favorites' ? (
+                      <View style={styles.favoritesArt}>
+                        {(covers.get(list.id) ?? []).length > 0 ? (
+                          <>
+                            <View style={StyleSheet.absoluteFill}>
+                              <PlaylistCover tracks={covers.get(list.id) ?? []} chosen={null} picture={null} size={ROW_COVER} />
+                            </View>
+                            <View style={styles.favoritesVeil} />
+                            <HeartIcon size={ICON} color="#ffffff" full />
+                          </>
+                        ) : (
+                          <HeartIcon size={ICON} color={c.onAccent} full />
+                        )}
+                      </View>
+                    ) : (
+                      <PlaylistCover
+                        tracks={covers.get(list.id) ?? []}
+                        chosen={(covers.get(list.id) ?? []).find((entry) => entry.id === list.coverTrackId) ?? null}
+                        picture={list.coverUri}
+                        size={ROW_COVER}
+                      />
+                    )
+                  }
+                  titleMark={
+                    list.tag ? (
+                      <TagIcon size={ICON_SMALL} color={c.textSecondary} />
+                    ) : list.kind === 'smart' ? (
+                      <View accessible accessibilityLabel={t.smart.sign}>
+                        <SmartIcon size={ICON_SMALL} color={c.textSecondary} />
+                      </View>
+                    ) : undefined
+                  }
+                  title={list.name}
+                  subtitle={
+                    // Worth saying on the row: the two look alike here and behave differently once opened.
+                    list.kind === 'smart'
+                      ? [t.smart.detail(held(list)), lengthOf(list)].filter(Boolean).join(' · ')
+                      : list.tag
+                      ? t.lists.screen.followingTag(held(list), list.tag)
+                      : [t.common.tracks(held(list)), lengthOf(list)].filter(Boolean).join(' · ')
+                  }
+                  trailing={
+                    <RowControl
+                      accessibilityLabel={t.lists.screen.shuffleList(list.name)}
+                      onPress={() => shufflePlay(members.current.get(list.id) ?? [], list.id)}>
+                      <ShuffleIcon size={ICON} color={c.textSecondary} />
+                    </RowControl>
+                  }
+                  menu={false}
+                />
               ))}
             {/* The rest of them, which there was no room for: at the foot of the card, and back again. */}
             {yours.length > fits ? (
@@ -514,10 +496,9 @@ export default function PlaylistsScreen() {
         </View>
       </ScrollView>
       </BlurArea>
+      {/* And behind the clock, over the page scrolled up under it: see `ClockGlass`. */}
+      <ClockGlass />
 
-      {/* Starting a track and being left looking at the list reads as the tap
-          having gone nowhere. */}
-      <NowPlayingBar column={landscape} />
       </Behind>
       </GlassScene>
 
@@ -530,21 +511,15 @@ export default function PlaylistsScreen() {
         onClose={() => setNaming(false)}
       />
 
-      {fromTags ? (
-        <View style={StyleSheet.absoluteFill}>
-          {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
-              of its own, touching outside it is one of the ways out, and it has to be findable. */}
-          <Pressable
-            style={styles.backdrop}
-            accessibilityRole="button"
-            accessibilityLabel={t.common.close}
-            onPress={() => setFromTags(false)}
-          />
-          <View style={[styles.sheet, { bottom: tabBar.bottom, paddingBottom: insets.bottom + 20 }]}>
-            <Text accessibilityRole="header" style={styles.sheetHeading}>{t.lists.screen.tagSheet.heading}</Text>
+      {/*
+        A page of its own in the tab, as Settings asks its questions, and not a
+        sheet over the screen: that one stood between the page and the bars,
+        the tab bar and the bar of what is playing put out of focus under it.
+      */}
+      <OnAPage visible={fromTags} title={t.lists.screen.tagSheet.heading} onClose={() => setFromTags(false)}>
+        <View style={card.card}>
+          <View style={card.row}>
             <Segmented
-              size="compact"
-              style={styles.kinds}
               options={[
                 { value: 'follows', label: t.lists.screen.tagSheet.follows },
                 { value: 'copy', label: t.lists.screen.tagSheet.copy },
@@ -552,31 +527,37 @@ export default function PlaylistsScreen() {
               value={live ? 'follows' : 'copy'}
               onChange={(kind) => setLive(kind === 'follows')}
             />
-            <Text style={styles.sheetHint}>
+            <Text style={card.muted}>
               {live ? t.lists.screen.tagSheet.followsHint : t.lists.screen.tagSheet.copyHint}
             </Text>
-            <ScrollView style={styles.tagScroll}>
-              {tags.length === 0 ? (
-                <Text style={styles.empty}>{t.lists.screen.tagSheet.noTags}</Text>
-              ) : (
-                tags.map((entry) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    android_ripple={pressed}
-                    key={entry.tag}
-                    style={styles.tagRow}
-                    onPress={() => createFromTag(entry.tag, live)}>
-                    <Text style={styles.tagName} numberOfLines={1}>
-                      {entry.tag}
-                    </Text>
-                    <Text style={styles.rowDetail}>{t.format.number(entry.trackCount)}</Text>
-                  </Pressable>
-                ))
-              )}
-            </ScrollView>
           </View>
         </View>
-      ) : null}
+        <View style={[card.card, styles.tagCard]}>
+          {tags.length === 0 ? (
+            <View style={card.row}>
+              <Text style={card.muted}>{t.lists.screen.tagSheet.noTags}</Text>
+            </View>
+          ) : (
+            tags.map((entry, index) => (
+              <View key={entry.tag}>
+                {index > 0 ? <View style={card.rule} /> : null}
+                <Pressable
+                  accessibilityRole="button"
+                  android_ripple={pressed}
+                  style={card.row}
+                  onPress={() => createFromTag(entry.tag, live)}>
+                  <View style={card.line}>
+                    <Text style={card.title} numberOfLines={1}>
+                      {entry.tag}
+                    </Text>
+                    <Text style={card.value}>{t.format.number(entry.trackCount)}</Text>
+                  </View>
+                </Pressable>
+              </View>
+            ))
+          )}
+        </View>
+      </OnAPage>
 
       {/* The files, brought out now and then rather than every visit: behind the button of three dots. */}
       <OptionSheet<'import' | 'export' | 'none'>
@@ -607,29 +588,14 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   /* Takes what the rail and the player leave, rather than only what it needs. */
   middle: { flex: 1, minWidth: 0 },
   fill: { flex: 1 },
-  content: { gap: 4 },
+  content: { gap: SPACE.xs },
 
-  head: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 18 },
-  headText: { flex: 1, minWidth: 0, gap: 2 },
-  title: { color: c.text, fontSize: 30, fontWeight: '700', letterSpacing: -0.5 },
-  subtitle: { color: c.textFaint, fontSize: 13 },
-  round: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    backgroundColor: c.surface,
-    ...outlinedClip(c),
-  },
-  roundOn: { backgroundColor: c.primary, ...outlined(c, c.primary) },
 
   favoritesArt: {
-    width: FAVORITES_ART,
-    height: FAVORITES_ART,
+    width: ROW_COVER,
+    height: ROW_COVER,
     // As PlaylistCover rounds a square this size, so it sits in the column of covers as one of them.
-    borderRadius: Math.max(6, FAVORITES_ART * 0.09),
+    borderRadius: Math.max(RADIUS.cover, ROW_COVER * 0.09),
     overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
@@ -637,90 +603,50 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   },
   favoritesVeil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.38)' },
 
-  shuffle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
 
-  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
   tile: {
     flexGrow: 1,
     flexBasis: '45%',
     minWidth: 140,
-    gap: 4,
-    padding: 14,
-    borderRadius: 14,
+    gap: SPACE.xs,
+    padding: SPACE.m,
+    borderRadius: RADIUS.card,
     overflow: 'hidden',
     backgroundColor: c.surface,
     ...outlinedClip(c),
   },
-  tileName: { color: c.text, fontSize: 14.5, fontWeight: '600', paddingTop: 6 },
-  tileDetail: { color: c.textFaint, fontSize: 12, lineHeight: 16 },
+  tileName: { color: c.text, fontSize: TYPE.body, fontWeight: '600', paddingTop: SPACE.xs },
+  tileDetail: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint },
 
-  listCard: { borderRadius: 16, overflow: 'hidden', backgroundColor: c.surface, ...outlinedClip(c) },
-  listRow: { flexDirection: 'row', alignItems: 'center', gap: 13, paddingLeft: 12, paddingRight: 6, paddingVertical: 10 },
-  more: { alignItems: 'center', justifyContent: 'center', minHeight: 48 },
-  moreWide: { flexBasis: '100%' },
-  moreLabel: { color: c.accent, fontSize: 14, fontWeight: '600' },
+  listCard: { borderRadius: RADIUS.card, overflow: 'hidden', backgroundColor: c.surface, ...outlinedClip(c) },
+  more: { alignItems: 'center', justifyContent: 'center', minHeight: TOUCH.normal },
+  // A row of the grid to itself, the whole of its width: a share of it as a basis was not taken, and the words stood in two lines at its start.
+  moreWide: { width: '100%' },
+  moreLabel: { color: c.accent, fontSize: TYPE.small, fontWeight: '600' },
   listRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
   cell: {
     flexGrow: 1,
     flexBasis: '45%',
     minWidth: 240,
-    borderRadius: 14,
+    borderRadius: RADIUS.card,
     overflow: 'hidden',
     backgroundColor: c.surface,
     ...outlinedClip(c),
   },
 
-  rowText: { flex: 1, minWidth: 0, gap: 3 },
-  rowName: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  rowDetail: { color: c.textFaint, fontSize: 12.5 },
 
   section: {
     color: c.textFaint,
-    fontSize: 11,
+    fontSize: TYPE.label,
     letterSpacing: 1,
-    paddingTop: 26,
-    paddingBottom: 12,
+    paddingTop: SPACE.xl,
+    paddingBottom: SPACE.m,
   },
-  empty: { color: c.textFaint, fontSize: 13, lineHeight: 20, paddingVertical: 10 },
+  empty: { color: c.textFaint, fontSize: TYPE.small, lineHeight: LEADING.small, paddingVertical: SPACE.s },
 
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '75%',
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 18,
-    paddingHorizontal: 20,
-    gap: 6,
-    ...outlined(c),
-  },
-  sheetHeading: { color: c.text, fontSize: 15, fontWeight: '600' },
-  sheetHint: { color: c.textFaint, fontSize: 12, lineHeight: 18, paddingBottom: 8 },
-  // On the sheet, which is the surface a tray is elsewhere: the page's colour is the step off it here.
-  kinds: { backgroundColor: c.bg, marginTop: 10 },
-  tagScroll: { flexGrow: 0 },
-  tagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  tagName: { color: c.text, fontSize: 14.5, flex: 1, minWidth: 0 },
+  // The tags' card, under the card of how the list is to be made: apart, as cards are.
+  tagCard: { marginTop: SPACE.xl },
 }));

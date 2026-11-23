@@ -64,7 +64,8 @@ export function toOpml(shows: readonly { feedUrl: string; title: string }[], now
  */
 export function feedsInOpml(text: string): string[] {
   const feeds: string[] = [];
-  for (const outline of text.matchAll(/<outline\b[^>]*>/gi)) {
+  // A quoted value is taken whole, with any `>` in it: a title saying "A > B" ended the outline there, before its feed.
+  for (const outline of text.matchAll(/<outline\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi)) {
     const found = /\bxmlurl\s*=\s*("([^"]*)"|'([^']*)')/i.exec(outline[0]);
     const feed = found ? feedFromOthers(unescape((found[2] ?? found[3] ?? '').trim())) : '';
     if (/^https?:\/\/\S+$/i.test(feed) && !feeds.includes(feed)) feeds.push(feed);

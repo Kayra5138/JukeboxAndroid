@@ -2,7 +2,6 @@ import { format } from './format.ts';
 import type { Strings } from '../en/index.ts';
 
 export const sound: Strings['sound'] = {
-  percent: (value) => `${format.number(value)}%`,
 
   effects: {
     failures: {
@@ -18,6 +17,8 @@ export const sound: Strings['sound'] = {
       headphones: { name: 'ヘッドホン', hint: '左右に極端に振られたミックスを聴きやすく' },
       '8d': { name: '8D', hint: '音がゆっくりと周りを回ります' },
       karaoke: { name: 'カラオケ風', hint: '中央の音を遠ざけます' },
+      nightcore: { name: 'ナイトコア', hint: '速く高く、回転の速すぎるレコードのように' },
+      slowed: { name: 'スロー＋リバーブ', hint: '遅く低く、広い部屋で鳴らしたように' },
     },
     voices: {
       off: { name: 'オフ', hint: '録音そのままの音' },
@@ -41,6 +42,13 @@ export const sound: Strings['sound'] = {
     left: (percent) => `左${percent}%`,
     right: (percent) => `右${percent}%`,
     swap: { title: '左右チャンネルを入れ替え', note: '左右を逆にします。配線が逆のケーブル用です。' },
+
+    room: '部屋',
+
+    reverb: 'リバーブ',
+
+    reverbNote: '広い部屋の響きをどれだけ加えるか。0 で響きなし。',
+
 
     headphones: 'ヘッドホン',
     crossfeed: 'クロスフィード',

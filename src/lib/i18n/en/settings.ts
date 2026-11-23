@@ -14,6 +14,7 @@ export const settings = {
     look: 'Look & feel',
     sound: 'Sound',
     player: 'Player',
+    miniPlayer: 'Mini player',
     tapes: 'Tapes',
     library: 'Library',
     downloads: 'Downloads & Discover',
@@ -34,6 +35,7 @@ export const settings = {
     look: 'The theme, motion, vibration, and which views the library offers.',
     sound: 'The equalizer and effects, even loudness, crossfade, and speed and pitch.',
     player: 'How far the jump buttons go, what plays when the queue runs out, and the language lyrics are translated into.',
+    miniPlayer: 'What the bar of what is playing shows, its buttons, and how it looks and is handled.',
     tapes: 'Smart rewind, how far a tape’s jump buttons go, and fetching podcasts on Wi‑Fi only.',
     library: 'The folder your music is in, tags and covers, and files that may be the same song.',
     /** Beside Library's name: how many files are waiting to be called one song or two. */
@@ -42,6 +44,19 @@ export const settings = {
     data: 'Back everything up or bring a backup in, new-version checks, and ListenBrainz (experimental).',
   },
 
+  /** Finding a setting by a word it is shown with, on any page however far in: the field over Settings and its page. */
+  /** Settings → Look & feel: whether the bar to take hold of beside a long list is there always, while it moves, or never. */
+  scrollBar: { title: 'Scroll bar', note: 'The bar beside a long list, to take hold of and go a long way at once.', always: 'Always', moving: 'While scrolling', never: 'Never' },
+  /** Settings → Library: whether a list's page says what else might belong in it. */
+  listSuggestions: { title: 'Suggestions under a list', note: 'Under a list\'s songs, others from the library that might belong in it, judged from the tags the list leans on.' },
+  /** Settings → Look & feel: whether a song taken out can be had back for a moment after. */
+  undoOffers: { title: 'Undo after taking out', note: 'For a few seconds after a song is taken out of a list, let go from the player or turned away in Discover, a button to have it back.' },
+  search: {
+    open: 'Search settings',
+    title: 'Search settings',
+    placeholder: 'A word from any setting',
+    none: (query: string) => `Nothing in Settings says “${query}”.`,
+  },
   language: {
     title: 'Language',
     note: 'The language the app speaks. It does not follow the phone’s.',
@@ -84,7 +99,6 @@ export const settings = {
     saturation: 'Saturation',
     lightness: 'Lightness',
     degrees: (value: string) => `${value}°`,
-    percent: (value: string) => `${value}%`,
     hex: 'Colour code',
     /** Said of a colour that could not be used as it was picked. */
     nudged: (colour: string) => `Shown as ${colour}, so that everything on it can be read.`,
@@ -196,13 +210,11 @@ export const settings = {
       sparks: 'Sparks thrown off its edge on each beat, across the player.',
       aurora: 'Clouds of the cover\'s own colours behind the whole player, each swelling with a part of the sound.',
     },
-    beats: 'Vibrate on the beat',
-    beatsNote: 'A light knock on each beat while the player is open and the music plays. As quiet as your vibration settings make it.',
   },
   still: {
     title: 'Hold the decoration still',
     note:
-      'For a phone that drops frames. The player appears instead of rising, and the game stops lighting up around a life won or lost. The keys themselves still fall — that is the game, not decoration.',
+      'For a phone that drops frames. Pages and sheets open without animation, covers do not fade in, the record and the visualisers stand still, and glass is drawn without blur.',
   },
   /** Which writing a song's name found in two is shown in: Settings → Look. */
   scriptNames: { title: 'Names in other writings', latin: 'Latin letters', original: 'Original', note: 'Where a lookup found a song\'s name in Latin letters as well as in its own writing (Japanese, Chinese, Korean), which the library shows. Songs looked up before this was added fill in when they are looked up again.' },
@@ -219,7 +231,9 @@ export const settings = {
       custom: "Pick the kinds of moment below.",
     },
     strength: "Strength",
-    strengthNote: "Felt as you let go. Phones whose motor cannot be made lighter or stronger keep their own strength.",
+    strengthNote: "Felt as you let go. 100% is the recommended; past it the same touches are made heavier, and past 200% the motor is driven as hard as it goes. Phones whose motor cannot be made lighter or stronger keep their own strength until then.",
+    /** Beside the strength where it is the one the app comes with and suggests. */
+    recommended: "recommended",
     groupsHeading: "What vibrates",
     groups: {
       holds: { title: "Holds and drags", note: "A long press taking, a row lifted to move it, a finger run down the checkboxes." },
@@ -237,10 +251,84 @@ export const settings = {
     note:
       'At the end of every row of tracks and albums, opening the same menu a long press does. Holding a row works without them too.',
   },
+  /** Settings → Mini player: see `ui/miniPlayer.ts`. */
+  miniPlayer: {
+    shows: 'What it shows',
+    progress: {
+      title: 'Progress',
+      none: 'None',
+      line: 'Line',
+      fill: 'Fill',
+      note: 'How far into the song it is: a thin line along its foot, or the whole bar filling as the song goes on.',
+    },
+    line: {
+      title: 'Under the name',
+      artist: 'Artist',
+      album: 'Album',
+      both: 'Artist and album',
+      left: 'Time left',
+      next: 'Up next',
+      note: 'What the second line on it says.',
+    },
+    cover: {
+      title: 'Cover',
+      square: 'Square',
+      round: 'Round',
+      record: 'Record',
+      note: 'A record turns while the song plays.',
+    },
+    buttons: {
+      title: 'Buttons',
+      aside: 'Up to four, in the order they are shown here.',
+      names: {
+        previous: 'Previous',
+        playPause: 'Play and pause',
+        next: 'Next',
+        back: 'Jump back',
+        forward: 'Jump forward',
+        heart: 'Favorite',
+        shuffle: 'Shuffle',
+        repeat: 'Repeat',
+      },
+    },
+    handling: 'Touch',
+    swipe: {
+      title: 'Swipe for another song',
+      note: 'Pulled sideways it goes to the song before or after. Off, it only opens the player.',
+    },
+    hold: {
+      title: 'Holding it opens',
+      none: 'Nothing',
+      menu: 'The song’s menu',
+      queue: 'The queue',
+      lyrics: 'The lyrics',
+      note: 'What a long press on the song in it does.',
+    },
+    look: 'Look',
+    floating: {
+      title: 'Floating',
+      note: 'Rounded and clear of the edges, rather than across the whole width.',
+    },
+    tint: {
+      title: 'Cover colour',
+      note: 'Washed with the colour of the cover of what is playing.',
+    },
+    leftHanded: {
+      title: 'Left-handed',
+      note: 'The buttons on the left and the song on the right.',
+    },
+  },
   /** Settings → Look: the tabs that can be taken off the bar. Their names are the tabs' own. */
   tabs: {
     title: 'Tabs',
-    searchNote: 'Discover and YouTube downloads are on this tab, and go with it.',
+    /** Under each tab's name: what is on it. */
+    notes: {
+      library: 'Your tracks, albums, artists, tapes and folders.',
+      lists: 'Your playlists, smart lists and favourites.',
+      search: 'Discover and downloading from YouTube. Turn this tab off and both are hidden with it.',
+      stats: 'What you have listened to, and your listening reports.',
+      settings: 'How the app looks, sounds and behaves.',
+    },
     aside: 'Library and Settings are always there.',
     names: 'Names under the icons',
     namesNote: 'Off, the bar shows its icons alone and is a little lower. Sideways it always does.',

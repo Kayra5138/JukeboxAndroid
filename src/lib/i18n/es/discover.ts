@@ -8,6 +8,10 @@ export const discover: Strings['discover'] = {
   panel: {
     heading: 'Para lo próximo que escuches',
     refresh: 'Actualizar',
+    /** On the knob's track, in the line of status while there is a list: a new one comes by sliding the knob along, not by a touch that could be a slip. */
+    slideToRefresh: 'Desliza para actualizar',
+    /** The same, slid far enough that letting go now makes a new list. */
+    releaseToRefresh: 'Suelta para actualizar',
     updated: (date) => `Actualizada el ${date}`,
 
     familiar: (because) => `Más de tus artistas · ${because}`,
@@ -47,7 +51,6 @@ export const discover: Strings['discover'] = {
     failed: 'No se ha podido descargar · toca para reintentar',
     needsBuild: 'Necesita la app actualizada',
     waitingWifi: 'Esperando Wi-Fi · toca para descargar',
-    percent: (percent) => `${n(percent)} %`,
     gettingReady: 'Descargándose',
     hint: 'Reproduce la canción, descargándola antes si hace falta',
     nowPlaying: (title) => `Sonando: ${title}`,
@@ -154,7 +157,8 @@ export const discover: Strings['discover'] = {
     buildingArtists: (done, total) =>
       `Buscando canciones · ${n(done)} de ${n(total)} ${oneOrMany(total, 'artista', 'artistas')}`,
     preparing: (ready, target) =>
-      `Hay una lista nueva en camino · ${n(ready)} de ${n(target)} ${oneOrMany(target, 'canción lista', 'canciones listas')}.${ready > 0 ? ' Vuelve a actualizar para verla ya.' : ''}`,
+      `Hay una lista nueva en camino · ${n(ready)} de ${n(target)} ${oneOrMany(target, 'canción lista', 'canciones listas')}.`,
+    showNow: 'Mostrar ya',
     offline: 'Sin conexión. Tu lista se conserva; se buscarán canciones nuevas cuando haya conexión.',
     offlineEmpty: 'Sin conexión. Descubrir creará tu lista cuando haya conexión.',
     noLibrary: 'Descubrir parte de la música de este teléfono, y aún no ha encontrado ninguna.',

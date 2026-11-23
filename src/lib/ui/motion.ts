@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
-import { AccessibilityInfo } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useSyncExternalStore } from 'react';
+import { AccessibilityInfo, Animated } from 'react-native';
 
-import { readSetting, SETTINGS } from '../db/index';
+import { SETTINGS } from '../db/index';
+import { createStore } from './store';
+import { switchSetting } from './switchSetting';
 
 /*
   Whether the phone itself has been told to remove animations, in its
@@ -14,15 +15,14 @@ import { readSetting, SETTINGS } from '../db/index';
   promise is not possible. Until the first answer arrives it is taken to be
   no, which is what nearly every phone says.
 */
-let systemStill = false;
+const systemStill = createStore(false);
 void AccessibilityInfo.isReduceMotionEnabled()
-  .then((on) => {
-    systemStill = on;
-  })
+  .then((on) => systemStill.set(on))
   .catch(() => {});
-AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => {
-  systemStill = on;
-});
+AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => systemStill.set(on));
+
+/** The switch in Settings → Look, held and watched (`switchSetting`). */
+const chosen = switchSetting(SETTINGS.reduceMotion, false);
 
 /**
  * Whether the decoration should hold still.
@@ -31,34 +31,53 @@ AccessibilityInfo.addEventListener('reduceMotionChanged', (on) => {
  * been asked to remove animations for everything: somebody who has made that
  * choice for the whole phone should not have to find it again in each app.
  *
- * The setting is read straight from the database rather than held in a
- * provider. It changes on one screen, by hand, perhaps twice in the life of
- * an install, and a context around the whole app so that a switch nobody is
- * touching can be observed is more machinery than the question deserves. The
- * read is one indexed row from SQLite on the same thread.
+ * Held in memory and not read from the database at each asking: it is asked
+ * in the middle of drawing, by every cover and every row, and from inside
+ * nearly every press and fling.
  */
 export function motionReduced(): boolean {
-  if (systemStill) return true;
-  // Asked from inside nearly every press and fling: a database that will not answer is motion as usual, not a closed app.
-  try {
-    return readSetting(SETTINGS.reduceMotion) === 'true';
-  } catch {
-    return false;
-  }
+  return systemStill.get() || chosen.isOn();
+}
+
+function subscribe(listener: () => void): () => void {
+  const fromSystem = systemStill.subscribe(listener);
+  const fromSwitch = chosen.subscribe(listener);
+  return () => {
+    fromSystem();
+    fromSwitch();
+  };
 }
 
 /**
- * The same answer, for a screen that should notice it changing.
- *
- * Re-read when the screen comes back into focus, which is the only moment it
- * can have changed: getting to either switch means leaving whatever is asking.
+ * The same answer, for what is drawn by it: drawn again the moment either
+ * changes, the switch being turned or the phone's own setting, including
+ * what stands over every screen and never comes back into focus.
  */
-export function useReducedMotion(): boolean {
-  const [reduced, setReduced] = useState(motionReduced);
-  useFocusEffect(
-    useCallback(() => {
-      setReduced(motionReduced());
-    }, [])
-  );
-  return reduced;
+export function useMotionReduced(): boolean {
+  return useSyncExternalStore(subscribe, motionReduced);
+}
+
+/** The switch itself, for Settings to show and turn; the phone's own setting is not this app's to show. */
+export const useStillChosen = (): boolean => chosen.useOn();
+export const setStillChosen = (on: boolean): void => chosen.set(on);
+
+/**
+ * [animation] of [value] to [to], started; or while the decoration is held
+ * still, [value] put there at once, and [done] told so as it would have been.
+ * For React Native's own animations, which Reanimated's setting (see the root
+ * layout) does not reach: a row going back after a swipe, a fade.
+ */
+export function unlessStill(
+  animation: Animated.CompositeAnimation,
+  value: Animated.Value,
+  to: number,
+  done?: Animated.EndCallback
+): void {
+  if (motionReduced()) {
+    value.stopAnimation();
+    value.setValue(to);
+    done?.({ finished: true });
+    return;
+  }
+  animation.start(done);
 }

@@ -9,6 +9,7 @@ import {
   pairKey,
   pairsOf,
   parseApart,
+  versionWordsOf,
   type CopyCandidate,
   type Weighed,
 } from '../copies.ts';
@@ -298,4 +299,14 @@ test('a file whose name has no letter or digit in it is looked through like any 
     file('Eminem - Berzerk (1).mp3', 200),
   ]);
   assert.deepEqual(ids(found), [['Eminem - Berzerk [ab9176Srb5Y].mp3', 'Eminem - Berzerk (1).mp3']]);
+});
+
+test('a note that names the recording everybody knows is not another version', () => {
+  {
+    for (const title of ['Song (Album Version)', 'Song (Single Version)', 'Song (Mono Version)', 'Song (Remastered Version)', 'Song (2011 Remastered Version)', 'Song (Original Mix)', 'Song (Remastered 2009)']) {
+      assert.deepEqual(versionWordsOf(title), [], title);
+    }
+    assert.deepEqual(versionWordsOf('Song (Radio Edit)'), ['radio', 'edit']);
+    assert.deepEqual(versionWordsOf('Song (Live Version)'), ['live', 'version']);
+  }
 });

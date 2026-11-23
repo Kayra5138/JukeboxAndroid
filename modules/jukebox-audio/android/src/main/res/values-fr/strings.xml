@@ -31,7 +31,6 @@
   <string name="jukebox_widget_up_next">À suivre</string>
   <string name="jukebox_widget_up_next_empty">Rien à suivre</string>
   <string name="jukebox_widget_open">Ouvre le lecteur</string>
-  <string name="jukebox_widget_continue">Reprendre : %1$s</string>
 
   <!-- The media notification. -->
   <string name="jukebox_playback_channel">Lecture en cours</string>

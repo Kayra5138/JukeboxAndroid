@@ -29,8 +29,6 @@ const months = [
 
 /** The stats tab, its charts, and the recap cards. */
 export const stats = {
-  /** `12%`, which is not where every language puts the sign. */
-  percent: (value: number) => `${value}%`,
 
   period: {
     labels: { day: 'Day', week: 'Week', month: 'Month', year: 'Year', all: 'All' },

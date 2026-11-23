@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from './settings/Find';
 
 import { OptionSheet } from './OptionSheet';
 import { Pressable } from './Pressable';
-import { useRows } from './settings/rows';
+import { useRows, Chevron } from './settings/rows';
 import { useT } from '../lib/i18n/index';
 import { AUTOPLAY_MODES } from '../lib/player/autoplay/plan';
 import { setAutoplayMode, useAutoplayMode } from '../lib/player/autoplay/setting';
@@ -39,12 +40,13 @@ export function AutoplaySetting() {
           <Text style={styles.title}>{said.title}</Text>
           <View style={styles.choices}>
             <Text style={styles.value} numberOfLines={1}>{said[mode].label}</Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+            <Chevron />
           </View>
         </View>
         <Text style={styles.muted}>{said.note}</Text>
       </Pressable>
       <OptionSheet
+        page
         visible={open}
         heading={said.title}
         note={said.sheetNote}

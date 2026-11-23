@@ -31,7 +31,6 @@
   <string name="jukebox_widget_up_next">A seguir</string>
   <string name="jukebox_widget_up_next_empty">Nada a seguir</string>
   <string name="jukebox_widget_open">Abre o player</string>
-  <string name="jukebox_widget_continue">Continuar: %1$s</string>
 
   <string name="jukebox_playback_channel">Tocando agora</string>
 

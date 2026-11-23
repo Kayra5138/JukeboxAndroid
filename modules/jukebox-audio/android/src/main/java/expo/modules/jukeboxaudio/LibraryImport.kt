@@ -167,22 +167,4 @@ object LibraryImport {
       throw Told(R.string.jukebox_import_cut_short)
     }
   }
-
-  /**
-   * Refuses anything that resolves to the device itself or to the network it is
-   * sitting on.
-   *
-   * The url arrives from outside — the app answers a `jukebox://` deep link —
-   * and a phone can reach a great deal that the sender cannot. Without this,
-   * `http://127.0.0.1:8080/…` or an RFC1918 address would be fetched with the
-   * phone's own reachability and the answer parked in the shared music library.
-   *
-   * Knowingly incomplete: this resolves the name and the connection resolves it
-   * again, so a host with a short TTL can answer public here and `127.0.0.1` a
-   * moment later. Closing that needs the check and the connect to share one
-   * address, which means replacing HttpURLConnection with a socket factory that
-   * pins the address it validated — a large amount of new surface, on the
-   * download path, to defend against an attacker who already has to talk the
-   * user into pasting their link. The residual risk is accepted.
-   */
 }

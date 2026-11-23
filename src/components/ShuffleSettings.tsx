@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from './settings/Find';
 
 import { OptionSheet } from './OptionSheet';
 import { Pressable } from './Pressable';
-import { useRows } from './settings/rows';
+import { useRows, Chevron } from './settings/rows';
 import { TextPrompt } from './TextPrompt';
 import { useT } from '../lib/i18n/index';
 import { useLibraryTracks } from '../lib/library/useLibrary';
@@ -47,7 +48,7 @@ export function useShuffleWords(): { shown: string | null; spoken: string } {
 }
 
 /** Choosing what the button plays from now on: every list it can play, with how many songs, the one it plays ticked. */
-export function ShuffleSourceSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function ShuffleSourceSheet({ visible, onClose, page = false }: { visible: boolean; onClose: () => void; page?: boolean }) {
   const t = useT();
   const said = t.library.shuffle;
   const names = useShuffleNames();
@@ -62,6 +63,7 @@ export function ShuffleSourceSheet({ visible, onClose }: { visible: boolean; onC
   );
   return (
     <OptionSheet
+      page={page}
       visible={visible}
       heading={said.heading}
       note={said.note}
@@ -103,7 +105,7 @@ export function ShuffleSettingsRows() {
             <Text style={styles.value} numberOfLines={1}>
               {playing}
             </Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+            <Chevron />
           </View>
         </View>
         <Text style={styles.muted}>{said.note}</Text>
@@ -121,13 +123,14 @@ export function ShuffleSettingsRows() {
             <Text style={styles.value} numberOfLines={1}>
               {saying}
             </Text>
-            <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+            <Chevron />
           </View>
         </View>
       </Pressable>
 
-      <ShuffleSourceSheet visible={choosing === 'source'} onClose={() => setChoosing(null)} />
+      <ShuffleSourceSheet page visible={choosing === 'source'} onClose={() => setChoosing(null)} />
       <OptionSheet
+        page
         visible={choosing === 'label'}
         heading={said.labelHeading}
         options={(['name', 'words', 'icon'] as const).map((mode) => ({ value: mode, label: said.label[mode] }))}
@@ -143,6 +146,7 @@ export function ShuffleSettingsRows() {
         onClose={() => setChoosing((now) => (now === 'label' ? null : now))}
       />
       <TextPrompt
+        page
         visible={choosing === 'words'}
         heading={said.wordsHeading}
         placeholder={said.wordsPlaceholder}

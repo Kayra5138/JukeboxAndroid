@@ -110,6 +110,7 @@ export const library: Strings['library'] = {
     lookSwitch: 'Alterna esta visão para a outra exibição',
     view: 'Visão',
     looks: { list: 'Lista', shelves: 'Prateleiras', rack: 'Estante', map: 'Mapa' },
+    shelf: { added: 'Adicionadas recentemente', around: (hour: string) => `Por volta das ${hour}`, repeat: 'No repeat este mês', while: 'Sem ouvir há um tempo', never: 'Nunca tocadas', all: 'Todas as músicas', play: (name: string) => `Tocar ${name}`, shuffle: (name: string) => `Tocar ${name} em ordem aleatória`, queue: (name: string) => `Adicionar ${name} à fila` },
     artistMap: { drawing: 'Desenhando o mapa…', shuffle: 'Tocar as músicas em ordem aleatória', open: 'Abrir', with: 'Com', lasso: 'Circular artistas para tocar em ordem aleatória', lassoHint: 'Circule os artistas que quer misturar', lassoChosen: 'Circulados', putBackAll: 'Devolver os artistas movidos à mão', movedByHand: 'Movidos à mão', putBack: 'Devolver' },
     groupSortShort: { name: 'A–Z', tracks: 'Faixas', played: 'Reprod.', added: 'Recentes' },
     groupSortedBy: {
@@ -336,9 +337,6 @@ export const library: Strings['library'] = {
     note: 'Estes arquivos parecem a mesma gravação salva mais de uma vez: o mesmo nome, ou o mesmo artista e título, e a mesma duração com no máximo dois segundos de diferença. Uma cópia de cada é mantida. Antes de as outras serem excluídas, as reproduções, tags, letras e posições em listas delas passam para essa cópia.',
     empty: 'Nenhuma música está mais de uma vez na sua biblioteca.',
     cleanAll: (count) => `Limpar todas (${format.number(count)})`,
-    confirmAll: (files, songs) =>
-      `Excluir ${oneOrMany(files, '1 arquivo', `${format.number(files)} arquivos`)}? Uma cópia de ${oneOrMany(songs, 'a música', `cada uma das ${format.number(songs)} músicas`)} é mantida, e as reproduções, tags, letras e posições em listas de cada arquivo excluído passam antes para ela. O Android pergunta mais uma vez antes de excluir qualquer coisa.`,
-    confirm: (files) => `Excluir ${oneOrMany(files, '1 arquivo', `${format.number(files)} arquivos`)}`,
     deleteOthers: (count) =>
       oneOrMany(count, 'Excluir a outra cópia', `Excluir as outras ${format.number(count)} cópias`),
     different: 'São músicas diferentes',

@@ -267,12 +267,12 @@ export async function startLyricsLookup(items: LyricsItem[]): Promise<BulkOutcom
   if (controller || items.length === 0) return null;
   const own = new AbortController();
   controller = own;
-  const shown = (done: number, total: number, found: number, offline?: boolean): EnrichProgress => ({
+  const shown = (done: number, total: number, found: number, offline?: boolean, throttled?: boolean): EnrichProgress => ({
     done,
     total,
     matched: found,
     covers: 0,
-    throttled: false,
+    throttled: throttled === true,
     ...(offline ? { offline } : {}),
   });
   publish({ kind: 'lyrics', progress: shown(0, items.length, 0), last: null, album: null });
@@ -283,7 +283,7 @@ export async function startLyricsLookup(items: LyricsItem[]): Promise<BulkOutcom
       items,
       (progress) => {
         if (controller === own) {
-          publish({ ...state, progress: shown(progress.done, progress.total, progress.found, progress.offline) });
+          publish({ ...state, progress: shown(progress.done, progress.total, progress.found, progress.offline, progress.throttled) });
         }
       },
       own.signal,

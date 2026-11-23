@@ -1,17 +1,24 @@
 import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { loadLanguage } from '../i18n/index';
+import { noteError } from '../support/errorLogStore';
 import { maintainDiscoverInBackground } from './engine';
 import { readDiscoverSettings } from './store';
 
 const TASK = 'jukebox-discover';
 
 TaskManager.defineTask(TASK, async () => {
-  // Run with no screen, so nothing else has read the language yet. Nothing made here is kept as words any more, but the
-  // download's notification and the catalogue's progress are said in it.
-  loadLanguage();
-  const well = await maintainDiscoverInBackground();
-  return well ? BackgroundTask.BackgroundTaskResult.Success : BackgroundTask.BackgroundTaskResult.Failed;
+  // Caught, and written down where a report can find it: thrown out of a task with no screen, it went nowhere anybody could see.
+  try {
+    // Run with no screen, so nothing else has read the language yet. Nothing made here is kept as words any more, but the
+    // download's notification and the catalogue's progress are said in it.
+    loadLanguage();
+    const well = await maintainDiscoverInBackground();
+    return well ? BackgroundTask.BackgroundTaskResult.Success : BackgroundTask.BackgroundTaskResult.Failed;
+  } catch (error) {
+    noteError('discover', error);
+    return BackgroundTask.BackgroundTaskResult.Failed;
+  }
 });
 
 /**

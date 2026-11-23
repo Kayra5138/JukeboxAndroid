@@ -243,7 +243,7 @@ export function buildReport(input: ReportInput, t: Strings = strings()): ReportC
   if (summary.playCount > 0) {
     items.push({
       label: figures.finished,
-      value: t.stats.percent(Math.round((summary.completedCount / summary.playCount) * 100)),
+      value: t.format.percent(Math.round((summary.completedCount / summary.playCount) * 100)),
     });
   }
   if (input.days > 0) {

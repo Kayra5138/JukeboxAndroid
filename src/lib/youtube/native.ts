@@ -41,6 +41,10 @@ declare class DownloadsModule extends NativeModule<DownloadsEvents> {
   enqueueBatchAsync(videos: YouTubeVideo[], format: AudioFormat, folder: string): Promise<string[]>;
   cancelSearchAsync(searchId: string): Promise<void>;
   getJobsAsync(refreshFiles: boolean): Promise<DownloadJob[]>;
+  /** How many changes worth reading the whole list for there have been. Missing from an older build. */
+  getJobsRevisionAsync?(): Promise<number>;
+  /** Only the jobs waiting or under way, and that count as they were read. Missing from an older build. */
+  getActiveJobsAsync?(): Promise<{ revision: number; jobs: DownloadJob[] }>;
   /** The feed of the YouTube channel at [address], its page or its feed; null where it is not a channel's. */
   youtubeFeedAsync?(address: string): Promise<string | null>;
   /** YouTube channels by name, the nearest first. */

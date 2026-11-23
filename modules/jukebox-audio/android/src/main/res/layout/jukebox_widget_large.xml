@@ -73,25 +73,6 @@
       </LinearLayout>
     </LinearLayout>
 
-    <!-- With nothing playing, the tape last listened to, carried on with at a
-         press; shown and named from code. Under the cover and not beside it,
-         where the words have only the cover's height. -->
-    <TextView
-      android:id="@+id/jukebox_widget_continue"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:layout_marginTop="8dp"
-      android:background="@drawable/jukebox_widget_continue"
-      android:ellipsize="end"
-      android:maxLines="1"
-      android:paddingStart="12dp"
-      android:paddingTop="5dp"
-      android:paddingEnd="12dp"
-      android:paddingBottom="5dp"
-      android:textColor="#F2F2F2"
-      android:textSize="13sp"
-      android:visibility="gone" />
-
     <ProgressBar android:id="@+id/jukebox_widget_progress"
       style="?android:attr/progressBarStyleHorizontal"
       android:layout_width="match_parent" android:layout_height="3dp"

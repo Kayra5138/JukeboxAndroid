@@ -118,3 +118,6 @@ fun shakeListenIn(deadlineMs: Long, nowMs: Long): Long =
  */
 fun extendedDeadline(deadlineMs: Long, nowMs: Long, addsMs: Long = SHAKE_ADDS_MS): Long =
   minOf(maxOf(deadlineMs, nowMs) + addsMs, nowMs + MAX_SLEEP_MS)
+
+/** How long after a timer runs out a shake is still listened for, while the track it lets finish plays on. */
+const val SHAKE_AFTER_MS = 5 * 60_000L

@@ -213,7 +213,11 @@ object MediaStoreLibrary {
   fun embeddedArtwork(context: Context, trackId: String): String? {
     val id = trackId.toLongOrNull() ?: return null
     val cacheDir = File(context.cacheDir, "artwork")
-    if (!cacheDir.isDirectory && !cacheDir.mkdirs()) return null
+    // Made and then looked for, not made only where it was not there: covers are asked for several at once,
+    // and the first time, with no folder yet, the others found it made under them, were told no by mkdirs,
+    // and answered that their files had no cover, which the screen then believed until the app was opened again.
+    cacheDir.mkdirs()
+    if (!cacheDir.isDirectory) return null
 
     // The media store keeps a row's `_ID` when the file behind it is rewritten
     // in place, so an entry keyed on the id alone could never go stale: tag a

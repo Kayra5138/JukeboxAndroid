@@ -6,17 +6,18 @@ import { FavoritesSetting } from '../../../components/HeartSetting';
 import { ListButtonSetting } from '../../../components/ListButtonSetting';
 import { LyricsFolderSetting } from '../../../components/LyricsFolderSetting';
 import { useFocusEffect } from 'expo-router';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 
 import { OptionSheet } from '../../../components/OptionSheet';
 import { Pressable } from '../../../components/Pressable';
-import { Segmented } from '../../../components/Segmented';
-import { SettingsPage, useRows } from '../../../components/settings/rows';
+import { SettingsPage, useRows, Chevron } from '../../../components/settings/rows';
 import { readSetting, SETTINGS, writeSetting } from '../../../lib/db/index';
 import { useLanguage, useT } from '../../../lib/i18n/index';
 import { namedTargets } from '../../../lib/lyrics/target';
 import { chooseLyricsTarget, useLyricsTarget, useUnsupportedTargets } from '../../../lib/lyrics/useTarget';
 import { JUMP_RANGE, stepFrom } from '../../../lib/player/jump';
+import { jumpStepChanged } from '../../../lib/tapes/settings';
 import { usePressed } from '../../../lib/theme/index';
 import { NumberStepper } from '../../../components/NumberStepper';
 
@@ -56,6 +57,7 @@ export default function PlayerSettingsScreen() {
     <SettingsPage
       sheets={
         <OptionSheet
+          page
           visible={targetsOpen}
           heading={t.settings.lyricsLanguage.title}
           note={t.settings.lyricsLanguage.note}
@@ -77,6 +79,7 @@ export default function PlayerSettingsScreen() {
               onChange={(seconds) => {
                 setJump(seconds);
                 writeSetting(SETTINGS.jumpSeconds, String(seconds));
+                jumpStepChanged();
               }}
             />
           </View>
@@ -108,7 +111,7 @@ export default function PlayerSettingsScreen() {
               <Text style={styles.value} numberOfLines={1}>
                 {targets.find((target) => target.tag === lyricsTarget)?.name ?? lyricsTarget}
               </Text>
-              <Text style={styles.chevron} importantForAccessibility="no">›</Text>
+              <Chevron />
             </View>
           </View>
           <Text style={styles.muted}>{t.settings.lyricsLanguage.note}</Text>

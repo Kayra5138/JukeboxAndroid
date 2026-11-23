@@ -9,7 +9,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Image } from './Picture';
+import { Artwork } from './Artwork';
+import { MediaRow, mediaRowHeight, RowControl } from './MediaRow';
 import {
   Animated,
   FlatList,
@@ -23,8 +24,6 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 
-import { PlayIcon } from './Icons';
-import { MoreButton } from './MoreButton';
 import { useT } from '../lib/i18n/index';
 import { useTrackArtwork } from '../lib/media/artwork';
 import { progressOf, useTapePlace } from '../lib/tapes/places';
@@ -32,11 +31,14 @@ import { isTape } from '../lib/tapes/tape';
 import { ArtistLinks } from './NameLinks';
 import { dividerAt, queueIndex, queueMove, shownIndex } from '../lib/player/autoplay/section';
 import { indexAfterMove, indexAfterRemove, rowShift } from '../lib/player/queue';
+import { useCurrentId } from '../lib/player/current';
 import { laid, makeStyles, outlined, useColours, withAlpha } from '../lib/theme/index';
+import { RADIUS, ROW_COVER_COMPACT, SPACE } from '../lib/theme/measures';
 import { glassOf } from '../lib/theme/Veil';
 import { PressRing, type PressRingFor } from './PressMenu';
 import { announce } from '../lib/ui/announce';
 import { haptic } from '../lib/ui/haptics';
+import { motionReduced } from '../lib/ui/motion';
 import { edgePull, withinScroll } from '../lib/ui/autoScroll';
 import type { Track } from '../lib/types';
 import { CLIP_SUBVIEWS } from '../lib/ui/lists';
@@ -53,8 +55,7 @@ import { CLIP_SUBVIEWS } from '../lib/ui/lists';
  * is as large as Android's setting goes.
  */
 export function queueRowHeight(fontScale: number): number {
-  const scale = Math.min(Math.max(fontScale, 1), 2);
-  return Math.round(25 + 31 * scale);
+  return mediaRowHeight('compact', fontScale);
 }
 
 /** That height, for the rows and the slots they stand in; see `queueRowHeight`. */
@@ -103,7 +104,6 @@ const QueueRow = memo(function QueueRow({
   const artwork = useTrackArtwork(track);
   const t = useT();
   const styles = useStyles();
-  const height = use(RowHeightContext);
   // A part of a tape says whether it was heard, or how much of it is left: see `lib/tapes`.
   const place = useTapePlace(track.id);
   const progress = progressOf(place);
@@ -130,97 +130,69 @@ const QueueRow = memo(function QueueRow({
     Where the screen has no menu the whole row lifts, as it always did.
   */
   const liftFrom = onLift
-    ? (event: GestureResponderEvent) => onLift(index, event.nativeEvent.pageY)
+    ? (event?: GestureResponderEvent) => {
+        if (event) onLift(index, event.nativeEvent.pageY);
+      }
     : undefined;
 
   return (
-    <Pressable
-      style={[styles.row, { height }, lifted && styles.rowLifted]}
-      accessibilityRole="button"
-      accessibilityState={{ selected: playing }}
-      // A long press is not something a screen reader's user can be expected
-      // to find by trying. Named, it is in the reader's own list of actions —
-      // and so is moving the row, which by hand is a drag by the handle and
-      // which a reader has no way to do at all.
-      accessibilityActions={[
-        ...(onMenu ? [{ name: 'longpress', label: t.library.trackMenu }] : []),
-        ...(onStep && !first ? [{ name: 'moveUp', label: t.common.moveUp }] : []),
-        ...(onStep && !last ? [{ name: 'moveDown', label: t.common.moveDown }] : []),
-      ]}
-      onAccessibilityAction={(event) => {
-        const name = event.nativeEvent.actionName;
-        if (name === 'longpress') onMenu?.(index);
-        else if (name === 'moveUp') onStep?.(index, -1);
-        else if (name === 'moveDown') onStep?.(index, 1);
-      }}
-      onPress={() => onPress(index)}
-      onLongPress={
-        onMenu
-          ? () => {
-              haptic('holds', 'hold');
-              onMenu(index);
-            }
-          : liftFrom
-      }
-      delayLongPress={onMenu ? undefined : LIFT_AFTER_MS}>
-      <View style={styles.mark}>{playing ? <PlayIcon size={8} /> : null}</View>
-      {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" drawnAt={36} />
-      ) : (
-        <View style={[styles.art, styles.artEmpty]} />
-      )}
-      <View style={styles.text}>
-        <Text style={[styles.title, playing && styles.titlePlaying]} numberOfLines={1}>
-          {track.title}
-        </Text>
-        <Text style={styles.artist} numberOfLines={1}>
+    <MediaRow
+      size="compact"
+      lead={<Artwork uri={artwork} size={ROW_COVER_COMPACT} />}
+      title={track.title}
+      subtitle={
+        <>
           {/* Who it is by, as words only: a touch on a song's row is for the song, and a name that led elsewhere took it there by mistake. */}
           <ArtistLinks credit={track.artist} off />
           {tapeNote ? ` · ${tapeNote}` : ''}
-        </Text>
-      </View>
-      {/*
-        Both only where they lead somewhere. A record's running order and a
-        list read from a tag are not anybody's arrangement, and a cross that
-        does nothing and a handle that will not lift are two promises the
-        screen cannot keep.
-      */}
-      {onMenu ? <MoreButton onPress={() => onMenu(index)} /> : null}
-      {onRemove ? (
-        <Pressable
-          style={styles.remove}
-          accessibilityRole="button"
-          // Named with the track: every row has one of these, and "remove"
-          // alone does not say what from.
-          accessibilityLabel={t.player.queue.remove(track.title)}
-          onPress={() => {
-            haptic('holds', 'tick');
-            onRemove(index);
-          }}
-          // The cross is a small mark in a tall row. Reached for and missed,
-          // it plays the track instead.
-          hitSlop={REMOVE_SLOP}>
-          <Text style={styles.removeLabel}>×</Text>
-        </Pressable>
-      ) : null}
-      {onLift && onMenu ? (
-        <Pressable
-          // Tapped, it is still part of the row. Only the hold is its own.
-          onPress={() => onPress(index)}
-          onLongPress={liftFrom}
-          delayLongPress={LIFT_AFTER_MS}
-          // The mark is a few points wide in a row a finger's height tall, and
-          // a hold that misses it now opens a menu instead of doing nothing.
-          hitSlop={GRIP_SLOP}
-          // The row says everything there is to say; this is how it is moved
-          // by hand, which is not something to stop at on the way past.
-          accessible={false}>
-          <Text style={styles.grip} importantForAccessibility="no">≡</Text>
-        </Pressable>
-      ) : onLift ? (
-        <Text style={styles.grip} importantForAccessibility="no">≡</Text>
-      ) : null}
-    </Pressable>
+        </>
+      }
+      playing={playing}
+      style={lifted ? styles.rowLifted : undefined}
+      onPress={() => onPress(index)}
+      // The menu where the screen has one; otherwise a hold lifts the row, as it always did.
+      onLongPress={onMenu ? () => onMenu(index) : liftFrom}
+      menu={onMenu != null}
+      holdAfter={onMenu ? undefined : LIFT_AFTER_MS}
+      // Moving the row, which by hand is a drag by the handle and which a screen reader has no way to do at all.
+      actions={[
+        ...(onStep && !first ? [{ name: 'moveUp', label: t.common.moveUp, run: () => onStep(index, -1) }] : []),
+        ...(onStep && !last ? [{ name: 'moveDown', label: t.common.moveDown, run: () => onStep(index, 1) }] : []),
+      ]}
+      // After the dots, the cross and then the handle at the very edge, where the ring leaves a finger room for it (`GRIP_ZONE`).
+      afterDots={
+        <>
+          {/*
+            Both only where they lead somewhere. A record's running order and
+            a list read from a tag are not anybody's arrangement, and a cross
+            that does nothing and a handle that will not lift are two promises
+            the screen cannot keep.
+          */}
+          {onRemove ? (
+            <RowControl
+              // Named with the track: every row has one of these, and "remove" alone does not say what from.
+              accessibilityLabel={t.player.queue.remove(track.title)}
+              onPress={() => {
+                haptic('holds', 'tick');
+                onRemove(index);
+              }}>
+              <Text style={styles.removeLabel}>×</Text>
+            </RowControl>
+          ) : null}
+          {onLift && onMenu ? (
+            // Tapped, it is still part of the row. Only the hold is its own. The row says everything there is to say;
+            // this is how it is moved by hand, not something to stop at on the way past.
+            <RowControl hidden onPress={() => onPress(index)} onLongPress={liftFrom} delayLongPress={LIFT_AFTER_MS}>
+              <Text style={styles.grip} importantForAccessibility="no">≡</Text>
+            </RowControl>
+          ) : onLift ? (
+            <RowControl>
+              <Text style={styles.grip} importantForAccessibility="no">≡</Text>
+            </RowControl>
+          ) : null}
+        </>
+      }
+    />
   );
 });
 
@@ -229,16 +201,6 @@ const LIFT_AFTER_MS = 220;
 
 /** How much of a row's right-hand end is its handle's, the mark and the room round it a finger has: left out of the ring. */
 const GRIP_ZONE = 52;
-
-/** Out to the row's own edges, and no further left than the cross's own reach. */
-const GRIP_SLOP = { top: 18, bottom: 18, left: 2, right: 16 };
-
-/*
-  The cross is a few points wide; this brings what will take a press for it to
-  48 each way. Further to the left than the right, because to the right is the
-  handle, and the two are not to reach for the same spot.
-*/
-const REMOVE_SLOP = { top: 10, bottom: 10, left: 16, right: 10 };
 
 /** What the copy in the hand does when pressed, which it cannot be. */
 const nothing = () => {};
@@ -303,7 +265,9 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Row>) 
   const shift = from !== null && to !== null ? rowShift(index, from, to) : 0;
   const rows = use(PlateContext);
   const height = use(RowHeightContext);
-  const plate = rows > 0 ? [styles.plate, index === 0 && styles.plateTop, index === rows - 1 && styles.plateFoot] : null;
+  const top = rows > 0 && index === 0;
+  const foot = rows > 0 && index === rows - 1;
+  const plate = rows > 0 ? [styles.plate, top && styles.plateTop, foot && styles.plateFoot] : null;
 
   // `onFocusCapture` is not forwarded: it exists to highlight separators around
   // a focused row, and there are no separators here.
@@ -318,6 +282,14 @@ function QueueCell({ index, style, children, ...rest }: CellRendererProps<Row>) 
         shift !== 0 && { transform: [{ translateY: shift * height }] },
       ]}>
       {children}
+      {/*
+        The plate's edge a layer of its own over the strip. Drawn by the strip
+        itself, a strip with rounded corners pulled its fill in from the edge
+        to make room for the line, on the side with no line as well, and the
+        dot between the first strip and the next, and the last and the one
+        before, was left bare: a line across the plate.
+      */}
+      {rows > 0 ? <View pointerEvents="none" style={[styles.plateEdge, top && styles.plateEdgeTop, foot && styles.plateEdgeFoot]} /> : null}
     </Animated.View>
   );
 }
@@ -359,9 +331,17 @@ export function QueueList({
   inset = 0,
   foot = 0,
   scatter,
+  marksPlaying = false,
 }: {
   queue: Track[];
   currentIndex: number;
+  /**
+   * For a list that is not the queue -- a record's, a list's -- with no
+   * place in it being played ([currentIndex] -1): the song playing marked
+   * wherever it is in it, by which song it is, without the list being moved
+   * to it.
+   */
+  marksPlaying?: boolean;
   onSelect: (index: number) => void;
   /** Both absent on a list whose order and membership are not the user's. */
   onMove?: (from: number, to: number) => void;
@@ -407,6 +387,8 @@ export function QueueList({
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const offset = useRef(new Animated.Value(0)).current;
+  const inPlayer = useCurrentId();
+  const playingId = marksPlaying ? inPlayer : null;
   const fromRef = useRef<number | null>(null);
   const toRef = useRef<number | null>(null);
   const steppedAt = useRef(0);
@@ -789,7 +771,7 @@ export function QueueList({
   useEffect(() => {
     const ours = expected.current === currentIndex;
     expected.current = null;
-    if (!ours && anchored.current) anchorToCurrent(true);
+    if (!ours && anchored.current) anchorToCurrent(!motionReduced());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentIndex]);
 
@@ -880,7 +862,7 @@ export function QueueList({
               <QueueRow
                 track={item}
                 index={index}
-                playing={position === currentIndex}
+                playing={marksPlaying ? item.id === playingId : position === currentIndex}
                 lifted={from === index}
                 onPress={select}
                 onLift={onMove ? lift : undefined}
@@ -932,7 +914,7 @@ export function QueueList({
           <QueueRow
             track={rows[from]}
             index={from}
-            playing={queueIndex(from, shownDivider) === currentIndex}
+            playing={marksPlaying ? rows[from]?.id === playingId : queueIndex(from, shownDivider) === currentIndex}
             lifted
             onPress={nothing}
           />
@@ -958,37 +940,34 @@ const useStyles = makeStyles((c) => StyleSheet.create({
     still lets the light of it through; and a line of light down each side.
   */
   plate: {
-    marginHorizontal: 10,
+    marginHorizontal: SPACE.s,
     backgroundColor: withAlpha(laid(c.surfaceRaised, c.bg), 0.66),
-    borderColor: c.borderStrong,
+  },
+  plateTop: { borderTopLeftRadius: RADIUS.card, borderTopRightRadius: RADIUS.card },
+  plateFoot: { borderBottomLeftRadius: RADIUS.card, borderBottomRightRadius: RADIUS.card },
+  // Its line, coloured on the sides it is drawn on and no other.
+  plateEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderColor: 'transparent',
+    borderLeftColor: c.borderStrong,
+    borderRightColor: c.borderStrong,
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
   },
-  plateTop: { borderTopLeftRadius: 18, borderTopRightRadius: 18, borderTopWidth: StyleSheet.hairlineWidth },
-  plateFoot: { borderBottomLeftRadius: 18, borderBottomRightRadius: 18, borderBottomWidth: StyleSheet.hairlineWidth },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-  },
+  plateEdgeTop: { borderTopLeftRadius: RADIUS.card, borderTopRightRadius: RADIUS.card, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.borderStrong },
+  plateEdgeFoot: { borderBottomLeftRadius: RADIUS.card, borderBottomRightRadius: RADIUS.card, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.borderStrong },
   /*
     One flat colour, whatever the theme writes its surfaces in. The rows it is
     carried over go on sliding about underneath, and through a fill of glass
     every one of them would be read through the row in the hand.
   */
-  rowLifted: { backgroundColor: laid(c.surfaceRaised, c.bg), borderRadius: 8, ...outlined(c) },
-  mark: { width: 12, alignItems: 'center' },
-  // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  art: { width: 36, height: 36, borderRadius: 4 },
-  artEmpty: { backgroundColor: c.surfaceRaised },
-  text: { flex: 1, gap: 1 },
-  title: { color: c.textSecondary, fontSize: 14 },
-  titlePlaying: { color: c.text },
-  artist: { color: c.textFaint, fontSize: 11.5 },
-  remove: { paddingHorizontal: 6, paddingVertical: 4 },
+  rowLifted: { backgroundColor: laid(c.surfaceRaised, c.bg), borderRadius: RADIUS.control, ...outlined(c) },
   removeLabel: { color: c.textFaint, fontSize: 18, lineHeight: 20 },
-  grip: { color: c.textDisabled, fontSize: 18, paddingHorizontal: 4 },
+  grip: { color: c.textDisabled, fontSize: 18 },
 }));
 
 /**

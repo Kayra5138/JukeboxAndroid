@@ -110,11 +110,12 @@ export function useTabBarRoom(): number {
  *     const under = useUnderBars();
  *     contentContainerStyle={[styles.content, { paddingBottom: 32 + under.bottom }]}
  *
- * Nought at both ends in any theme not of glass. [player] is for a screen
- * that has the bar of what is playing along its foot, which is laid over it
- * as well; it counts only while there is something in that bar.
+ * Nought at both ends in any theme not of glass. [player] is the bar of
+ * what is playing along the foot, which is laid over every page of a tab as
+ * well (see the tabs' layout); it counts only while there is something in
+ * that bar, and is left out only by what is not under it.
  */
-export function useUnderBars({ player = false }: { player?: boolean } = {}): Over {
+export function useUnderBars({ player = true }: { player?: boolean } = {}): Over {
   const c = useColours();
   const landscape = useLandscape();
   const around = use(Context);
@@ -179,18 +180,35 @@ export function barGlass(c: Palette): { backgroundColor: string } | null {
  *
  * where `headerOver` is `topGlass(c)`. In any other theme it is not laid
  * over anything, takes its room as it always did, and is not measured.
+ *
+ * A screen's own top, upright, as the library's is, asks for the [clock]:
+ * the glass then runs on up behind the phone's clock to the top of the
+ * screen, as the bar over a page opened does, and the list under it with
+ * it. Kept clear of the clock by the screen, the strip behind it was a band
+ * of the screen's flat colour over glass, and looked like another thing.
+ * The screen then keeps clear of the clock by `clock`, the room the top
+ * pads itself with, and not by a safe area of its own.
  */
-export function useLaidOver(): {
+export function useLaidOver({ clock: underClock = false }: { clock?: boolean } = {}): {
   laid: boolean;
   height: number;
   onLayout: ((event: LayoutChangeEvent) => void) | undefined;
+  /** How far the top reaches up behind the clock: none where it is not glass, or sideways, where the strip across the top keeps the clock. */
+  clock: number;
 } {
   const laid = barsLaidOver(useColours());
+  const landscape = useLandscape();
+  const insets = useSafeAreaInsets();
   const [height, setHeight] = useState(0);
   const onLayout = useCallback((event: LayoutChangeEvent) => {
     setHeight(Math.round(event.nativeEvent.layout.height * 10) / 10);
   }, []);
-  return { laid, height: laid ? height : 0, onLayout: laid ? onLayout : undefined };
+  return {
+    laid,
+    height: laid ? height : 0,
+    onLayout: laid ? onLayout : undefined,
+    clock: laid && underClock && !landscape ? insets.top : 0,
+  };
 }
 
 /**

@@ -1,23 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Artwork } from '../../../components/Artwork';
+import { MediaRow, mediaRowHeight } from '../../../components/MediaRow';
+import { LEADING, ROW_COVER, SPACE, TYPE } from '../../../lib/theme/measures';
+import { useDragSelect } from '../../../lib/ui/useDragSelect';
+import { ScreenState } from '../../../components/ScreenState';
 import { useFocusEffect, useRouter, useIsFocused } from 'expo-router';
 import { BlurArea, Frost, GlassScene, useFrosted, useOwnScene } from '../../../components/Frosted';
-import { Image } from '../../../components/Picture';
 import {
-  ActivityIndicator,
   AppState,
   FlatList,
-  PanResponder,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
-import { Pressable } from '../../../components/Pressable';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topGlass, useLaidOver } from '../../../components/UnderBars';
+import { topGlass, useLaidOver, useUnderBars } from '../../../components/UnderBars';
 
 import {
   metadataSummary,
@@ -30,6 +28,7 @@ import { useSelectionActions } from '../../../components/SelectionActions';
 import { useTrackMenu } from '../../../components/useTrackMenu';
 import { useT } from '../../../lib/i18n/index';
 import { useTrackArtwork } from '../../../lib/media/artwork';
+import { isStandIn } from '../../../lib/media/standIns';
 import {
   bulkLookupRunning,
   onBulkSaved,
@@ -40,7 +39,8 @@ import {
 import { describeOutcome } from '../../../lib/metadata/outcome';
 import { foldForMatch } from '../../../lib/metadata/text';
 import { ensureAudioPermission, scanLibrary } from '../../../lib/media/library';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../../../lib/theme/index';
+import { readLibrary } from '../../../lib/library/index';
+import { makeStyles, scene } from '../../../lib/theme/index';
 import { Behind } from '../../../lib/theme/Veil';
 import { useAnnounce } from '../../../lib/ui/announce';
 import { haptic } from '../../../lib/ui/haptics';
@@ -48,6 +48,7 @@ import type { Track } from '../../../lib/types';
 import { CLIP_SUBVIEWS } from '../../../lib/ui/lists';
 import { useBack } from '../../../lib/ui/back';
 import { isTape } from '../../../lib/tapes/tape';
+import { Button } from '../../../components/Button';
 
 type Row = { track: Track; metadata: TrackMetadata | undefined };
 
@@ -73,15 +74,11 @@ function rowMatches(row: Row, folded: string): boolean {
 
 /**
  * Rows are all one height so a finger position can be turned into an index:
- * 78 at the ordinary size of writing, and taller as the writing is turned up.
- * The three lines of a row take some forty-seven points of it and grow with
- * the writing; at 78 whatever the setting, the third line was cut from about
- * one and a half times the size.
+ * a row of three lines (`MediaRow` `tall`), taller as the writing is turned
+ * up, so that the third line is not cut at a larger size of writing.
  */
-const rowHeightFor = (fontScale: number) => Math.round(31 + 47 * Math.min(Math.max(fontScale, 1), 2));
+const rowHeightFor = (fontScale: number) => mediaRowHeight('tall', fontScale);
 
-/** Drags that begin over the checkboxes select; anywhere else scrolls. */
-const CHECKBOX_COLUMN = 52;
 
 /**
  * How long results are gathered before the list is told about them.
@@ -95,12 +92,35 @@ const SHOW_RESULTS_EVERY_MS = 300;
 
 const keyOf = (row: Row) => row.track.id;
 
+type Scanned = { of: unknown; tracks: Track[] };
+
+/**
+ * The library's songs with what is known of each, the files read afresh only
+ * where the library has changed since [scanned]; null where they may not be
+ * read, or could not be. Out here rather than in the screen, which the React
+ * Compiler does not take with a question inside a `try`: the whole screen
+ * went uncompiled for it.
+ */
+async function readRows(scanned: Scanned | null): Promise<{ rows: Row[]; scanned: Scanned; summary: ReturnType<typeof metadataSummary> } | null> {
+  try {
+    if (!(await ensureAudioPermission())) return null;
+    const held = await readLibrary();
+    const tracks = scanned?.of === held ? scanned.tracks : await scanLibrary();
+    const known = readAllMetadata();
+    return {
+      // Songs only: a tape is never looked up nor tagged.
+      rows: tracks.filter((track) => !isTape(track)).map((track) => ({ track, metadata: known.get(track.id) })),
+      scanned: { of: held, tracks },
+      summary: metadataSummary(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function MetadataScreen() {
   const { fontScale } = useWindowDimensions();
   const rowHeight = rowHeightFor(fontScale);
-  // For the gesture's handlers, which are made once.
-  const rowHeightRef = useRef(rowHeight);
-  rowHeightRef.current = rowHeight;
   const [rows, setRows] = useState<Row[] | null>(null);
   const [summary, setSummary] = useState(() => metadataSummary());
   /*
@@ -129,30 +149,15 @@ export default function MetadataScreen() {
     through it, beginning this far down what it scrolls.
   */
   const top = useLaidOver();
+  // The bar of what is playing is along the foot of every page of a tab (see the tabs' layout), laid over it in a theme of glass: kept clear of.
+  const under = useUnderBars();
   // The list out of focus behind the top, where it is laid over it: see `Frosted`.
   const scene = useOwnScene();
   const frosted = useFrosted(top.laid ? scene.target : null);
-  const topRoom = useRef(0);
-  topRoom.current = top.height;
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
   const said = t.details.library;
 
-  // Mirrors for the gesture handler, which is created once and would otherwise
-  // close over stale state.
-  const rowsRef = useRef<Row[]>([]);
-  const selectedRef = useRef<Set<string>>(new Set());
-  selectedRef.current = selected;
-
-  const wrapperRef = useRef<View>(null);
-  const listTop = useRef(0);
-  const listLeft = useRef(0);
-  const scrollOffset = useRef(0);
-  const dragAnchor = useRef<number | null>(null);
-  const dragDeselects = useRef(false);
-  const selectionBeforeDrag = useRef<Set<string>>(new Set());
 
   /*
     What the list is actually showing. Everything downstream works from this
@@ -166,15 +171,23 @@ export default function MetadataScreen() {
     return (rows ?? []).filter((row) => rowMatches(row, folded));
   }, [rows, query]);
 
-  rowsRef.current = visible;
-
+  /*
+    The files as they say themselves, which is what this screen shows beside
+    what was found for them: read off the device again only when the library
+    the whole app holds has changed, and not every time the screen is come
+    back to. One that cannot be had is an empty list, and not a spinner for
+    good.
+  */
+  const scanned = useRef<Scanned | null>(null);
   const refresh = useCallback(async () => {
-    if (!(await ensureAudioPermission())) return;
-    const tracks = await scanLibrary();
-    const known = readAllMetadata();
-    // Songs only: a tape is never looked up nor tagged.
-    setRows(tracks.filter((track) => !isTape(track)).map((track) => ({ track, metadata: known.get(track.id) })));
-    setSummary(metadataSummary());
+    const read = await readRows(scanned.current);
+    if (!read) {
+      setRows((current) => current ?? []);
+      return;
+    }
+    scanned.current = read.scanned;
+    setRows(read.rows);
+    setSummary(read.summary);
   }, []);
 
   /*
@@ -250,90 +263,35 @@ export default function MetadataScreen() {
     });
   }, []);
 
-  const indexAtY = useCallback((pageY: number) => {
-    const y = pageY - listTop.current + scrollOffset.current - topRoom.current;
-    const index = Math.floor(y / rowHeightRef.current);
-    return Math.min(Math.max(index, 0), rowsRef.current.length - 1);
-  }, []);
-
   /*
-    Measured across the window, like the vertical half above it.
-
-    Not `locationX`: that is relative to whichever view the finger actually
-    landed on, which here is the innermost — a checkbox, or a title that begins
-    52 points in. Touching the first few characters of a title therefore read as
-    a locationX of nearly nothing and started selecting.
+    Dragging down the column of boxes ticks a run of rows, from the first row
+    touched (`useDragSelect`); starting on one already ticked unticks the run.
+    Always on: it is how choosing begins here, as a long press is elsewhere.
   */
-  const startsOverCheckboxes = useCallback(
-    (pageX: number) => pageX - listLeft.current < CHECKBOX_COLUMN,
-    []
-  );
+  // Taken apart, each by itself: read off the one object, everything on it was taken for a ref (as in the library).
+  const { wrapperRef: dragWrapper, onWrapperLayout: onDragLayout, panHandlers: dragHandlers, onScroll: dragScroll, onWidth: dragWidth } = useDragSelect({
+    ids: useMemo(() => visible.map((row) => row.track.id), [visible]),
+    rowHeight,
+    columns: 1,
+    enabled: true,
+    selected,
+    onChange: setSelected,
+    top: top.height,
+  });
 
-  /**
-   * One responder for the whole list rather than per-row touch handlers: in
-   * React Native the view where a gesture begins keeps the responder, so a row
-   * never hears about a finger that started on its neighbour. Position maps to
-   * an index instead, which is why the rows are a fixed height.
-   */
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: (event) =>
-          startsOverCheckboxes(event.nativeEvent.pageX),
-        onMoveShouldSetPanResponder: (event) =>
-          startsOverCheckboxes(event.nativeEvent.pageX),
-        onPanResponderGrant: (event) => {
-          const index = indexAtY(event.nativeEvent.pageY);
-          const id = rowsRef.current[index]?.track.id;
-          if (!id) return;
-          dragAnchor.current = index;
-          // Dragging from a selected row clears the run instead, which is what
-          // every other list with checkboxes does.
-          dragDeselects.current = selectedRef.current.has(id);
-          selectionBeforeDrag.current = new Set(selectedRef.current);
-          toggle(id);
-        },
-        onPanResponderMove: (event) => {
-          const anchor = dragAnchor.current;
-          if (anchor == null) return;
-          const current = indexAtY(event.nativeEvent.pageY);
-          const [start, end] = anchor <= current ? [anchor, current] : [current, anchor];
-
-          const next = new Set(selectionBeforeDrag.current);
-          for (let i = start; i <= end; i += 1) {
-            const id = rowsRef.current[i]?.track.id;
-            if (!id) continue;
-            if (dragDeselects.current) next.delete(id);
-            else next.add(id);
-          }
-          setSelected(next);
-        },
-        onPanResponderRelease: () => {
-          dragAnchor.current = null;
-        },
-        onPanResponderTerminate: () => {
-          dragAnchor.current = null;
-        },
-      }),
-    [indexAtY, startsOverCheckboxes, toggle]
-  );
-
-  const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    scrollOffset.current = event.nativeEvent.contentOffset.y;
-  }, []);
 
   const run = useCallback(
     async (subset?: Track[]) => {
       // One at a time: see `metadata/bulk.ts`, which turns a second away.
       if (bulkLookupRunning()) return;
       // Every row, but the tapes, when nobody chose: a book is not looked up as a song. One chosen by hand is.
-      const tracks = subset ?? rowsRef.current.map((row) => row.track).filter((track) => !isTape(track));
+      const tracks = subset ?? visible.map((row) => row.track).filter((track) => !isTape(track));
       if (tracks.length === 0) return;
       // The selection is let go of and the list read again when the run ends,
       // by the effect above that watches for it, wherever the run began.
       await startBulkLookup(tracks, rows?.map((row) => row.track));
     },
-    [rows]
+    [rows, visible]
   );
 
   /** How the last run ended, when that is worth saying. Cleared by the next one. */
@@ -382,7 +340,6 @@ export default function MetadataScreen() {
     ({ item }: { item: Row }) => (
       <MetadataRow
         row={item}
-        height={rowHeight}
         selecting={selecting}
         checked={selected.has(item.track.id)}
         onPress={() =>
@@ -398,8 +355,8 @@ export default function MetadataScreen() {
 
   if (!rows) {
     return (
-      <View style={[styles.screen, styles.centered]}>
-        <ActivityIndicator color={c.text} />
+      <View style={styles.screen}>
+        <ScreenState kind="loading" />
       </View>
     );
   }
@@ -446,9 +403,13 @@ export default function MetadataScreen() {
             {/* Beside the count and not instead of it: one service is being
                 left alone for a minute while the other is still being asked. */}
             {progress.throttled ? <Text style={styles.muted}>{said.rateLimited}</Text> : null}
-            <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={stopBulkLookup}>
-              <Text style={styles.buttonLabel}>{said.stop}</Text>
-            </Pressable>
+            <Button
+              label={said.stop}
+              kind="outline"
+              shape="pill"
+              size="small"
+              onPress={stopBulkLookup}
+            />
           </View>
         ) : (
           <View style={styles.stack}>
@@ -463,45 +424,49 @@ export default function MetadataScreen() {
                 <>
                   {/* The two most asked for, as buttons of their own; the rest,
                       these two included, are a press away under More. */}
-                  <Pressable
-                    accessibilityRole="button"
+                  <Button
+                    label={t.details.lookUp}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     accessibilityHint={t.details.selection.actions.lookUp.hint}
-                    android_ripple={pressed}
-                    style={styles.button}
-                    onPress={() => actions.run('lookUp')}>
-                    <Text style={styles.buttonLabel}>{t.details.lookUp}</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
+                    onPress={() => actions.run('lookUp')}
+                  />
+                  <Button
+                    label={t.common.edit}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     accessibilityHint={t.details.selection.actions.edit.hint}
-                    android_ripple={pressed}
-                    style={styles.button}
-                    onPress={() => actions.run('edit')}>
-                    <Text style={styles.buttonLabel}>{t.common.edit}</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityRole="button"
+                    onPress={() => actions.run('edit')}
+                  />
+                  <Button
+                    label={t.details.selection.more}
+                    kind="outline"
+                    shape="pill"
+                    size="small"
                     accessibilityHint={t.details.selection.moreHint}
-                    android_ripple={pressed}
-                    style={styles.button}
-                    onPress={actions.open}>
-                    <Text style={styles.buttonLabel}>{t.details.selection.more}</Text>
-                  </Pressable>
+                    onPress={actions.open}
+                  />
                 </>
               ) : (
-                <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.button} onPress={() => void run()}>
-                  <Text style={styles.buttonLabel}>{said.lookUpMissing}</Text>
-                </Pressable>
+                <Button
+                  label={said.lookUpMissing}
+                  kind="outline"
+                  shape="pill"
+                  size="small"
+                  onPress={() => void run()}
+                />
               )}
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={styles.button}
+              <Button
+                label={allSelected ? t.common.clear : t.common.selectAll}
+                kind="outline"
+                shape="pill"
+                size="small"
                 onPress={() =>
-                  setSelected(allSelected ? new Set() : new Set(visible.map((r) => r.track.id)))
-                }>
-                <Text style={styles.buttonLabel}>{allSelected ? t.common.clear : t.common.selectAll}</Text>
-              </Pressable>
+                setSelected(allSelected ? new Set() : new Set(visible.map((r) => r.track.id)))
+                }
+              />
             </View>
             <Text style={styles.hint}>{said.hint}</Text>
             <SearchField
@@ -514,26 +479,22 @@ export default function MetadataScreen() {
       </View>
 
       <View
-        ref={wrapperRef}
+        ref={dragWrapper}
         style={styles.listWrapper}
         // Page coordinates are what the gesture reports, so the list's own
-        // corner in the window is needed to turn one into a row and a column.
-        onLayout={() =>
-          wrapperRef.current?.measureInWindow((x, y) => {
-            listLeft.current = x;
-            listTop.current = y;
-          })
-        }
-        {...panResponder.panHandlers}>
+        // corner in the window is needed to turn one into a row.
+        onLayout={onDragLayout}
+        {...dragHandlers}>
         {/* What scrolls under the counts and the buttons, which blur it: see `Frosted`. */}
         <BlurArea style={styles.fill}>
         <FlatList
                   removeClippedSubviews={CLIP_SUBVIEWS}
           data={visible}
           keyExtractor={keyOf}
-          onScroll={onScroll}
+          onScroll={(event) => dragScroll(event.nativeEvent.contentOffset.y)}
+          onLayout={(event) => dragWidth(event.nativeEvent.layout.width)}
           scrollEventThrottle={16}
-          contentContainerStyle={top.height > 0 ? { paddingTop: top.height } : undefined}
+          contentContainerStyle={{ paddingTop: top.height, paddingBottom: under.bottom }}
           getItemLayout={(_data, index) => ({ length: rowHeight, offset: top.height + rowHeight * index, index })}
           renderItem={renderRow}
         />
@@ -553,90 +514,71 @@ export default function MetadataScreen() {
  */
 function MetadataRow({
   row: { track, metadata },
-  height,
   selecting,
   checked,
   onPress,
   onLongPress,
 }: {
   row: Row;
-  height: number;
   /** Whether rows are being ticked, when a tap ticks rather than opens. */
   selecting: boolean;
   checked: boolean;
   onPress: () => void;
   onLongPress: () => void;
 }) {
-  const artwork = useTrackArtwork(track);
+  // Its cover, if it has one: not the paper sleeve that stands in for none.
+  const drawn = useTrackArtwork(track);
+  const artwork = isStandIn(drawn) ? null : drawn;
   const t = useT();
   const styles = useStyles();
-  const pressed = usePressed();
+  const found = metadata && metadata.status !== 'not_found' ? metadata : null;
+  const spoken = found
+    ? found.status === 'manual'
+      ? t.details.library.manualSpoken(found.artist ?? '', found.title ?? '')
+      : t.details.library.matchedSpoken(found.artist ?? '', found.title ?? '')
+    : metadata?.status === 'not_found'
+      ? t.details.library.noMatch
+      : t.details.library.notLookedUp;
+  const detail = found ? [found.genre, found.year, found.source].filter(Boolean).join(' · ') || t.details.library.noGenre : null;
 
+  /*
+    Its box always there, ready to be dragged down (`useDragSelect`); a tap
+    opens the track until something is ticked, and ticking begins with a
+    hold, which a screen reader is offered by name.
+  */
   return (
-    <Pressable
-      android_ripple={pressed}
-      style={[styles.row, { height }]}
+    <MediaRow
+      size="tall"
+      check={checked}
+      choosing={selecting}
+      // The paper sleeve where there is none: never a blank, but not a cover to act on either.
+      lead={<Artwork uri={artwork ?? drawn} size={ROW_COVER} />}
+      title={track.title}
+      subtitle={
+        found ? (
+          <Text style={found.status === 'manual' ? styles.manual : styles.matched}>
+            → {found.artist} — {found.title}
+          </Text>
+        ) : (
+          <Text style={styles.unmatched}>{spoken}</Text>
+        )
+      }
+      detail={detail}
+      accessibilityLabel={[track.title, spoken, detail].filter(Boolean).join(', ')}
+      menu={false}
+      holdLabel={t.library.albumActions.select.label}
       onPress={onPress}
       onLongPress={onLongPress}
-      /*
-        A tick box while rows are being ticked, saying whether it is: the
-        square is all that says so to the eye. Otherwise a tap opens the track,
-        and ticking is the hold, which a screen reader is offered by name.
-      */
-      accessibilityRole={selecting ? 'checkbox' : 'button'}
-      accessibilityState={selecting ? { checked } : undefined}
-      accessibilityActions={selecting ? undefined : [{ name: 'longpress', label: t.library.albumActions.select.label }]}
-      onAccessibilityAction={(event) => {
-        if (event.nativeEvent.actionName === 'longpress') onLongPress();
-      }}>
-      <View style={styles.checkColumn}>
-        <View style={[styles.checkbox, checked && styles.checkboxOn]}>
-          {checked ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
-        </View>
-      </View>
-      {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.art} contentFit="cover" />
-      ) : (
-        <View style={[styles.art, styles.artEmpty]} />
-      )}
-      <View style={styles.rowText}>
-        <Text style={styles.title} numberOfLines={1}>
-          {track.title}
-        </Text>
-        {metadata && metadata.status !== 'not_found' ? (
-          <>
-            <Text
-              style={metadata.status === 'manual' ? styles.manual : styles.matched}
-              numberOfLines={1}
-              accessibilityLabel={
-                metadata.status === 'manual'
-                  ? t.details.library.manualSpoken(metadata.artist ?? '', metadata.title ?? '')
-                  : t.details.library.matchedSpoken(metadata.artist ?? '', metadata.title ?? '')
-              }>
-              → {metadata.artist} — {metadata.title}
-            </Text>
-            <Text style={styles.detail} numberOfLines={1}>
-              {[metadata.genre, metadata.year, metadata.source].filter(Boolean).join(' · ') ||
-                t.details.library.noGenre}
-            </Text>
-          </>
-        ) : (
-          <Text style={styles.unmatched}>
-            {metadata?.status === 'not_found' ? t.details.library.noMatch : t.details.library.notLookedUp}
-          </Text>
-        )}
-      </View>
-    </Pressable>
+    />
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   screen: { flex: 1, ...scene(c) },
-  centered: { alignItems: 'center', justifyContent: 'center' },
   fill: { flex: 1 },
   listWrapper: { flex: 1 },
   header: {
-    padding: 16,
+    padding: SPACE.l,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: c.border,
   },
@@ -644,47 +586,15 @@ const useStyles = makeStyles((c) => StyleSheet.create({
   headerOver: topGlass(c),
   /** Its fill left to `Frost`, which draws it over the blur. */
   headerClear: { backgroundColor: 'transparent' },
-  stack: { gap: 10 },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  checkColumn: { width: CHECKBOX_COLUMN, alignItems: 'center', justifyContent: 'center' },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: c.textDisabled,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
-  checkMark: { color: c.onAccent, fontSize: 14, fontWeight: '700', lineHeight: 16 },
-  rowText: { flex: 1, gap: 3 },
+  stack: { gap: SPACE.s },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
   // No colour of the theme's on the picture itself; see TrackRow's `art`.
-  art: { width: 46, height: 46, borderRadius: 6, marginRight: 12 },
-  artEmpty: { backgroundColor: c.surfaceRaised },
-  title: { color: c.text, fontSize: 15 },
-  matched: { color: c.success, fontSize: 13 },
+  matched: { color: c.success, fontSize: TYPE.small },
   /** Distinct from a lookup result, because it is the one thing lookups respect. */
-  manual: { color: c.warning, fontSize: 13 },
-  detail: { color: c.textMuted, fontSize: 12 },
-  unmatched: { color: c.textFaint, fontSize: 13 },
-  body: { color: c.text, fontSize: 15 },
-  muted: { color: c.textSecondary, fontSize: 13 },
-  outcome: { color: c.warning, fontSize: 13, lineHeight: 19 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 17 },
-  button: {
-    backgroundColor: c.surfaceRaised,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    ...outlined(c),
-  },
-  buttonLabel: { color: c.text, fontSize: 14 },
+  manual: { color: c.warning, fontSize: TYPE.small },
+  unmatched: { color: c.textFaint, fontSize: TYPE.small },
+  body: { color: c.text, fontSize: TYPE.body },
+  muted: { color: c.textSecondary, fontSize: TYPE.small },
+  outcome: { color: c.warning, fontSize: TYPE.small, lineHeight: LEADING.small },
+  hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.hint },
 }));

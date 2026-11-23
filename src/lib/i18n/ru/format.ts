@@ -13,6 +13,7 @@ const date = (value: Date) =>
   `${pad2(value.getDate())}.${pad2(value.getMonth() + 1)}.${value.getFullYear()}`;
 
 export const format: Strings['format'] = {
+  percent: (value) => `${format.number(value)}%`,
   number: (value) => grouped(value, SPACE),
   decimal: (value, places = 1) => fixed(value, places, ',', SPACE),
   date,

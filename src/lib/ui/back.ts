@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { createContext, use, useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { BackHandler } from 'react-native';
 
@@ -33,6 +33,15 @@ function listen(): void {
 }
 
 /**
+ * Whether what is inside is put away for now, out of sight, and every layer
+ * in it lets back go past it: the player, hidden under a page it opened (see
+ * `player/overPlayer.ts`), whose open queue or card would otherwise take
+ * back from the page over it. Woken again, its layers come back in the order
+ * they are drawn.
+ */
+export const BackAsleep = createContext(false);
+
+/**
  * While [active], a press of back calls [close] instead of going anywhere,
  * unless something opened after it is open too. [close] is read when the
  * press comes, so it may change from one render to the next without the
@@ -42,7 +51,8 @@ function listen(): void {
  * (`useIsFocused`): a selection left on a tab behind another is not what the
  * press is about.
  */
-export function useBack(active: boolean, close: () => void): void {
+export function useBack(given: boolean, close: () => void): void {
+  const active = given && !use(BackAsleep);
   const latest = useRef(close);
   useEffect(() => {
     latest.current = close;
@@ -65,7 +75,8 @@ export function useBack(active: boolean, close: () => void): void {
  * rather than asked (`useIsFocused`), which drew the whole screen again every
  * time any tab was changed to or from.
  */
-export function useBackInFront(active: boolean, close: () => void): void {
+export function useBackInFront(given: boolean, close: () => void): void {
+  const active = given && !use(BackAsleep);
   const latest = useRef(close);
   useEffect(() => {
     latest.current = close;

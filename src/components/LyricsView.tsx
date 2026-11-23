@@ -1,12 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useScreenReader } from '../lib/ui/screenReader';
+import { LEADING, SPACE, TYPE, RADIUS } from '../lib/theme/measures';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Busy } from './Busy';
+import { LocateIcon } from './Icons';
+import { Pressable } from './Pressable';
 
 import { useT } from '../lib/i18n/index';
 import { lineAt, parseLrc } from '../lib/lyrics/lrc';
 import type { LyricsState } from '../lib/lyrics/useLyrics';
 import { useTranslation } from '../lib/lyrics/useTranslation';
-import { makeStyles, useColours } from '../lib/theme/index';
+import { makeStyles, outlined, useColours, usePressed } from '../lib/theme/index';
 import { haptic } from '../lib/ui/haptics';
+import { motionReduced } from '../lib/ui/motion';
 
 const LINE_HEIGHT = 34;
 
@@ -54,6 +60,7 @@ export function LyricsView({
   const t = useT();
   const styles = useStyles();
   const c = useColours();
+  const pressed = usePressed();
   const scroll = useRef<ScrollView>(null);
   const shown = useRef(-1);
   /** Which words these are, counted: what a measurement is asked about may be gone by the time it answers. */
@@ -67,6 +74,13 @@ export function LyricsView({
   */
   const body = useRef<View>(null);
   const rows = useRef<(View | null)[]>([]);
+  /*
+    Whether the words go along with the song. Not once they are scrolled by
+    hand: somebody reading on ahead, or back, was taken back to the sung line
+    the moment the song came to the next one. A button says how to have them
+    follow again, and a line pressed, which goes there in the song, does too.
+  */
+  const [following, setFollowing] = useState(true);
 
   const synced = state.lyrics?.synced ?? null;
   const lines = useMemo(() => (synced ? parseLrc(synced) : []), [synced]);
@@ -120,7 +134,7 @@ export function LyricsView({
     if (index < 0) {
       if (shown.current >= 0) {
         shown.current = -1;
-        scroll.current?.scrollTo({ y: 0, animated: true });
+        scroll.current?.scrollTo({ y: 0, animated: !motionReduced() });
       }
       return;
     }
@@ -144,7 +158,8 @@ export function LyricsView({
           a moment's delay and the words never moving again.
         */
         shown.current = index;
-        list.scrollTo({ y: Math.max(0, y - SUNG_AT), animated: true });
+        // Held still, the sung line is put in its place rather than brought there.
+        list.scrollTo({ y: Math.max(0, y - SUNG_AT), animated: !motionReduced() });
       },
       () => {
         // Nothing to do: the next tick asks again.
@@ -174,7 +189,20 @@ export function LyricsView({
     wordsNow.current += 1;
     shown.current = -1;
     scroll.current?.scrollTo({ y: 0, animated: false });
+    // A new song's words follow it, whatever was being read of the last one's.
+    setFollowing(true);
   }, [trackId, synced]);
+
+  /*
+    Not with a screen reader, which moves through the words by its own
+    gestures and not by a drag, so nothing here would hear that it had taken
+    them: words that moved by themselves would pull the line being read out
+    from under it. The button to follow is there for whoever wants it.
+  */
+  const reader = useScreenReader();
+  useEffect(() => {
+    if (reader) setFollowing(false);
+  }, [reader, trackId, synced]);
 
   /*
     Runs on the position as well as on the line, so that a failed attempt is
@@ -191,8 +219,15 @@ export function LyricsView({
     given is the one already shown, which it is on all but the first tick.
   */
   useEffect(() => {
-    anchorToActive(active);
-  }, [active, positionSec, height, translation.lines, anchorToActive]);
+    if (following) anchorToActive(active);
+  }, [active, following, positionSec, height, translation.lines, anchorToActive]);
+
+  /** Following the song again, from the line it is on now. */
+  const follow = () => {
+    haptic('player', 'tick');
+    shown.current = -1;
+    setFollowing(true);
+  };
 
   /*
     A translation appearing or going puts a second row under every line, so
@@ -207,7 +242,7 @@ export function LyricsView({
   if (state.looking) {
     return (
       <View style={[styles.centred, { height }]}>
-        <ActivityIndicator color={c.textFaint} />
+        <Busy color={c.textFaint} />
       </View>
     );
   }
@@ -257,7 +292,13 @@ export function LyricsView({
   }
 
   return (
-    <ScrollView ref={scroll} style={{ height }} showsVerticalScrollIndicator={false}>
+    <View style={{ height }}>
+    <ScrollView
+      ref={scroll}
+      style={{ height }}
+      showsVerticalScrollIndicator={false}
+      // Taken by the finger: the words stay where they are put until asked to follow again.
+      onScrollBeginDrag={() => setFollowing(false)}>
       <View
         ref={body}
         /*
@@ -306,6 +347,7 @@ export function LyricsView({
                 onPress={() => {
                   haptic('player', 'tick');
                   onSeek(line.at + offsetSec);
+                  setFollowing(true);
                 }}
                 style={[styles.line, index === active && styles.lineNow]}>
                 {line.text}
@@ -315,9 +357,10 @@ export function LyricsView({
                   // Already said with the line above it.
                   importantForAccessibility="no"
                   onPress={() => {
-                  haptic('player', 'tick');
-                  onSeek(line.at + offsetSec);
-                }}
+                    haptic('player', 'tick');
+                    onSeek(line.at + offsetSec);
+                    setFollowing(true);
+                  }}
                   style={[styles.translated, index === active && styles.translatedNow]}>
                   {rendering}
                 </Text>
@@ -328,40 +371,69 @@ export function LyricsView({
         {origin ? <Text style={styles.origin}>{origin}</Text> : null}
       </View>
     </ScrollView>
+    {/*
+      In the corner across from the translation's button, its like: a map's
+      "where you are", back to where the song is. Named for a screen reader.
+    */}
+    {following ? null : (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t.lyrics.follow}
+        android_ripple={pressed}
+        hitSlop={6}
+        style={styles.follow}
+        onPress={follow}>
+        <LocateIcon size={18} color={c.text} />
+      </Pressable>
+    )}
+    </View>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   centred: { alignItems: 'center', justifyContent: 'center' },
-  none: { color: c.textFaint, fontSize: 13 },
+  none: { color: c.textFaint, fontSize: TYPE.small },
   line: {
     color: c.textFaint,
-    fontSize: 16,
+    fontSize: TYPE.heading,
     lineHeight: LINE_HEIGHT,
     textAlign: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: SPACE.s,
   },
   lineNow: { color: c.text, fontWeight: '600' },
   // The faintest colour still meant to be read: a translation is read, and
   // the colour for what cannot be pressed came to less than three to one.
   translated: {
     color: c.textFaint,
-    fontSize: 13.5,
-    lineHeight: 20,
+    fontSize: TYPE.small,
+    lineHeight: LEADING.small,
     textAlign: 'center',
-    paddingHorizontal: 8,
-    paddingBottom: 6,
+    paddingHorizontal: SPACE.s,
+    paddingBottom: SPACE.xs,
   },
   translatedNow: { color: c.accent },
-  aside: { color: c.textFaint, fontSize: 12, textAlign: 'center', paddingBottom: 10 },
-  origin: { color: c.textFaint, fontSize: 11.5, textAlign: 'center', paddingTop: 18 },
-  plainBody: { paddingVertical: 8 },
-  plain: { color: c.textSecondary, fontSize: 15, lineHeight: 26, textAlign: 'center' },
+  aside: { color: c.textFaint, fontSize: TYPE.hint, textAlign: 'center', paddingBottom: SPACE.s },
+  origin: { color: c.textFaint, fontSize: TYPE.label, textAlign: 'center', paddingTop: SPACE.l },
+  plainBody: { paddingVertical: SPACE.s },
+  // Over the words, top left, while they are not following the song: as the translation's button is, top right (`PlayerSheet`).
+  follow: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: c.surfaceRaised,
+    ...outlined(c),
+  },
+  plain: { color: c.textSecondary, fontSize: TYPE.body, lineHeight: LEADING.body, textAlign: 'center' },
   plainTranslated: {
     color: c.textFaint,
-    fontSize: 13,
+    fontSize: TYPE.small,
     lineHeight: 20,
     textAlign: 'center',
-    paddingBottom: 4,
+    paddingBottom: SPACE.xs,
   },
 }));

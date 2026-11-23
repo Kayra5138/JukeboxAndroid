@@ -1,10 +1,13 @@
 import { memo, useEffect, useState } from 'react';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useUnderBars } from '../../../components/UnderBars';
+import { ProgressBar } from '../../../components/ProgressBar';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StyleSheet, Text, View } from 'react-native';
+import { Busy } from '../../../components/Busy';
+import { Button, TextButton } from '../../../components/Button';
+import { Check } from '../../../components/Check';
+import { HeadNote, MediaHead, MediaPage } from '../../../components/MediaPage';
+import { ROW_SIDE } from '../../../components/MediaRow';
 
-import { LIST_COVER_SIZE } from '../../../components/ListHeading';
 import { PlaylistCover } from '../../../components/PlaylistCover';
 import { Pressable } from '../../../components/Pressable';
 import { lookUpAlbumOnYouTube, lookUpAlbumRest, putInOrder, undoOrder } from '../../../lib/album/index';
@@ -15,9 +18,11 @@ import type { RestOutcome, RestTrack } from '../../../lib/album/rest';
 import type { Stage, YouTubeOutcome } from '../../../lib/album/youtube';
 import { useT } from '../../../lib/i18n/index';
 import type { Strings } from '../../../lib/i18n/index';
-import { albumsOf, findAlbum, type Album } from '../../../lib/media/albums';
+import { findAlbum, type Album } from '../../../lib/media/albums';
+import { grouped } from '../../../lib/media/grouped';
 import { readLibrary } from '../../../lib/library/index';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../../../lib/theme/index';
+import { makeStyles, useColours, usePressed } from '../../../lib/theme/index';
+import { CHECK, HEAD_COVER, ROW, SPACE, TOUCH, TYPE } from '../../../lib/theme/measures';
 import { useDownloadLibraryRevision, useDownloads } from '../../../lib/youtube/DownloadsProvider';
 import { youtubeError } from '../../../lib/youtube/errors';
 import { downloads } from '../../../lib/youtube/native';
@@ -29,7 +34,6 @@ import {
   type DownloadJob,
   type YouTubeVideo,
 } from '../../../lib/youtube/types';
-import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../../lib/ui/lists';
 import { AlbumLink, ArtistLinks } from '../../../components/NameLinks';
 
 /** Where a track list is read from. */
@@ -127,10 +131,6 @@ export default function AlbumRestScreen() {
   const t = useT();
   const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  const insets = useSafeAreaInsets();
-  // How far the screen's bar of glass is over the top of what scrolls; nought in any other theme.
-  const under = useUnderBars();
   const revision = useDownloadLibraryRevision();
   const { jobs, enqueueFindAll, enqueueAll, cancelMany } = useDownloads();
   const said = t.library.rest;
@@ -171,7 +171,7 @@ export default function AlbumRestScreen() {
     // app's own tables, and either is noticed there without being said.
     readLibrary().then(
       (tracks) => {
-        if (live) setAlbum(findAlbum(albumsOf(tracks), key));
+        if (live) setAlbum(findAlbum(grouped.albums(tracks), key));
       },
       () => {
         if (live) setAlbum(null);
@@ -427,6 +427,8 @@ export default function AlbumRestScreen() {
    */
   const able =
     shown?.source === 'youtube' ? downloads != null : downloads?.enqueueFindAsync != null;
+  // The bar of what to fetch along the foot, where there is anything to fetch and a way to.
+  const barShown = shown != null && missing > 0 && able;
 
   const byHand = (query: string) => router.navigate({ pathname: '/search', params: { q: query } });
 
@@ -456,8 +458,6 @@ export default function AlbumRestScreen() {
     setChoice(new Map());
     setAsked('musicbrainz');
   };
-
-  const edges = { paddingLeft: 20 + insets.left, paddingRight: 20 + insets.right };
 
   const trouble = wantTube && tube && !tube.ok ? tube : null;
   /** Whether MusicBrainz failed in a way that asking again could mend. */
@@ -517,169 +517,89 @@ export default function AlbumRestScreen() {
         : passing && !trouble ? 'youtube' : null;
 
   return (
-    <View style={styles.screen}>
-      {/* The album's own name over it, once the library has said what that is. */}
-      <Stack.Screen options={{ title: album?.name ?? t.nav.albumRest }} />
-
-      <FlatList
-              removeClippedSubviews={CLIP_SUBVIEWS}
-              windowSize={LIST_WINDOW}
-        data={rows}
-        keyExtractor={(row) => row.slot}
-        contentContainerStyle={[styles.content, edges, { paddingTop: 16 + under.top, paddingBottom: 24 + insets.bottom }]}
-        ListHeaderComponent={
-          <View style={styles.header}>
-            {album ? (
-              <View style={styles.identity}>
-                <PlaylistCover
-                  tracks={album.tracks}
-                  chosen={null}
-                  sleeve={album.tracks}
-                  size={LIST_COVER_SIZE}
-                />
-                <View style={styles.identityText}>
-                  <Text style={styles.name} numberOfLines={3}>
-                    <AlbumLink name={album.name} albumKey={album.key} />
-                  </Text>
-                  {album.artist ? (
-                    <Text style={styles.detail}>
-                      <ArtistLinks credit={album.artist} />
-                    </Text>
-                  ) : null}
-                  {shown ? (
-                    <>
-                      <Text style={styles.detail}>
-                        {playlist
-                          ? said.source.youtube(playlist.playlist.title, playlist.playlist.channel)
-                          : said.source.musicbrainz}
-                      </Text>
-                      <Text style={styles.detail}>
-                        {said.release(shown.tracks.length, album.year ?? shown.year)}
-                      </Text>
-                      <Text style={styles.detail}>
-                        {missing === 0
-                          ? said.complete
-                          : said.have(rows.length - missing, rows.length)}
-                      </Text>
-                    </>
-                  ) : null}
-                </View>
-              </View>
-            ) : null}
-
+    <MediaPage
+      head={(side) =>
+        album ? (
+          <MediaHead
+            side={side}
+            cover={<PlaylistCover tracks={album.tracks} chosen={null} sleeve={album.tracks} size={HEAD_COVER} />}
+            title={<AlbumLink name={album.name} albumKey={album.key} />}
+            lines={[
+              album.artist ? <ArtistLinks credit={album.artist} /> : null,
+              ...(shown
+                ? [
+                    playlist ? said.source.youtube(playlist.playlist.title, playlist.playlist.channel) : said.source.musicbrainz,
+                    said.release(shown.tracks.length, album.year ?? shown.year),
+                    missing === 0 ? said.complete : said.have(rows.length - missing, rows.length),
+                  ]
+                : []),
+            ]}
+            // A link and not a button: the list on screen is the answer, and this is the second opinion.
+            links={other ? [{ label: said.other[other], onPress: other === 'youtube' ? lookOnTube : useCatalogue }] : undefined}>
+            {/* What was done unasked, said as quietly as a hint, with the way back beside it. */}
             {moved > 0 ? (
-              <View style={styles.ordered}>
-                <Text style={styles.orderedText}>{said.ordered(moved)}</Text>
-                <Pressable
-                  android_ripple={pressed}
-                  accessibilityRole="button"
-                  style={styles.undo}
-                  onPress={undo}>
-                  <Text style={styles.otherLabel}>{said.undoOrder}</Text>
-                </Pressable>
+              <View style={styles.inLine}>
+                <HeadNote>{said.ordered(moved)}</HeadNote>
+                <TextButton label={said.undoOrder} strong onPress={undo} />
               </View>
             ) : null}
-
             {notice ? (
               <View style={styles.notice}>
-                <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.note}>
-                  {notice.text}
-                </Text>
+                <HeadNote bad>{notice.text}</HeadNote>
                 {/* Only where asking again could be answered differently. */}
-                {notice.again ? (
-                  <Pressable
-                    android_ripple={pressed}
-                    accessibilityRole="button"
-                    style={styles.secondary}
-                    onPress={notice.again}>
-                    <Text style={styles.secondaryLabel}>{t.common.tryAgain}</Text>
-                  </Pressable>
-                ) : null}
+                {notice.again ? <Button label={t.common.tryAgain} kind="secondary" size="small" onPress={notice.again} /> : null}
               </View>
             ) : null}
-
             {pending || (!shown && !notice) ? (
-              <View style={styles.looking}>
-                <ActivityIndicator color={c.text} />
-                <Text style={styles.detail}>
-                  {pending
-                    ? stage === 'reading' ? said.readingTube : said.lookingTube
-                    : said.looking}
-                </Text>
+              <View style={styles.inLine}>
+                <Busy color={c.textMuted} />
+                <HeadNote>{pending ? (stage === 'reading' ? said.readingTube : said.lookingTube) : said.looking}</HeadNote>
               </View>
             ) : null}
-
-            {other ? (
-              <Pressable
-                android_ripple={pressed}
-                accessibilityRole="button"
-                style={styles.other}
-                onPress={other === 'youtube' ? lookOnTube : useCatalogue}>
-                <Text style={styles.otherLabel}>{said.other[other]}</Text>
-              </Pressable>
-            ) : null}
-
-            {shown ? (
-              <>
-                {unsure ? <Text style={styles.note}>{said.unsure}</Text> : null}
-                {playlist?.by === 'album' ? <Text style={styles.hint}>{said.onTrust}</Text> : null}
-                {shown.rivals > 0 ? <Text style={styles.hint}>{said.rivals}</Text> : null}
-                {aside ? <Text style={styles.hint}>{aside}</Text> : null}
-                {!able && missing > 0 ? (
-                  <Text style={styles.note}>{t.search.unavailable.downloads}</Text>
-                ) : null}
-                {refused ? (
-                  <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.note}>
-                    {refused}
-                  </Text>
-                ) : null}
-              </>
-            ) : null}
-          </View>
-        }
-        renderItem={({ item }) => (
-          <RestRow
-            slot={item.slot}
-            heading={item.heading}
-            position={item.position}
-            title={item.title}
-            detail={item.detail}
-            query={[item.place.artist, item.place.title].filter(Boolean).join(' ')}
-            kind={item.kind}
-            ticked={choice.get(item.slot) ?? !unsure}
-            status={item.status}
-            bad={item.bad}
-            progress={item.progress}
-            onToggle={toggle}
-            onByHand={byHand}
-          />
-        )}
-      />
-
-      {shown && missing > 0 && able ? (
-        <View style={[styles.bar, edges, { paddingBottom: 12 + insets.bottom }]}>
-          {waiting.length > 0 ? (
-            <Pressable
-              android_ripple={pressed}
-              accessibilityRole="button"
-              style={styles.secondary}
-              onPress={stop}>
-              <Text style={styles.secondaryLabel}>{said.stop}</Text>
-            </Pressable>
-          ) : null}
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            disabled={ticked.length === 0}
-            style={[styles.primary, ticked.length === 0 && styles.off]}
-            onPress={download}>
-            <Text style={styles.primaryLabel}>
-              {ticked.length > 0 ? said.download(ticked.length) : said.nothingTicked}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+            {shown && unsure ? <HeadNote bad>{said.unsure}</HeadNote> : null}
+            {shown && playlist?.by === 'album' ? <HeadNote>{said.onTrust}</HeadNote> : null}
+            {shown && shown.rivals > 0 ? <HeadNote>{said.rivals}</HeadNote> : null}
+            {shown && aside ? <HeadNote>{aside}</HeadNote> : null}
+            {shown && !able && missing > 0 ? <HeadNote bad>{t.search.unavailable.downloads}</HeadNote> : null}
+            {shown && refused ? <HeadNote bad>{refused}</HeadNote> : null}
+          </MediaHead>
+        ) : null
+      }
+      items={rows}
+      keyOf={(row) => row.slot}
+      renderItem={(item) => (
+        <RestRow
+          slot={item.slot}
+          heading={item.heading}
+          position={item.position}
+          title={item.title}
+          detail={item.detail}
+          query={[item.place.artist, item.place.title].filter(Boolean).join(' ')}
+          kind={item.kind}
+          ticked={choice.get(item.slot) ?? !unsure}
+          status={item.status}
+          bad={item.bad}
+          progress={item.progress}
+          onToggle={toggle}
+          onByHand={byHand}
+        />
+      )}
+      bar={
+        barShown
+          ? {
+              actions: [
+                ...(waiting.length > 0 ? [{ label: said.stop, wide: false, onPress: stop }] : []),
+                {
+                  label: ticked.length > 0 ? said.download(ticked.length) : said.nothingTicked,
+                  kind: 'primary',
+                  disabled: ticked.length === 0,
+                  onPress: download,
+                },
+              ],
+            }
+          : null
+      }
+    />
   );
 }
 
@@ -744,15 +664,13 @@ const RestRow = memo(function RestRow({
           style={styles.rowMain}
           onPress={() => onToggle(slot)}>
           {open ? (
-            <View style={[styles.checkbox, ticked && styles.checkboxOn]}>
-              {ticked ? <Text style={styles.checkMark} importantForAccessibility="no">✓</Text> : null}
-            </View>
+            <Check on={ticked} />
           ) : (
             <View style={styles.mark}>
               {kind === 'have' ? (
                 <Text style={styles.present} importantForAccessibility="no">✓</Text>
               ) : (
-                <ActivityIndicator size="small" color={c.textFaint} />
+                <Busy size="small" color={c.textFaint} />
               )}
             </View>
           )}
@@ -767,125 +685,45 @@ const RestRow = memo(function RestRow({
               </Text>
             ) : null}
             {progress != null ? (
-              <View style={styles.progressTrack}>
-                <View style={[styles.progress, { width: `${progress}%` }]} />
-              </View>
+              <ProgressBar value={progress / 100} style={styles.progressTrack} />
             ) : null}
           </View>
         </Pressable>
         {open ? (
-          <Pressable
-            android_ripple={pressed}
-            accessibilityRole="button"
-            accessibilityLabel={said.byHandLabel(title)}
+          <TextButton
+            label={said.byHand}
             style={styles.byHand}
-            onPress={() => onByHand(query)}>
-            <Text style={styles.byHandLabel}>{said.byHand}</Text>
-          </Pressable>
+            accessibilityLabel={said.byHandLabel(title)}
+            onPress={() => onByHand(query)}
+          />
         ) : null}
       </View>
     </>
   );
 });
 
-const useStyles = makeStyles((c) => StyleSheet.create({
-  screen: { flex: 1, ...scene(c) },
-  content: { paddingTop: 16 },
+const useStyles = makeStyles((c) =>
+  StyleSheet.create({
+    // Something said in the head with what to do about it beside it.
+    inLine: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m },
+    notice: { gap: SPACE.m, alignItems: 'flex-start' },
 
-  // The heading of a list, without the buttons: `ListHeading`'s measures.
-  header: { gap: 12, paddingBottom: 14 },
-  identity: { flexDirection: 'row', gap: 15, alignItems: 'center' },
-  identityText: { flex: 1, minWidth: 0, gap: 5 },
-  name: { color: c.text, fontSize: 22, fontWeight: '600' },
-  detail: { color: c.textMuted, fontSize: 13 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
-  note: { color: c.danger, fontSize: 12.5, lineHeight: 18 },
-  notice: { gap: 12, alignItems: 'flex-start' },
-  looking: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  // A link and not a button: the list on screen is the answer, and this is the second opinion.
-  other: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
-  otherLabel: { color: c.accent, fontSize: 12.5 },
-  // What was done unasked, said as quietly as a hint, with the way back beside it.
-  ordered: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  orderedText: { flexShrink: 1, color: c.textFaint, fontSize: 12, lineHeight: 18 },
-  undo: { minHeight: 32, justifyContent: 'center' },
-
-  disc: {
-    color: c.textFaint,
-    fontSize: 11,
-    fontWeight: '600',
-    letterSpacing: 0.8,
-    paddingTop: 16,
-    paddingBottom: 6,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  rowMain: {
-    flex: 1,
-    minWidth: 0,
-    minHeight: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  // As `TrackRow` draws it.
-  checkbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: c.textDisabled,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: c.accent, borderColor: c.accent },
-  checkMark: { color: c.onAccent, fontSize: 13, fontWeight: '700', lineHeight: 15 },
-  // The box's place, kept by the rows that have none, so the names line up.
-  mark: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
-  present: { color: c.textFaint, fontSize: 13, lineHeight: 15 },
-  position: { color: c.textFaint, fontSize: 12.5, minWidth: 18, textAlign: 'right' },
-  rowText: { flex: 1, minWidth: 0, gap: 3 },
-  title: { color: c.text, fontSize: 15 },
-  titleHave: { color: c.textMuted, fontSize: 15 },
-  line: { color: c.textFaint, fontSize: 12.5 },
-  lineBad: { color: c.danger, fontSize: 12.5 },
-  // The Search tab's, for the same download.
-  progressTrack: { height: 3, backgroundColor: c.borderStrong, borderRadius: 2, marginTop: 3, overflow: 'hidden' },
-  progress: { height: 3, backgroundColor: c.text },
-  byHand: { minHeight: 44, justifyContent: 'center', paddingLeft: 12, paddingVertical: 8 },
-  byHandLabel: { color: c.accent, fontSize: 12.5 },
-
-  bar: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: c.border,
-  },
-  // `ListHeading`'s two buttons.
-  primary: {
-    flex: 1,
-    alignItems: 'center',
-    backgroundColor: c.primary,
-    borderRadius: 11,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    ...outlined(c, c.primary),
-  },
-  primaryLabel: { color: c.onPrimary, fontSize: 15, fontWeight: '600' },
-  secondary: {
-    alignItems: 'center',
-    borderRadius: 11,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: c.borderStrong,
-  },
-  secondaryLabel: { color: c.text, fontSize: 15 },
-  off: { opacity: 0.35 },
-}));
+    // The label over a disc's tracks.
+    disc: { color: c.textMuted, fontSize: TYPE.label, fontWeight: '600', letterSpacing: 0.8, paddingTop: SPACE.l, paddingBottom: SPACE.s, paddingHorizontal: ROW_SIDE },
+    // To the sides of the page, as every row of a list is, with the room inside it (`MediaRow`).
+    row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: ROW_SIDE, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border },
+    rowMain: { flex: 1, minWidth: 0, minHeight: TOUCH.normal, flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingVertical: ROW.vertical },
+    // The box's place, kept by the rows that have none, so the names line up.
+    mark: { width: CHECK, height: CHECK, alignItems: 'center', justifyContent: 'center' },
+    present: { color: c.textMuted, fontSize: TYPE.small },
+    position: { color: c.textMuted, fontSize: TYPE.hint, minWidth: SPACE.l, textAlign: 'right', fontVariant: ['tabular-nums'] },
+    rowText: { flex: 1, minWidth: 0, gap: SPACE.xxs },
+    title: { color: c.text, fontSize: TYPE.body },
+    titleHave: { color: c.textMuted, fontSize: TYPE.body },
+    line: { color: c.textMuted, fontSize: TYPE.hint },
+    lineBad: { color: c.danger, fontSize: TYPE.hint },
+    // The Search tab's, for the same download.
+    progressTrack: { marginTop: SPACE.xxs },
+    byHand: { marginLeft: SPACE.s },
+  })
+);

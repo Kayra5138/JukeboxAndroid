@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { AppState, Linking } from 'react-native';
 
-import { pageOfLink } from './late.ts';
+import { fromOutside, pageOfLink } from './late.ts';
 
 /**
  * A link that opened the app while the app was already running behind the
@@ -31,7 +31,7 @@ export function LateLink() {
       void first.then(async (was) => {
         if (was != null) return;
         const page = pageOfLink(await Linking.getInitialURL().catch(() => null));
-        if (page) router.push(page as never);
+        if (page) router.push(fromOutside(page) as never);
       });
     });
     return () => watch.remove();

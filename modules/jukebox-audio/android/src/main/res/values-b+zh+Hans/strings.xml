@@ -37,7 +37,6 @@
   <string name="jukebox_widget_up_next">待播</string>
   <string name="jukebox_widget_up_next_empty">没有待播歌曲</string>
   <string name="jukebox_widget_open">打开播放器</string>
-  <string name="jukebox_widget_continue">继续播放：%1$s</string>
 
   <string name="jukebox_playback_channel">正在播放</string>
 

@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { SPACE } from '../../../lib/theme/measures';
+import { StyleSheet, View } from 'react-native';
+import { Text } from '../../../components/settings/Find';
 
 import { DownloadsSettings } from '../../../components/downloads/SettingsRows';
 import { NumberStepper } from '../../../components/NumberStepper';
@@ -49,5 +51,5 @@ export default function DownloadsSettingsScreen() {
 
 const apart = StyleSheet.create({
   // A card of its own under the downloads', set off from it as cards are on every settings page.
-  card: { marginTop: 16 },
+  card: { marginTop: SPACE.xl },
 });

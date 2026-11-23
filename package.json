@@ -1,6 +1,6 @@
 {
   "name": "jukebox",
-  "version": "0.39.0",
+  "version": "0.40.0",
   "author": "Kayra5138",
   "engines": {
     "node": ">=22.6"

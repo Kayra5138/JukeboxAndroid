@@ -85,6 +85,12 @@ class SpectrumAnalyzer {
     }
     val data = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
     val frameBytes = bytesPerSample * channels
+    /*
+      As many looks a second whatever the file's rate: [HOP] is in samples,
+      and counted as such a file at 96 or 192 kHz was looked at two or four
+      times as often as one at 44.1, for nothing anybody could see.
+    */
+    val hop = max(HOP, (HOP.toLong() * rate / BASE_RATE).toInt())
     val frameCount = (data.limit() - data.position()) / frameBytes
     var place = data.position()
     for (frame in 0 until frameCount) {
@@ -94,10 +100,10 @@ class SpectrumAnalyzer {
         place += bytesPerSample
       }
       ring[at] = sum / channels
-      at = (at + 1) % SIZE
+      at = (at + 1) and RING
       if (filled < SIZE) filled++
       sinceLook++
-      if (sinceLook >= HOP && filled == SIZE) {
+      if (sinceLook >= hop && filled == SIZE) {
         sinceLook = 0
         // Heard at the middle of what was looked at.
         val heardUs = presentationUs + ((frame + 1 - SIZE / 2) * 1_000_000L) / rate
@@ -121,7 +127,7 @@ class SpectrumAnalyzer {
   private fun look(heardUs: Long) {
     val level = shapeOf(wave)
     for (i in 0 until SIZE) {
-      real[i] = ring[(at + i) % SIZE] * WINDOW[i]
+      real[i] = ring[(at + i) and RING] * WINDOW[i]
       imaginary[i] = 0f
     }
     fft(real, imaginary)
@@ -146,15 +152,15 @@ class SpectrumAnalyzer {
     val middle = SIZE / 2
     var from = middle - WAVE_SPAN
     for (i in middle - WAVE_SPAN until middle - 1) {
-      if (ring[(at + i) % SIZE] <= 0f && ring[(at + i + 1) % SIZE] > 0f) {
+      if (ring[(at + i) and RING] <= 0f && ring[(at + i + 1) and RING] > 0f) {
         from = i + 1
         break
       }
     }
-    for (point in 0 until WAVE) into[point] = ring[(at + from + point * WAVE_STEP) % SIZE]
+    for (point in 0 until WAVE) into[point] = ring[(at + from + point * WAVE_STEP) and RING]
     var power = 0.0
     for (i in middle - LEVEL_SPAN / 2 until middle + LEVEL_SPAN / 2) {
-      val sample = ring[(at + i) % SIZE]
+      val sample = ring[(at + i) and RING]
       power += sample * sample
     }
     val decibels = 10 * log10(max(power / LEVEL_SPAN, 1e-12))
@@ -231,8 +237,11 @@ class SpectrumAnalyzer {
   companion object {
     /** How many samples are looked at at a time: about a twentieth of a second. */
     const val SIZE = 2048
-    /** How many come in between looks: about eighty-six looks a second, more than are drawn. */
+    /** A place in the ring brought round within it, as `% SIZE` would but with no division: [SIZE] is a power of two, as [fft] needs. */
+    private const val RING = SIZE - 1
+    /** How many come in between looks: about eighty-six looks a second, more than are drawn, at [BASE_RATE]; as many more as a file's rate is higher. */
     const val HOP = 512
+    private const val BASE_RATE = 44100
     /** How many pitches are drawn. */
     const val BANDS = 40
     /** How many points the line of the sound is drawn through, and how many samples apart: some nine thousandths of a second of it. */

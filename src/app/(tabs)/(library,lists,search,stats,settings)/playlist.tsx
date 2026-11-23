@@ -1,25 +1,32 @@
+import { Artwork } from '../../../components/Artwork';
+import { Note } from '../../../components/Note';
+import { TextButton } from '../../../components/Button';
+import { MediaPage, SectionLabel, type HeadLink } from '../../../components/MediaPage';
+import { MediaRow } from '../../../components/MediaRow';
+import { LEADING, PAGE, ROW_COVER_COMPACT, SPACE, TYPE } from '../../../lib/theme/measures';
+import { ScreenState } from '../../../components/ScreenState';
 import { useDownloadLibraryRevision } from '../../../lib/youtube/DownloadsProvider';
+import { ConfirmSheet } from '../../../components/ConfirmSheet';
+import { MenuEntry } from '../../../components/MenuSheet';
+import { OnAPage } from '../../../components/OnAPage';
+import { usePageRoom } from '../../../components/Page';
+import { ListsIcon, PictureIcon } from '../../../components/Icons';
+import { CLIP_SUBVIEWS, LIST_WINDOW } from '../../../lib/ui/lists';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect, useLocalSearchParams, useRouter, useIsFocused } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useNavigation, useRouter, useIsFocused } from 'expo-router';
 import {
-  ActivityIndicator,
-  ScrollView,
+  FlatList,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { BlurArea, GlassScene } from '../../../components/Frosted';
-import { Image } from '../../../components/Picture';
 import { Pressable } from '../../../components/Pressable';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AlbumTools } from '../../../components/AlbumTools';
-import { LIST_COVER_SIZE, ListHeading, SIDE_COLUMN, sideCoverSize } from '../../../components/ListHeading';
-import { SetAsideLink } from '../../../components/SetAsideLink';
+import { useAlbumTools } from '../../../components/AlbumTools';
+import { LIST_COVER_SIZE, ListHeading } from '../../../components/ListHeading';
+import { useSetAsideLink } from '../../../components/SetAsideLink';
 import { AlbumBy } from '../../../components/NameLinks';
-import { NowPlayingBar } from '../../../components/NowPlayingBar';
-import { useUnderBars } from '../../../components/UnderBars';
 import { PlaylistCover } from '../../../components/PlaylistCover';
 import { QueueList } from '../../../components/QueueList';
 import { ZoomStack } from '../../../components/looks/CoverGrid';
@@ -36,19 +43,17 @@ import {
   markListPlayed,
   playlist,
   playlistTrackIds,
+  putBackInPlaylist,
   removeFromPlaylist,
   renamePlaylist,
   reorderPlaylist,
   setPlaylistCover,
   setPlaylistImage,
 } from '../../../lib/db/playlists';
-import { allTags, tagCounts } from '../../../lib/db/tags';
+import { tagCounts } from '../../../lib/db/tags';
 import { readSetting, SETTINGS, writeSetting } from '../../../lib/db/index';
-import { creditReader } from '../../../lib/db/credits';
 import { useT } from '../../../lib/i18n/index';
-import { albumsOf, findAlbum, type Album } from '../../../lib/media/albums';
-import { artistsOf } from '../../../lib/media/artists';
-import { foldersOf } from '../../../lib/media/folders';
+import { findAlbum, type Album } from '../../../lib/media/albums';
 import JukeboxAudio from '../../../../modules/jukebox-audio';
 import { readLibrary } from '../../../lib/library/index';
 import { useLibraryTracks } from '../../../lib/library/useLibrary';
@@ -57,10 +62,12 @@ import { useTrackArtwork } from '../../../lib/media/artwork';
 import type { EnrichedTrack } from '../../../lib/media/merge';
 import { usePlayerActions } from '../../../lib/player/PlayerProvider';
 import { usePlayTapped } from '../../../lib/player/usePlayTapped';
+import { grouped } from '../../../lib/media/grouped';
+import { moveOnto } from '../../../lib/playlists/members';
 import { suggestForPlaylist, type Candidate, type Suggestion } from '../../../lib/playlists/suggest';
-import { makeStyles, outlined, scene, useColours, usePressed } from '../../../lib/theme/index';
-import { Behind, scrimOf } from '../../../lib/theme/Veil';
-import { useLandscape } from '../../../lib/ui/layout';
+import { useListSuggestions } from '../../../lib/ui/listSuggestions';
+import { offerUndo } from '../../../lib/ui/undo';
+import { makeStyles, scene, usePressed } from '../../../lib/theme/index';
 import { useAnnounce } from '../../../lib/ui/announce';
 import { useBack } from '../../../lib/ui/back';
 import { backTo, useTrailLength } from '../../../lib/ui/pageTrail';
@@ -112,6 +119,28 @@ type Loaded = {
   smart?: boolean;
 };
 
+/**
+ * A picture from the gallery made [listId]'s cover. Answers with what went
+ * wrong, to be said, or null where nothing did. Out here rather than in the
+ * screen, which the React Compiler does not take with a question inside a
+ * `try`: the whole page went uncompiled for it.
+ */
+async function pickListPicture(listId: number | null, failedWords: string): Promise<string | null> {
+  if (!JukeboxAudio.pickImageAsync) return null;
+  try {
+    const picked = await JukeboxAudio.pickImageAsync();
+    // Null is the user backing out, which is not a failure and
+    // must not clear the cover they already had.
+    if (picked && listId != null) setPlaylistImage(listId, picked);
+    return null;
+  } catch (error) {
+    // Said rather than swallowed. A sheet that closes and
+    // changes nothing is indistinguishable from one that was
+    // cancelled, which is how this came to look broken.
+    return error instanceof Error ? error.message : failedWords;
+  }
+}
+
 export default function PlaylistScreen() {
   const { id, auto, album, track: from, artist, folder } = useLocalSearchParams<{
     id?: string;
@@ -130,13 +159,10 @@ export default function PlaylistScreen() {
   }>();
   const router = useRouter();
   const downloadRevision = useDownloadLibraryRevision();
-  const insets = useSafeAreaInsets();
-  // In a theme of glass the bar of what is playing is laid over the foot of the list, which runs on under it.
-  const under = useUnderBars({ player: true });
-  const landscape = useLandscape();
-  const { height: tall } = useWindowDimensions();
+  const navigation = useNavigation();
   const t = useT();
-  const c = useColours();
+  // What might belong in it, under its songs, unless that was turned off.
+  const suggesting = useListSuggestions();
   const styles = useStyles();
   const pressed = usePressed();
   const { playQueue } = usePlayerActions();
@@ -187,7 +213,7 @@ export default function PlaylistScreen() {
       the order is the record's, not a choice to be edited.
     */
     if (album) {
-      const found = findAlbum(albumsOf(library), album, from);
+      const found = findAlbum(grouped.albums(library), album, from);
       setData({
         name: found?.name ?? t.lists.list.album,
         tag: null,
@@ -212,7 +238,7 @@ export default function PlaylistScreen() {
     if (artist) {
       // Told the language, for the one heading whose name is the app's own
       // words: the tracks that name nobody.
-      const found = artistsOf(library, creditReader(), t).find(
+      const found = grouped.artists(library, t).find(
         (candidate) => candidate.key === artist
       );
       setData({
@@ -231,7 +257,7 @@ export default function PlaylistScreen() {
     }
 
     if (folder) {
-      const found = foldersOf(library, libraryRoot()).find(
+      const found = grouped.folders(library, libraryRoot()).find(
         (candidate) => candidate.key === folder
       );
       setData({
@@ -345,9 +371,9 @@ export default function PlaylistScreen() {
       tracks: ordered,
       albums: [],
       // Nothing to suggest for a list that fills itself.
-      suggestions: tag ? [] : suggestions(ordered, library),
+      suggestions: tag || !suggesting ? [] : suggestions(ordered, library),
     });
-  }, [album, artist, auto, folder, from, listId, t]);
+  }, [album, artist, auto, folder, from, listId, suggesting, t]);
 
   /*
     Reading the list can fail: the media store can refuse, and the lists come
@@ -376,9 +402,21 @@ export default function PlaylistScreen() {
     app opened on. Not while a reading of the list is waiting for the library
     itself, which is that same change on its way here by the other road.
   */
+  /*
+    Nor while the page is not in front: under another, or in a tab not open.
+    Each reading scores the whole library for what might belong here, and
+    did so at every download that landed, for a page nobody was looking at;
+    coming back to it reads it anyway (above).
+  */
+  const focused = useIsFocused();
+  // Read when the library changes, and not when the page comes back, which reads it already.
+  const inFront = useRef(focused);
+  useEffect(() => {
+    inFront.current = focused;
+  }, [focused]);
   const held = useLibraryTracks();
   useEffect(() => {
-    if (asking.current > 0 || madeFrom.current === null || madeFrom.current === held) return;
+    if (!inFront.current || asking.current > 0 || madeFrom.current === null || madeFrom.current === held) return;
     void load();
   }, [held, load]);
 
@@ -410,8 +448,6 @@ export default function PlaylistScreen() {
     Registered after the menu's, so a list picker the menu opened is the
     first thing back closes.
   */
-  const sheetOpen = choosingCover || confirmingDelete || adding;
-  const focused = useIsFocused();
   /*
     Back, from a page a name opened in place of another: to that one again,
     in its place, before it is to wherever the first of them was opened from.
@@ -424,11 +460,23 @@ export default function PlaylistScreen() {
     else router.back();
   };
   useBack(trailed && focused, back);
-  useBack(sheetOpen && focused, () => {
-    setChoosingCover(false);
-    setConfirmingDelete(false);
-    setAdding(false);
-  });
+  /*
+    And from the bar's own arrow, which goes back by the navigator: kept to
+    the trail the same way. Only going back is turned aside; the page put in
+    this one's place by `back` itself is let through.
+  */
+  useEffect(
+    () =>
+      navigation.addListener('beforeRemove', (event) => {
+        const kind = event.data.action.type;
+        if (kind !== 'GO_BACK' && kind !== 'POP') return;
+        const to = backTo();
+        if (!to) return;
+        event.preventDefault();
+        router.replace({ pathname: '/playlist', params: to });
+      }),
+    [navigation, router]
+  );
 
   const tracks = data?.tracks ?? [];
 
@@ -452,6 +500,16 @@ export default function PlaylistScreen() {
     not shuffled.
   */
   const tapesHere = folder != null && tracks.length > 0 && tracks.every((track) => isTape(track));
+  /*
+    The links under the head that are more than a press: looking a record up,
+    and setting the whole of it aside (`library/setAside.ts`). Asked for here,
+    above the screens drawn while the list is still being read.
+  */
+  const albumTools = useAlbumTools(data?.record ?? null);
+  const setAsideLink = useSetAsideLink(
+    tapesHere ? null : album ? 'album' : artist ? 'artist' : folder ? 'folder' : listId != null ? 'list' : null,
+    album ? (data?.record?.key ?? album) : (artist ?? folder ?? (listId != null ? String(listId) : null))
+  );
   const tap = useCallback(
     (startIndex: number) => {
       played();
@@ -493,24 +551,29 @@ export default function PlaylistScreen() {
     already on screen stays there through a re-reading that failed: it is what
     was true a moment ago, and the next return to the screen asks again.
   */
-  if (!data && failed) {
-    return (
-      <View style={[styles.screen, styles.centred, styles.failed]}>
-        <Text style={styles.failedBody}>{failed}</Text>
-        <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.failedButton} onPress={() => void load()}>
-          <Text style={styles.failedLabel}>{t.common.tryAgain}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={back}>
-          <Text style={styles.backLabel}>{t.library.back}</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  /*
+    What kind of list it is, over the page, as every page of a thing says
+    what it is in its bar ("Album", "Show"), the name being written large
+    just under it. Until the list is read, what it was opened as.
+  */
+  const kind = album
+    ? t.nav.album
+    : artist
+      ? t.nav.artist
+      : folder
+        ? t.nav.folder
+        : data?.smart
+          ? t.nav.smartList
+          : data?.tag
+            ? t.nav.tag
+            : t.nav.list;
+  const titled = <Stack.Screen options={{ title: kind }} />;
 
   if (!data) {
     return (
-      <View style={[styles.screen, styles.centred]}>
-        <ActivityIndicator color={c.text} />
+      <View style={styles.screen}>
+        {titled}
+        {failed ? <ScreenState kind="error" text={failed} onRetry={() => void load()} /> : <ScreenState kind="loading" />}
       </View>
     );
   }
@@ -542,10 +605,36 @@ export default function PlaylistScreen() {
     come to look like different things. Sideways, down a column of its own
     beside the tracks, as that record has it; upright, at the top of them.
   */
-  const heading = (
+  const links: HeadLink[] = [
+    ...(album
+      ? [
+          {
+            label: t.library.albumActions.rest.label,
+            onPress: () => router.push({ pathname: '/album-rest', params: { album: data.record?.key ?? album } }),
+          },
+        ]
+      : []),
+    ...(albumTools.link ? [albumTools.link] : []),
+    ...(setAsideLink ? [setAsideLink] : []),
+    ...(exportable ? [{ label: t.lists.files.export, onPress: () => files.exportList(exportable) }] : []),
+    ...(stored
+      ? [
+          ...(editable ? [{ label: t.lists.list.addTracks, onPress: () => setAdding(true) }] : []),
+          // What a smart list holds is changed by changing what it asks for.
+          ...(data.smart && listId != null
+            ? [{ label: t.smart.editRules, onPress: () => router.push({ pathname: '/smart-list', params: { id: String(listId) } }) }]
+            : []),
+          { label: t.common.rename, onPress: () => setRenaming(true) },
+          { label: t.lists.list.cover, disabled: tracks.length === 0, onPress: () => setChoosingCover(true) },
+          // Favorites has no Delete: the heart has to have somewhere to put a song.
+          ...(data.favorites ? [] : [{ label: t.lists.list.deleteList, tone: 'danger' as const, onPress: () => setConfirmingDelete(true) }]),
+        ]
+      : []),
+  ];
+
+  const heading = (side: boolean) => (
     <ListHeading
-      side={landscape}
-      onBack={back}
+      side={side}
       cover={
         <Pressable
           disabled={!stored || tracks.length === 0}
@@ -558,7 +647,7 @@ export default function PlaylistScreen() {
             chosen={data.cover}
             picture={data.picture}
             sleeve={data.sleeve}
-            size={landscape ? sideCoverSize(tall, insets.top, insets.bottom) : LIST_COVER_SIZE}
+            size={LIST_COVER_SIZE}
           />
         </Pressable>
       }
@@ -569,77 +658,15 @@ export default function PlaylistScreen() {
       note={
         note ? (
           <Pressable accessibilityRole="button" onPress={() => setNote(null)}>
-            <Text style={styles.note}>{note}</Text>
+            <Note tone="bad" style={styles.note}>{note}</Note>
           </Pressable>
         ) : null
       }
       onPlay={() => play(0)}
-      onShuffle={tapesHere ? undefined : shuffle}>
-      {/* Adding the whole of it to the queue is the heading's third button now. */}
-      <View style={styles.links}>
-        {album ? (
-          <Pressable
-            style={styles.linkHit}
-            accessibilityRole="button"
-            onPress={() =>
-              router.push({ pathname: '/album-rest', params: { album: data.record?.key ?? album } })
-            }>
-            <Text style={styles.link}>{t.library.albumActions.rest.label}</Text>
-          </Pressable>
-        ) : null}
-        {data.record ? <AlbumTools album={data.record} /> : null}
-        {/* The whole of a record, an artist or a folder kept out of Tracks and the shuffle, or back: see `library/setAside.ts`. */}
-        {tapesHere ? null : album ? (
-          <SetAsideLink kind="album" itemKey={data.record?.key ?? album} hit={styles.linkHit} style={styles.link} />
-        ) : artist ? (
-          <SetAsideLink kind="artist" itemKey={artist} hit={styles.linkHit} style={styles.link} />
-        ) : folder ? (
-          <SetAsideLink kind="folder" itemKey={folder} hit={styles.linkHit} style={styles.link} />
-        ) : listId != null && stored ? (
-          <SetAsideLink kind="list" itemKey={String(listId)} hit={styles.linkHit} style={styles.link} />
-        ) : null}
-        {exportable ? (
-          <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => files.exportList(exportable)}>
-            <Text style={styles.link}>{t.lists.files.export}</Text>
-          </Pressable>
-        ) : null}
-        {stored ? (
-          <>
-            {editable ? (
-              <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setAdding(true)}>
-                <Text style={styles.link}>{t.lists.list.addTracks}</Text>
-              </Pressable>
-            ) : null}
-            {/* What a smart list holds is changed by changing what it asks for. */}
-            {data.smart && listId != null ? (
-              <Pressable
-                style={styles.linkHit}
-                accessibilityRole="button"
-                onPress={() => router.push({ pathname: '/smart-list', params: { id: String(listId) } })}>
-                <Text style={styles.link}>{t.smart.editRules}</Text>
-              </Pressable>
-            ) : null}
-            <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setRenaming(true)}>
-              <Text style={styles.link}>{t.common.rename}</Text>
-            </Pressable>
-            <Pressable
-              style={styles.linkHit}
-              accessibilityRole="button"
-              disabled={tracks.length === 0}
-              onPress={() => setChoosingCover(true)}>
-              <Text style={[styles.link, tracks.length === 0 && styles.actionOff]}>
-                {t.lists.list.cover}
-              </Text>
-            </Pressable>
-            {/* Favorites has no Delete: the heart has to have somewhere to put a song. */}
-            {data.favorites ? null : (
-              <Pressable style={styles.linkHit} accessibilityRole="button" onPress={() => setConfirmingDelete(true)}>
-                <Text style={styles.destructive}>{t.lists.list.deleteList}</Text>
-              </Pressable>
-            )}
-          </>
-        ) : null}
-      </View>
+      onShuffle={tapesHere ? undefined : shuffle}
+      // Adding the whole of it to the queue is the heading's third button.
+      links={links}>
+      {albumTools.status}
 
       {/*
         An artist's records, above their tracks.
@@ -656,7 +683,7 @@ export default function PlaylistScreen() {
       */}
       {data.albums.length > 0 ? (
         <>
-          <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.albums)}</Text>
+          <SectionLabel>{t.lists.list.albums}</SectionLabel>
           <View style={styles.records}>
             {data.albums.map((entry) => (
               <Pressable
@@ -686,18 +713,15 @@ export default function PlaylistScreen() {
           </View>
           {/* Only needed because something now stands between the
               buttons and the rows they play. */}
-          <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.tracks)}</Text>
+          <SectionLabel>{t.lists.list.tracks}</SectionLabel>
         </>
       ) : null}
     </ListHeading>
   );
 
-  const pageHeader = (
-    // The screen has no navigation header of its own, so nothing else
-    // is keeping it out from under the clock.
-    <View style={{ paddingTop: insets.top }}>
-      {landscape ? null : heading}
-
+  // Said where the rows would be, when there are none.
+  const nothing = (
+    <>
       {tracks.length === 0 ? (
         <Text style={styles.empty}>
           {editable
@@ -715,14 +739,18 @@ export default function PlaylistScreen() {
               : t.lists.list.empty.auto}
         </Text>
       ) : null}
-    </View>
+    </>
   );
-  const pageFooter = (
-    <View style={{ paddingBottom: insets.bottom + 32 + under.bottom }}>
-      {data.suggestions.length > 0 ? (
+  // Under the songs, before the page's foot: songs that might belong, at the sides as rows are.
+  const mightBelong = (
+    <>
+      {/* Not where they were turned off: Settings → Library. */}
+      {suggesting && data.suggestions.length > 0 ? (
         <View style={styles.suggested}>
-          <Text accessibilityRole="header" style={styles.section}>{t.format.upper(t.lists.list.mightBelong)}</Text>
-          <Text style={styles.hint}>{t.lists.list.mightBelongHint}</Text>
+          <View style={styles.suggestedHead}>
+            <SectionLabel>{t.lists.list.mightBelong}</SectionLabel>
+            <Text style={styles.hint}>{t.lists.list.mightBelongHint}</Text>
+          </View>
           {data.suggestions.map((entry) => (
             <Suggested
               key={entry.track.id}
@@ -737,272 +765,277 @@ export default function PlaylistScreen() {
           ))}
         </View>
       ) : null}
-    </View>
+    </>
   );
 
   return (
-    <View style={styles.screen}>
-      {/* Sideways the player runs down the right, so the record keeps the
-          width and the height goes to its tracks.
-
-          And everything the sheets below are laid over, which is the whole
-          of the screen but them. */}
-      {/* The tracks an area the bar of what is playing blurs, in a theme of glass: see `Frosted`. */}
-      <GlassScene>
-      <Behind
-        veiled={choosingCover || adding || confirmingDelete || menu.veiled}
-        style={landscape ? styles.sideways : styles.upright}>
-      {/*
+    <MediaPage
+      head={heading}
+      above={nothing}
+      veiled={menu.veiled}
+      /*
         The queue's list, reused whole. It was written to be a reorderable
         list of tracks with a remove on each row, which is exactly what this
         is — the only thing queue-specific about it was its name.
 
-        It is also the screen's scroller, with everything else on the screen
-        riding inside it. The other way round — this list inside a scroll view
-        — mounted every row of a five hundred track list at once, each one
-        opening a file for its cover.
-
-        The sides are kept clear out here rather than in the header, so the
-        rows and the copy of a row being dragged are kept clear with it.
-      */}
-      {landscape ? (
-        // The heading's column: scrolled on its own, should a long name and the links under it not fit.
-        <ScrollView
-          style={[styles.sideColumn, { marginLeft: insets.left }]}
-          contentContainerStyle={{ paddingTop: insets.top, paddingBottom: insets.bottom + under.bottom }}
-          showsVerticalScrollIndicator={false}>
-          {heading}
-        </ScrollView>
-      ) : null}
-      <BlurArea style={[styles.upright, { paddingLeft: landscape ? 0 : insets.left, paddingRight: insets.right }]}>
-        {/* The list and its wall of covers, pinched between as a gallery is: see `ZoomStack`. Not on a record's page. */}
-        <ZoomStack
-          zoom={zoomable ? zoom : 0}
-          onZoom={zoomTo}
-          enabled={zoomable}
-          list={
-        <View collapsable={false} style={styles.shownPane}>
-        <QueueList
-          // On a plate, where screens are glass: the page's own body, with what it was opened over round it.
-          plate
-          queue={tracks}
-          // Nothing in a list is "the playing one"; the mark column stays empty.
-          currentIndex={-1}
-          onSelect={tap}
-          // On a record's own page "go to album" would open this page again.
-          onLongPress={(index) => {
-            const track = tracks[index];
-            if (track) menu.open(track, album ? WITHOUT_ALBUM : undefined);
-          }}
-          ring={album ? albumRing : ring}
-          /*
-            Left off entirely where there is nothing to arrange. A record's
-            running order is the record's, an artist's tracks and a folder's
-            files are whatever the library holds of them, an auto list is
-            read out of what was listened to, and a tag list is the tag's
-            answer -- none of them is an arrangement anybody made, so none of
-            them should offer a handle to change one.
-          */
-          onMove={
-            editable && listId != null
-              ? (from, to) => {
-                  // By id: the rows are only the members on show, so a row
-                  // number is not a position in the list.
-                  const moved = tracks[from];
-                  const target = tracks[to];
-                  if (!moved || !target) return;
-                  reorderPlaylist(listId, moved.id, target.id, Date.now());
-                  void load();
+        It is also the page's scroller, with the head (upright) and the songs
+        that might belong riding inside it. The other way round — this list
+        inside a scroll view — mounted every row of a five hundred track list
+        at once, each one opening a file for its cover.
+      */
+      rows={({ header, footer }) => {
+        const foot = (
+          <>
+            {mightBelong}
+            {footer}
+          </>
+        );
+        return (
+          // The tracks an area the bar of what is playing blurs, in a theme of glass: see `Frosted`.
+          <GlassScene>
+            <BlurArea style={styles.upright}>
+              {/* The list and its wall of covers, pinched between as a gallery is: see `ZoomStack`. Not on a record's page. */}
+              <ZoomStack
+                zoom={zoomable ? zoom : 0}
+                onZoom={zoomTo}
+                enabled={zoomable}
+                list={
+                  <View collapsable={false} style={styles.shownPane}>
+                    <QueueList
+                      // On a plate, where screens are glass: the page's own body, with what it was opened over round it.
+                      plate
+                      queue={tracks}
+                      // No place in a list is "the one playing"; the song playing is marked where it is in it all the same.
+                      currentIndex={-1}
+                      marksPlaying
+                      onSelect={tap}
+                      // On a record's own page "go to album" would open this page again.
+                      onLongPress={(index) => {
+                        const track = tracks[index];
+                        if (track) menu.open(track, album ? WITHOUT_ALBUM : undefined);
+                      }}
+                      ring={album ? albumRing : ring}
+                      /*
+                        Left off entirely where there is nothing to arrange. A record's
+                        running order is the record's, an artist's tracks and a folder's
+                        files are whatever the library holds of them, an auto list is
+                        read out of what was listened to, and a tag list is the tag's
+                        answer -- none of them is an arrangement anybody made, so none of
+                        them should offer a handle to change one.
+                      */
+                      onMove={
+                        editable && listId != null
+                          ? (from, to) => {
+                              // By id: the rows are only the members on show, so a row
+                              // number is not a position in the list.
+                              const moved = tracks[from];
+                              const target = tracks[to];
+                              if (!moved || !target) return;
+                              // Shown where it was let go at once: drawn back where it was
+                              // until the list was read again, the row jumped twice.
+                              const order = moveOnto(tracks.map((track) => track.id), moved.id, target.id);
+                              if (order) {
+                                const byId = new Map(tracks.map((track) => [track.id, track]));
+                                setData((held) => (held ? { ...held, tracks: order.map((id) => byId.get(id)!) } : held));
+                              }
+                              reorderPlaylist(listId, moved.id, target.id, Date.now());
+                              void load();
+                            }
+                          : undefined
+                      }
+                      onRemove={
+                        editable && listId != null
+                          ? (index) => {
+                              const track = tracks[index];
+                              if (!track) return;
+                              // Where it was, so that taking the offer puts that one song
+                              // back there and leaves alone whatever else changed since.
+                              const place = removeFromPlaylist(listId, track.id, Date.now());
+                              void load();
+                              if (!place) return;
+                              offerUndo(t.common.undone.removedFromList(track.title), () => {
+                                putBackInPlaylist(listId, track.id, place, Date.now());
+                                void load();
+                              });
+                            }
+                          : undefined
+                      }
+                      header={header}
+                      footer={foot}
+                    />
+                  </View>
                 }
-              : undefined
-          }
-          onRemove={
-            editable && listId != null
-              ? (index) => {
-                  const track = tracks[index];
-                  if (!track) return;
-                  removeFromPlaylist(listId, track.id, Date.now());
-                  void load();
-                }
-              : undefined
-          }
-          header={pageHeader}
-          footer={pageFooter}
-        />
-        </View>
-          }
-          items={tracks}
-          keyOf={(track) => track.id}
-          titleOf={(track) => track.title}
-          detailOf={(track) => track.artist}
-          renderCover={(track, size) => <TrackCover track={track} size={size} />}
-          sleeveOf={(track) => track}
-          labelOf={(_track, at) => String(at + 1)}
-          header={pageHeader}
-          footer={pageFooter}
-          top={0}
-          bottom={0}
-          onPress={(_track, index) => tap(index)}
-          onLongPress={(track) => menu.open(track, album ? WITHOUT_ALBUM : undefined)}
-        />
-      </BlurArea>
-
-      <NowPlayingBar column={landscape} />
-      </Behind>
-      </GlassScene>
-
-      {choosingCover ? (
-        <View style={styles.layer}>
-          {/* Named, for a screen reader: in a sheet drawn over the screen rather than in a window
-              of its own, touching outside it is one of the ways out, and it has to be findable. */}
-          <Pressable
-            style={styles.backdrop}
-            accessibilityRole="button"
-            accessibilityLabel={t.common.close}
-            onPress={() => setChoosingCover(false)}
-          />
-          <View style={[styles.sheet, { paddingBottom: insets.bottom + 18 }]}>
-            <Text style={styles.sheetHeading}>{t.format.upper(t.lists.list.cover)}</Text>
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={pressed}
-              style={styles.coverChoice}
-              onPress={() => {
-                void (async () => {
-                  setChoosingCover(false);
-                  try {
-                    const picked = await JukeboxAudio.pickImageAsync?.();
-                    // Null is the user backing out, which is not a failure and
-                    // must not clear the cover they already had.
-                    if (picked && listId != null) setPlaylistImage(listId, picked);
-                  } catch (error) {
-                    // Said rather than swallowed. A sheet that closes and
-                    // changes nothing is indistinguishable from one that was
-                    // cancelled, which is how this came to look broken.
-                    setNote(error instanceof Error ? error.message : t.common.pictureFailed);
-                  }
-                  void load();
-                })();
-              }}>
-              <Text style={styles.link}>{t.lists.list.choosePicture}</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              android_ripple={pressed}
-              style={styles.coverChoice}
-              onPress={() => {
-                if (listId != null) setPlaylistCover(listId, null);
+                items={tracks}
+                keyOf={(track) => track.id}
+                titleOf={(track) => track.title}
+                detailOf={(track) => track.artist}
+                renderCover={(track, size) => <TrackCover track={track} size={size} />}
+                sleeveOf={(track) => track}
+                labelOf={(_track, at) => String(at + 1)}
+                header={header}
+                footer={foot}
+                top={0}
+                bottom={0}
+                onPress={(_track, index) => tap(index)}
+                onLongPress={(track) => menu.open(track, album ? WITHOUT_ALBUM : undefined)}
+                holdLabel={t.library.trackMenu}
+              />
+            </BlurArea>
+          </GlassScene>
+        );
+      }}
+      sheets={
+        <>
+          <CoverPage
+            visible={choosingCover}
+            tracks={tracks}
+            onClose={() => setChoosingCover(false)}
+            onPicture={() => {
+              void (async () => {
                 setChoosingCover(false);
+                const failed = await pickListPicture(listId, t.common.pictureFailed);
+                if (failed != null) setNote(failed);
                 void load();
-              }}>
-              <Text style={styles.link}>{t.lists.list.firstFour}</Text>
-            </Pressable>
-            <ScrollView style={styles.coverScroll}>
-              {tracks.map((track) => (
-                <Pressable
-                  accessibilityRole="button"
-                  android_ripple={pressed}
-                  key={track.id}
-                  style={styles.coverChoice}
-                  onPress={() => {
-                    if (listId != null) setPlaylistCover(listId, track.id);
-                    setChoosingCover(false);
-                    void load();
-                  }}>
-                  <PlaylistCover tracks={[track]} chosen={track} size={40} />
-                  <Text style={styles.coverName} numberOfLines={1}>
-                    {track.title}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      ) : null}
+              })();
+            }}
+            onChosen={(track) => {
+              if (listId != null) setPlaylistCover(listId, track?.id ?? null);
+              setChoosingCover(false);
+              void load();
+            }}
+          />
 
-      <TrackPicker
-        visible={adding}
-        library={library}
-        already={new Set(tracks.map((track) => track.id))}
-        onClose={() => setAdding(false)}
-        onAdd={(trackIds) => {
-          if (listId == null) return;
-          addToPlaylist(listId, trackIds, Date.now());
-          void load();
-        }}
-      />
+          <TrackPicker
+            visible={adding}
+            library={library}
+            already={new Set(tracks.map((track) => track.id))}
+            onClose={() => setAdding(false)}
+            onAdd={(trackIds) => {
+              if (listId == null) return;
+              addToPlaylist(listId, trackIds, Date.now());
+              void load();
+            }}
+          />
 
-      <TextPrompt
-        visible={renaming}
-        heading={t.lists.list.renameHeading}
-        placeholder={t.lists.naming.placeholder}
-        initial={data.name}
-        onSubmit={(name) => {
-          if (listId != null) renamePlaylist(listId, name, Date.now());
-          setRenaming(false);
-          void load();
-        }}
-        onClose={() => setRenaming(false)}
-      />
+          <TextPrompt
+            visible={renaming}
+            heading={t.lists.list.renameHeading}
+            placeholder={t.lists.naming.placeholder}
+            initial={data.name}
+            onSubmit={(name) => {
+              if (listId != null) renamePlaylist(listId, name, Date.now());
+              setRenaming(false);
+              void load();
+            }}
+            onClose={() => setRenaming(false)}
+          />
 
-      {confirmingDelete ? (
-        <View style={StyleSheet.absoluteFill}>
-          {/* Not a stop for a screen reader: Cancel is right below it, and says so. */}
-          <Pressable style={styles.backdrop} accessible={false} onPress={() => setConfirmingDelete(false)} />
-          <View style={styles.confirm}>
-            <Text style={styles.confirmHeading}>{t.lists.list.deleteQuestion(data.name)}</Text>
-            <Text style={styles.hint}>{t.lists.list.deleteHint}</Text>
-            <View style={styles.confirmActions}>
-              <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.confirmButton} onPress={() => setConfirmingDelete(false)}>
-                <Text style={styles.link}>{t.common.cancel}</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                android_ripple={pressed}
-                style={styles.confirmButton}
-                onPress={() => {
-                  if (listId != null) {
-                    deletePlaylist(listId);
-                    haptic('results', 'confirm');
-                  }
-                  router.back();
-                }}>
-                <Text style={styles.destructive}>{t.common.delete}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      ) : null}
+          {/* A small question, on the app's own card over the page and short of the bars (`Floating`). */}
+          <ConfirmSheet
+            visible={confirmingDelete}
+            title={t.lists.list.deleteQuestion(data.name)}
+            body={t.lists.list.deleteHint}
+            confirmLabel={t.common.delete}
+            danger
+            onCancel={() => setConfirmingDelete(false)}
+            onConfirm={() => {
+              if (listId != null) {
+                deletePlaylist(listId);
+                haptic('results', 'confirm');
+              }
+              router.back();
+            }}
+          />
 
-      {menu.element}
-      {files.element}
-    </View>
+          {menu.element}
+          {files.element}
+        </>
+      }
+    />
+  );
+}
+
+/**
+ * What a list's cover is to be: a picture from the phone, the first four of
+ * its songs' covers, or one song's. A page of its own in the tab, the bars
+ * where they are, its songs the page's own list (`OnAPage`, bare): they can
+ * be hundreds, and were a short box of them scrolled inside the page.
+ */
+function CoverPage({
+  visible,
+  tracks,
+  onClose,
+  onPicture,
+  onChosen,
+}: {
+  visible: boolean;
+  tracks: EnrichedTrack[];
+  onClose: () => void;
+  onPicture: () => void;
+  /** A song's cover, or null for the first four. */
+  onChosen: (track: EnrichedTrack | null) => void;
+}) {
+  const t = useT();
+  return (
+    <OnAPage visible={visible} title={t.lists.list.cover} onClose={onClose} bare>
+      <CoverChoices tracks={tracks} onPicture={onPicture} onChosen={onChosen} />
+    </OnAPage>
+  );
+}
+
+function CoverChoices({
+  tracks,
+  onPicture,
+  onChosen,
+}: {
+  tracks: EnrichedTrack[];
+  onPicture: () => void;
+  onChosen: (track: EnrichedTrack | null) => void;
+}) {
+  const t = useT();
+  // The rows to the page's sides, as a list's are (`MediaRow`); the room over and under them the page's.
+  const room = usePageRoom({ edge: true });
+  return (
+    <FlatList
+      removeClippedSubviews={CLIP_SUBVIEWS}
+      windowSize={LIST_WINDOW}
+      initialNumToRender={12}
+      data={tracks}
+      keyExtractor={(track) => track.id}
+      contentContainerStyle={room}
+      ListHeaderComponent={
+        <>
+          <MenuEntry icon={PictureIcon} label={t.lists.list.choosePicture} onPress={onPicture} />
+          <MenuEntry icon={ListsIcon} label={t.lists.list.firstFour} onPress={() => onChosen(null)} />
+        </>
+      }
+      renderItem={({ item: track }) => (
+        <MediaRow
+          size="compact"
+          lead={<TrackCover track={track} size={ROW_COVER_COMPACT} />}
+          title={track.title}
+          subtitle={track.artist ?? undefined}
+          onPress={() => onChosen(track)}
+        />
+      )}
+    />
   );
 }
 
 /** A song that might belong in the list, with its cover, and a tap to add it. */
 function Suggested({ track, reasons, onAdd }: { track: EnrichedTrack; reasons: string[]; onAdd: () => void }) {
   const t = useT();
-  const styles = useStyles();
-  const pressed = usePressed();
   const artwork = useTrackArtwork(track);
+  // A close-set row, as songs to pick are; pressed anywhere, it goes into the list.
   return (
-    <Pressable accessibilityRole="button" android_ripple={pressed} style={styles.suggestion} onPress={onAdd}>
-      {artwork ? (
-        <Image source={{ uri: artwork }} style={styles.suggestionArt} contentFit="cover" />
-      ) : (
-        <View style={[styles.suggestionArt, styles.suggestionArtEmpty]} />
-      )}
-      <View style={styles.suggestionText}>
-        <Text style={styles.suggestionTitle} numberOfLines={1}>
-          {track.title}
-        </Text>
-        <Text style={styles.suggestionWhy} numberOfLines={1}>
-          {[track.artist, reasons.join(' · ')].filter(Boolean).join(' — ')}
-        </Text>
-      </View>
-      <Text style={styles.add}>{t.common.add}</Text>
-    </Pressable>
+    <MediaRow
+      size="compact"
+      lead={<Artwork uri={artwork} size={ROW_COVER_COMPACT} />}
+      title={track.title}
+      subtitle={[track.artist, reasons.join(' · ')].filter(Boolean).join(' — ')}
+      onPress={onAdd}
+      trailing={<TextButton label={t.common.add} strong onPress={onAdd} />}
+    />
   );
 }
 
@@ -1018,14 +1051,20 @@ function suggestions(
   library: EnrichedTrack[]
 ): { track: EnrichedTrack; reasons: string[] }[] {
   if (members.length === 0) return [];
+  /*
+    The same songs in the same library suggest the same: a list read again
+    for a song moved in it or a cover chosen for it is not scored again.
+  */
+  const asked = members.map((track) => track.id).sort().join('\u0000');
+  if (lastSuggested && lastSuggested.library === library && lastSuggested.asked === asked) return lastSuggested.found;
 
-  const tags = allTags();
   const plays = playCounts();
   const counts = new Map(tagCounts().map((entry) => [entry.tag, entry.trackCount]));
 
   const candidate = (track: EnrichedTrack): Candidate => ({
     trackId: track.id,
-    tags: (tags.get(track.id) ?? []).map((entry) => entry.tag),
+    // Each track carries its tags already: the whole table is not read again for them.
+    tags: track.tags,
     artist: track.artist,
     plays: plays.get(track.id)?.plays ?? 0,
     completed: plays.get(track.id)?.completed ?? 0,
@@ -1042,125 +1081,37 @@ function suggestions(
   });
 
   const byId = new Map(library.map((track) => [track.id, track]));
-  return found
+  const shown = found
     .map((entry) => ({ track: byId.get(entry.trackId), reasons: entry.reasons }))
     .filter((entry): entry is { track: EnrichedTrack; reasons: string[] } => entry.track != null);
+  lastSuggested = { library, asked, found: shown };
+  return shown;
 }
+
+/** The last suggestions worked out, and for what. */
+let lastSuggested: { library: EnrichedTrack[]; asked: string; found: { track: EnrichedTrack; reasons: string[] }[] } | null = null;
 
 const useStyles = makeStyles((c) => StyleSheet.create({
   shownPane: { flex: 1 },
   hiddenPane: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, opacity: 0 },
   screen: { flex: 1, ...scene(c) },
   upright: { flex: 1 },
-  sideways: { flex: 1, flexDirection: 'row' },
-  sideColumn: {
-    ...SIDE_COLUMN,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: c.border,
-  },
-  centred: { alignItems: 'center', justifyContent: 'center' },
-  failed: { gap: 16, padding: 24 },
-  failedBody: { color: c.text, fontSize: 16, textAlign: 'center' },
-  failedButton: {
-    backgroundColor: c.surfaceRaised,
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    ...outlined(c),
-  },
-  failedLabel: { color: c.text, fontSize: 15 },
-
-  backLabel: { color: c.accent, fontSize: 16 },
-  hint: { color: c.textFaint, fontSize: 12, lineHeight: 18 },
-  note: { color: c.danger, fontSize: 12.5, paddingTop: 4 },
+  hint: { color: c.textFaint, fontSize: TYPE.hint, lineHeight: LEADING.small },
+  note: { paddingTop: SPACE.xs },
 
   actionOff: { opacity: 0.35 },
 
-  /*
-    Each a finger's height, though drawn as a line of words: as words alone a
-    press had sixteen points to land on. The room above them was sixteen and
-    is now inside the first row of them, so they sit where they did.
-  */
-  links: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 20 },
-  linkHit: { minHeight: 48, justifyContent: 'center' },
-  link: { color: c.accent, fontSize: 13.5 },
-  destructive: { color: c.danger, fontSize: 13.5 },
 
-  empty: { color: c.textFaint, fontSize: 13, lineHeight: 20, paddingHorizontal: 20 },
+  empty: { color: c.textFaint, fontSize: TYPE.small, lineHeight: LEADING.small },
 
-  records: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingTop: 10 },
+  records: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.m, paddingTop: SPACE.s },
   // As wide as its sleeve and no wider, so a long name wraps under its own
   // cover instead of pushing the next one along.
-  record: { width: RECORD_SIZE, gap: 4 },
-  recordName: { color: c.text, fontSize: 12.5, lineHeight: 16, paddingTop: 3 },
-  recordYear: { color: c.textFaint, fontSize: 11.5, fontVariant: ['tabular-nums'] },
+  record: { width: RECORD_SIZE, gap: SPACE.xs },
+  recordName: { color: c.text, fontSize: TYPE.hint, lineHeight: LEADING.hint, paddingTop: SPACE.xxs },
+  recordYear: { color: c.textFaint, fontSize: TYPE.label, fontVariant: ['tabular-nums'] },
 
-  suggested: { paddingHorizontal: 20, paddingTop: 10, gap: 4 },
-  section: {
-    color: c.textFaint,
-    fontSize: 11,
-    letterSpacing: 1,
-    paddingTop: 28,
-  },
-  suggestion: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 11,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  suggestionArt: { width: 42, height: 42, borderRadius: 6 },
-  suggestionArtEmpty: { backgroundColor: c.surfaceRaised },
-  suggestionText: { flex: 1, minWidth: 0, gap: 2 },
-  suggestionTitle: { color: c.text, fontSize: 14.5 },
-  suggestionWhy: { color: c.textFaint, fontSize: 12 },
-  add: { color: c.accent, fontSize: 13.5 },
-
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
-  confirm: {
-    position: 'absolute',
-    left: 24,
-    right: 24,
-    top: '35%',
-    backgroundColor: c.surface,
-    borderRadius: 14,
-    padding: 20,
-    gap: 10,
-    ...outlined(c),
-  },
-  confirmHeading: { color: c.text, fontSize: 15.5, fontWeight: '600' },
-  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, paddingTop: 6 },
-  confirmButton: { paddingHorizontal: 14, paddingVertical: 9 },
-
-  layer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '70%',
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 18,
-    paddingHorizontal: 20,
-    ...outlined(c),
-  },
-  sheetHeading: {
-    color: c.textMuted,
-    fontSize: 12,
-    letterSpacing: 1,
-    paddingBottom: 6,
-  },
-  coverScroll: { flexGrow: 0 },
-  coverChoice: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 11,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: c.border,
-  },
-  coverName: { color: c.text, fontSize: 14.5, flex: 1, minWidth: 0 },
+  // The label and its note at the page's margins; the songs to its sides, as rows of a list are.
+  suggested: { paddingTop: SPACE.s, gap: SPACE.xs },
+  suggestedHead: { paddingHorizontal: PAGE.side, gap: SPACE.xs, paddingBottom: SPACE.s },
 }));

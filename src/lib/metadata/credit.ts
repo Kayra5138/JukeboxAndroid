@@ -256,6 +256,9 @@ const STRONG = new Set([
   'vietsub', 'engsub', 'vostfr', 'ceviri', 'romaji',
 ]);
 
+/** The word for a song, which a song's own name ends in as often as an upload's note begins with it. */
+const SONG = new Set(['song', 'sarki']);
+
 /** Words that say the video has subtitles, which end a title as `Official Video` does: `… English subtitles`. */
 const SUBTITLED = new Set(['sub', 'subs', 'subbed', 'subtitle', 'subtitles', 'legendado', 'vietsub', 'engsub', 'ceviri', 'vostfr']);
 
@@ -360,12 +363,26 @@ export function withoutPackaging(title: string): string {
     if (left !== '') break;
     cleaned = tail[1]!;
   }
-  // And at the end with nothing to set it off: only a run of such words that
-  // has a strong one in it, so that a song called `Video Games` or one whose
-  // last word is `Music` keeps its name.
-  const words = cleaned.split(/\s+/);
+  // And at the end with nothing to set it off; or just before what is left in
+  // brackets at the end, which says something about the recording and stays:
+  // `Ashley's Song with lyrics (Super Smash Bros. Version)`.
+  const kept = /^(.*?\S)((?:\s*\([^)]*\))+)\s*$/.exec(cleaned);
+  cleaned = kept ? `${withoutTrailingNote(kept[1]!)}${kept[2]!}` : withoutTrailingNote(cleaned);
+  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\s+[-|–—/]+\s*$/, '').trim();
+  return cleaned || title;
+}
+
+/**
+ * [text] without a note about the upload at its end, set off by nothing:
+ * only a run of such words that has a strong one in it, so that a song called
+ * `Video Games` or one whose last word is `Music` keeps its name.
+ */
+function withoutTrailingNote(text: string): string {
+  const words = text.split(/\s+/);
   let cut = words.length;
   while (cut > 1 && PACKAGING.has(foldForMatch(words[cut - 1]!))) cut -= 1;
+  // `Song` at the front of such a run is far more often the song's own name than the upload's: `Ashley's Song with lyrics`.
+  while (cut < words.length && SONG.has(foldForMatch(words[cut]!))) cut += 1;
   const run = words.slice(cut).map((word) => foldForMatch(word));
   const saysUpload = (word: string) => word === 'official' || word === 'resmi' || word === 'lyrics' || word === 'video' || SUBTITLED.has(word);
   if (
@@ -373,8 +390,7 @@ export function withoutPackaging(title: string): string {
     // A word that is nothing else: `…「狂乱 Hey Kids!!」MusicVideo`.
     (run.length === 1 && (run[0] === 'musicvideo' || run[0] === 'mv'))
   ) {
-    cleaned = words.slice(0, cut).join(' ');
+    return words.slice(0, cut).join(' ');
   }
-  cleaned = cleaned.replace(/\s{2,}/g, ' ').replace(/\s+[-|–—/]+\s*$/, '').trim();
-  return cleaned || title;
+  return text;
 }

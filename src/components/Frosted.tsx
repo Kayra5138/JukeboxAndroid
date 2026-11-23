@@ -1,4 +1,5 @@
 import { requireNativeViewManager } from 'expo-modules-core';
+import { FloatLayer } from './Floating';
 import { createContext, use, useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
 import { findNodeHandle, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -7,10 +8,13 @@ import { frostedWashOf } from '../lib/theme/effects';
 import { outlineWidth, useColours } from '../lib/theme/index';
 import type { Palette } from '../lib/theme/tokens';
 import { createStore } from '../lib/ui/store';
+import { useMotionReduced } from '../lib/ui/motion';
 import { useIsFocused } from 'expo-router';
 import { Curtain } from './Curtain';
 import { TabOpen } from '../lib/ui/tabOpen';
 import { barsLaidOver } from './UnderBars';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLandscape } from '../lib/ui/layout';
 
 /**
  * What scrolls under a bar of glass, out of focus behind it.
@@ -148,7 +152,14 @@ const NativeFrost = requireNativeViewManager<{ targetId?: number; radius: number
 export function useFrosted(target: Target | null): boolean {
   const c = useColours();
   const inside = use(InsideContext);
-  return CAN_FROST && barsLaidOver(c) && target != null && !inside.includes(target);
+  /*
+    Not while the decoration is held still: each bar blurring what passes
+    under it at every frame of a scroll is the dearest thing glass does. The
+    bar keeps the fill it has where there is nothing to blur, which is
+    worked out to be read over anything, and stays where it is.
+  */
+  const still = useMotionReduced();
+  return CAN_FROST && !still && barsLaidOver(c) && target != null && !inside.includes(target);
 }
 
 /**
@@ -163,8 +174,11 @@ export function useFrosted(target: Target | null): boolean {
  * and the bar, its own fill left off, showed what was behind it through
  * the line: a gap between the bar of what is playing and the tabs. So the
  * blur reaches under where the edge is, and the edge is drawn over it.
+ *
+ * [bare] leaves the wash off, for glass that is not a bar: over nothing it
+ * is the backdrop again, and seen only once something passes under it.
  */
-export function Frost({ target, edge }: { target: Target; edge?: 'top' | 'bottom' }) {
+export function Frost({ target, edge, bare = false }: { target: Target; edge?: 'top' | 'bottom'; bare?: boolean }) {
   const c = useColours();
   // The list, by the number the phone knows its view by, once it is there to be found.
   const [targetId, setTargetId] = useState<number | undefined>(undefined);
@@ -176,7 +190,7 @@ export function Frost({ target, edge }: { target: Target; edge?: 'top' | 'bottom
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, reach]}>
       <NativeFrost targetId={targetId} radius={RADIUS} overlay={tintOf(c) === 'dark' ? TINT_DARK : TINT_LIGHT} style={StyleSheet.absoluteFill} />
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: frostedWashOf(c) }]} />
+      {bare ? null : <View style={[StyleSheet.absoluteFill, { backgroundColor: frostedWashOf(c) }]} />}
       {edge ? <View style={[styles.edge, edge === 'top' ? styles.atTop : styles.atBottom, { height: line, backgroundColor: c.border }]} /> : null}
     </View>
   );
@@ -191,6 +205,30 @@ function tintOf(c: Palette): 'dark' | 'light' {
  * The area of each tab, by its route, for the tab bar: it is outside every
  * tab, and blurs whichever is open.
  */
+/**
+ * Glass behind the phone's clock, over a tab's own page that scrolls up
+ * under it: Lists, Stats, Settings. Put inside the page's `GlassScene`,
+ * after its `BlurArea`. Bare, with no wash: over the page at rest it is the
+ * backdrop, and the words that scroll up under the clock go out of focus
+ * there rather than run on under it sharp. Edged along its foot, as every
+ * other bar of glass is (23 Nov, Kayra).
+ * Upright only, where the clock is over the page; sideways the strip across
+ * the top keeps it (see the tabs' `TopStrip`). A screen whose top is a bar
+ * reaches up behind the clock itself instead: see `useLaidOver`'s `clock`.
+ */
+export function ClockGlass() {
+  const target = useSceneTarget();
+  const frosted = useFrosted(target);
+  const landscape = useLandscape();
+  const insets = useSafeAreaInsets();
+  if (!frosted || !target || landscape || insets.top <= 0) return null;
+  return (
+    <View pointerEvents="none" style={[styles.clock, { height: insets.top }]}>
+      <Frost target={target} edge="bottom" bare />
+    </View>
+  );
+}
+
 const tabTargets = createStore<Readonly<Record<string, Target>>>({});
 
 /**
@@ -233,11 +271,15 @@ export function TabArea({ routeKey, children }: { routeKey: string; children: Re
     },
     [routeKey]
   );
+  const target = useTabTarget(routeKey);
   return (
     <Curtain shut={!open} warm={warm && !open} style={styles.fill}>
-      <BlurArea style={styles.fill} onTarget={onTarget}>
-        <TabOpen value={open}>{children}</TabOpen>
-      </BlurArea>
+      {/* And the tab's small questions over its pages, short of the bars: see `Floating`. */}
+      <FloatLayer active={open} target={target}>
+        <BlurArea style={styles.fill} onTarget={onTarget}>
+          <TabOpen value={open}>{children}</TabOpen>
+        </BlurArea>
+      </FloatLayer>
     </Curtain>
   );
 }
@@ -250,6 +292,7 @@ export function useTabTarget(routeKey: string | undefined): Target | null {
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  clock: { position: 'absolute', top: 0, left: 0, right: 0 },
   edge: { position: 'absolute', left: 0, right: 0 },
   atTop: { top: 0 },
   atBottom: { bottom: 0 },

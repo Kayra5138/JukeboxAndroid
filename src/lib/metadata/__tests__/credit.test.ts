@@ -184,6 +184,14 @@ describe('guestsNamedIn', () => {
 });
 
 describe('withoutPackaging', () => {
+  it('drops a note said before a bracket as well as after it', () => {
+    assert.equal(withoutPackaging("Ashley's Song with lyrics (Super Smash Bros. Version)"), "Ashley's Song (Super Smash Bros. Version)");
+    assert.equal(withoutPackaging('Numb Official Video (Live)'), 'Numb (Live)');
+    // A song whose own name ends in such a word keeps it.
+    assert.equal(withoutPackaging('Video Games (Remix)'), 'Video Games (Remix)');
+    assert.equal(withoutPackaging('Lyrics (Acoustic)'), 'Lyrics (Acoustic)');
+  });
+
   it('drops what is about the upload', () => {
     assert.equal(withoutPackaging('The Monster (Explicit) [Official Video]'), 'The Monster');
     assert.equal(withoutPackaging('Yetmez (Official Video)'), 'Yetmez');

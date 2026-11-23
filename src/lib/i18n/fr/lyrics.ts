@@ -9,6 +9,7 @@ const secondsIn = (seconds: string) =>
     : 'secondes';
 
 export const lyrics: Strings['lyrics'] = {
+  follow: 'Revenir à la chanson',
   none: 'Paroles introuvables.',
   translating: 'Traduction…',
   seekTo: (seconds) => `Aller à ${seconds} ${secondsIn(seconds)}`,

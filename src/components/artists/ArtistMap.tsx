@@ -1,4 +1,5 @@
 import { requireNativeViewManager } from 'expo-modules-core';
+import { RADIUS, SPACE, TYPE, ICON } from '../../lib/theme/measures';
 import { memo, use, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -19,6 +20,7 @@ import { foldForMatch } from '../../lib/metadata/text';
 import { glassOf } from '../../lib/theme/Veil';
 import { makeStyles, useColours } from '../../lib/theme/index';
 import { haptic } from '../../lib/ui/haptics';
+import { Button } from '../Button';
 
 /**
  * The artists as a map (`media/artistMap.ts`): a circle for each, as big as
@@ -133,7 +135,14 @@ export const ArtistMap = memo(function ArtistMap({
   onOpen,
   onShuffle,
   register,
+  inSight = true,
 }: {
+  /**
+   * Whether it is the view in front, in the tab in front. Behind, a library
+   * that changed is not laid out again and no covers are fetched for it:
+   * that waits for it to be looked at.
+   */
+  inSight?: boolean;
   /** Handed, after every drawing, its step back for the tab pressed again: see `back`. */
   register?: (back: () => boolean) => void;
   artists: readonly Artist[];
@@ -168,8 +177,8 @@ export const ArtistMap = memo(function ArtistMap({
       setLayout(known);
       return;
     }
-    // Nobody yet: the library is still being read.
-    if (inputs.length === 0) return;
+    // Nobody yet: the library is still being read. Or nobody looking.
+    if (inputs.length === 0 || !inSight) return;
     /*
       A moment after the switch is drawn: laying out a few hundred artists
       from nothing is most of a second on a phone. From the map as it was,
@@ -183,14 +192,14 @@ export const ArtistMap = memo(function ArtistMap({
       setLayout(made);
     }, 60);
     return () => clearTimeout(timer);
-  }, [inputs, signature]);
+  }, [inSight, inputs, signature]);
 
   const byKey = useMemo(() => new Map(artists.map((artist) => [artist.key, artist])), [artists]);
   // Every cover the map wears found before it is wanted, one after another, so that it is whole by the time it is gone about in.
   useEffect(() => {
-    if (!layout) return;
+    if (!layout || !inSight) return;
     return warmAlbumArtwork(layout.nodes.map((node) => byKey.get(node.key)?.sleeve));
-  }, [byKey, layout]);
+  }, [byKey, inSight, layout]);
   const photos = useMemo(() => {
     try {
       return artistPhotoUris();
@@ -321,6 +330,28 @@ export const ArtistMap = memo(function ArtistMap({
   const [askingBack, setAskingBack] = useState(false);
   const [lassoed, setLassoed] = useState<number[] | null>(null);
   const [ringClearedAt, setRingClearedAt] = useState(0);
+  /*
+    Who is chosen and who lassoed are held by their place on the map, and the
+    map laid out again for a song downloaded or taken away puts people in new
+    places: the card and its shuffle went to different artists, and with
+    somebody gone, to nobody at all, and the map fell over. So they are
+    carried over to the new map by who they are.
+  */
+  const [placedOn, setPlacedOn] = useState(layout);
+  if (placedOn !== layout) {
+    setPlacedOn(layout);
+    const was = placedOn?.nodes ?? [];
+    const now = new Map((layout?.nodes ?? []).map((node, index) => [node.key, index]));
+    const carried = (index: number) => {
+      const key = was[index]?.key;
+      return key == null ? undefined : now.get(key);
+    };
+    if (chosen != null) setChosen(carried(chosen) ?? null);
+    if (lassoed) {
+      const still = lassoed.map(carried).filter((index) => index != null);
+      setLassoed(still.length > 0 ? still : null);
+    }
+  }
   const lassoOff = () => {
     setLassoOn(false);
     setLassoed(null);
@@ -1066,16 +1097,19 @@ export const ArtistMap = memo(function ArtistMap({
                 {t.common.artists(Object.keys(pins).length)}
               </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.common.close}
-              style={styles.cardButton}
-              onPress={() => setAskingBack(false)}>
-              <CrossIcon size={16} color={c.textMuted} />
-            </Pressable>
-            <Pressable accessibilityRole="button" style={[styles.cardButton, styles.cardOpen]} onPress={putBack}>
-              <Text style={styles.cardOpenText}>{t.library.screen.artistMap.putBack}</Text>
-            </Pressable>
+            <Button
+              kind="secondary"
+              size="small"
+              label={t.common.close}
+              mark={(ink) => <CrossIcon size={ICON} color={ink} />}
+              onPress={() => setAskingBack(false)}
+            />
+            <Button
+              label={t.library.screen.artistMap.putBack}
+              kind="primary"
+              size="small"
+              onPress={putBack}
+            />
           </View>
         </View>
       ) : null}
@@ -1090,27 +1124,27 @@ export const ArtistMap = memo(function ArtistMap({
                 {`${t.common.artists(lassoCard.members.length)} · ${t.common.tracks(lassoCard.tracks.length)}`}
               </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.common.close}
-              style={styles.cardButton}
+            <Button
+              kind="secondary"
+              size="small"
+              label={t.common.close}
+              mark={(ink) => <CrossIcon size={ICON} color={ink} />}
               onPress={() => {
                 haptic('choices', 'tick');
                 setLassoed(null);
                 setRingClearedAt((at) => at + 1);
-              }}>
-              <CrossIcon size={16} color={c.textMuted} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.library.screen.artistMap.shuffle}
-              style={[styles.cardButton, styles.cardOpen]}
+              }}
+            />
+            <Button
+              kind="primary"
+              size="small"
+              label={t.library.screen.artistMap.shuffle}
+              mark={(ink) => <ShuffleIcon size={ICON} color={ink} />}
               onPress={() => {
                 onShuffle(lassoCard.tracks);
                 lassoOff();
-              }}>
-              <ShuffleIcon size={18} color={c.onPrimary} />
-            </Pressable>
+              }}
+            />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.partners}>
             {lassoCard.members.map((member) => (
@@ -1142,13 +1176,13 @@ export const ArtistMap = memo(function ArtistMap({
                 {`${t.common.artists(genreCard.members.length)} · ${t.common.tracks(genreCard.tracks.length)}`}
               </Text>
             </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.library.screen.artistMap.shuffle}
-              style={styles.cardButton}
-              onPress={() => onShuffle(genreCard.tracks)}>
-              <ShuffleIcon size={18} color={c.accent} />
-            </Pressable>
+            <Button
+              kind="secondary"
+              size="small"
+              label={t.library.screen.artistMap.shuffle}
+              mark={(ink) => <ShuffleIcon size={ICON} color={ink} />}
+              onPress={() => onShuffle(genreCard.tracks)}
+            />
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.partners}>
             {genreCard.members.map((member) => (
@@ -1186,16 +1220,19 @@ export const ArtistMap = memo(function ArtistMap({
                   .join(' · ')}
               </Text>
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t.library.screen.artistMap.shuffle}
-              style={styles.cardButton}
-              onPress={() => chosenArtist && onShuffle(chosenArtist.tracks)}>
-              <ShuffleIcon size={18} color={c.accent} />
-            </Pressable>
-            <Pressable accessibilityRole="button" style={[styles.cardButton, styles.cardOpen]} onPress={() => openPage(chosenNode.key)}>
-              <Text style={styles.cardOpenText}>{t.library.screen.artistMap.open}</Text>
-            </Pressable>
+            <Button
+              kind="secondary"
+              size="small"
+              label={t.library.screen.artistMap.shuffle}
+              mark={(ink) => <ShuffleIcon size={ICON} color={ink} />}
+              onPress={() => chosenArtist && onShuffle(chosenArtist.tracks)}
+            />
+            <Button
+              label={t.library.screen.artistMap.open}
+              kind="primary"
+              size="small"
+              onPress={() => openPage(chosenNode.key)}
+            />
           </View>
           {partners.length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.partners}>
@@ -1277,7 +1314,7 @@ const Dot = memo(function Dot({
               // As wide on screen however near the map is: a name of a few words, not cut off far out.
               width: 180 / scale,
               left: node.r - 90 / scale,
-              fontSize: 12 / scale,
+              fontSize: TYPE.hint / scale,
             },
           ]}>
           {node.name}
@@ -1300,7 +1337,7 @@ function Face({ artist, photo, size }: { artist: Artist; photo: string | undefin
   const uri = photo ?? cover;
   return uri ? <Image source={{ uri }} style={faceStyle} contentFit="cover" recyclingKey={artist.key} drawnAt={size} /> : null;
 }
-const faceStyle = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 999 } as const;
+const faceStyle = { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: RADIUS.pill } as const;
 
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
@@ -1315,7 +1352,7 @@ const useStyles = makeStyles((c) =>
       position: 'absolute',
       left: 10,
       right: 10,
-      padding: 12,
+      padding: SPACE.m,
       gap: 10,
       borderRadius: 16,
       backgroundColor: c.surfaceRaised,
@@ -1326,18 +1363,8 @@ const useStyles = makeStyles((c) =>
     },
     cardTop: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     cardWords: { flex: 1, minWidth: 0 },
-    cardName: { color: c.text, fontSize: 18, fontWeight: '700' },
-    cardDetail: { color: c.textMuted, fontSize: 12.5 },
-    cardButton: {
-      height: 38,
-      minWidth: 38,
-      paddingHorizontal: 10,
-      borderRadius: 19,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: c.borderStrong,
-    },
+    cardName: { color: c.text, fontSize: TYPE.heading, fontWeight: '700' },
+    cardDetail: { color: c.textMuted, fontSize: TYPE.hint },
     lassoButton: {
       position: 'absolute',
       right: 12,
@@ -1355,19 +1382,17 @@ const useStyles = makeStyles((c) =>
     lassoHint: { position: 'absolute', left: 12, right: 66, alignItems: 'flex-start' },
     lassoHintText: {
       color: c.text,
-      fontSize: 13,
+      fontSize: TYPE.small,
       backgroundColor: c.surfaceRaised,
-      paddingHorizontal: 12,
+      paddingHorizontal: SPACE.m,
       paddingVertical: 7,
-      borderRadius: 14,
+      borderRadius: RADIUS.card,
       overflow: 'hidden',
     },
-    cardOpen: { backgroundColor: c.accent, borderColor: c.accent, paddingHorizontal: 16 },
-    cardOpenText: { color: c.onPrimary, fontWeight: '700' },
     partners: { gap: 6, alignItems: 'center' },
-    with: { color: c.textFaint, fontSize: 12 },
-    partner: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: c.surface },
-    partnerText: { color: c.text, fontSize: 13 },
+    with: { color: c.textFaint, fontSize: TYPE.hint },
+    partner: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: RADIUS.card, backgroundColor: c.surface },
+    partnerText: { color: c.text, fontSize: TYPE.small },
   })
 );
 

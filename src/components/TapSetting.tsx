@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { Switch } from './Switch';
+import { View } from 'react-native';
+import { Text } from './settings/Find';
 
 import { OptionSheet } from './OptionSheet';
 import { Pressable } from './Pressable';
-import { useRows } from './settings/rows';
+import { useRows, SwitchRow, Chevron } from './settings/rows';
 import { useT } from '../lib/i18n/index';
 import { SIMILAR_SOURCES, TAP_MODES } from '../lib/player/tap';
 import { setSimilarSource, setTapEverywhere, setTapMode, useTapChoice } from '../lib/player/tapSetting';
-import { makeStyles, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { usePressed } from '../lib/theme/index';
 
 /**
  * Rows of the player's settings: what a tap on a track plays, and whether
@@ -21,8 +21,6 @@ import { makeStyles, switchColours, useColours, usePressed } from '../lib/theme/
 export function TapSetting() {
   const t = useT();
   const rows = useRows();
-  const styles = useStyles();
-  const c = useColours();
   const pressed = usePressed();
   const { mode, everywhere, source } = useTapChoice();
   const [open, setOpen] = useState<'mode' | 'source' | null>(null);
@@ -38,7 +36,7 @@ export function TapSetting() {
           <Text style={rows.title}>{said.title}</Text>
           <View style={rows.choices}>
             <Text style={rows.value} numberOfLines={1}>{said[mode].label}</Text>
-            <Text style={rows.chevron} importantForAccessibility="no">›</Text>
+            <Chevron />
           </View>
         </View>
         <Text style={rows.muted}>{said.note}</Text>
@@ -51,7 +49,7 @@ export function TapSetting() {
               <Text style={rows.title}>{said.source.title}</Text>
               <View style={rows.choices}>
                 <Text style={rows.value} numberOfLines={1}>{t.settings.autoplay[source].label}</Text>
-                <Text style={rows.chevron} importantForAccessibility="no">›</Text>
+                <Chevron />
               </View>
             </View>
             <Text style={rows.muted}>{said.source.note}</Text>
@@ -61,21 +59,16 @@ export function TapSetting() {
       {mode !== 'list' ? (
         <>
           <View style={rows.rule} />
-          <View style={styles.row}>
-            <View style={styles.line}>
-              <Text style={styles.title}>{said.everywhere.title}</Text>
-              <Switch
-                value={everywhere}
-                accessibilityLabel={said.everywhere.title}
-                onValueChange={setTapEverywhere}
-                {...switchColours(c, everywhere)}
-              />
-            </View>
-            <Text style={styles.muted}>{said.everywhere.note}</Text>
-          </View>
+          <SwitchRow
+            title={said.everywhere.title}
+            hint={said.everywhere.note}
+            value={everywhere}
+            onChange={setTapEverywhere}
+          />
         </>
       ) : null}
       <OptionSheet
+        page
         visible={open === 'mode'}
         heading={said.title}
         note={said.sheetNote}
@@ -85,6 +78,7 @@ export function TapSetting() {
         onClose={() => setOpen(null)}
       />
       <OptionSheet
+        page
         visible={open === 'source'}
         heading={said.source.title}
         note={said.source.note}
@@ -96,12 +90,3 @@ export function TapSetting() {
     </>
   );
 }
-
-const useStyles = makeStyles((c) =>
-  StyleSheet.create({
-    row: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
-    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-    title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-    muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
-  })
-);

@@ -1,12 +1,14 @@
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, RADIUS, SPACE, TYPE } from '../lib/theme/measures';
+import { Busy } from './Busy';
+import { OnAPage } from './OnAPage';
 
-import { Pressable } from './Pressable';
 import type { ImportPlan } from '../lib/history/index';
 import { formatDate } from '../lib/format/date';
 import { useT } from '../lib/i18n/index';
-import { makeStyles, outlined, outlinedClip, useColours, usePressed } from '../lib/theme/index';
-import { scrimOf, useWindowVeil } from '../lib/theme/Veil';
+import { makeStyles, outlinedClip, useColours } from '../lib/theme/index';
+import { Button, TextButton } from './Button';
+import { Note } from './Note';
 
 /**
  * What stands between choosing another app's history and its listens going
@@ -35,35 +37,17 @@ export function HistorySheet({
   onImport: () => void;
   onCancel: () => void;
 }) {
-  const insets = useSafeAreaInsets();
   const t = useT();
   const c = useColours();
   const styles = useStyles();
-  const pressed = usePressed();
-  useWindowVeil(plan !== null);
-  if (!plan) return null;
-
   const said = t.backup.history;
-  const leave = working ? undefined : onCancel;
   const day = (at: number | null) => (at == null ? '' : formatDate(new Date(at), t));
 
+  // A page of its own in the tab, the bars where they are; not to be left while the listens are being written (`OnAPage`).
   return (
-    <Modal
-      visible
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      navigationBarTranslucent
-      onRequestClose={leave}>
-      {/* Not a stop for a screen reader: Cancel and the back gesture are the ways out. */}
-      <Pressable style={styles.backdrop} onPress={leave} accessible={false} />
-      <ScrollView
-        style={styles.sheet}
-        contentContainerStyle={[
-          styles.body,
-          { paddingBottom: insets.bottom + 24, paddingLeft: insets.left + 20, paddingRight: insets.right + 20 },
-        ]}>
-        <Text accessibilityRole="header" style={styles.heading}>{said.question}</Text>
+    <OnAPage visible={plan !== null} title={said.question} onClose={onCancel} locked={working}>
+      {plan ? (
+      <View style={styles.body}>
         <View style={styles.facts}>
           <Text style={styles.fact}>{t.backup.listens(plan.rows.length)}</Text>
         </View>
@@ -73,63 +57,43 @@ export function HistorySheet({
         {plan.already > 0 ? <Text style={styles.muted}>{said.already(plan.already)}</Text> : null}
 
         {failure ? (
-          <Text accessibilityRole="alert" accessibilityLiveRegion="assertive" style={styles.failure}>
-            {failure}
-          </Text>
+          <Note tone="bad">{failure}</Note>
         ) : null}
 
         {working ? (
           <View style={styles.working}>
-            <ActivityIndicator color={c.textSecondary} />
+            <Busy color={c.textSecondary} />
             <Text style={styles.text}>{t.backup.importing}</Text>
           </View>
         ) : (
           <>
-            <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.primary} onPress={onImport}>
-              <Text style={styles.primaryLabel}>{t.common.import}</Text>
-            </Pressable>
-            <Pressable android_ripple={pressed} accessibilityRole="button" style={styles.plain} onPress={onCancel}>
-              <Text style={styles.plainLabel}>{t.common.cancel}</Text>
-            </Pressable>
+            <Button kind="primary" wide label={t.common.import} onPress={onImport} />
+            <TextButton label={t.common.cancel} tone="plain" size="body" onPress={onCancel} style={styles.cancel} />
           </>
         )}
-      </ScrollView>
-    </Modal>
+      </View>
+      ) : null}
+    </OnAPage>
   );
 }
 
 const useStyles = makeStyles((c) => StyleSheet.create({
-  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: scrimOf(c) },
-  sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: c.surface,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: '88%',
-    ...outlined(c),
-  },
-  body: { paddingTop: 20, gap: 14 },
-  heading: { color: c.text, fontSize: 19, fontWeight: '600' },
-  text: { color: c.textSecondary, fontSize: 14, lineHeight: 20 },
-  muted: { color: c.textMuted, fontSize: 13, lineHeight: 18 },
-  failure: { color: c.danger, fontSize: 14, lineHeight: 20 },
-  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  body: { gap: SPACE.m },
+  heading: { color: c.text, fontSize: TYPE.heading, fontWeight: '600' },
+  text: { color: c.textSecondary, fontSize: TYPE.small, lineHeight: LEADING.small },
+  muted: { color: c.textMuted, fontSize: TYPE.small, lineHeight: LEADING.small },
+  facts: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACE.s },
   fact: {
     color: c.text,
-    fontSize: 13,
+    fontSize: TYPE.small,
     backgroundColor: c.surfaceRaised,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    borderRadius: RADIUS.pill,
+    paddingVertical: SPACE.xs,
+    paddingHorizontal: SPACE.m,
     overflow: 'hidden',
     ...outlinedClip(c),
   },
-  working: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  primary: { backgroundColor: c.primary, borderRadius: 12, padding: 14, gap: 3, marginTop: 4, ...outlined(c, c.primary) },
-  primaryLabel: { color: c.onPrimary, fontSize: 15.5, fontWeight: '600' },
-  plain: { padding: 14, alignItems: 'center' },
-  plainLabel: { color: c.textSecondary, fontSize: 15 },
+  working: { flexDirection: 'row', alignItems: 'center', gap: SPACE.m, paddingVertical: SPACE.s },
+  // The way out, quietly, under the way on.
+  cancel: { alignSelf: 'center' },
 }));

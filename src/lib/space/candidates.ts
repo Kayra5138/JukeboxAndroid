@@ -188,7 +188,8 @@ export function freeUpCandidates(
     if (keep != null) candidate.reason = 'copy';
     else if (skippedOften(heard)) candidate.reason = 'skipped';
     else if (heard.plays === 0 && track.addedAt != null && track.addedAt < before) candidate.reason = 'neverPlayed';
-    else if (heard.plays > 0 && heard.lastPlayedAt != null && heard.lastPlayedAt < before) candidate.reason = 'forgotten';
+    // By the later of its last listen and its coming, as the deleting by itself goes: see `dueForDeletion`.
+    else if (heard.plays > 0 && heard.lastPlayedAt != null && Math.max(heard.lastPlayedAt, track.addedAt ?? 0) < before) candidate.reason = 'forgotten';
     else {
       if (candidate.bytes >= LARGE_BYTES) rest.push(candidate);
       continue;
@@ -245,8 +246,8 @@ export const AUTO_MONTHS_RANGE: Range = { min: 1, max: 24 };
  *
  * Only files the app downloaded itself, which are [own]; never [playing];
  * never one in Favorites or another list unless the settings say it may go
- * too. Due when its last listen, or where it was never listened to the day
- * the phone first saw it, is more than [settings.months] months before [now].
+ * too. Due when the later of its last listen and the day the phone first saw
+ * it is more than [settings.months] months before [now].
  * A song of which neither is known is never due.
  */
 export function dueForDeletion<T extends SpaceTrack>(
@@ -265,7 +266,15 @@ export function dueForDeletion<T extends SpaceTrack>(
     if (member?.favorite && !settings.favorites) return false;
     if (member && member.lists > 0 && !settings.lists) return false;
     const heard = listening.get(track.id);
-    const last = heard && heard.plays > 0 ? heard.lastPlayedAt : track.addedAt;
+    /*
+      The later of the two: a listen from a history brought in from another
+      service can be years before the song was downloaded here, and a song
+      downloaded last week whose last listen elsewhere was in 2022 went at
+      the next look, unasked.
+    */
+    const played = heard && heard.plays > 0 ? heard.lastPlayedAt : null;
+    const added = track.addedAt ?? null;
+    const last = played != null && added != null ? Math.max(played, added) : (played ?? added);
     return last != null && last < before;
   });
 }

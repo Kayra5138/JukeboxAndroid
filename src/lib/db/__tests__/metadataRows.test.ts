@@ -57,6 +57,28 @@ const entry = (trackId: string, changes: Partial<TrackMetadata> = {}): TrackMeta
   discNumber: null, ...changes,
 });
 
+describe('saying a row afresh', () => {
+  it('never writes a lookup over what somebody wrote by hand, and says so', () => {
+    const { target, read } = open();
+    assert.equal(saveMetadataTo(target, entry('1', { status: 'manual', source: 'manual', album: 'Mine' }), 1), true);
+    // A lookup that set out before the edit answers after it, found or not.
+    assert.equal(saveMetadataTo(target, entry('1', { album: 'Theirs' }), 2), false);
+    assert.equal(saveMetadataTo(target, entry('1', { status: 'not_found', title: null, album: null }), 3), false);
+    assert.equal(read('1').status, 'manual');
+    assert.equal(read('1').album, 'Mine');
+  });
+
+  it('writes a hand edit over anything, and a lookup over a lookup', () => {
+    const { target, read } = open();
+    saveMetadataTo(target, entry('1', { album: 'First' }), 1);
+    assert.equal(saveMetadataTo(target, entry('1', { album: 'Second' }), 2), true);
+    assert.equal(read('1').album, 'Second');
+    assert.equal(saveMetadataTo(target, entry('1', { status: 'manual', source: 'manual', album: 'Mine' }), 3), true);
+    assert.equal(saveMetadataTo(target, entry('1', { status: 'manual', source: 'manual', album: 'Mine again' }), 4), true);
+    assert.equal(read('1').album, 'Mine again');
+  });
+});
+
 describe('putting covers on rows', () => {
   it('fills a row with no cover and one holding only an address', () => {
     const { target, read } = open();

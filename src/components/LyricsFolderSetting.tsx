@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { LEADING, SPACE, TYPE, TOUCH } from '../lib/theme/measures';
+import { Note } from './Note';
+import { StyleSheet, View } from 'react-native';
+import { Text } from './settings/Find';
 import { Switch } from './Switch';
 
+import { TextButton } from './Button';
 import { Pressable } from './Pressable';
 import { useT } from '../lib/i18n/index';
 import { readLyricsFolders, writeLyricsFolders } from '../lib/lyrics/device';
 import type { LyricsFolder } from '../lib/lyrics/local';
 import { lyricsNative } from '../lib/lyrics/native';
-import { makeStyles, switchColours, useColours, usePressed } from '../lib/theme/index';
+import { makeStyles, usePressed } from '../lib/theme/index';
 
 /**
  * A row of the player's settings: whether `.lrc` files beside the songs are
@@ -24,7 +28,6 @@ import { makeStyles, switchColours, useColours, usePressed } from '../lib/theme/
  */
 export function LyricsFolderSetting() {
   const t = useT();
-  const c = useColours();
   const styles = useStyles();
   const pressed = usePressed();
   const said = t.lyrics.folders;
@@ -97,7 +100,6 @@ export function LyricsFolderSetting() {
             if (wanted) void add();
             else for (const folder of folders) remove(folder);
           }}
-          {...switchColours(c, on)}
         />
       </View>
       <Text style={styles.muted}>{said.note}</Text>
@@ -106,14 +108,7 @@ export function LyricsFolderSetting() {
           <Text style={styles.folderName} numberOfLines={1}>
             {folder.label}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={said.removeLabel(folder.label)}
-            android_ripple={pressed}
-            hitSlop={8}
-            onPress={() => remove(folder)}>
-            <Text style={styles.link}>{said.remove}</Text>
-          </Pressable>
+          <TextButton label={said.remove} accessibilityLabel={said.removeLabel(folder.label)} onPress={() => remove(folder)} />
         </View>
       ))}
       {on ? (
@@ -125,28 +120,28 @@ export function LyricsFolderSetting() {
           <Text style={styles.link}>{said.add}</Text>
         </Pressable>
       ) : null}
-      {elsewhere ? <Text style={styles.bad}>{said.elsewhere}</Text> : null}
+      {elsewhere ? <Note tone="bad" style={styles.bad}>{said.elsewhere}</Note> : null}
     </View>
   );
 }
 
 const useStyles = makeStyles((c) =>
   StyleSheet.create({
-    row: { paddingHorizontal: 16, paddingVertical: 14, gap: 4 },
-    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 28 },
-    title: { color: c.text, fontSize: 15.5, flexShrink: 1 },
-    muted: { color: c.textMuted, fontSize: 12.5, lineHeight: 18 },
+    row: { paddingHorizontal: SPACE.l, paddingVertical: SPACE.m, gap: SPACE.xs },
+    line: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: SPACE.m, minHeight: TOUCH.row },
+    title: { color: c.text, fontSize: TYPE.body, flexShrink: 1 },
+    muted: { color: c.textMuted, fontSize: TYPE.hint, lineHeight: LEADING.hint },
     folder: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
-      minHeight: 32,
-      marginTop: 4,
+      gap: SPACE.m,
+      minHeight: TOUCH.row,
+      marginTop: SPACE.xs,
     },
-    folderName: { color: c.textSecondary, fontSize: 14, flexShrink: 1 },
-    link: { color: c.accent, fontSize: 13.5 },
-    addRow: { alignSelf: 'flex-start', paddingVertical: 6 },
-    bad: { color: c.danger, fontSize: 12.5, lineHeight: 18, marginTop: 4 },
+    folderName: { color: c.textSecondary, fontSize: TYPE.small, flexShrink: 1 },
+    link: { color: c.accent, fontSize: TYPE.small },
+    addRow: { alignSelf: 'flex-start', paddingVertical: SPACE.xs },
+    bad: { marginTop: SPACE.xs },
   })
 );

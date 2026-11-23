@@ -178,6 +178,12 @@ describe('the songs due to be deleted by themselves', () => {
     assert.deepEqual(ids(dueForDeletion(tracks, listening, own, membership, settings, 'playing', now)), ['old', 'heardLong']);
   });
 
+  it('a song downloaded lately is kept though its last listen, brought in from elsewhere, was long ago', () => {
+    const lately = [{ id: 'imported', addedAt: monthsAgo(1) }];
+    const before = new Map<string, Listening>([['imported', heard({ plays: 5, lastPlayedAt: monthsAgo(40) })]]);
+    assert.deepEqual(ids(dueForDeletion(lately, before, new Set(['imported']), new Map(), settings, null, now)), []);
+  });
+
   it('take in Favorites and the lists only where told to', () => {
     assert.deepEqual(
       ids(dueForDeletion(tracks, listening, own, membership, { ...settings, favorites: true }, 'playing', now)),

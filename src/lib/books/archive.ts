@@ -1,3 +1,5 @@
+import { request } from '../metadata/http.ts';
+
 /**
  * Books from the Internet Archive: LibriVox's recordings of books out of
  * copyright, read aloud by volunteers and kept there, and any other audio
@@ -183,18 +185,19 @@ export function bookQuery(words: string, language: string | null): string {
 export async function searchBooks(words: string, language: string | null = null): Promise<BookHit[]> {
   const query = bookQuery(words, language);
   const fields = ['identifier', 'title', 'creator'].map((field) => `fl[]=${field}`).join('&');
-  const response = await fetch(
-    `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&${fields}&rows=30&sort[]=downloads+desc&output=json`
+  // Through `request`, which gives up after a while: a bare fetch to a server that never answered left the search turning for good.
+  return hitsOf(
+    await request<unknown>(
+      'Internet Archive',
+      `https://archive.org/advancedsearch.php?q=${encodeURIComponent(query)}&${fields}&rows=30&sort[]=downloads+desc&output=json`,
+      {}
+    )
   );
-  if (!response.ok) throw new Error(`search ${response.status}`);
-  return hitsOf(await response.json());
 }
 
 /** The book that is the Archive's item [id]. Throws where it cannot be had or holds nothing to listen to. */
 export async function fetchBook(id: string): Promise<Book> {
-  const response = await fetch(`https://archive.org/metadata/${encodeURIComponent(id)}`);
-  if (!response.ok) throw new Error(`metadata ${response.status}`);
-  const book = bookOf(id, await response.json());
+  const book = bookOf(id, await request<unknown>('Internet Archive', `https://archive.org/metadata/${encodeURIComponent(id)}`, {}));
   if (!book || book.parts.length === 0) throw new Error('nothing to listen to');
   return book;
 }

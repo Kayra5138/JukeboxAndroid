@@ -1,5 +1,5 @@
 import { isSynced } from './lrc.ts';
-import { request, sleep, statusOf, USER_AGENT } from '../metadata/http.ts';
+import { pacer, request, statusOf, USER_AGENT } from '../metadata/http.ts';
 import { withoutPackaging } from '../metadata/credit.ts';
 import { identify } from '../metadata/identify.ts';
 import { bareTitle, matchScore } from '../metadata/text.ts';
@@ -72,12 +72,14 @@ type LrcRecord = {
   syncedLyrics: string | null;
 };
 
-let nextRequestAt = 0;
+/*
+  One request at a time, a second apart, in the order asked: two asked at
+  once both read the same time to wait for and went out together.
+*/
+const turn = pacer(REQUEST_INTERVAL_MS);
 
 async function get(path: string, signal?: AbortSignal): Promise<unknown | null> {
-  const wait = nextRequestAt - Date.now();
-  if (wait > 0) await sleep(wait, signal);
-  nextRequestAt = Date.now() + REQUEST_INTERVAL_MS;
+  await turn(signal);
 
   try {
     return await request<unknown>(
